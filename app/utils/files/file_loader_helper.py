@@ -4,7 +4,7 @@ that vends file loader method
 """
 
 from app.errors.NotImplementedError import NotImplementedError
-from app.models.file_processing.sources import FileSourceConfig, FileSource
+from app.models.file_processing.sources import FileSourceConfig
 import tqdm
 
 

@@ -1,6 +1,6 @@
 import h5py
 from pydantic import ValidationError
-from app.models.file_processing.sources import FileSource, FileSourceConfig
+from app.models.file_processing.sources import FileSourceConfig
 from app.utils.files.file_loader_helper import FileLoaderHelper
 from typing import Dict, List, Any
 from app.models.file_processing.file_metadata_models import (
@@ -27,7 +27,6 @@ class HE5Helper:
         """
 
         # Initialize the file loader helper
-        logger.info(f"Initializing file loader helper for file source: {file_source}")
         self.file_source_config: FileSourceConfig = file_source_config
 
         # The raw strcture in itself can be used to access the metadata and the actual content in the file.
@@ -108,8 +107,8 @@ class HE5Helper:
 if __name__ == "__main__":
     import pprint
 
-    file_source = FileSource.LOCAL_FILE
     file_source_config = FileSourceConfig(
         source_path="raw_files/Hyper/PRS_L2D_STD_20231229050902_20231229050907_0001.he5"
     )
     he5_helper = HE5Helper(file_source_config)
+    pprint.pprint([*he5_helper.file_metadata.root_metadata.file_attributes.keys()])
