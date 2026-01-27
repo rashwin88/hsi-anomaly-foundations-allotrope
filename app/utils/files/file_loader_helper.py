@@ -13,23 +13,20 @@ class FileLoaderHelper:
     A helper class for loading files from various sources.
     """
 
-    def __init__(self, file_source: FileSource):
+    def __init__(self, file_path: str):
         """
         Class constructor
         """
-
-        self.file_source = file_source
-
+        self.file_path = file_path
         # Map the file source to a file loader method
         # using a dictionary
         self.file_loader_methods = {
-            FileSource.LOCAL_FILE: self._local_source,
             FileSource.GOOGLE_DRIVE: self._google_drive_source,
             FileSource.S3: self._s3_source,
             FileSource.DOWNLOAD_LINK: self._download_link_source,
         }
 
-        self.file_loader = self.file_loader_methods[self.file_source]
+        self.file_loader = self.file_loader_methods[self.file_path]
 
     def _local_source(self, file_source_config: FileSourceConfig):
         """
