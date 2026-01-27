@@ -9,3 +9,14 @@ The class structure and relationships are as follows:
 </p>
 
 The class can take in *both numpy arrays and tensors* and will return *both numpy arrays and tensors*. Internally it will use the `torch` library to perform the transformations.
+
+Sample usage:
+```python
+image_cube_operations = ImageCubeOperations()
+cube = np.random.rand(30, 2000, 1000)
+print(cube.shape)
+transformed = image_cube_operations.convert_cube(
+    cube, CubeRepresentation.BSQ, CubeRepresentation.BIL
+)
+print(transformed.shape)
+```
