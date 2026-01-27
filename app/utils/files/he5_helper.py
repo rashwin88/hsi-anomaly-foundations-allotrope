@@ -111,4 +111,4 @@ if __name__ == "__main__":
         source_path="raw_files/Hyper/PRS_L2D_STD_20231229050902_20231229050907_0001.he5"
     )
     he5_helper = HE5Helper(file_source_config)
-    pprint.pprint([*he5_helper.file_metadata.root_metadata.file_attributes.keys()])
+    pprint.pprint(he5_helper.file_metadata.model_dump())
