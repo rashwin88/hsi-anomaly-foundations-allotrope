@@ -14,6 +14,8 @@ $$
 H \times W \times C
 $$
 
-## Handling Transformations
+### Handling Transformations
 
 Moving between these formats will be crucial for visualization and training. Look up the section on image transformation to see how this is done.
+
+### Basic Visualization
