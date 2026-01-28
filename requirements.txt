@@ -3,3 +3,4 @@ pydantic
 tqdm
 numpy
 torch
+matplotlib
