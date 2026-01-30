@@ -26,3 +26,15 @@ The `TIFHelper` class is also defined similarly as follows:
 </p>
 
 
+### A note on band extraction from files.
+
+There is a subtle but important difference in the way bands are extracted from HE5 and TIF files. In the case of HE5, we pull the entire data cube from the file and then downstream processes can extract whatever band they want. In the case of TIF files, we pull out specific bands directly. Pulling in bands directly will mean a few things. The output of a band extraction is a 3d numpy array. However, since we pull bands out directly in the case of TIF files, the band indexes will get reset and we will have to map them back. This is why we use a band_mapping dictionary in the `BasicBandLevelVisualizationTIF` class. Similar corrections will have to be made whereever TIF files are handled. This is ugly, but necessary till a more comprehensive refactoring is done.
+
+Also note that BIL is the default in the case of HE5 files. However, in the case of TIF files, BSQ is the default. This is why we will have to convert the cube to BIP format for visualization in the `BasicBandLevelVisualizationTIF` class.
+
+*Also note that in the case of TIF files, the bands are indexed starting from 1. This means there is no band 0*
+
+<p align="center">
+  <img src="assets/tif_nuances.png" width="400" alt="File Handling Flow">
+</p>
+
