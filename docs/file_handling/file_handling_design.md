@@ -18,3 +18,11 @@ The general flow of the file handling is as follows:
 </p>
 
 We pass a path of the he5 file to the he5 helper class. This class will then pull out the metadata at the file and group level and contain methods to access the data at the dataset level.
+
+The `TIFHelper` class is also defined similarly as follows:
+
+<p align="center">
+  <img src="assets/tif_helper.png" width="700" alt="File Handling Flow">
+</p>
+
+
