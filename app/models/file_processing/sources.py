@@ -24,6 +24,8 @@ class FileSourceConfig(BaseModel):
         default=None, description="The category of the file"
     )
 
+    # Directly infer the file category in case it is not specified.
+    # Can be used in downstream processing to switch processing methods.
     @model_validator(mode="after")
     def infer_file_category(self) -> "FileSourceConfig":
         """
