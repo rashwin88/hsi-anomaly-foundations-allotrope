@@ -1,5 +1,7 @@
 from enum import Enum
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
+from app.models.file_processing.file_categories import FileCategory
+from typing import Optional
 
 
 class FileDownloaderType(Enum):
@@ -18,3 +20,18 @@ class FileSourceConfig(BaseModel):
     """
 
     source_path: str = Field(description="The source of the file")
+    file_category: Optional[FileCategory] = Field(
+        default=None, description="The category of the file"
+    )
+
+    @model_validator(mode="after")
+    def infer_file_category(self) -> "FileSourceConfig":
+        """
+        Infers the file category based on the file extension
+        """
+        if self.file_category is None:
+            if self.source_path.endswith(".he5"):
+                self.file_category = FileCategory.HDFS
+            elif self.source_path.lower().endswith(".tif"):
+                self.file_category = FileCategory.TIF
+        return self

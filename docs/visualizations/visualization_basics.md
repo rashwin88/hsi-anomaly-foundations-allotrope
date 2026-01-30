@@ -45,3 +45,10 @@ Sample visualizations are as follows:
 <p align="center">
     <img src="assets/basic_swir_1.jpg" width="500" alt="Sample SWIR Multibands 11-62">
 </p>
+
+### Thermal Band Visualization
+
+The thermal band visualization for the sample file is as follows. Note that there is only one band in this case:
+<p align="center">
+    <img src="assets/basic_thermal_1.jpg" width="500" alt="Sample Thermal Band 1">
+</p>

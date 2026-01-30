@@ -1,0 +1,69 @@
+<mxfile host="Electron" agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) draw.io/28.0.4 Chrome/138.0.7204.97 Electron/37.2.1 Safari/537.36" version="28.0.4">
+  <diagram name="Page-1" id="aqeiM2UZunvHgZSNgqEu">
+    <mxGraphModel dx="1216" dy="816" grid="0" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="827" pageHeight="1169" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="kszv5VcCG0khrPSAufmX-8" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="1" source="kszv5VcCG0khrPSAufmX-1" target="kszv5VcCG0khrPSAufmX-2">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="kszv5VcCG0khrPSAufmX-1" value="app.&lt;div&gt;utils.&lt;/div&gt;&lt;div&gt;files.&lt;/div&gt;&lt;div&gt;tif_helper&lt;/div&gt;" style="shape=module;align=left;spacingLeft=20;align=center;verticalAlign=top;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="156" y="164" width="154" height="76" as="geometry" />
+        </mxCell>
+        <mxCell id="kszv5VcCG0khrPSAufmX-2" value="TIFHelper" style="swimlane;fontStyle=1;align=center;verticalAlign=top;childLayout=stackLayout;horizontal=1;startSize=26;horizontalStack=0;resizeParent=1;resizeParentMax=0;resizeLast=0;collapsible=1;marginBottom=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="49" y="318" width="368" height="138" as="geometry" />
+        </mxCell>
+        <mxCell id="kszv5VcCG0khrPSAufmX-3" value="+ file_source_config : FileSourceConfig" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;whiteSpace=wrap;html=1;" vertex="1" parent="kszv5VcCG0khrPSAufmX-2">
+          <mxGeometry y="26" width="368" height="26" as="geometry" />
+        </mxCell>
+        <mxCell id="kszv5VcCG0khrPSAufmX-6" value="+ file_metadata: TIFMetadata" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;whiteSpace=wrap;html=1;" vertex="1" parent="kszv5VcCG0khrPSAufmX-2">
+          <mxGeometry y="52" width="368" height="26" as="geometry" />
+        </mxCell>
+        <mxCell id="kszv5VcCG0khrPSAufmX-4" value="" style="line;strokeWidth=1;fillColor=none;align=left;verticalAlign=middle;spacingTop=-1;spacingLeft=3;spacingRight=3;rotatable=0;labelPosition=right;points=[];portConstraint=eastwest;strokeColor=inherit;" vertex="1" parent="kszv5VcCG0khrPSAufmX-2">
+          <mxGeometry y="78" width="368" height="8" as="geometry" />
+        </mxCell>
+        <mxCell id="kszv5VcCG0khrPSAufmX-5" value="+_construct_metadata_structure() -&amp;gt; TIFMetadata" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;whiteSpace=wrap;html=1;" vertex="1" parent="kszv5VcCG0khrPSAufmX-2">
+          <mxGeometry y="86" width="368" height="26" as="geometry" />
+        </mxCell>
+        <mxCell id="kszv5VcCG0khrPSAufmX-26" value="+ extract_bands(bands, masking_needed) -&amp;gt; np.ma.MaskedArray" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;whiteSpace=wrap;html=1;" vertex="1" parent="kszv5VcCG0khrPSAufmX-2">
+          <mxGeometry y="112" width="368" height="26" as="geometry" />
+        </mxCell>
+        <mxCell id="kszv5VcCG0khrPSAufmX-9" value="app.&lt;div&gt;models.&lt;/div&gt;&lt;div&gt;file_processing.&lt;/div&gt;&lt;div&gt;file_metadata_models&lt;/div&gt;" style="shape=module;align=left;spacingLeft=20;align=center;verticalAlign=top;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="552" y="164" width="154" height="76" as="geometry" />
+        </mxCell>
+        <mxCell id="kszv5VcCG0khrPSAufmX-20" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=1;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="kszv5VcCG0khrPSAufmX-10" target="kszv5VcCG0khrPSAufmX-16">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="801" y="354" />
+              <mxPoint x="801" y="468" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="kszv5VcCG0khrPSAufmX-10" value="TIFProperty" style="swimlane;fontStyle=1;align=center;verticalAlign=top;childLayout=stackLayout;horizontal=1;startSize=26;horizontalStack=0;resizeParent=1;resizeParentMax=0;resizeLast=0;collapsible=1;marginBottom=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="477.5" y="311" width="303" height="86" as="geometry" />
+        </mxCell>
+        <mxCell id="kszv5VcCG0khrPSAufmX-11" value="+ name: str" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;whiteSpace=wrap;html=1;" vertex="1" parent="kszv5VcCG0khrPSAufmX-10">
+          <mxGeometry y="26" width="303" height="26" as="geometry" />
+        </mxCell>
+        <mxCell id="kszv5VcCG0khrPSAufmX-12" value="+ value: Any" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;whiteSpace=wrap;html=1;" vertex="1" parent="kszv5VcCG0khrPSAufmX-10">
+          <mxGeometry y="52" width="303" height="26" as="geometry" />
+        </mxCell>
+        <mxCell id="kszv5VcCG0khrPSAufmX-13" value="" style="line;strokeWidth=1;fillColor=none;align=left;verticalAlign=middle;spacingTop=-1;spacingLeft=3;spacingRight=3;rotatable=0;labelPosition=right;points=[];portConstraint=eastwest;strokeColor=inherit;" vertex="1" parent="kszv5VcCG0khrPSAufmX-10">
+          <mxGeometry y="78" width="303" height="8" as="geometry" />
+        </mxCell>
+        <mxCell id="kszv5VcCG0khrPSAufmX-15" value="TIFMetadata" style="swimlane;fontStyle=1;align=center;verticalAlign=top;childLayout=stackLayout;horizontal=1;startSize=26;horizontalStack=0;resizeParent=1;resizeParentMax=0;resizeLast=0;collapsible=1;marginBottom=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="477.5" y="429" width="303" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="kszv5VcCG0khrPSAufmX-16" value="+ metadata: List[str, TIFProperty]" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;whiteSpace=wrap;html=1;" vertex="1" parent="kszv5VcCG0khrPSAufmX-15">
+          <mxGeometry y="26" width="303" height="26" as="geometry" />
+        </mxCell>
+        <mxCell id="kszv5VcCG0khrPSAufmX-18" value="" style="line;strokeWidth=1;fillColor=none;align=left;verticalAlign=middle;spacingTop=-1;spacingLeft=3;spacingRight=3;rotatable=0;labelPosition=right;points=[];portConstraint=eastwest;strokeColor=inherit;" vertex="1" parent="kszv5VcCG0khrPSAufmX-15">
+          <mxGeometry y="52" width="303" height="8" as="geometry" />
+        </mxCell>
+        <mxCell id="kszv5VcCG0khrPSAufmX-27" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0;entryY=0.25;entryDx=0;entryDy=0;" edge="1" parent="1" source="kszv5VcCG0khrPSAufmX-6" target="kszv5VcCG0khrPSAufmX-15">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
