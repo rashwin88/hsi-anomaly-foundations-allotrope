@@ -1,3 +1,5 @@
+import logging
+
 import h5py
 from pydantic import ValidationError
 from app.models.file_processing.sources import FileSourceConfig
@@ -9,7 +11,6 @@ from app.models.file_processing.file_metadata_models import (
 )
 from h5py import Group, Dataset
 
-import logging
 
 logger = logging.getLogger("He5Helper")
 logger.setLevel(logging.INFO)
@@ -72,7 +73,6 @@ class HE5Helper:
         metadata_structure = {}
 
         # First we need to get the root metadata
-
         root_meta = ComponentMetadata()
         root_meta.type = type(self.raw_structure)
         root_meta.shape = None
@@ -103,17 +103,12 @@ class HE5Helper:
 
 
 ## Local testing
-
 if __name__ == "__main__":
-    import pprint
-    import json
-
     file_source_config = FileSourceConfig(
         source_path="raw_files/Hyper/PRS_L2D_STD_20231229050902_20231229050907_0001.he5"
     )
     he5_helper = HE5Helper(file_source_config)
     root_attributes = he5_helper.file_metadata.root_metadata.file_attributes
-
     ## understanding VNIR
     vnir_count = len(root_attributes["List_Cw_Vnir"])
     vnir_non_zero_count = sum(
@@ -123,12 +118,10 @@ if __name__ == "__main__":
     vnir_cube_shape = he5_helper.file_metadata.component_metadata[
         "HDFEOS/SWATHS/PRS_L2D_HCO/Data Fields/VNIR_Cube"
     ].shape
-
     print(f"VNIR Count: {vnir_count}")
     print(f"VNIR Non Zero Count: {vnir_non_zero_count}")
     print(f"VNIR FWHM Count: {vnir_fwhm_count}")
     print(f"VNIR Cube Shape: {vnir_cube_shape}")
-
     ## understanding SWIR
     swir_count = len(root_attributes["List_Cw_Swir"])
     swir_non_zero_count = sum(
@@ -138,7 +131,6 @@ if __name__ == "__main__":
     swir_cube_shape = he5_helper.file_metadata.component_metadata[
         "HDFEOS/SWATHS/PRS_L2D_HCO/Data Fields/SWIR_Cube"
     ].shape
-
     print(f"SWIR Count: {swir_count}")
     print(f"SWIR Non Zero Count: {swir_non_zero_count}")
     print(f"SWIR FWHM Count: {swir_fwhm_count}")

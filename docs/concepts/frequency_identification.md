@@ -77,4 +77,4 @@ Notice a few things here, the `List_Cw_Vnir_FLags` has 66 elements in total and 
 
 The `List_Cw_Swir_Flags` has 173 elements in total and 171 non-zero elements. The indices of the non-zero elements are the bands that are valid. The rest are invalid. The cube has 173 bands which means that it has a band for every wavelength *including* the invalid wavelengths. We can remove them later on. The FWHM list also has 173 elements. For the invalid wavelengths, the FWHM is set to 0.0. 
 
-So, by looking at the band number, we can identify the frequency, the FWHM and whether the band is valid or invalid. We will need to construct a helper class that does this.
+So, by looking at the band number, we can identify the frequency, the FWHM and whether the band is valid or invalid. We will need to construct a helper class that does this. The idea is to extract this information and then store it somewhere.
