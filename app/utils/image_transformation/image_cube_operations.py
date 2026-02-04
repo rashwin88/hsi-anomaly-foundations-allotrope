@@ -1,54 +1,33 @@
+"""
+Perform transformation operations on image cubes
+"""
+
+from typing import Dict, List, Literal
 import torch
 import numpy as np
-from app.models.images.cube_representation import CubeRepresentation
-from typing import Dict, List, Literal
+import copy
+
+from app.models.images.cube_representation import (
+    CubeRepresentation,
+    DIMENSION_MAPPING,
+    DIMENSIONAL_ARRANGEMENTS,
+)
 from app.utils.torch_helpers.device_selection import get_device
 
 
 class ImageCubeOperations:
+    """
+    Operations on an image cube to transform it into multiple
+    representations.
+    """
+
     def __init__(self):
-        self.dimension_map: Dict[CubeRepresentation, Dict[str, int]] = (
-            self._build_dimension_map()
-        )
+        self.dimension_map: Dict[CubeRepresentation, Dict[str, int]] = DIMENSION_MAPPING
         self.arrangements: Dict[CubeRepresentation, List[str]] = (
-            self._build_dimensional_arrangements()
+            DIMENSIONAL_ARRANGEMENTS
         )
         self.device = get_device()
         print(f"Using device: {self.device}")
-
-    def _build_dimension_map(self) -> Dict[CubeRepresentation, Dict[str, int]]:
-        """
-        Builds a dimension map for the cube representations
-        """
-        dimension_map = {
-            CubeRepresentation.BIL: {
-                "H": 0,
-                "W": 2,
-                "C": 1,
-            },
-            CubeRepresentation.BIP: {
-                "H": 0,
-                "W": 1,
-                "C": 2,
-            },
-            CubeRepresentation.BSQ: {
-                "H": 1,
-                "W": 2,
-                "C": 0,
-            },
-        }
-        return dimension_map
-
-    def _build_dimensional_arrangements(self) -> Dict[CubeRepresentation, List[str]]:
-        """
-        Builds a dimensional arrangement for the cube representations
-        """
-        dimensional_arrangements = {
-            CubeRepresentation.BIL: ["H", "C", "W"],
-            CubeRepresentation.BIP: ["H", "W", "C"],
-            CubeRepresentation.BSQ: ["C", "H", "W"],
-        }
-        return dimensional_arrangements
 
     def convert_cube(
         self,
@@ -82,13 +61,3 @@ class ImageCubeOperations:
             return transformed.detach().cpu().numpy()
         else:
             raise ValueError(f"Invalid output form: {output_form}")
-
-
-if __name__ == "__main__":
-    image_cube_operations = ImageCubeOperations()
-    cube = np.random.rand(30, 2000, 1000)
-    print(cube.shape)
-    transformed = image_cube_operations.convert_cube(
-        cube, CubeRepresentation.BSQ, CubeRepresentation.BIL
-    )
-    print(transformed.shape)

@@ -1,27 +1,11 @@
-from token import OP
-from pydantic import BaseModel, Field
+"""
+Metadata components for different file types
+"""
+
 from typing import Any, Optional, Tuple
 from typing import Dict, List
-import warnings
 
-
-### Replacing FullMetadata with He5Metadata
-def __getattr__(name: str) -> Any:
-    if name == "FullMetadata":
-        warnings.warn(
-            "FullMetadata is deprecated. Please use He5Metadata instead.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        return He5Metadata
-    elif name == "ComponentMetadata":
-        warnings.warn(
-            "ComponentMetadata is deprecated. Please use He5ComponentMetadata instead.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        return He5ComponentMetadata
-    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+from pydantic import BaseModel, Field
 
 
 class He5ComponentMetadata(BaseModel):
