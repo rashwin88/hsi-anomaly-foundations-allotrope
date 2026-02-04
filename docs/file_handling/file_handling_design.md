@@ -1,3 +1,48 @@
+### File helper abstraction
+
+We use the `file_helper` abstract class to create a model for all file handling operations.
+
+```mermaid
+classDiagram
+    class FileHelper~T, Ab~ {
+        <<abstract>>
+        FileSourceConfig file_source_config
+        file_category: FileCategory*
+        file_metadata: T*
+        product: Product*
+        template: Dict*
+        access_dataset(path: str) Any
+        _construct_metadata_structure()* T
+        extract_specific_bands(bands, masking, family, mode)* ndarray
+    }
+
+    class FileSourceConfig {
+        +path: str
+        +source_type: str
+    }
+
+    class Product {
+        <<enumeration>>
+        PSRIMA
+        ENMAP
+        LANDSAT
+    }
+
+    class FileCategory {
+      <<enumeration>>
+      HDFS
+      TIF
+
+    }
+
+    %% Relationships
+    FileHelper --> FileSourceConfig : Has-a (Composition)
+    FileHelper ..> Product : Uses
+    FileHelper ..> FileCategory: Uses
+```
+
+In this specific case the `extract_specific_bands` method goes into the dataset and pulls out bands by their specific index.
+
 ### File Handling Design
 
 This project will involve a lot of he5 file handling and it is important to have a consistent system of managing these files.

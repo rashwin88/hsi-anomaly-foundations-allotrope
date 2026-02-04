@@ -2,10 +2,9 @@
 Perform transformation operations on image cubes
 """
 
-from typing import Dict, List, Literal
+from typing import Dict, List, Literal, Union
 import torch
 import numpy as np
-import copy
 
 from app.models.images.cube_representation import (
     CubeRepresentation,
@@ -31,11 +30,11 @@ class ImageCubeOperations:
 
     def convert_cube(
         self,
-        cube: np.ndarray | torch.Tensor,
+        cube: Union[np.ndarray, np.ma.MaskedArray, torch.Tensor],
         from_format: CubeRepresentation,
         to_format: CubeRepresentation,
         output_form: Literal["tensor", "numpy"] = "numpy",
-    ) -> torch.Tensor | np.ndarray:
+    ) -> Union[torch.Tensor, np.ndarray, np.ma.MaskedArray]:
         """
         Converts a cube from one format to another
         """

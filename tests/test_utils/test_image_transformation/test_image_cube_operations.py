@@ -40,6 +40,18 @@ def tensor_cubes():
     }
 
 
+@pytest.fixture
+def masked_numpy_array() -> np.ma.MaskedArray:
+    """
+    Fixture for a masked numpy array
+    """
+    # The shape is BSQ
+    shape = (3, 2000, 2000)
+    cube = np.random.randint(0, 100, size=shape)
+    mask = np.random.rand(*shape) < 0.20
+    return np.ma.masked_array(cube, mask=mask)
+
+
 def test_array_inputs_array_outputs(numpy_cubes):
     """
     Tests to check if array inputs under various configurations
@@ -359,3 +371,29 @@ def test_invalid_output_form(numpy_cubes):
             to_format=CubeRepresentation.BIP,
             output_form="invalid",
         )
+
+
+def test_cube_manipulations_on_masked_array(masked_numpy_array):
+    """
+    Tests to see if cube operations work on masked arrays
+    """
+    transformer = ImageCubeOperations()
+
+    output_cube = transformer.convert_cube(
+        cube=masked_numpy_array,
+        from_format=CubeRepresentation.BSQ,
+        to_format=CubeRepresentation.BIP,
+        output_form="numpy",
+    )
+
+    assert output_cube.shape == (2000, 2000, 3)
+
+    tensor_output = transformer.convert_cube(
+        cube=masked_numpy_array,
+        from_format=CubeRepresentation.BSQ,
+        to_format=CubeRepresentation.BIP,
+        output_form="tensor",
+    )
+
+    assert isinstance(tensor_output, torch.Tensor)
+    assert tensor_output.shape == (2000, 2000, 3)

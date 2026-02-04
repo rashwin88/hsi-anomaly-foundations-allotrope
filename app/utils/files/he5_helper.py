@@ -151,43 +151,15 @@ class HE5Helper(FileHelper):
             raise KeyError(
                 "Mapping Key for Spectral Family not found",
             )
-
         # Now that we have the path we can perform further operations
         # Access the data in the path
         raw_cube = self.access_dataset(path)
         # Slice out only the bands in the cube that matter
-
-
-## Local testing
-if __name__ == "__main__":
-    file_source_config = FileSourceConfig(
-        source_path="raw_files/Hyper/PRS_L2D_STD_20231229050902_20231229050907_0001.he5"
-    )
-    he5_helper = HE5Helper(file_source_config)
-    root_attributes = he5_helper.file_metadata.root_metadata.file_attributes
-    ## understanding VNIR
-    vnir_count = len(root_attributes["List_Cw_Vnir"])
-    vnir_non_zero_count = sum(
-        1 for x in root_attributes["List_Cw_Vnir_Flags"] if x == 1
-    )
-    vnir_fwhm_count = len(root_attributes["List_Fwhm_Vnir"])
-    vnir_cube_shape = he5_helper.file_metadata.component_metadata[
-        "HDFEOS/SWATHS/PRS_L2D_HCO/Data Fields/VNIR_Cube"
-    ].shape
-    print(f"VNIR Count: {vnir_count}")
-    print(f"VNIR Non Zero Count: {vnir_non_zero_count}")
-    print(f"VNIR FWHM Count: {vnir_fwhm_count}")
-    print(f"VNIR Cube Shape: {vnir_cube_shape}")
-    ## understanding SWIR
-    swir_count = len(root_attributes["List_Cw_Swir"])
-    swir_non_zero_count = sum(
-        1 for x in root_attributes["List_Cw_Swir_Flags"] if x == 1
-    )
-    swir_fwhm_count = len(root_attributes["List_Fwhm_Swir"])
-    swir_cube_shape = he5_helper.file_metadata.component_metadata[
-        "HDFEOS/SWATHS/PRS_L2D_HCO/Data Fields/SWIR_Cube"
-    ].shape
-    print(f"SWIR Count: {swir_count}")
-    print(f"SWIR Non Zero Count: {swir_non_zero_count}")
-    print(f"SWIR FWHM Count: {swir_fwhm_count}")
-    print(f"SWIR Cube Shape: {swir_cube_shape}")
+        if mode == "all":
+            output = raw_cube
+        elif mode == "specific":
+            output = raw_cube[:, bands, :]
+        # Check if we need masking
+        if masking_needed:
+            output = np.ma.masked_where(output == 0, output)
+        return output
