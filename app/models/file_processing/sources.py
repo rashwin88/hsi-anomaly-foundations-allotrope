@@ -1,7 +1,12 @@
+"""
+Defines sources for files
+"""
+
 from enum import Enum
+from typing import Optional
+
 from pydantic import BaseModel, Field, model_validator
 from app.models.file_processing.file_categories import FileCategory
-from typing import Optional
 
 
 class FileDownloaderType(Enum):
@@ -32,8 +37,10 @@ class FileSourceConfig(BaseModel):
         Infers the file category based on the file extension
         """
         if self.file_category is None:
-            if self.source_path.endswith(".he5"):
+            if self.source_path.lower().endswith(".he5"):  # pylint: disable=no-member
                 self.file_category = FileCategory.HDFS
-            elif self.source_path.lower().endswith(".tif"):
+            elif self.source_path.lower().endswith(".tif"):  # pylint: disable=no-member
                 self.file_category = FileCategory.TIF
+            else:
+                raise ValueError("Unrecognized File Extension")
         return self

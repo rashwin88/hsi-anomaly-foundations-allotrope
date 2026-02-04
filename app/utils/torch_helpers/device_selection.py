@@ -1,5 +1,9 @@
-import torch
+"""
+Device setter across mac and other linux devices
+"""
+
 import logging
+import torch
 
 logger = logging.getLogger("DeviceSelection")
 logger.setLevel(logging.INFO)
@@ -17,11 +21,5 @@ def get_device():
     else:
         device = "cpu"
 
-    logger.info(f"Using device: {device.upper()}")
+    logger.info("Using device: %s", device.upper())
     return torch.device(device)
-
-
-# testing routine
-if __name__ == "__main__":
-    device = get_device()
-    print(device)

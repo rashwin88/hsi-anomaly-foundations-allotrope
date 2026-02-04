@@ -47,7 +47,7 @@ class ReferenceDefinition(BaseModel):
             if not self.file_name:
                 raise ValueError(f"{ReferenceType.FILE_REFERENCE} needs a file name.")
         elif self.reference_type == ReferenceType.ROOT_METADATA_FIELD:
-            if not self.root_metdata_field_name:
+            if not self.root_metadata_field_name:
                 raise ValueError(
                     f"{ReferenceType.ROOT_METADATA_FIELD} needs a field name."
                 )

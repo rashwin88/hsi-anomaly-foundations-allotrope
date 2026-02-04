@@ -1,42 +1,66 @@
-import logging
+"""
+Implementation of the FileHelper for
+HE5 files
+"""
 
+import logging
+from typing import Dict, Any, Literal, List, Optional
+
+import numpy as np
 import h5py
-from pydantic import ValidationError
+from h5py import Dataset
+
+# Abstract classes
+from app.abstract_classes.file_helper import FileHelper
+from app.models.products.products import Product
+from app.models.hyperspectral_concepts.spectral_family import SpectralFamily
 from app.models.file_processing.sources import FileSourceConfig
-from app.utils.files.file_loader_helper import FileLoaderHelper
-from typing import Dict, List, Any
 from app.models.file_processing.file_metadata_models import (
-    FullMetadata,
-    ComponentMetadata,
+    He5ComponentMetadata,
+    He5Metadata,
 )
-from h5py import Group, Dataset
+from app.models.hyperspectral_concepts.file_components import (
+    HyperspectralFileComponents,
+)
+from app.models.hyperspectral_concepts.references import ReferenceDefinition
+
+from app.templates.template_mappings import TEMPLATE_MAPPINGS
 
 
 logger = logging.getLogger("He5Helper")
 logger.setLevel(logging.INFO)
 
 
-class HE5Helper:
+class HE5Helper(FileHelper):
     """
     A helper class for working with HE5 files.
     Operates on multiple file sources.
+
+    ** Abstract Class : FileHelper **
     """
 
-    def __init__(self, file_source_config: FileSourceConfig):
+    def __init__(self, file_source_config: FileSourceConfig, product: Product = None):
         """
         Class constructor for file loading
         """
-
         # Initialize the file loader helper
-        self.file_source_config: FileSourceConfig = file_source_config
+        super().__init__(file_source_config=file_source_config)
 
-        # The raw strcture in itself can be used to access the metadata and the actual content in the file.
+        self.product = product
+        # The raw structure in itself can be used to access the metadata and the actual content in the file.
         self.raw_structure: h5py.File = h5py.File(
             self.file_source_config.source_path, "r"
         )
-        self.file_metadata: FullMetadata = self._construct_metadata_structure()
+        self.file_metadata: He5Metadata = self._construct_metadata_structure()
+        # Get the template mappings
+        self.template: Dict[HyperspectralFileComponents, ReferenceDefinition] = (
+            TEMPLATE_MAPPINGS.get(self.product)
+        )
 
-    def get_dataset(self, path: str) -> Any:
+        # Additional things needed for proper file handling
+        self.masked_pixel_value: int = 0
+
+    def access_dataset(self, path: str) -> Any:
         """
         Given a path, returns the dataset at that path
         """
@@ -51,8 +75,9 @@ class HE5Helper:
         """
         Gets clean attributes for a given key path
         """
-        clean_attrs = {}
+        clean_attrs: Dict = {}
         if key_path is None:
+            # meant for root level metadata tags if any
             metadata = self.raw_structure
         else:
             metadata = self.raw_structure[key_path]
@@ -63,20 +88,20 @@ class HE5Helper:
                 clean_attrs[k] = v
         return clean_attrs
 
-    def _construct_metadata_structure(self) -> FullMetadata:
+    def _construct_metadata_structure(self) -> He5Metadata:
         """
-
         Constructs a metadata structure for the He5 file
         """
-        output = FullMetadata()
+        output = He5Metadata()
         metadata_paths = []
         metadata_structure = {}
 
         # First we need to get the root metadata
-        root_meta = ComponentMetadata()
+        root_meta = He5ComponentMetadata()
         root_meta.type = type(self.raw_structure)
         root_meta.shape = None
         root_meta.is_scalar = False
+        # Root level metadata extracted
         root_meta.file_attributes = self._get_clean_attrs()
         output.root_metadata = root_meta
 
@@ -86,7 +111,7 @@ class HE5Helper:
 
         # Now for each path build up the metdata structure
         for path in metadata_paths:
-            metadata = ComponentMetadata()
+            metadata = He5ComponentMetadata()
             metadata.type = type(self.raw_structure[path])
             metadata_structure[path] = metadata
             # Check if this is a dataset
@@ -100,6 +125,37 @@ class HE5Helper:
             metadata.file_attributes = self._get_clean_attrs(path)
             output.component_metadata[path] = metadata
         return output
+
+    def extract_specific_bands(
+        self,
+        bands: List[int],
+        masking_needed: Optional[bool] = False,
+        spectral_family: Optional[SpectralFamily] = None,
+        mode: Literal["all", "specific"] = "specific",
+    ) -> np.ndarray | np.ma.MaskedArray:
+        """
+        Extracts bands from the dataset.
+        Refer to base class for documentation.
+        """
+        # First we access the dataset and store it.
+        # To do that we need the spectral family
+        if spectral_family == SpectralFamily.SWIR:
+            path = self.template.get(
+                HyperspectralFileComponents.SWIR_CUBE_DATA
+            ).file_name
+        elif spectral_family == SpectralFamily.VNIR:
+            path = self.template.get(
+                HyperspectralFileComponents.VNIR_CUBE_DATA
+            ).file_name
+        else:
+            raise KeyError(
+                "Mapping Key for Spectral Family not found",
+            )
+
+        # Now that we have the path we can perform further operations
+        # Access the data in the path
+        raw_cube = self.access_dataset(path)
+        # Slice out only the bands in the cube that matter
 
 
 ## Local testing
