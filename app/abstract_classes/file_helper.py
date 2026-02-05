@@ -34,14 +34,6 @@ class FileHelper(ABC, Generic[T]):
     def __init__(self, file_source_config: FileSourceConfig):
         self.file_source_config = file_source_config
 
-    @property
-    @abstractmethod
-    def file_category(self) -> FileCategory:
-        """
-        The file category for the helper
-        """
-        pass
-
     def access_dataset(self, path: str) -> Any:
         """
         Most times the datasets are loaded in a lazy manner. This allows pulling actual
