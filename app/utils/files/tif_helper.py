@@ -1,29 +1,53 @@
+from typing import Dict, List
+import logging
+
+import numpy as np
 import rasterio
 from app.models.file_processing.sources import FileSourceConfig
 from app.models.file_processing.file_metadata_models import TIFMetadata, TIFProperty
 from app.models.images.cube_representation import CubeRepresentation
-from typing import Dict, List
-import numpy as np
+from app.models.products.products import Product
+from app.abstract_classes.file_helper import FileHelper
 
-
-import logging
 
 logger = logging.getLogger("TIFHelper")
 logger.setLevel(logging.INFO)
 
 
-class TIFHelper:
+class TIFHelper(FileHelper):
     """
     A helper class for working with tif files.
     """
 
-    def __init__(self, file_source_config: FileSourceConfig):
+    def __init__(self, file_source_config: FileSourceConfig, product: Product = None):
         """
         Class constructor for file loading
         """
         # Initialize file Source Config
-        self.file_source_config: FileSourceConfig = file_source_config
-        self.file_metadata: TIFMetadata = self._construct_metadata_structure()
+        self._file_source_config: FileSourceConfig = file_source_config
+        self._product = product
+        self._file_metadata: TIFMetadata = self._construct_metadata_structure()
+
+    @property
+    def file_source_config(self) -> FileSourceConfig:
+        """
+        Return the file source config
+        """
+        return self._file_source_config
+
+    @property
+    def product(self) -> Product:
+        """
+        Returns the product
+        """
+        return self._product
+
+    @property
+    def file_metadata(self) -> TIFMetadata:
+        """
+        Returns the file metadata
+        """
+        return self._file_metadata
 
     def _construct_metadata_structure(self) -> TIFMetadata:
         """
@@ -33,12 +57,13 @@ class TIFHelper:
         property_dict: Dict[str, TIFProperty] = {}
 
         logger.debug(
-            f"Constructing metadata structure for TIF file: {self.file_source_config.source_path}"
+            "Constructing metadata structure for TIF file: %s",
+            self.file_source_config.source_path,
         )
 
         # First pull information from profile
         logger.debug(
-            f"Pulling information from profile: {self.file_source_config.source_path}"
+            "Pulling information from profile: %s", self.file_source_config.source_path
         )
         profile = rasterio.open(self.file_source_config.source_path).profile
         for key, value in profile.items():
@@ -46,7 +71,7 @@ class TIFHelper:
 
         # Now pull information from tags
         logger.debug(
-            f"Pulling information from tags: {self.file_source_config.source_path}"
+            "Pulling information from tags: %s", self.file_source_config.source_path
         )
         tags = rasterio.open(self.file_source_config.source_path).tags()
         for key, value in tags.items():
@@ -54,7 +79,7 @@ class TIFHelper:
 
         # Now pull information from bounds
         logger.debug(
-            f"Pulling information from bounds: {self.file_source_config.source_path}"
+            "Pulling information from bounds: %s", self.file_source_config.source_path
         )
         bounds = rasterio.open(self.file_source_config.source_path).bounds
         property_dict["bounds"] = TIFProperty(name="bounds", value=bounds)
