@@ -1,0 +1,24 @@
+"""
+Defines the different hyperspectral file components
+"""
+
+from enum import Enum
+
+
+class HyperspectralFileComponents(str, Enum):
+    """
+    Defines the different hyperspectral file components
+    """
+
+    SWIR_CUBE_DATA = "SWIR_CUBE_DATA"
+    VNIR_CUBE_DATA = "VNIR_CUBE_DATA"
+    VNIR_PIXEL_ERR_MATRIX = "VNIR_PIXEL_ERR_MATRIX"
+    SWIR_PIXEL_ERR_MATRIX = "SWIR_PIXEL_ERR_MATRIX"
+
+    SWIR_CENTRAL_WAVELENGTH_LIST = "SWIR_CENTRAL_WAVELENGTH_LIST"
+    SWIR_CENTRAL_WAVELENGTH_FLAGS = "SWIR_CENTRAL_WAVELENGTH_FLAGS"
+    SWIR_FWHM_LIST = "SWIR_FWHM_LIST"
+
+    VNIR_CENTRAL_WAVELENGTH_LIST = "VNIR_CENTRAL_WAVELENGTH_LIST"
+    VNIR_CENTRAL_WAVELENGTH_FLAGS = "VNIR_CENTRAL_WAVELENGTH_FLAGS"
+    VNIR_FWHM_LIST = "VNIR_FWHM_LIST"
