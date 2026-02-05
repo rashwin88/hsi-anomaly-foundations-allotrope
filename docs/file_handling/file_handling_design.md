@@ -45,30 +45,57 @@ In this specific case the `extract_specific_bands` method goes into the dataset 
 
 ### File Handling Design
 
-This project will involve a lot of he5 file handling and it is important to have a consistent system of managing these files.
-What we are dealing with is a specific flavor of the hierarchical data format 5 file - HDF-EOS5. This is a standard format used in satellite data. The file is self describing and usually contains metadata tags.
+The `HE5Helper` class implements the file_helper abstraction and is used to handle large HE5 files. Sequence diagrams of individual methods are shown below
 
-Think of the 'file' as a tree structure. The root node is the file itself. The leaves are the datasets. The branches are the groups. We need a simple interface to help access the data in the file.
+```mermaid
+sequenceDiagram
+    participant U as User
+    participant HE5H as HE5Helper
+    participant FS as FileSourceConfig
 
-In this discussion we will seperate **downloading** the file from *processing* it. This implies that for file processing to take place the file object is already downloaded and available in a local path.
+    U->>HE5H: call _construct_metadata_structure()
+    activate HE5H
+    HE5H->>FS: access file path and config
+    FS-->>HE5H: return file path and config
+    HE5H->>HE5H: call _get_clean_attrs() for root metadata
+    HE5H->>HE5H: visit all dataset paths in file
+    loop for each dataset path
+        HE5H->>HE5H: call _get_clean_attrs(path)
+    end
+    HE5H->>HE5H: build metadata objects for each component
+    HE5H-->>U: return constructed metadata structure (T)
+    deactivate HE5H
+```
 
-The local path is stored in the `FileSourceConfig` model where the `source_path` field is a string.
+Extracttion of specific bands from the lazily loaded dataset proceeds as follows, not that there is a slight inefficiency that needs correction here. Instead of pulling out specific bands directly, we are forced to pull the entire cube first and then slice out the required bands.
 
-The `he5_helper` class is used to help process the file. It is initialized with a `FileSourceConfig` object and provides a simple interface to help access the data in the file.
+```mermaid
+sequenceDiagram
+    participant U as User
+    participant HE5H as HE5Helper
+    participant FS as FileSourceConfig
+    participant T as TemplateMapping
+    participant H5 as HDF5File
 
-The general flow of the file handling is as follows:
+    U->>HE5H: extract_specific_bands(bands, masking_needed, spectral_family, mode)
+    activate HE5H
+    HE5H->>T: get file path for spectral_family from template mapping
+    T-->>HE5H: return path
+    HE5H->>H5: access_dataset(path)
+    H5-->>HE5H: return raw_cube (full data from path)
+    alt mode == "all"
+        HE5H->>HE5H: output = raw_cube
+    else mode == "specific"
+        HE5H->>HE5H: output = slice raw_cube to extract bands by index
+    end
+    alt masking_needed == true
+        HE5H->>HE5H: mask output where values == 0
+    end
+    HE5H-->>U: return output
+    deactivate HE5H
+```
 
-<p align="center">
-  <img src="assets/he5_helper.png" width="700" alt="File Handling Flow">
-</p>
 
-We pass a path of the he5 file to the he5 helper class. This class will then pull out the metadata at the file and group level and contain methods to access the data at the dataset level.
-
-The `TIFHelper` class is also defined similarly as follows:
-
-<p align="center">
-  <img src="assets/tif_helper.png" width="700" alt="File Handling Flow">
-</p>
 
 
 ### A note on band extraction from files.
@@ -79,7 +106,4 @@ Also note that BIL is the default in the case of HE5 files. However, in the case
 
 *Also note that in the case of TIF files, the bands are indexed starting from 1. This means there is no band 0*
 
-<p align="center">
-  <img src="assets/tif_nuances.png" width="400" alt="File Handling Flow">
-</p>
 

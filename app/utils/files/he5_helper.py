@@ -46,19 +46,36 @@ class HE5Helper(FileHelper):
         # Initialize the file loader helper
         super().__init__(file_source_config=file_source_config)
 
-        self.product = product
+        self._product = product
         # The raw structure in itself can be used to access the metadata and the actual content in the file.
         self.raw_structure: h5py.File = h5py.File(
             self.file_source_config.source_path, "r"
         )
-        self.file_metadata: He5Metadata = self._construct_metadata_structure()
+        logger.info(
+            "Setting file metadata for he5 file %s", self.file_source_config.source_path
+        )
+        self._file_metadata: He5Metadata = self._construct_metadata_structure()
+
+        logger.info("Pulling template mappings for product : %s", self.product.value)
         # Get the template mappings
-        self.template: Dict[HyperspectralFileComponents, ReferenceDefinition] = (
+        self._template: Dict[HyperspectralFileComponents, ReferenceDefinition] = (
             TEMPLATE_MAPPINGS.get(self.product)
         )
 
         # Additional things needed for proper file handling
         self.masked_pixel_value: int = 0
+
+    @property
+    def file_metadata(self) -> He5Metadata:
+        return self._file_metadata
+
+    @property
+    def product(self) -> Product:
+        return self._product
+
+    @property
+    def template(self) -> Dict[HyperspectralFileComponents, ReferenceDefinition]:
+        return self._template
 
     def access_dataset(self, path: str) -> Any:
         """
@@ -68,7 +85,7 @@ class HE5Helper(FileHelper):
         if path not in self.file_metadata.components:
             raise TypeError(f"Path {path} not found in the file")
         if not isinstance(self.raw_structure[path], Dataset):
-            raise TypeError(f"Path {path} is not a dataset")
+            raise KeyError(f"Path {path} is not a dataset")
         return self.raw_structure[path][()]
 
     def _get_clean_attrs(self, key_path: str | None = None) -> Dict[str, Any]:
@@ -136,6 +153,7 @@ class HE5Helper(FileHelper):
         """
         Extracts bands from the dataset.
         Refer to base class for documentation.
+        Will return a numpy array.
         """
         # First we access the dataset and store it.
         # To do that we need the spectral family
