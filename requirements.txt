@@ -3,3 +3,7 @@ pydantic
 tqdm
 numpy
 torch
+matplotlib
+rasterio
+pytest
+pytest-cov

@@ -1,4 +1,9 @@
-class NotImplementedError(Exception):
+"""
+Standard Not Implemented
+"""
+
+
+class ImplementationIncompleteError(Exception):
     """
     An error that is raised when a method is not implemented.
     """

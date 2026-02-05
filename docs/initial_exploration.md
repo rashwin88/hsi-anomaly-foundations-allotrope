@@ -231,3 +231,70 @@ The components of the file are as follows:
  'VNIR_Corrupted_Frame_Percentage',
  'VNIR_HGRP',
  'VNIR_X'
+```
+ ### File 2 - 6a4afb36-45f9-499a-8435-01a51f141db4
+
+The file contains a single .tif file in a folder named Thermal. The file is named: `LC09_L2SP_147049_20251121_20251122_02_T1_ST_B10.TIF`
+
+There is definitely some information about the file in the file name, but we will not extract it from there. Rather, there ought to be structured metadata in the file itself that can be extracted in a lazy manner.
+
+There are 4 sources of information from the TIF file that we can extract:
+1. profile
+2. tags() - a method
+3. bounds
+4. descriptions
+
+We'll probably store it in a single object in the end. Running a simple analysis shows the following:
+
+```python
+FILE_NAME = "raw_files/Thermal/LC09_L2SP_147049_20251121_20251122_02_T1_ST_B10.TIF"
+with rasterio.open(FILE_NAME) as src:
+
+    print("====== Profile ======")
+    print(src.profile)
+
+    print("====== Tags ======")
+    print(src.tags())
+
+    print("====== Bounds ======")
+    print(src.bounds)
+
+    print("====== Descriptions ======")
+    print(src.descriptions)
+```
+
+The output of the above code is as follows:
+```shell
+====== Profile ======
+{'driver': 'GTiff', 'dtype': 'uint16', 'nodata': 0.0, 'width': 7641, 'height': 7781, 'count': 1, 'crs': CRS.from_wkt('PROJCS["WGS 84 / UTM zone 43N",GEOGCS["WGS 84",DATUM["WGS_1984",SPHEROID["WGS 84",6378137,298.257223563,AUTHORITY["EPSG","7030"]],AUTHORITY["EPSG","6326"]],PRIMEM["Greenwich",0,AUTHORITY["EPSG","8901"]],UNIT["degree",0.0174532925199433,AUTHORITY["EPSG","9122"]],AUTHORITY["EPSG","4326"]],PROJECTION["Transverse_Mercator"],PARAMETER["latitude_of_origin",0],PARAMETER["central_meridian",75],PARAMETER["scale_factor",0.9996],PARAMETER["false_easting",500000],PARAMETER["false_northing",0],UNIT["metre",1,AUTHORITY["EPSG","9001"]],AXIS["Easting",EAST],AXIS["Northing",NORTH],AUTHORITY["EPSG","32643"]]'), 'transform': Affine(30.0, 0.0, 201885.0,
+       0.0, -30.0, 1875015.0), 'blockxsize': 256, 'blockysize': 256, 'tiled': True, 'compress': 'deflate', 'interleave': 'band'}
+====== Tags ======
+{'AREA_OR_POINT': 'Point'}
+====== Bounds ======
+BoundingBox(left=201885.0, bottom=1641585.0, right=431115.0, top=1875015.0)
+====== Descriptions ======
+(None,)
+```
+
+The field available are as follows:
+|Field| Available From | Significance|
+|-----|----------------|------------|
+driver| profile | The driver of the file - GTiff|
+dtype| profile | The data type of the file - uint16. This means every pixel is a number between 0 and 65535.|
+nodata | profile | Means every pixel with a value of 0 is empty |
+width | profile | The width of the image in pixels |
+height | profile | The height of the image in pixels |
+count | profile | The number of bands in the image |
+crs | profile | The coordinate reference system of the image |
+compress | profile | The compression algorithm used to compress the image |
+interleave | profile | The interleave order of the image |
+blockxsize, blockysize | profile | This setting determines how the image data is physically cut up and stored on your hard drive |
+transform | profile | The transformation matrix of the image which converts each pixel into a coordinate in the coordinate reference system|
+AREA_OR_POINT | tags() | 'Point': The coordinate (e.g., Lat/Lon) refers to the exact center of the pixel.,'Area': The coordinate refers to the top-left corner of the pixel.|
+
+
+We will be storing all this information in a single object.
+
+
+
+
