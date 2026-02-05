@@ -45,7 +45,9 @@ def test_class_initialization(live_source_data):
     assert len(helper.file_metadata.root_metadata.file_attributes.keys()) > 0
 
     # Check out the component metadata
-    assert len(helper.file_metadata.component_metadata.keys()) > 0
+    assert (
+        len(helper.file_metadata.component_metadata.keys()) > 0
+    )  # Pylint: disable=no-member
 
     # make sure templates are loaded
     assert len(helper.template.keys()) > 0
@@ -126,6 +128,7 @@ def test_full_band_extraction(live_source_data):
             spectral_family=SpectralFamily.PANCHROMATIC,
             mode="all",
         )
+        del panchromatic_cube
 
 
 @pytest.mark.large_files
