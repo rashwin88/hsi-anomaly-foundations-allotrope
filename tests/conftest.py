@@ -40,7 +40,7 @@ def live_source_data() -> Dict[str, FileSourceConfig]:
             source_path="tests/test_payloads/thermal_1/LC09_L2SP_150044_20251009_20251010_02_T1_ST_B10.TIF"
         ),
         "thermal_2": FileSourceConfig(
-            source_path="tests/test_payloads/thermal_1/LC09_L2SP_147049_20251121_20251122_02_T1_ST_B10.TIF"
+            source_path="tests/test_payloads/thermal_2/LC09_L2SP_147049_20251121_20251122_02_T1_ST_B10.TIF"
         ),
         "phase_2_hyperspectral_1": FileSourceConfig(
             source_path="tests/test_payloads/phase_2/Set-1/Hypersepctral Datasets/PRS_L2D_STD_20201214060713_20201214060717_0001.he5"
