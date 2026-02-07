@@ -5,7 +5,7 @@ dealing with very hierarchical and complicated datasets
 """
 
 from abc import ABC, abstractmethod
-from typing import Any, Generic, TypeVar, List, Optional, Literal, Dict
+from typing import Any, Generic, TypeVar, List, Optional, Literal, Dict, Union
 import numpy as np
 
 from pydantic import BaseModel
@@ -13,12 +13,11 @@ from pydantic import BaseModel
 
 # Local models
 from app.models.file_processing.sources import FileSourceConfig
-from app.models.file_processing.file_categories import FileCategory
 from app.models.hyperspectral_concepts.spectral_family import SpectralFamily
-from app.models.products.products import Product
 from app.models.hyperspectral_concepts.references import ReferenceDefinition
 from app.models.hyperspectral_concepts.file_components import (
     HyperspectralFileComponents,
+    ThermalComponents,
 )
 
 
@@ -31,8 +30,15 @@ class FileHelper(ABC, Generic[T]):
     Abstract notion of a file helper
     """
 
-    def __init__(self, file_source_config: FileSourceConfig):
+    def __init__(
+        self,
+        file_source_config: FileSourceConfig,
+        template: Dict[
+            Union[HyperspectralFileComponents, ThermalComponents], ReferenceDefinition
+        ],
+    ):
         self.file_source_config = file_source_config
+        self._template = template
 
     def access_dataset(self, path: str) -> Any:
         """
@@ -59,7 +65,7 @@ class FileHelper(ABC, Generic[T]):
     @abstractmethod
     def extract_specific_bands(
         self,
-        bands: List[int],
+        bands: List[int] | int,
         masking_needed: Optional[bool] = False,
         spectral_family: Optional[SpectralFamily] = None,
         mode: Literal["all", "specific"] = "specific",
@@ -73,14 +79,6 @@ class FileHelper(ABC, Generic[T]):
             masking_needed (Optional[bool]): Whether masking needs to be applied on the dataset that is extracted
             spectral_family (Optional[SpectralFamily]): The spectral family of the bands to be extracted.
             mode (Literal) : Specifies if all or specific bands need to be extracted.
-        """
-        pass
-
-    @property
-    @abstractmethod
-    def product(self) -> Product:
-        """
-        The product from which this file is produced
         """
         pass
 

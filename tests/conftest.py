@@ -31,16 +31,16 @@ def live_source_data() -> Dict[str, FileSourceConfig]:
     """
     return {
         "hyperspectral_1": FileSourceConfig(
-            source_path="test_payloads/Hyper_1/PRS_L2D_STD_20231229050902_20231229050907_0001.he5"
+            source_path="tests/test_payloads/Hyper_1/PRS_L2D_STD_20231229050902_20231229050907_0001.he5"
         ),
         "hyperspectral_3": FileSourceConfig(
-            source_path="test_payloads/Hyper_3/PRS_L2D_STD_20210516050459_20210516050503_0001.he5"
+            source_path="tests/test_payloads/Hyper_3/PRS_L2D_STD_20210516050459_20210516050503_0001.he5"
         ),
         "thermal_1": FileSourceConfig(
-            source_path="test_payloads/thermal_1/LC09_L2SP_150044_20251009_20251010_02_T1_ST_B10.TIF"
+            source_path="tests/test_payloads/thermal_1/LC09_L2SP_150044_20251009_20251010_02_T1_ST_B10.TIF"
         ),
         "thermal_2": FileSourceConfig(
-            source_path="test_payloads/thermal_1/LC09_L2SP_147049_20251121_20251122_02_T1_ST_B10.TIF"
+            source_path="tests/test_payloads/thermal_1/LC09_L2SP_147049_20251121_20251122_02_T1_ST_B10.TIF"
         ),
         "phase_2_hyperspectral_1": FileSourceConfig(
             source_path="tests/test_payloads/phase_2/Set-1/Hypersepctral Datasets/PRS_L2D_STD_20201214060713_20201214060717_0001.he5"
