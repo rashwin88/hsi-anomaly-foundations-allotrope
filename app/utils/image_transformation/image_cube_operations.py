@@ -38,12 +38,21 @@ class ImageCubeOperations:
         """
         Converts a cube from one format to another
         """
-        is_masked_input = False
-        mask_tensor = None
-        # If the input is a numpy array, convert it to a tensor
+        # We will need to handled masked cubes in a special manner
+        # The idea is that if the input is a masked array and the output from is numpy
+        # Then, we must return as masked array as default behavior/
+        # But when we take the array into a Tensor form,
+        # the masking information is lost, so we must also Tensorify the mask and permute it
+        # And then the permuted mask must be applied to the permuted output
         if isinstance(cube, np.ma.MaskedArray):
             is_masked_input = True
+        else:
+            is_masked_input = False
+        mask_tensor = None
+        # If the input is a numpy array, convert it to a tensor
+        if is_masked_input:
             mask_array = np.ma.getmaskarray(cube)
+            # Create a mask_tensor
             mask_tensor = torch.from_numpy(mask_array).to(self.device)
             cube_data = cube.data
             cube = torch.from_numpy(cube_data).float().to(self.device)
@@ -63,6 +72,7 @@ class ImageCubeOperations:
         transformed = cube.permute(*final_permutation_arrangement)
         transformed_mask = None
         if is_masked_input:
+            # Transform the mask too.
             transformed_mask = mask_tensor.permute(*final_permutation_arrangement)
         if output_form == "tensor":
             return transformed
@@ -70,6 +80,7 @@ class ImageCubeOperations:
             if is_masked_input:
                 numpy_data = transformed.detach().cpu().numpy()
                 numpy_mask = transformed_mask.detach().cpu().numpy().astype(bool)
+                # Reapply the mask and then move on
                 return np.ma.MaskedArray(data=numpy_data, mask=numpy_mask)
             # Detach the tensor from the computational graph and move it to the CPU
             return transformed.detach().cpu().numpy()

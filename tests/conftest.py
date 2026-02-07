@@ -2,7 +2,7 @@
 Test configurations
 """
 
-from typing import Dict
+from typing import Dict, List
 import pytest
 from app.models.file_processing.sources import FileSourceConfig
 
@@ -49,3 +49,12 @@ def live_source_data() -> Dict[str, FileSourceConfig]:
             source_path="tests/test_payloads/phase_2/Set-1/Thermal Anomaly Datasets/LC09_L2SP_141045_20250604_20250605_02_T1_ST_B10.TIF"
         ),
     }
+
+
+@pytest.fixture
+def hyperspectral_band_numbers() -> List[int]:
+    """
+    Returns a standard set of band numbers to test against
+    """
+
+    return [11, 12, 35, 50, 49, 30, 32]
