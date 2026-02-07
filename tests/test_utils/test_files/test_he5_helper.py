@@ -5,7 +5,7 @@ Tests the he5 helper implementation of the file helper abstraction
 import pytest
 import numpy as np
 from app.utils.files.he5_helper import HE5Helper
-from app.models.products.products import Product
+from app.templates.template_mappings import TemplateIdentifier, TEMPLATE_MAPPINGS
 from app.models.file_processing.file_metadata_models import (
     He5Metadata,
     He5ComponentMetadata,
@@ -32,7 +32,8 @@ def test_class_initialization(live_source_data):
 
     # Initialize the HE5Helper1
     helper = HE5Helper(
-        file_source_config=source, product=Product.PRISMA
+        file_source_config=source,
+        template=TEMPLATE_MAPPINGS.get(TemplateIdentifier.PRISMA_HYPERSPECTRAL),
     )  # pylint: disable=abstract-class-instantiated
 
     # Run tests to make sure that the objects that need to be populated are present
@@ -63,7 +64,8 @@ def test_access_dataset_path_invalidity(live_source_data):
 
     # Initialize the HE5Helper1
     helper = HE5Helper(
-        file_source_config=source, product=Product.PRISMA
+        file_source_config=source,
+        template=TEMPLATE_MAPPINGS.get(TemplateIdentifier.PRISMA_HYPERSPECTRAL),
     )  # pylint: disable=abstract-class-instantiated
 
     with pytest.raises(TypeError):
@@ -83,7 +85,10 @@ def test_full_band_extraction(live_source_data):
     source = live_source_data.get(PHASE2)
 
     # Initialize the HE5Helper1
-    helper = HE5Helper(file_source_config=source, product=Product.PRISMA)
+    helper = HE5Helper(
+        file_source_config=source,
+        template=TEMPLATE_MAPPINGS.get(TemplateIdentifier.PRISMA_HYPERSPECTRAL),
+    )
 
     # Collect all the bands from the SWIR Cube
     swir_cube = helper.extract_specific_bands(
@@ -141,7 +146,10 @@ def test_specific_band_pulling(live_source_data):
     source = live_source_data.get(PHASE2)
 
     # Initialize the HE5Helper1
-    helper = HE5Helper(file_source_config=source, product=Product.PRISMA)
+    helper = HE5Helper(
+        file_source_config=source,
+        template=TEMPLATE_MAPPINGS.get(TemplateIdentifier.PRISMA_HYPERSPECTRAL),
+    )
 
     # collect the shape attreibute from the actual component properties
     swir_cube_path = helper.template.get(HyperspectralFileComponents.SWIR_CUBE_DATA)
@@ -173,7 +181,10 @@ def test_masking_application(live_source_data):
     source = live_source_data.get(PHASE2)
 
     # Initialize the HE5Helper1
-    helper = HE5Helper(file_source_config=source, product=Product.PRISMA)
+    helper = HE5Helper(
+        file_source_config=source,
+        template=TEMPLATE_MAPPINGS.get(TemplateIdentifier.PRISMA_HYPERSPECTRAL),
+    )
 
     # Collect all the bands from the SWIR Cube
     swir_cube = helper.extract_specific_bands(

@@ -7,14 +7,12 @@ from abc import ABC, abstractmethod
 
 # models imported
 from app.models.file_processing.sources import FileSourceConfig
-from app.models.dataset.dataset_categories import DatasetCategory
 from app.models.images.cube_representation import CubeRepresentation
 from app.models.intermediate_concepts.band_requests import BandRequestOptions
 from app.models.intermediate_concepts.band_responses import (
     BandByIndexResponse,
     BandByWavelengthResponse,
 )
-from app.models.products.products import Product
 from app.models.hyperspectral_concepts.band import (
     HyperpectralBandInformation,
 )
@@ -70,23 +68,6 @@ class DatasetBuilder(ABC):
     ) -> Dict[SpectralFamily, HyperpectralBandInformation] | None:
         """
         Extrtacts band information from the dataset if applicable
-        """
-        pass
-
-    @property
-    @abstractmethod
-    def product(self) -> Product:
-        """
-        The product from which this dataset is obtained.
-        """
-        pass
-
-    @property
-    @abstractmethod
-    def dataset_category(self) -> DatasetCategory:
-        """
-        The category of dataset that we are loading.
-        In the case of the specific problem we are solving, it can be Thermal or Hyperspectral
         """
         pass
 

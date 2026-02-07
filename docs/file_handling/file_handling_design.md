@@ -6,10 +6,8 @@ We use the `file_helper` abstract class to create a model for all file handling 
 classDiagram
     class FileHelper~T, Ab~ {
         <<abstract>>
-        FileSourceConfig file_source_config
-        file_category: FileCategory*
+        file_source_config FileSourceConfig
         file_metadata: T*
-        product: Product*
         template: Dict*
         access_dataset(path: str) Any
         _construct_metadata_structure()* T
@@ -21,24 +19,9 @@ classDiagram
         +source_type: str
     }
 
-    class Product {
-        <<enumeration>>
-        PSRIMA
-        ENMAP
-        LANDSAT
-    }
-
-    class FileCategory {
-      <<enumeration>>
-      HDFS
-      TIF
-
-    }
 
     %% Relationships
     FileHelper --> FileSourceConfig : Has-a (Composition)
-    FileHelper ..> Product : Uses
-    FileHelper ..> FileCategory: Uses
 ```
 
 In this specific case the `extract_specific_bands` method goes into the dataset and pulls out bands by their specific index.
@@ -67,7 +50,7 @@ sequenceDiagram
     deactivate HE5H
 ```
 
-Extracttion of specific bands from the lazily loaded dataset proceeds as follows, not that there is a slight inefficiency that needs correction here. Instead of pulling out specific bands directly, we are forced to pull the entire cube first and then slice out the required bands.
+Extraction of specific bands from the lazily loaded dataset proceeds as follows, not that there is a slight inefficiency that needs correction here. Instead of pulling out specific bands directly, we are forced to pull the entire cube first and then slice out the required bands.
 
 ```mermaid
 sequenceDiagram
