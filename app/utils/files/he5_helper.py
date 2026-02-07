@@ -4,7 +4,7 @@ HE5 files
 """
 
 import logging
-from typing import Dict, Any, Literal, List, Optional
+from typing import Dict, Any, Literal, List, Optional, Union
 
 import numpy as np
 import h5py
@@ -12,7 +12,6 @@ from h5py import Dataset
 
 # Abstract classes
 from app.abstract_classes.file_helper import FileHelper
-from app.models.products.products import Product
 from app.models.hyperspectral_concepts.spectral_family import SpectralFamily
 from app.models.file_processing.sources import FileSourceConfig
 from app.models.file_processing.file_metadata_models import (
@@ -21,10 +20,9 @@ from app.models.file_processing.file_metadata_models import (
 )
 from app.models.hyperspectral_concepts.file_components import (
     HyperspectralFileComponents,
+    ThermalComponents,
 )
 from app.models.hyperspectral_concepts.references import ReferenceDefinition
-
-from app.templates.template_mappings import TEMPLATE_MAPPINGS
 
 
 logger = logging.getLogger("He5Helper")
@@ -39,14 +37,19 @@ class HE5Helper(FileHelper):
     ** Abstract Class : FileHelper **
     """
 
-    def __init__(self, file_source_config: FileSourceConfig, product: Product = None):
+    def __init__(
+        self,
+        file_source_config: FileSourceConfig,
+        template: Dict[
+            Union[HyperspectralFileComponents, ThermalComponents], ReferenceDefinition
+        ],
+    ):
         """
         Class constructor for file loading
         """
         # Initialize the file loader helper
-        super().__init__(file_source_config=file_source_config)
+        super().__init__(file_source_config=file_source_config, template=template)
 
-        self._product = product
         # The raw structure in itself can be used to access the metadata and the actual content in the file.
         self.raw_structure: h5py.File = h5py.File(
             self.file_source_config.source_path, "r"
@@ -56,22 +59,12 @@ class HE5Helper(FileHelper):
         )
         self._file_metadata: He5Metadata = self._construct_metadata_structure()
 
-        logger.info("Pulling template mappings for product : %s", self.product.value)
-        # Get the template mappings
-        self._template: Dict[HyperspectralFileComponents, ReferenceDefinition] = (
-            TEMPLATE_MAPPINGS.get(self.product)
-        )
-
         # Additional things needed for proper file handling
         self.masked_pixel_value: int = 0
 
     @property
     def file_metadata(self) -> He5Metadata:
         return self._file_metadata
-
-    @property
-    def product(self) -> Product:
-        return self._product
 
     @property
     def template(self) -> Dict[HyperspectralFileComponents, ReferenceDefinition]:
@@ -171,13 +164,17 @@ class HE5Helper(FileHelper):
             )
         # Now that we have the path we can perform further operations
         # Access the data in the path
-        raw_cube = self.access_dataset(path)
-        # Slice out only the bands in the cube that matter
-        if mode == "all":
-            output = raw_cube
-        elif mode == "specific":
-            output = raw_cube[:, bands, :]
-        # Check if we need masking
-        if masking_needed:
-            output = np.ma.masked_where(output == 0, output)
-        return output
+        try:
+            raw_cube = self.access_dataset(path)
+            # Slice out only the bands in the cube that matter
+            if mode == "all":
+                output = raw_cube
+            elif mode == "specific":
+                output = raw_cube[:, bands, :]
+            # Check if we need masking
+            if masking_needed:
+                output = np.ma.masked_where(output == 0, output)
+            return output
+        except Exception as err:
+            logger.error("Error in band extaction: %s", str(err))
+            raise err

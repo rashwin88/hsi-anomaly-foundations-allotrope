@@ -5,9 +5,6 @@ Cube Tensor Representations
 from enum import Enum
 from typing import Dict, List
 
-# First party imports
-from app.models.products.products import Product
-
 
 class CubeRepresentation(str, Enum):
     """
@@ -45,10 +42,4 @@ DIMENSIONAL_ARRANGEMENTS: Dict[CubeRepresentation, List[str]] = {
     CubeRepresentation.BIL: ["H", "C", "W"],
     CubeRepresentation.BIP: ["H", "W", "C"],
     CubeRepresentation.BSQ: ["C", "H", "W"],
-}
-
-# Map each product to its default representation.
-PRODUCT_TO_REPRESENTATION_MAPPING: Dict[Product, CubeRepresentation] = {
-    Product.PRISMA: CubeRepresentation.BIL,
-    Product.LANDSAT: CubeRepresentation.BSQ,
 }

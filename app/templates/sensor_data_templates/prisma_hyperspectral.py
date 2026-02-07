@@ -12,7 +12,9 @@ from app.models.hyperspectral_concepts.file_components import (
     HyperspectralFileComponents,
 )
 
-PRISMA_TEMPLATE: Dict[HyperspectralFileComponents, ReferenceDefinition] = {
+PRISMA_HYPERSPECTRAL_TEMPLATE: Dict[
+    HyperspectralFileComponents, ReferenceDefinition
+] = {
     HyperspectralFileComponents.SWIR_CUBE_DATA: ReferenceDefinition(
         description="The file name corresponding to the SWIR cube data",
         reference_type=ReferenceType.FILE_REFERENCE,

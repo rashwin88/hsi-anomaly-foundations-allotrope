@@ -14,6 +14,7 @@ class ReferenceType(Enum):
 
     ROOT_METADATA_FIELD = "root_metadata"
     FILE_REFERENCE = "file_reference"
+    DIRECT_PROPERTY_DEFINITION = "direct_property_definition"
 
 
 class ReferenceDefinition(BaseModel):
@@ -38,6 +39,11 @@ class ReferenceDefinition(BaseModel):
         default=None, description="The name of the root metadata field"
     )
 
+    property_name: Optional[str] = Field(
+        default=None,
+        description="The name of the property that must be extracted in the case of TIF files .etc",
+    )
+
     @model_validator(mode="after")
     def check_reference_requirements(self) -> "ReferenceDefinition":
         """
@@ -50,5 +56,10 @@ class ReferenceDefinition(BaseModel):
             if not self.root_metadata_field_name:
                 raise ValueError(
                     f"{ReferenceType.ROOT_METADATA_FIELD} needs a field name."
+                )
+        elif self.reference_type == ReferenceType.DIRECT_PROPERTY_DEFINITION:
+            if not self.property_name:
+                raise ValueError(
+                    f"{ReferenceType.DIRECT_PROPERTY_DEFINITION} needs a property name."
                 )
         return self
