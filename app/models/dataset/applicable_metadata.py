@@ -15,3 +15,5 @@ class ApplicableFields(str, Enum):
     ACQUISITION_DATE_STR = "acq_date_str"
     PROCESSING_LEVEL = "processing_level"
     BAND = "band"
+    PRODUCT_TYPE = "product_type"
+    DATETIME = "datetime"
