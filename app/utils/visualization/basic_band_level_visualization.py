@@ -1,13 +1,18 @@
-from app.models.images.cube_representation import CubeRepresentation
-from app.models.file_processing.file_metadata_models import FullMetadata
-from app.models.file_processing.sources import FileSourceConfig
-from app.utils.image_transformation.image_cube_operations import ImageCubeOperations
-from app.utils.files.he5_helper import HE5Helper
-from app.utils.files.tif_helper import TIFHelper
+from _pytest._code import source
 from matplotlib import pyplot as plt
 from typing import List, Dict
 import math
 import numpy as np
+from sympy.printing.maple import spec_relational_ops
+
+
+from app.models.images.cube_representation import CubeRepresentation
+from app.models.file_processing.sources import FileSourceConfig
+from app.utils.image_transformation.image_cube_operations import ImageCubeOperations
+from app.utils.files.he5_helper import HE5Helper
+from app.utils.files.tif_helper import TIFHelper
+from app.templates.template_mappings import TEMPLATE_MAPPINGS, TemplateIdentifier
+from app.models.hyperspectral_concepts.spectral_family import SpectralFamily
 
 DEFAULT_VIS_PATH = "sample_visualization"
 
@@ -24,12 +29,15 @@ class BasicBandLevelVisualizationHE5:
         Accepts a file source config and constructs a basic band level visualization.
         """
         # initialize the he5 helper
-        self.helper = HE5Helper(file_source_config)
+        self.helper = HE5Helper(
+            file_source_config=file_source_config,
+            template=TEMPLATE_MAPPINGS.get(TemplateIdentifier.PRISMA_HYPERSPECTRAL),
+        )
         self.image_cube_operations = ImageCubeOperations()
         self.max_cols = 3
 
     def visualize_band(
-        self, band_numbers: List[int], file_reference: str, file_name: str
+        self, band_numbers: List[int], spectral_family: SpectralFamily, file_name: str
     ):
         """
         Visualizes a band of a cube.
@@ -47,28 +55,29 @@ class BasicBandLevelVisualizationHE5:
             dpi=120,
         )
         fig.suptitle(
-            f"Hyperspectral band analysis \n {file_reference}",
+            f"Hyperspectral band analysis \n {spectral_family.value}",
             fontsize=14,
             fontweight="bold",
         )
         axes_flat = axes.flatten() if num_plots > 1 else [axes]
         plot_images = []
 
-        # get the band from the file
-        # A short note here - we are pulling out the entire cube from the file.
-        # This is in contrast to the TIF case where we are pulling out the bands directly.
-        cube = self.helper.get_dataset(file_reference)
-
-        # Cast the cube to BIP format
-        cube = self.image_cube_operations.convert_cube(
-            cube, CubeRepresentation.BIL, CubeRepresentation.BIP, output_form="numpy"
-        )
-
         for i, ax in enumerate(axes_flat):
             if i < num_plots:
-                single_band = cube[:, :, band_numbers[i]]
-                masked_band = np.ma.masked_where(single_band == 0, single_band)
-                im = ax.imshow(masked_band, cmap="Spectral")
+                single_band = self.helper.extract_specific_bands(
+                    bands=[band_numbers[i]],
+                    masking_needed=True,
+                    spectral_family=spectral_family,
+                    mode="specific",
+                )
+                # Transform the image to BIP
+                single_band = self.image_cube_operations.convert_cube(
+                    single_band,
+                    from_format=CubeRepresentation.BIL,
+                    to_format=CubeRepresentation.BIP,
+                )
+                print(type(single_band))
+                im = ax.imshow(single_band, cmap="Spectral")
                 plot_images.append(im)
                 label_text = f"Band : {band_numbers[i]}"
                 ax.set_title(label_text, fontsize=11, fontfamily="serif", pad=10)
@@ -104,7 +113,10 @@ class BasicBandLevelVisualizationTIF:
         Accepts a file source config and constructs a basic band level visualization.
         """
         # initialize the he5 helper
-        self.helper = TIFHelper(file_source_config)
+        self.helper = TIFHelper(
+            file_source_config=file_source_config,
+            template=TEMPLATE_MAPPINGS.get(TemplateIdentifier.LANDSAT_THERMAL),
+        )
         self.image_cube_operations = ImageCubeOperations()
         self.max_cols = 3
 
@@ -138,7 +150,9 @@ class BasicBandLevelVisualizationTIF:
 
         # get the band from the file
         # A short note here - we are pulling out the bands directly from the file.
-        cube = self.helper.extract_bands(band_numbers)
+        cube = self.helper.extract_specific_bands(
+            bands=band_numbers, mode="specific", masking_needed=True
+        )
 
         # However, we have to be careful here because the bands in TIF start at 1 and since we
         # are pulling them out specifically, the band indexes will get reset and we will have to map them back.
@@ -156,8 +170,7 @@ class BasicBandLevelVisualizationTIF:
         for i, ax in enumerate(axes_flat):
             if i < num_plots:
                 single_band = cube[:, :, i]
-                masked_band = np.ma.masked_where(single_band == 0, single_band)
-                im = ax.imshow(masked_band, cmap="plasma")
+                im = ax.imshow(single_band, cmap="plasma")
                 plot_images.append(im)
                 label_text = f"Band : {band_mapping[i]}"
                 ax.set_title(label_text, fontsize=11, fontfamily="serif", pad=10)
@@ -184,19 +197,19 @@ class BasicBandLevelVisualizationTIF:
 
 if __name__ == "__main__":
     file_source_config = FileSourceConfig(
-        source_path="raw_files/Thermal/LC09_L2SP_147049_20251121_20251122_02_T1_ST_B10.TIF"
+        source_path="tests/test_payloads/thermal_1/LC09_L2SP_150044_20251009_20251010_02_T1_ST_B10.TIF"
     )
     basic_band_level_visualization = BasicBandLevelVisualizationTIF(file_source_config)
     basic_band_level_visualization.visualize_band(
         [1],
-        "sample_thermal_single_band_1",
+        "new_thermal_single_band_1",
     )
     file_source_config = FileSourceConfig(
-        source_path="raw_files/Hyper/PRS_L2D_STD_20231229050902_20231229050907_0001.he5"
+        source_path="tests/test_payloads/phase_2/Set-1/Hypersepctral Datasets/PRS_L2D_STD_20201214060713_20201214060717_0001.he5"
     )
     basic_band_level_visualization = BasicBandLevelVisualizationHE5(file_source_config)
     basic_band_level_visualization.visualize_band(
         [14, 19, 24, 29, 34, 39, 44, 49, 54, 59],
-        "HDFEOS/SWATHS/PRS_L2D_HCO/Data Fields/VNIR_Cube",
-        "sample_vnir_multibands_14_59",
+        SpectralFamily.VNIR,
+        "new_vnir_multibands_14_59",
     )
