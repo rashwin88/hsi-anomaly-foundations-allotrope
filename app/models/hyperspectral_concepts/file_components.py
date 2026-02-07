@@ -22,3 +22,17 @@ class HyperspectralFileComponents(str, Enum):
     VNIR_CENTRAL_WAVELENGTH_LIST = "VNIR_CENTRAL_WAVELENGTH_LIST"
     VNIR_CENTRAL_WAVELENGTH_FLAGS = "VNIR_CENTRAL_WAVELENGTH_FLAGS"
     VNIR_FWHM_LIST = "VNIR_FWHM_LIST"
+
+
+class ThermalComponents(Enum):
+    """
+    Defines the different components and properties
+    of a thermal dataset
+    """
+
+    COORDINATE_REFERENCE_SYSTEM = "COORDINATE_REFERENCE_SYSTEM"
+    AREA_OR_POINT = "AREA_OR_POINT"
+    BOUNDS = "BOUNDS"
+    TRANSFORM = "TRANSFORM"
+    WIDTH = "WIDTH"
+    HEIGHT = "HEIGHT"
