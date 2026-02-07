@@ -140,3 +140,4 @@ def test_exceptions(live_source_data):
         thermal_cube = helper.extract_specific_bands(
             bands=[4], masking_needed=False, mode="specific"
         )
+        del thermal_cube
