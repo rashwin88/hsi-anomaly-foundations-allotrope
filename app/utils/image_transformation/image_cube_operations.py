@@ -38,8 +38,16 @@ class ImageCubeOperations:
         """
         Converts a cube from one format to another
         """
+        is_masked_input = False
+        mask_tensor = None
         # If the input is a numpy array, convert it to a tensor
-        if isinstance(cube, np.ndarray):
+        if isinstance(cube, np.ma.MaskedArray):
+            is_masked_input = True
+            mask_array = np.ma.getmaskarray(cube)
+            mask_tensor = torch.from_numpy(mask_array).to(self.device)
+            cube_data = cube.data
+            cube = torch.from_numpy(cube_data).float().to(self.device)
+        elif isinstance(cube, np.ndarray):
             cube = torch.from_numpy(cube).float().to(self.device)
         else:
             if cube.dtype == torch.float64:
@@ -53,9 +61,16 @@ class ImageCubeOperations:
             for dim in to_dim_arrangement  # pyright: ignore[reportOptionalIterable]
         )
         transformed = cube.permute(*final_permutation_arrangement)
+        transformed_mask = None
+        if is_masked_input:
+            transformed_mask = mask_tensor.permute(*final_permutation_arrangement)
         if output_form == "tensor":
             return transformed
         elif output_form == "numpy":
+            if is_masked_input:
+                numpy_data = transformed.detach().cpu().numpy()
+                numpy_mask = transformed_mask.detach().cpu().numpy().astype(bool)
+                return np.ma.MaskedArray(data=numpy_data, mask=numpy_mask)
             # Detach the tensor from the computational graph and move it to the CPU
             return transformed.detach().cpu().numpy()
         else:
