@@ -3,10 +3,10 @@ Test for stac item and asset creation
 """
 
 import pytest
+from pystac import MediaType
+from pystac import Item
 from app.utils.stac.stac_utils.stac_items import StacCreator
 from app.models.file_processing.sources import FileSourceConfig
-from pystac import MediaType
-from pystac import Item, Asset
 
 
 def test_class_initialization(live_source_data):
