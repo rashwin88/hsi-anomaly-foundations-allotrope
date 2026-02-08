@@ -206,3 +206,28 @@ def test_masking_application(live_source_data):
     )
 
     assert isinstance(swir_cube, np.ndarray)
+
+
+@pytest.mark.large_files
+def test_band_extraction_error(live_source_data):
+    """
+    Ensure that an error is raised when an unavailable band is specified
+    """
+
+    # Using hyperspectral from phase 2 for this
+    source = live_source_data.get(PHASE2)
+
+    # Initialize the HE5Helper1
+    helper = HE5Helper(
+        file_source_config=source,
+        template=TEMPLATE_MAPPINGS.get(TemplateIdentifier.PRISMA_HYPERSPECTRAL),
+    )
+
+    with pytest.raises(Exception):
+        swir_cube = helper.extract_specific_bands(
+            bands=[500, 501, 600],
+            masking_needed=True,
+            spectral_family=SpectralFamily.SWIR,
+            mode="specific",
+        )
+        del swir_cube
