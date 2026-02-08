@@ -24,7 +24,7 @@ def test_prisma_parsing(helper):
     parsed_data = helper.parse(file_name)
 
     assert parsed_data.get("platform") == "Prisma"
-    assert parsed_data.get("processing_level") == "L2D"
+    assert parsed_data.get("processing:level") == "L2D"
     assert parsed_data.get("product_type") == "STD"
     assert parsed_data.get("datetime") == datetime.strptime(
         "20210516050459", "%Y%m%d%H%M%S"
@@ -39,6 +39,6 @@ def test_lc09_parsing(helper):
     parsed_data = helper.parse(file_name)
 
     assert parsed_data.get("platform") == "landsat-9"
-    assert parsed_data.get("processing_level") == "L2SP"
+    assert parsed_data.get("processing:level") == "L2SP"
     assert parsed_data.get("product_type") == "ST"
     assert parsed_data.get("datetime") == datetime.strptime("20250604", "%Y%m%d")
