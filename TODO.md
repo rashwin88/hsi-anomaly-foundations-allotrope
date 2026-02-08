@@ -5,3 +5,4 @@ Must Haves:
 - [x] Write proper documentation for image cube operations.
 - [x] Write tests for image cube operations on actual data.
 - [ ] Implement a STAC object creator.
+- [ ] Write down a detailed document on data parsing and other things.
