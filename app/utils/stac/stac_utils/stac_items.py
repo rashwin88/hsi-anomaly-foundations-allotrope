@@ -32,6 +32,15 @@ class StacCreator:
         logger.info("File Name: %s", self.file_name)
         self.file_id = self.file_name.split(".")[0]
 
+        # Determine the media type of the file also
+        if self.file_name.endswith(("TIF", "TIFF")):
+            self.media_type = MediaType.COG
+        elif self.file_name.endswith(("he5")):
+            self.media_type = MediaType.HDF5
+        else:
+            logger.error("The file : %s has no recognized file type", self.file_name)
+            raise TypeError("FileType not recognized")
+
         # Create the metadata helper
         self.helper: FileNameParser = FileNameParser()
         self.metadata: Dict[str, str] = self.helper.parse(file_name=self.file_name)
@@ -46,15 +55,6 @@ class StacCreator:
             self.bounding_box: List[float] = get_landsat_bounding_box(self.file_path)
             self.asset_role = AssetRole.THERMAL.value
         self.geom = self._build_geojson_geometry()
-
-        # Determine the media type of the file also
-        if self.file_name.endswith(("TIF", "TIFF")):
-            self.media_type = MediaType.COG
-        elif self.file_name.endswith(("he5")):
-            self.media_type = MediaType.HDF5
-        else:
-            logger.error("The file : %s has no recognized file type", self.file_name)
-            raise TypeError("FileType not recognized")
 
     def _build_geojson_geometry(self) -> Dict[str, Any]:
         """
