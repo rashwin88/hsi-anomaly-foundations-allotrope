@@ -90,3 +90,32 @@ Also note that BIL is the default in the case of HE5 files. However, in the case
 *Also note that in the case of TIF files, the bands are indexed starting from 1. This means there is no band 0*
 
 
+### TIF Helper sequence diagram
+```mermaid
+sequenceDiagram
+    participant U as User
+    participant TIFH as TIFHelper
+    participant FS as FileSourceConfig
+    participant T as TemplateMapping
+    participant TIF as TIFFile
+
+    U->>TIFH: extract_specific_bands(bands, masking_needed, spectral_family, mode)
+    activate TIFH
+    TIFH->>FS: get source_path
+    FS-->>TIFH: return .tif file path
+    TIFH->>TIF: open source_path using rasterio
+    alt mode == "specific"
+        TIFH->>TIF: read(bands, masked=masking_needed)
+        TIF-->>TIFH: return requested band data (3D np array)
+    else mode == "all"
+        TIFH->>TIF: read(all bands, masked=masking_needed)
+        TIF-->>TIFH: return all band data (3D np array)
+    end
+    TIFH-->>U: return band data
+    deactivate TIFH
+```
+This sequence diagram illustrates the workflow for band extraction using the `TIFHelper` class. Unlike HE5 files, TIF files allow for direct access to specific bands, resulting in more efficient extraction and memory usage. The user calls `extract_specific_bands`, which retrieves the file path, opens the TIF file via rasterio, and reads either specific bands or all bands depending on the mode. The output is returned as a 3D numpy array suitable for downstream processing or visualization.
+
+
+
+
