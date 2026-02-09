@@ -120,3 +120,39 @@ def test_masked_operations_thermal(live_source_data):
     assert transformed_cube.shape[2] == raw_cube.shape[0]
     assert transformed_cube.shape[0] == raw_cube.shape[1]
     assert transformed_cube.shape[1] == raw_cube.shape[2]
+
+
+@pytest.mark.large_files
+def test_image_transformation_benchmark(benchmark, live_source_data):
+    """
+    Benchmarks image transformations
+    """
+    # intialize the transformer
+    transformer = ImageCubeOperations()
+
+    # initialize the source
+    source = live_source_data.get(HYPERSPECTRAL)
+
+    # Initialize the helper
+    helper = HE5Helper(
+        file_source_config=source,
+        template=TEMPLATE_MAPPINGS.get(TemplateIdentifier.PRISMA_HYPERSPECTRAL),
+    )
+
+    # Pull a cube of data from the dataset
+    raw_cube = helper.extract_specific_bands(
+        bands=[1],
+        masking_needed=True,
+        spectral_family=SpectralFamily.VNIR,
+        mode="all",
+    )
+
+    result = benchmark(
+        transformer.convert_cube,
+        raw_cube,
+        CubeRepresentation.BIL,
+        CubeRepresentation.BSQ,
+        "tensor",
+    )
+
+    assert result is not None
