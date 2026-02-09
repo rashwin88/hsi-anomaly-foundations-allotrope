@@ -47,7 +47,9 @@ def test_conversion_on_real_data(live_source_data, transformer):
 
 
 @pytest.mark.large_files
-def test_transform_benchmark(benchmark, live_source_data, transformer):
+def test_lc09_ls2p_st_transformation_benchmark(
+    benchmark, live_source_data, transformer
+):
     """
     Benchmarks performance
     """
