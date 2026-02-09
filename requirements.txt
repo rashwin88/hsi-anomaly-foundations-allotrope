@@ -8,3 +8,4 @@ rasterio
 pytest
 pytest-cov
 pystac
+numexpr
