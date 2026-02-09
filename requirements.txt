@@ -8,3 +8,5 @@ rasterio
 pytest
 pytest-cov
 pystac
+numexpr
+pytest-benchmark
