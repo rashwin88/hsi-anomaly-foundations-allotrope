@@ -35,7 +35,7 @@ class Lc09L2spStTransformer(DataTransformer):
         input_data: Union[np.ndarray, np.ma.MaskedArray],
         unit: Temperature = Temperature.KELVIN,
         **kwargs,
-    ) -> Union[np.ndarray, np.ma.MaskedArray]:
+    ) -> Union[np.ndarray, np.array, np.ma.MaskedArray]:
         """
         Performs the actual transformation
         """
