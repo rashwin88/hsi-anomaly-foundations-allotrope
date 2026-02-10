@@ -1,9 +1,7 @@
-from _pytest._code import source
 from matplotlib import pyplot as plt
 from typing import List, Dict
 import math
 import numpy as np
-from sympy.printing.maple import spec_relational_ops
 
 
 from app.models.images.cube_representation import CubeRepresentation
