@@ -55,3 +55,16 @@ def test_adaptive_cloud_masker(base_data):
     assert isinstance(output, AdaptiveCloudMaskerResponse)
     assert output.pixels_masked > 1000
     assert isinstance(output.cloud_mask, np.ndarray)
+
+
+@pytest.mark.large_files
+@pytest.mark.large_benchmarks
+def test_adaptive_b10_cloud_masker_benchmark(benchmark, base_data):
+    """
+    Benchmarks performance
+    """
+    model = B10AdaptiveCloudMasker()
+    model.configure(sampling_ratio=0.1)
+    # Run the benchmark
+    result = benchmark(model.train, base_data)
+    assert result is None
