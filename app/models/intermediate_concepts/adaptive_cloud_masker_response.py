@@ -21,7 +21,7 @@ class AdaptiveCloudMaskerResponse(BaseModel):
     n_comp: int = Field(
         ..., description="The number of components used in the Gaussian Mixture Model"
     )
-    model: GaussianMixture = Field(..., Field="The gaussian mixture modek")
+    model: GaussianMixture = Field(..., Field="The gaussian mixture model")
     anchors: Any = Field(..., description="The percentile probes used in the model")
     pixels_masked: int = Field(
         ..., description="The total number of pixels masked by the model"
