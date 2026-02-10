@@ -10,3 +10,4 @@ pytest-cov
 pystac
 numexpr
 pytest-benchmark
+scikit-learn
