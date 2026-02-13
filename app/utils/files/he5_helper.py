@@ -178,3 +178,46 @@ class HE5Helper(FileHelper):
         except Exception as err:
             logger.error("Error in band extaction: %s", str(err))
             raise err
+
+    def extract_error_matrices(
+        self,
+        bands: List[int],
+        spectral_family: Optional[SpectralFamily] = None,
+        mode: Literal["all", "specific"] = "specific",
+    ) -> np.ndarray:
+        """
+        Extracts Error Matrices from the data set.
+        Applicable for Prisma.
+        Will return a numpy array.
+
+        Debatable whether masking is a concept here as it refers only to invalid pixels not
+        out of bound pixels. So making it simple and removing all scope for masking.
+        """
+        # First we access the dataset and store it.
+        # To do that we need the spectral family
+        if spectral_family == SpectralFamily.SWIR:
+            path = self.template.get(
+                HyperspectralFileComponents.SWIR_PIXEL_ERR_MATRIX
+            ).file_name
+        elif spectral_family == SpectralFamily.VNIR:
+            path = self.template.get(
+                HyperspectralFileComponents.VNIR_PIXEL_ERR_MATRIX
+            ).file_name
+        else:
+            raise KeyError(
+                "Mapping Key for Spectral Family not found",
+            )
+        # Now that we have the path we can perform further operations
+        # Access the data in the path
+        try:
+            raw_cube = self.access_dataset(path)
+            # Slice out only the bands in the cube that matter
+            output = None
+            if mode == "all":
+                output = raw_cube
+            elif mode == "specific":
+                output = raw_cube[:, bands, :]
+            return output
+        except Exception as err:
+            logger.error("Error in band extaction: %s", str(err))
+            raise err
