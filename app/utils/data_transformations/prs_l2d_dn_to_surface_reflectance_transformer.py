@@ -97,7 +97,6 @@ class PrsL2dDnToSurfaceReflectanceTransformer(DataTransformer):
                     to_format=CubeRepresentation.BSQ,
                     output_form="numpy",
                 )
-                input_mask
         # Now we have the input data in the right shape and other the mask if applicable.
         # One safe bet is to conver the input data array to 0 where ever there is a mask
         if masked_input_flag:
