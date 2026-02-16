@@ -68,6 +68,7 @@ class BasicBandLevelVisualizationHE5:
                     spectral_family=spectral_family,
                     mode="specific",
                 )
+                print(single_band.min(), print(single_band.max()))
                 # Transform the image to BIP
                 single_band = self.image_cube_operations.convert_cube(
                     single_band,
@@ -200,7 +201,7 @@ if __name__ == "__main__":
     basic_band_level_visualization = BasicBandLevelVisualizationTIF(file_source_config)
     basic_band_level_visualization.visualize_band(
         [1],
-        "new_thermal_single_band_1",
+        "new_thermal_single_band_1_2",
     )
     file_source_config = FileSourceConfig(
         source_path="tests/test_payloads/phase_2/Set-1/Hypersepctral Datasets/PRS_L2D_STD_20201214060713_20201214060717_0001.he5"
@@ -209,5 +210,5 @@ if __name__ == "__main__":
     basic_band_level_visualization.visualize_band(
         [14, 19, 24, 29, 34, 39, 44, 49, 54, 59],
         SpectralFamily.VNIR,
-        "new_vnir_multibands_14_59",
+        "new_vnir_multibands_14_59_2",
     )
