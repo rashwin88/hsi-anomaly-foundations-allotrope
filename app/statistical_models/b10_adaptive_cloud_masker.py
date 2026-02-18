@@ -101,6 +101,8 @@ class B10AdaptiveCloudMasker(MlModel):
                 ]
             ).reshape(-1, 1)
 
+        print(f"Anchors Set to {self.anchors}")
+
         # Fit the GMM after sampling
 
         self.sample_count: int = int(training_data.shape[0] * self.sampling_ratio)

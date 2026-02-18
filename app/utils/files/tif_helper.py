@@ -107,6 +107,9 @@ class TIFHelper(FileHelper):
         try:
             with rasterio.open(self.file_source_config.source_path) as src:
                 # Read only specific bands or read in all the bands.
+                # Notice here that the masking concepts are slightly different and need
+                # some refinement. The mask is already coming out as part of the dataset pull.
+                # This is great, but needs some more work to understand fully.
                 if mode == "specific":
                     band_data = src.read(bands, masked=masking_needed)
                 else:
