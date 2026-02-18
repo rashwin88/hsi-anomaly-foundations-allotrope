@@ -6,9 +6,14 @@ Must Haves:
 - [x] Write tests for image cube operations on actual data.
 - [x] Implement a STAC object creator.
 - [x] Write down a detailed document on data parsing and other things.
-- [ ] Write out a proper paper on band experiments and what they mean before doing any thing else.
-- [ ] Write out a detailed document on Gaussian Mixture Models
-- [ ] Write a utility function to pull out SWIR and VNIR wavelengths and bands from the dataset and stack them and also stack the wavelengths and FWHMs.
 - [x] Write out a utility function to convert the DNs in Prisma to usable values and document the process.
-- [ ] Utility function to generate a robust validity mask that operates at the voxel level.
+- [x] Utility function to generate a robust validity mask that operates at the voxel level.
+- [x] Dataset Builder impl for Landsat data. be very careful about masking, because masks are native to rasterio read. Cloud detection is also needed.
+- [x] full visual confirmation that the dataset builder for landsat is working as expected.
+- [ ] Procure necessary AWS resources for patching experiments
 - [ ] Workout patch data model.
+
+Good to have:
+
+- [ ] Write out a detailed document on Gaussian Mixture Models
+

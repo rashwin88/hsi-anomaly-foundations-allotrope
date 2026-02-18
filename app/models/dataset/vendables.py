@@ -2,7 +2,7 @@
 Defines vendable datasets for each dataset builder
 """
 
-from typing import List
+from typing import List, Optional
 from pydantic import BaseModel, Field, ConfigDict, SkipValidation
 import numpy as np
 
@@ -33,4 +33,26 @@ class VendableHyperspectralDataset(BaseModel):
     band_cw_order: List[float] = Field(
         ...,
         description="A list which has the CW of each band in order of occurence in the cube.",
+    )
+
+    band_fwhm_order: Optional[List[float]] = Field(
+        default=[], description="An ordered list of FWHM of the wavelengths"
+    )
+
+
+class VendableThermalDataset(BaseModel):
+    """
+    Defines a vendable dataset for Landsat
+    """
+
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+    normalized_thermal_cube: SkipValidation[np.ndarray] = Field(
+        ...,
+        description="A fully normalized thermal cube with surface temperatures in celsius",
+    )
+
+    validity_cube: SkipValidation[np.ndarray] = Field(
+        ...,
+        description="The full validity cube. Here validity refers to the presence or absence of clouds.",
     )
