@@ -231,3 +231,33 @@ def test_band_extraction_error(live_source_data):
             mode="specific",
         )
         del swir_cube
+
+
+@pytest.mark.large_files
+def test_pixel_error_extraction(live_source_data):
+    """
+    Ensure that error pixel extraction is working as expected
+    """
+
+    # Using hyperspectral from phase 2 for this
+    source = live_source_data.get(PHASE2)
+
+    # Initialize the helper
+    helper = HE5Helper(
+        file_source_config=source,
+        template=TEMPLATE_MAPPINGS.get(TemplateIdentifier.PRISMA_HYPERSPECTRAL),
+    )
+
+    swir_error = helper.extract_error_matrices(
+        bands=[1], spectral_family=SpectralFamily.SWIR, mode="all"
+    )
+
+    assert swir_error.max() > 0
+    assert swir_error.min() == 0
+
+    vnir_error = helper.extract_error_matrices(
+        bands=[1], spectral_family=SpectralFamily.VNIR, mode="all"
+    )
+
+    assert vnir_error.max() > 0
+    assert vnir_error.min() == 0

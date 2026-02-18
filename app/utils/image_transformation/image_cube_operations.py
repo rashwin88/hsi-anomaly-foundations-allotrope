@@ -55,9 +55,13 @@ class ImageCubeOperations:
             # Create a mask_tensor
             mask_tensor = torch.from_numpy(mask_array).to(self.device)
             cube_data = cube.data
-            cube = torch.from_numpy(cube_data).float().to(self.device)
+            if cube_data.dtype == np.float64:
+                cube_data = cube_data.astype(np.float32)
+            cube = torch.from_numpy(cube_data).to(self.device)
         elif isinstance(cube, np.ndarray):
-            cube = torch.from_numpy(cube).float().to(self.device)
+            if cube.dtype == np.float64:
+                cube = cube.astype(np.float32)
+            cube = torch.from_numpy(cube).to(self.device)
         else:
             if cube.dtype == torch.float64:
                 cube = cube.float()

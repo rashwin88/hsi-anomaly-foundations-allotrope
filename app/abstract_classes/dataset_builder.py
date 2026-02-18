@@ -2,21 +2,20 @@
 Defines an abstract class for dataset builder
 """
 
-from typing import Dict, Union, List, Literal
+from typing import Dict, Union
 from abc import ABC, abstractmethod
+from pystac import Item
+
 
 # models imported
 from app.models.file_processing.sources import FileSourceConfig
 from app.models.images.cube_representation import CubeRepresentation
-from app.models.intermediate_concepts.band_requests import BandRequestOptions
-from app.models.intermediate_concepts.band_responses import (
-    BandByIndexResponse,
-    BandByWavelengthResponse,
-)
+
 from app.models.hyperspectral_concepts.band import (
     HyperpectralBandInformation,
 )
 from app.models.hyperspectral_concepts.spectral_family import SpectralFamily
+from app.models.dataset.vendables import VendableHyperspectralDataset
 
 # Other abstract classes
 from app.abstract_classes.file_helper import FileHelper
@@ -73,6 +72,14 @@ class DatasetBuilder(ABC):
 
     @property
     @abstractmethod
+    def stac_item(self) -> Item:
+        """
+        The stac item for the dataset
+        """
+        pass
+
+    @property
+    @abstractmethod
     def default_cube_representation(self) -> CubeRepresentation:
         """
         The default cube representation for the dataset. Will be different depending on sensor, provider and
@@ -88,41 +95,9 @@ class DatasetBuilder(ABC):
         pass
 
     @abstractmethod
-    def collect_raw_bands_by_index(
-        self,
-        bands: List[int],
-        options: BandRequestOptions,
-        mode: Literal["all", "specific"] = "specific",
-    ) -> BandByIndexResponse:
+    def vend_dataset(self) -> Union[VendableHyperspectralDataset]:
         """
-        Collects the raw bands from the image when specific index bands are given.
-
-        Args:
-            bands (List[int]): The list of band indices that we are requesting from the dataset.
-            options (BandRequestOptions) : The options for pulling bands from the dataset.
-            mode (Literal) : Specifies if all or specific bands need to be extracted.
-
-        Returns:
-            output (BandByIndexResponse): The output bands as requested.
-        """
-        pass
-
-    @abstractmethod
-    def collect_raw_bands_by_wavelength(
-        self,
-        wavelength_ranges: List[float],
-        options: BandRequestOptions,
-        mode: Literal["all", "specific"] = "specific",
-    ) -> BandByWavelengthResponse:
-        """
-        Collects the raw bands from the image when specific index bands are given.
-
-        Args:
-            wavelength_ranges (List[float]): The list of wavelengths that we need from the dataset.
-            options (BandOptions) : The options for pulling bands from the dataset.
-            mode (Literal) : Specifies if all or specific bands need to be extracted.
-
-        Returns:
-            output (BandByIndexResponse): The output bands as requested.
+        Constructs the complete dataset in a form that can be used in downstream
+        applications in full.
         """
         pass

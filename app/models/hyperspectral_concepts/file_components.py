@@ -23,6 +23,12 @@ class HyperspectralFileComponents(str, Enum):
     VNIR_CENTRAL_WAVELENGTH_FLAGS = "VNIR_CENTRAL_WAVELENGTH_FLAGS"
     VNIR_FWHM_LIST = "VNIR_FWHM_LIST"
 
+    # Scaling factors for conversion
+    L2_SCALE_MAX_VNIR = "L2_SCALE_MAX_VNIR"
+    L2_SCALE_MIN_VNIR = "L2_SCALE_MIN_VNIR"
+    L2_SCALE_MAX_SWIR = "L2_SCALE_MAX_SWIR"
+    L2_SCALE_MIN_SWIR = "L2_SCALE_MIN_SWIR"
+
 
 class ThermalComponents(Enum):
     """
