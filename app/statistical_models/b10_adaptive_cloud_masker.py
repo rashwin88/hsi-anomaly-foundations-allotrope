@@ -88,7 +88,7 @@ class B10AdaptiveCloudMasker(MlModel):
             self.anchors = probe.reshape(-1, 1)
         else:
             self.n_comp: int = DEFAULT_COMPNENT_COUNT
-            # PHYSICS-DRIVEN: Force the GMM to look for cold clusters
+            # Force the GMM to look for cold clusters
             # even if they aren't in the P2/P8 range.
             # This prevents the anchors from 'drifting' too far warm.
             self.anchors = np.array(

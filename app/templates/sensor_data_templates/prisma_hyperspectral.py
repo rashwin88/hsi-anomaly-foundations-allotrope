@@ -67,4 +67,25 @@ PRISMA_HYPERSPECTRAL_TEMPLATE: Dict[
         reference_type=ReferenceType.ROOT_METADATA_FIELD,
         root_metadata_field_name="List_Fwhm_Vnir",
     ),
+    # Scale Factors
+    HyperspectralFileComponents.L2_SCALE_MIN_SWIR: ReferenceDefinition(
+        description="Minimum scaling factor of the SWIR bands",
+        reference_type=ReferenceType.ROOT_METADATA_FIELD,
+        root_metadata_field_name="L2ScaleSwirMin",
+    ),
+    HyperspectralFileComponents.L2_SCALE_MAX_SWIR: ReferenceDefinition(
+        description="Maximum scaling factor of the SWIR bands",
+        reference_type=ReferenceType.ROOT_METADATA_FIELD,
+        root_metadata_field_name="L2ScaleSwirMax",
+    ),
+    HyperspectralFileComponents.L2_SCALE_MIN_VNIR: ReferenceDefinition(
+        description="Minimum scaling factor of the VNIR bands",
+        reference_type=ReferenceType.ROOT_METADATA_FIELD,
+        root_metadata_field_name="L2ScaleVnirMin",
+    ),
+    HyperspectralFileComponents.L2_SCALE_MAX_VNIR: ReferenceDefinition(
+        description="Maximum scaling factor of the VNIR bands",
+        reference_type=ReferenceType.ROOT_METADATA_FIELD,
+        root_metadata_field_name="L2ScaleVnirMax",
+    ),
 }

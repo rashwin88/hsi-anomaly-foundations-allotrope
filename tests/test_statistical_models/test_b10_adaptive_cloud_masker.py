@@ -39,6 +39,29 @@ def base_data(live_source_data) -> np.ma.MaskedArray:
     return temperature_data
 
 
+@pytest.fixture
+def base_data_unmasked(live_source_data) -> np.ma.MaskedArray:
+    """
+    Creates a simple celsius scale masked cube as input to the model
+    """
+
+    helper = TIFHelper(
+        file_source_config=live_source_data.get("phase_2_thermal_1"),
+        template=TEMPLATE_MAPPINGS.get(TemplateIdentifier.LANDSAT_THERMAL),
+    )
+
+    raw_data = helper.extract_specific_bands(
+        bands=[1], masking_needed=False, mode="numpy"
+    )
+
+    temperature_converter = Lc09L2spStTransformer()
+    temperature_data = temperature_converter.transform(
+        input_data=raw_data, unit=Temperature.CELSIUS
+    )
+
+    return temperature_data
+
+
 @pytest.mark.large_files
 def test_adaptive_cloud_masker(base_data):
     """
@@ -54,6 +77,24 @@ def test_adaptive_cloud_masker(base_data):
 
     assert isinstance(output, AdaptiveCloudMaskerResponse)
     assert output.pixels_masked > 1000
+    assert isinstance(output.cloud_mask, np.ndarray)
+
+
+@pytest.mark.large_files
+def test_adaptive_cloud_masker_unmasked(base_data_unmasked):
+    """
+    Tests the adaptove cloud masker on actual data
+    Where there is some cloud cover.
+    """
+
+    # intiialize the model
+    model = B10AdaptiveCloudMasker()
+    model.configure(sampling_ratio=0.01)
+    model.train(base_data_unmasked)
+    output = model.predict(base_data_unmasked[0, 2000:3000, 2000:3000])
+
+    assert isinstance(output, AdaptiveCloudMaskerResponse)
+    assert output.pixels_masked > 10
     assert isinstance(output.cloud_mask, np.ndarray)
 
 
