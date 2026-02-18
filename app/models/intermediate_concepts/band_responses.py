@@ -3,7 +3,7 @@ Defines the response when a dataset is requested for specific bands by indices o
 wavelengths.
 """
 
-from typing import Dict, Union
+from typing import Dict, Union, Optional
 import numpy as np
 from pydantic import BaseModel, Field, ConfigDict, SkipValidation
 
@@ -22,6 +22,9 @@ class BandByIndexResponse(BaseModel):
         ...,
         description="A lookup dictionary that tells us which band is in which remapped index",
     )
+    error_pixel_values = Optional[SkipValidation[np.ndarray]] = Field(
+        default=None, description="The error pixel matrix of the selected bands"
+    )
 
 
 class BandByWavelengthResponse(BaseModel):
@@ -38,4 +41,8 @@ class BandByWavelengthResponse(BaseModel):
     band_lookup: Dict[float, int] = Field(
         ...,
         description="The lookup dict between the specified wavelengths and the index in the output cube",
+    )
+
+    error_pixel_values = Optional[SkipValidation[np.ndarray]] = Field(
+        default=None, description="The error pixel matrix of the selected bands"
     )
