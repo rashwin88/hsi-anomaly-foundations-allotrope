@@ -11,3 +11,5 @@ pystac
 numexpr
 pytest-benchmark
 scikit-learn
+python-dotenv
+requests

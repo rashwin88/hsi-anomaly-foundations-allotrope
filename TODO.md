@@ -12,6 +12,11 @@ Must Haves:
 - [x] full visual confirmation that the dataset builder for landsat is working as expected.
 - [ ] Procure necessary AWS resources for patching experiments
 - [ ] Workout patch data model.
+- [x] Implement basic patching plan generator
+- [ ] Write extensive tests for the patch plan generator.
+- [ ] Implement a scene search API client for USGS
+- [ ] Create scene search templates for USGS M2M APIs
+- [ ] Implement random selection
 
 Good to have:
 
