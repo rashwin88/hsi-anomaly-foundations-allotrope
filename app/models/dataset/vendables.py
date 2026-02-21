@@ -69,15 +69,15 @@ class VendableThermalDataset(BaseModel):
 
     provider_cloud_presence: Optional[SkipValidation[np.ndarray]] = Field(
         default=None,
-        description="The cloud mask that comes from the provider of the data 1 means no cloud 0 means cloud",
+        description="The cloud mask that comes from the provider of the data 1 means cloud 0 means no cloud",
     )
 
     provider_water_presence: Optional[SkipValidation[np.ndarray]] = Field(
         default=None,
-        description="The water mask that comes from the provider of the data 1 means no water 0 means water",
+        description="The water mask that comes from the provider of the data 1 means water 0 means no water",
     )
 
     provider_snow_presence: Optional[SkipValidation[np.ndarray]] = Field(
         default=None,
-        description="The snow mask that comes from the provider of the data 1 means no snow 0 means snow",
+        description="The snow mask that comes from the provider of the data 1 means snow 0 means no snow",
     )
