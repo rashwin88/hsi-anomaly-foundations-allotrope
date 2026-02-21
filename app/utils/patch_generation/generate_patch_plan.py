@@ -25,8 +25,8 @@ class PatchPlanGenerator:
         """
 
         # Store variables
-        cube_height = request.input_cube.shape[1]
-        cube_width = request.input_cube.shape[2]
+        cube_height = request.input_cube[1]
+        cube_width = request.input_cube[2]
 
         if request.stride <= 0:
             raise ValueError("Stride must be greater than 0 to avoid an infinite loop.")

@@ -18,6 +18,7 @@ Must Haves:
 - [x] Create scene search templates for USGS M2M APIs
 - [x] Implement random selection
 - [x] Initiate download of scenes
+- [x] Fix the masking aspect of the databuilder, where in even the granular masks are exposed for landsat
 
 Good to have:
 
