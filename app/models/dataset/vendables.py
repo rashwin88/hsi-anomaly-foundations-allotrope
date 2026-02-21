@@ -64,3 +64,20 @@ class VendableThermalDataset(BaseModel):
     pure_validity_mask: Optional[SkipValidation[np.ndarray]] = Field(
         ..., description="Pure validity mask"
     )
+
+    #### Provider specific data - we dont have access to this usually (use with care)
+
+    provider_cloud_presence: Optional[SkipValidation[np.ndarray]] = Field(
+        default=None,
+        description="The cloud mask that comes from the provider of the data 1 means no cloud 0 means cloud",
+    )
+
+    provider_water_presence: Optional[SkipValidation[np.ndarray]] = Field(
+        default=None,
+        description="The water mask that comes from the provider of the data 1 means no water 0 means water",
+    )
+
+    provider_snow_presence: Optional[SkipValidation[np.ndarray]] = Field(
+        default=None,
+        description="The snow mask that comes from the provider of the data 1 means no snow 0 means snow",
+    )
