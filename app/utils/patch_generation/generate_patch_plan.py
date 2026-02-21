@@ -19,16 +19,14 @@ class PatchPlanGenerator:
     def __init__(self):
         pass
 
-    def generate_patching_plan(
-        self, input_cube: np.ndarray, request: PatchRequest
-    ) -> PatchingPlan:
+    def generate_patching_plan(self, request: PatchRequest) -> PatchingPlan:
         """
         Generates a patching plan for a patch request
         """
 
         # Store variables
-        cube_height = input_cube.shape[1]
-        cube_width = input_cube.shape[2]
+        cube_height = request.input_cube.shape[1]
+        cube_width = request.input_cube.shape[2]
 
         if request.stride <= 0:
             raise ValueError("Stride must be greater than 0 to avoid an infinite loop.")
