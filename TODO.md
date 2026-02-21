@@ -13,10 +13,11 @@ Must Haves:
 - [ ] Procure necessary AWS resources for patching experiments
 - [ ] Workout patch data model.
 - [x] Implement basic patching plan generator
-- [ ] Write extensive tests for the patch plan generator.
-- [ ] Implement a scene search API client for USGS
-- [ ] Create scene search templates for USGS M2M APIs
-- [ ] Implement random selection
+- [x] Write extensive tests for the patch plan generator.
+- [x] Implement a scene search API client for USGS
+- [x] Create scene search templates for USGS M2M APIs
+- [x] Implement random selection
+- [x] Initiate download of scenes
 
 Good to have:
 
