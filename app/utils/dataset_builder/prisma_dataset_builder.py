@@ -191,7 +191,7 @@ class PrismaDatasetBuilder(DatasetBuilder):
         logger.info("Band information extracted for SWIR and VNIR.")
         return output_dict
 
-    def vend_dataset(self) -> VendableHyperspectralDataset:
+    def vend_dataset(self, **kwargs) -> VendableHyperspectralDataset:
         """
         Vends the full hyperspectral dataset that is usable by downstream applications.
         For convention and ease of use, we force it to be a BSQ format in representation.

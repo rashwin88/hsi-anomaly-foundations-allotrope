@@ -51,6 +51,10 @@ def live_source_data() -> Dict[str, FileSourceConfig]:
         "phase_2_thermal_4": FileSourceConfig(
             source_path="tests/test_payloads/phase_2/Set-4/Thermal/LC09_L2SP_147049_20251121_20251122_02_T1_ST_B10.TIF"
         ),
+        "thermal_usgs": FileSourceConfig(
+            source_path="tests/test_payloads/thermal_3/LC09_L2SP_132047_20240330_20240403_02_T1_ST_B10.TIF"
+        ),
+        "thermal_usgs_qa": "tests/test_payloads/thermal_3/LC09_L2SP_132047_20240330_20240403_02_T1_QA_PIXEL.TIF",
     }
 
 

@@ -100,9 +100,13 @@ class LandsatDataBuilder(DatasetBuilder):
     def extract_band_information(self) -> None:
         return None
 
-    def vend_dataset(self) -> VendableThermalDataset:
+    def vend_dataset(
+        self, provider_qa_pixel_source: str = None, **kwargs
+    ) -> VendableThermalDataset:
         """
         Returns a vendable thermal dataset
+
+        In the case of landsat data we may want to use the QA pixel source from the provider to store some additional information.
         """
 
         # First collect the thermal image in its native format with masking
@@ -138,9 +142,46 @@ class LandsatDataBuilder(DatasetBuilder):
         # Get the overall mask
         overall_mask = cloud_mask * validity_mask
 
-        return VendableThermalDataset(
-            normalized_thermal_cube=st_image,
-            validity_cube=overall_mask,
-            pure_validity_mask=validity_mask,
-            cloud_mask=cloud_mask,
-        )
+        if provider_qa_pixel_source is None:
+            return VendableThermalDataset(
+                normalized_thermal_cube=st_image,
+                validity_cube=overall_mask,
+                pure_validity_mask=validity_mask,
+                cloud_mask=cloud_mask,
+            )
+
+        else:
+            ## We start a process to actually process the provider QA data
+            provider_qa_source = FileSourceConfig(source_path=provider_qa_pixel_source)
+            # Initialize a helper for the QA data alone
+            qa_helper = TIFHelper(
+                file_source_config=provider_qa_source,
+                template=TEMPLATE_MAPPINGS.get(TemplateIdentifier.LANDSAT_THERMAL),
+            )
+            # Now that we have the qa helper we can get different types of masks from it.
+            qa_data = qa_helper.extract_specific_bands(
+                bands=[], masking_needed=False, mode="all"
+            )
+
+            # Now that we have the data, we can create the masks we need
+            # First we get the provider cloud presence
+            # We remove dilated clouds, cirrus, cloud and cloud shadow to be absolutely sure
+            provider_cloud_presence = (
+                ((qa_data >> 1) & 1)
+                | ((qa_data >> 2) & 1)
+                | ((qa_data >> 3) & 1)
+                | ((qa_data >> 4) & 1)
+            )
+
+            provider_water_presence = (qa_data >> 7) & 1
+            provider_snow_presence = (qa_data >> 5) & 1
+
+            return VendableThermalDataset(
+                normalized_thermal_cube=st_image,
+                validity_cube=overall_mask,
+                pure_validity_mask=validity_mask,
+                cloud_mask=cloud_mask,
+                provider_water_presence=provider_water_presence,
+                provider_snow_presence=provider_snow_presence,
+                provider_cloud_presence=provider_cloud_presence,
+            )
