@@ -1,0 +1,2021 @@
+{
+  "requestId": 2204484385,
+  "version": "stable",
+  "sessionId": 330341833,
+  "data": [
+    {
+      "id": "5e83d14fec7cae84",
+      "downloadName": null,
+      "displayId": "LC09_L2SP_145035_20240105_20240107_02_T1",
+      "entityId": "LC91450352024005LGN00",
+      "datasetId": "5e83d14f2fc39685",
+      "available": true,
+      "filesize": 962928790,
+      "productName": "Landsat Collection 2 Level-2 Product Bundle",
+      "productCode": "D694",
+      "bulkAvailable": true,
+      "downloadSystem": "ls_zip",
+      "secondaryDownloads": [
+        {
+          "id": "5f85f041a2ea6695",
+          "downloadName": null,
+          "displayId": "LC09_L2SP_145035_20240105_20240107_02_T1_ANG.txt",
+          "entityId": "L2ST_LC09_L2SP_145035_20240105_20240107_02_T1_ANG_TXT",
+          "datasetId": "5f85f041c828327a",
+          "available": true,
+          "filesize": 117391,
+          "productName": "Landsat Collection 2 Level-2 Band File",
+          "productCode": "D693",
+          "bulkAvailable": true,
+          "downloadSystem": "ls_s3",
+          "secondaryDownloads": [],
+          "fileGroups": null,
+          "displayOrder": 54,
+          "checksum": [
+            {
+              "id": "sha512",
+              "value": "71c719761e37727b76fd8b313156f80c7581052b9ae8566eb2a2a30529e67097fb3916a9b9e8fc11fc33a40059797307404b733256b371a63724b3863a76fe7e"
+            }
+          ]
+        },
+        {
+          "id": "5f85f041a2ea6695",
+          "downloadName": null,
+          "displayId": "LC09_L2SP_145035_20240105_20240107_02_T1_MTL.txt",
+          "entityId": "L2ST_LC09_L2SP_145035_20240105_20240107_02_T1_MTL_TXT",
+          "datasetId": "5f85f041c828327a",
+          "available": true,
+          "filesize": 15254,
+          "productName": "Landsat Collection 2 Level-2 Band File",
+          "productCode": "D693",
+          "bulkAvailable": true,
+          "downloadSystem": "ls_s3",
+          "secondaryDownloads": [],
+          "fileGroups": null,
+          "displayOrder": 54,
+          "checksum": [
+            {
+              "id": "sha512",
+              "value": "7cd4ce73519d70340fcc7dad99dd6ab8ed3caf2a7a179988a7215a5a411a3be925735650544d47729c4d94e9a3c6915bacb74d903063f79756074e97610809ba"
+            }
+          ]
+        },
+        {
+          "id": "5f85f041a2ea6695",
+          "downloadName": null,
+          "displayId": "LC09_L2SP_145035_20240105_20240107_02_T1_MTL.xml",
+          "entityId": "L2ST_LC09_L2SP_145035_20240105_20240107_02_T1_MTL_XML",
+          "datasetId": "5f85f041c828327a",
+          "available": true,
+          "filesize": 22465,
+          "productName": "Landsat Collection 2 Level-2 Band File",
+          "productCode": "D693",
+          "bulkAvailable": true,
+          "downloadSystem": "ls_s3",
+          "secondaryDownloads": [],
+          "fileGroups": null,
+          "displayOrder": 54,
+          "checksum": [
+            {
+              "id": "sha512",
+              "value": "e78aea312ff017e9df9aa2ace1b0cf9605a15f526abefd12f80347430a6f44d4d31bdc42013514377c89c1255855b275e61ee8fc8dae093437306a2712174e26"
+            }
+          ]
+        },
+        {
+          "id": "5f85f041a2ea6695",
+          "downloadName": null,
+          "displayId": "LC09_L2SP_145035_20240105_20240107_02_T1_QA_PIXEL.TIF",
+          "entityId": "L2SR_LC09_L2SP_145035_20240105_20240107_02_T1_QA_PIXEL_TIF",
+          "datasetId": "5f85f041c828327a",
+          "available": true,
+          "filesize": 5410324,
+          "productName": "Landsat Collection 2 Level-2 Band File",
+          "productCode": "D693",
+          "bulkAvailable": true,
+          "downloadSystem": "ls_s3",
+          "secondaryDownloads": [],
+          "fileGroups": null,
+          "displayOrder": 54,
+          "checksum": [
+            {
+              "id": "sha512",
+              "value": "fa3e5a873911ba4b996de4437ce485ac7388e64dabf88e5a63a23ac15c66b6eec19fd70ebbdcca889216f923fcdce1333ccc6f90d71b9725d1ff9e76c14d44ea"
+            }
+          ]
+        },
+        {
+          "id": "5f85f041a2ea6695",
+          "downloadName": null,
+          "displayId": "LC09_L2SP_145035_20240105_20240107_02_T1_QA_RADSAT.TIF",
+          "entityId": "L2SR_LC09_L2SP_145035_20240105_20240107_02_T1_QA_RADSAT_TIF",
+          "datasetId": "5f85f041c828327a",
+          "available": true,
+          "filesize": 230455,
+          "productName": "Landsat Collection 2 Level-2 Band File",
+          "productCode": "D693",
+          "bulkAvailable": true,
+          "downloadSystem": "ls_s3",
+          "secondaryDownloads": [],
+          "fileGroups": null,
+          "displayOrder": 54,
+          "checksum": [
+            {
+              "id": "sha512",
+              "value": "b410439ef869ed327668a86ae6a9cf2f2e330eba9b4dba4a7aed7bf256657f65227f7a2bbbcc39965f7766e3780eae276a4a3ab2e01652902a72c297209be0d6"
+            }
+          ]
+        },
+        {
+          "id": "5f85f041a2ea6695",
+          "downloadName": null,
+          "displayId": "LC09_L2SP_145035_20240105_20240107_02_T1_SR_B1.TIF",
+          "entityId": "L2SR_LC09_L2SP_145035_20240105_20240107_02_T1_SR_B1_TIF",
+          "datasetId": "5f85f041c828327a",
+          "available": true,
+          "filesize": 93608488,
+          "productName": "Landsat Collection 2 Level-2 Band File",
+          "productCode": "D693",
+          "bulkAvailable": true,
+          "downloadSystem": "ls_s3",
+          "secondaryDownloads": [],
+          "fileGroups": null,
+          "displayOrder": 54,
+          "checksum": [
+            {
+              "id": "sha512",
+              "value": "45b43375688f339b03743361f983b0f05f94c666b64bbfd545b2f6273280602e51f589640d169ded03964ae8e9c84bf0f7a349669c5700fb9a9942d21cfed2ed"
+            }
+          ]
+        },
+        {
+          "id": "5f85f041a2ea6695",
+          "downloadName": null,
+          "displayId": "LC09_L2SP_145035_20240105_20240107_02_T1_SR_B2.TIF",
+          "entityId": "L2SR_LC09_L2SP_145035_20240105_20240107_02_T1_SR_B2_TIF",
+          "datasetId": "5f85f041c828327a",
+          "available": true,
+          "filesize": 94480860,
+          "productName": "Landsat Collection 2 Level-2 Band File",
+          "productCode": "D693",
+          "bulkAvailable": true,
+          "downloadSystem": "ls_s3",
+          "secondaryDownloads": [],
+          "fileGroups": null,
+          "displayOrder": 54,
+          "checksum": [
+            {
+              "id": "sha512",
+              "value": "43ef68ca0a868b0f5637de5dfa588973dab35ebc8972284ddf75d7f1a1d25b3989b2973fe4250e76674ebc6d68a246714727ed33ff12e2f67f2534dc2a3e7311"
+            }
+          ]
+        },
+        {
+          "id": "5f85f041a2ea6695",
+          "downloadName": null,
+          "displayId": "LC09_L2SP_145035_20240105_20240107_02_T1_SR_B3.TIF",
+          "entityId": "L2SR_LC09_L2SP_145035_20240105_20240107_02_T1_SR_B3_TIF",
+          "datasetId": "5f85f041c828327a",
+          "available": true,
+          "filesize": 96222225,
+          "productName": "Landsat Collection 2 Level-2 Band File",
+          "productCode": "D693",
+          "bulkAvailable": true,
+          "downloadSystem": "ls_s3",
+          "secondaryDownloads": [],
+          "fileGroups": null,
+          "displayOrder": 54,
+          "checksum": [
+            {
+              "id": "sha512",
+              "value": "24a8b3f4286914f78bceb48241cf0b4d7e034ac80454e485d843a0db61692d8544675fcb28d66963a5aa0f33c7b27f3895bde3de6b5e18577efd74b0fab53480"
+            }
+          ]
+        },
+        {
+          "id": "5f85f041a2ea6695",
+          "downloadName": null,
+          "displayId": "LC09_L2SP_145035_20240105_20240107_02_T1_SR_B4.TIF",
+          "entityId": "L2SR_LC09_L2SP_145035_20240105_20240107_02_T1_SR_B4_TIF",
+          "datasetId": "5f85f041c828327a",
+          "available": true,
+          "filesize": 97178731,
+          "productName": "Landsat Collection 2 Level-2 Band File",
+          "productCode": "D693",
+          "bulkAvailable": true,
+          "downloadSystem": "ls_s3",
+          "secondaryDownloads": [],
+          "fileGroups": null,
+          "displayOrder": 54,
+          "checksum": [
+            {
+              "id": "sha512",
+              "value": "723973580deb59b75d58e08069c31a73692d1363e92b7011a8ebd9e6aea1886338d83406e5bf404d42ef24075915d90b921f5c9e8092c1959d5c643e632d69de"
+            }
+          ]
+        },
+        {
+          "id": "5f85f041a2ea6695",
+          "downloadName": null,
+          "displayId": "LC09_L2SP_145035_20240105_20240107_02_T1_SR_B5.TIF",
+          "entityId": "L2SR_LC09_L2SP_145035_20240105_20240107_02_T1_SR_B5_TIF",
+          "datasetId": "5f85f041c828327a",
+          "available": true,
+          "filesize": 97425819,
+          "productName": "Landsat Collection 2 Level-2 Band File",
+          "productCode": "D693",
+          "bulkAvailable": true,
+          "downloadSystem": "ls_s3",
+          "secondaryDownloads": [],
+          "fileGroups": null,
+          "displayOrder": 54,
+          "checksum": [
+            {
+              "id": "sha512",
+              "value": "8f903e3afcae86e33e8d92cc25b7ae850874d39236d84e5b2241977ce9d06c778a0039745e0fa26f08bf03e450ae373bf4849eb02690b7e799e11fa1ca704c87"
+            }
+          ]
+        },
+        {
+          "id": "5f85f041a2ea6695",
+          "downloadName": null,
+          "displayId": "LC09_L2SP_145035_20240105_20240107_02_T1_SR_B6.TIF",
+          "entityId": "L2SR_LC09_L2SP_145035_20240105_20240107_02_T1_SR_B6_TIF",
+          "datasetId": "5f85f041c828327a",
+          "available": true,
+          "filesize": 95864162,
+          "productName": "Landsat Collection 2 Level-2 Band File",
+          "productCode": "D693",
+          "bulkAvailable": true,
+          "downloadSystem": "ls_s3",
+          "secondaryDownloads": [],
+          "fileGroups": null,
+          "displayOrder": 54,
+          "checksum": [
+            {
+              "id": "sha512",
+              "value": "5c13a1c6fde1139fd95d60e99957bab2aede4cda3cb660ade183d6fcddc28aae9c73d0ae0b2323b1d22663c9f7a7bb4d692297ea118012bf81e221deee3f6861"
+            }
+          ]
+        },
+        {
+          "id": "5f85f041a2ea6695",
+          "downloadName": null,
+          "displayId": "LC09_L2SP_145035_20240105_20240107_02_T1_SR_B7.TIF",
+          "entityId": "L2SR_LC09_L2SP_145035_20240105_20240107_02_T1_SR_B7_TIF",
+          "datasetId": "5f85f041c828327a",
+          "available": true,
+          "filesize": 95257113,
+          "productName": "Landsat Collection 2 Level-2 Band File",
+          "productCode": "D693",
+          "bulkAvailable": true,
+          "downloadSystem": "ls_s3",
+          "secondaryDownloads": [],
+          "fileGroups": null,
+          "displayOrder": 54,
+          "checksum": [
+            {
+              "id": "sha512",
+              "value": "e04203eedb82eec67227354e22e0ecfb2b4cc3ef80ae3dec2fb5a9642ec95a70481d9416d5af366a93e256e6576baa1863265d2dcfd72a400af456d01aed10ae"
+            }
+          ]
+        },
+        {
+          "id": "5f85f041a2ea6695",
+          "downloadName": null,
+          "displayId": "LC09_L2SP_145035_20240105_20240107_02_T1_SR_QA_AEROSOL.TIF",
+          "entityId": "L2SR_LC09_L2SP_145035_20240105_20240107_02_T1_SR_QA_AEROSOL_TIF",
+          "datasetId": "5f85f041c828327a",
+          "available": true,
+          "filesize": 5046638,
+          "productName": "Landsat Collection 2 Level-2 Band File",
+          "productCode": "D693",
+          "bulkAvailable": true,
+          "downloadSystem": "ls_s3",
+          "secondaryDownloads": [],
+          "fileGroups": null,
+          "displayOrder": 54,
+          "checksum": [
+            {
+              "id": "sha512",
+              "value": "dda566f9476f95bd5befa2be2ef6bf4f56267a4bdc133c37d1283567f02e3b010f143a1f33a23bf5aa962d84c2370abd569b9ee46819c17e9e705c37d09f6371"
+            }
+          ]
+        },
+        {
+          "id": "5f85f041a2ea6695",
+          "downloadName": null,
+          "displayId": "LC09_L2SP_145035_20240105_20240107_02_T1_ST_ATRAN.TIF",
+          "entityId": "L2ST_LC09_L2SP_145035_20240105_20240107_02_T1_ST_ATRAN_TIF",
+          "datasetId": "5f85f041c828327a",
+          "available": true,
+          "filesize": 13912260,
+          "productName": "Landsat Collection 2 Level-2 Band File",
+          "productCode": "D693",
+          "bulkAvailable": true,
+          "downloadSystem": "ls_s3",
+          "secondaryDownloads": [],
+          "fileGroups": null,
+          "displayOrder": 54,
+          "checksum": [
+            {
+              "id": "sha512",
+              "value": "8886127ed33beaf86a523eec21c855d849d23d8fb552bf23ab7b06bd098f2ed1a3c69e2abf6294471dcf74f521726c8dd0cfaa63348c1a6222a8ab34aec8125d"
+            }
+          ]
+        },
+        {
+          "id": "5f85f041a2ea6695",
+          "downloadName": null,
+          "displayId": "LC09_L2SP_145035_20240105_20240107_02_T1_ST_B10.TIF",
+          "entityId": "L2ST_LC09_L2SP_145035_20240105_20240107_02_T1_ST_B10_TIF",
+          "datasetId": "5f85f041c828327a",
+          "available": true,
+          "filesize": 85953257,
+          "productName": "Landsat Collection 2 Level-2 Band File",
+          "productCode": "D693",
+          "bulkAvailable": true,
+          "downloadSystem": "ls_s3",
+          "secondaryDownloads": [],
+          "fileGroups": null,
+          "displayOrder": 54,
+          "checksum": [
+            {
+              "id": "sha512",
+              "value": "1ce0f04779a00397f9f30523d83c653a3baaf422f8e0400f13f432babdcab7345fc1fbb7d4edbe41ed5de01f646d97bbc380e9925ed3814954e3cae505279890"
+            }
+          ]
+        },
+        {
+          "id": "5f85f041a2ea6695",
+          "downloadName": null,
+          "displayId": "LC09_L2SP_145035_20240105_20240107_02_T1_ST_CDIST.TIF",
+          "entityId": "L2ST_LC09_L2SP_145035_20240105_20240107_02_T1_ST_CDIST_TIF",
+          "datasetId": "5f85f041c828327a",
+          "available": true,
+          "filesize": 18701623,
+          "productName": "Landsat Collection 2 Level-2 Band File",
+          "productCode": "D693",
+          "bulkAvailable": true,
+          "downloadSystem": "ls_s3",
+          "secondaryDownloads": [],
+          "fileGroups": null,
+          "displayOrder": 54,
+          "checksum": [
+            {
+              "id": "sha512",
+              "value": "c8574fcca130fad491eb3d7ba8c217477a3fea83d8cdffaa0442fa9dd4c23c04cc484c0a37835579baa518bc293432328df8968da1fd5939f902752491bcc863"
+            }
+          ]
+        },
+        {
+          "id": "5f85f041a2ea6695",
+          "downloadName": null,
+          "displayId": "LC09_L2SP_145035_20240105_20240107_02_T1_ST_DRAD.TIF",
+          "entityId": "L2ST_LC09_L2SP_145035_20240105_20240107_02_T1_ST_DRAD_TIF",
+          "datasetId": "5f85f041c828327a",
+          "available": true,
+          "filesize": 6775485,
+          "productName": "Landsat Collection 2 Level-2 Band File",
+          "productCode": "D693",
+          "bulkAvailable": true,
+          "downloadSystem": "ls_s3",
+          "secondaryDownloads": [],
+          "fileGroups": null,
+          "displayOrder": 54,
+          "checksum": [
+            {
+              "id": "sha512",
+              "value": "2cc72467098a2de97f7f857feddaa6f85c0e6ad193754c199f2e97539940cb9578bc7a853a8f487d9447cdc8f5a523860a00cea65a72657e899a080af3fc1b2e"
+            }
+          ]
+        },
+        {
+          "id": "5f85f041a2ea6695",
+          "downloadName": null,
+          "displayId": "LC09_L2SP_145035_20240105_20240107_02_T1_ST_EMIS.TIF",
+          "entityId": "L2ST_LC09_L2SP_145035_20240105_20240107_02_T1_ST_EMIS_TIF",
+          "datasetId": "5f85f041c828327a",
+          "available": true,
+          "filesize": 17332156,
+          "productName": "Landsat Collection 2 Level-2 Band File",
+          "productCode": "D693",
+          "bulkAvailable": true,
+          "downloadSystem": "ls_s3",
+          "secondaryDownloads": [],
+          "fileGroups": null,
+          "displayOrder": 54,
+          "checksum": [
+            {
+              "id": "sha512",
+              "value": "7a7648695abcc78c8da85077981444211683a1715d6e85fce7dbeb200d1117ca593f8669740a2da8baa34847ebc8010218896662e5f1b9553c40623b1797c75e"
+            }
+          ]
+        },
+        {
+          "id": "5f85f041a2ea6695",
+          "downloadName": null,
+          "displayId": "LC09_L2SP_145035_20240105_20240107_02_T1_ST_EMSD.TIF",
+          "entityId": "L2ST_LC09_L2SP_145035_20240105_20240107_02_T1_ST_EMSD_TIF",
+          "datasetId": "5f85f041c828327a",
+          "available": true,
+          "filesize": 17031584,
+          "productName": "Landsat Collection 2 Level-2 Band File",
+          "productCode": "D693",
+          "bulkAvailable": true,
+          "downloadSystem": "ls_s3",
+          "secondaryDownloads": [],
+          "fileGroups": null,
+          "displayOrder": 54,
+          "checksum": [
+            {
+              "id": "sha512",
+              "value": "50f8d3eb254f9403252bea7014445a0123295a9c0e382629e36aae5a3f16e923180b2c9ab4e8c12ea2c35c8719336bc14387df4194eb3dc749f698fa8c6fda48"
+            }
+          ]
+        },
+        {
+          "id": "5f85f041a2ea6695",
+          "downloadName": null,
+          "displayId": "LC09_L2SP_145035_20240105_20240107_02_T1_ST_QA.TIF",
+          "entityId": "L2ST_LC09_L2SP_145035_20240105_20240107_02_T1_ST_QA_TIF",
+          "datasetId": "5f85f041c828327a",
+          "available": true,
+          "filesize": 36626535,
+          "productName": "Landsat Collection 2 Level-2 Band File",
+          "productCode": "D693",
+          "bulkAvailable": true,
+          "downloadSystem": "ls_s3",
+          "secondaryDownloads": [],
+          "fileGroups": null,
+          "displayOrder": 54,
+          "checksum": [
+            {
+              "id": "sha512",
+              "value": "f01ec37427b020d28cb5fe822030246b32668e36b49ad40259aa985a3909626a528e9680c38f11f0c685a3d8f228dce18c4c47c25fd5b77b203379de084c6a26"
+            }
+          ]
+        },
+        {
+          "id": "5f85f041a2ea6695",
+          "downloadName": null,
+          "displayId": "LC09_L2SP_145035_20240105_20240107_02_T1_ST_TRAD.TIF",
+          "entityId": "L2ST_LC09_L2SP_145035_20240105_20240107_02_T1_ST_TRAD_TIF",
+          "datasetId": "5f85f041c828327a",
+          "available": true,
+          "filesize": 76410538,
+          "productName": "Landsat Collection 2 Level-2 Band File",
+          "productCode": "D693",
+          "bulkAvailable": true,
+          "downloadSystem": "ls_s3",
+          "secondaryDownloads": [],
+          "fileGroups": null,
+          "displayOrder": 54,
+          "checksum": [
+            {
+              "id": "sha512",
+              "value": "52e427b5b0f12d7e8ac163310a0e082be9475cebfdec2b8f56e7e208b10cfd08e8f9ad01111948724d0d17d8f7a6709c2baa09c36574a6361b4ad6f6504de9f6"
+            }
+          ]
+        },
+        {
+          "id": "5f85f041a2ea6695",
+          "downloadName": null,
+          "displayId": "LC09_L2SP_145035_20240105_20240107_02_T1_ST_URAD.TIF",
+          "entityId": "L2ST_LC09_L2SP_145035_20240105_20240107_02_T1_ST_URAD_TIF",
+          "datasetId": "5f85f041c828327a",
+          "available": true,
+          "filesize": 9305427,
+          "productName": "Landsat Collection 2 Level-2 Band File",
+          "productCode": "D693",
+          "bulkAvailable": true,
+          "downloadSystem": "ls_s3",
+          "secondaryDownloads": [],
+          "fileGroups": null,
+          "displayOrder": 54,
+          "checksum": [
+            {
+              "id": "sha512",
+              "value": "20c6978443f8a2f765afc6e057cc665a75f75412c98bb2a0745bd71ce95c747b0c1867741becea5761ee311d56b803dffbf90df8d001dfe6eb73c4ca03136fb7"
+            }
+          ]
+        }
+      ],
+      "fileGroups": null
+    },
+    {
+      "id": "6448198cc7b442a4",
+      "downloadName": "C2L2 Tile Product Files",
+      "displayId": "LC09_L2SP_145035_20240105_20240107_02_T1",
+      "entityId": "LC91450352024005LGN00",
+      "datasetId": "5e83d14f2fc39685",
+      "available": true,
+      "filesize": 0,
+      "productName": "Landsat Collection 2 Level-2 Band File",
+      "productCode": "D693",
+      "bulkAvailable": true,
+      "downloadSystem": "folder",
+      "secondaryDownloads": [
+        {
+          "id": "5f85f041a2ea6695",
+          "downloadName": null,
+          "displayId": "LC09_L2SP_145035_20240105_20240107_02_T1_ANG.txt",
+          "entityId": "L2ST_LC09_L2SP_145035_20240105_20240107_02_T1_ANG_TXT",
+          "datasetId": "5f85f041c828327a",
+          "available": true,
+          "filesize": 117391,
+          "productName": "Landsat Collection 2 Level-2 Band File",
+          "productCode": "D693",
+          "bulkAvailable": true,
+          "downloadSystem": "ls_s3",
+          "secondaryDownloads": [],
+          "fileGroups": null,
+          "displayOrder": 54,
+          "checksum": [
+            {
+              "id": "sha512",
+              "value": "71c719761e37727b76fd8b313156f80c7581052b9ae8566eb2a2a30529e67097fb3916a9b9e8fc11fc33a40059797307404b733256b371a63724b3863a76fe7e"
+            }
+          ]
+        },
+        {
+          "id": "5f85f041a2ea6695",
+          "downloadName": null,
+          "displayId": "LC09_L2SP_145035_20240105_20240107_02_T1_MTL.txt",
+          "entityId": "L2ST_LC09_L2SP_145035_20240105_20240107_02_T1_MTL_TXT",
+          "datasetId": "5f85f041c828327a",
+          "available": true,
+          "filesize": 15254,
+          "productName": "Landsat Collection 2 Level-2 Band File",
+          "productCode": "D693",
+          "bulkAvailable": true,
+          "downloadSystem": "ls_s3",
+          "secondaryDownloads": [],
+          "fileGroups": null,
+          "displayOrder": 54,
+          "checksum": [
+            {
+              "id": "sha512",
+              "value": "7cd4ce73519d70340fcc7dad99dd6ab8ed3caf2a7a179988a7215a5a411a3be925735650544d47729c4d94e9a3c6915bacb74d903063f79756074e97610809ba"
+            }
+          ]
+        },
+        {
+          "id": "5f85f041a2ea6695",
+          "downloadName": null,
+          "displayId": "LC09_L2SP_145035_20240105_20240107_02_T1_MTL.xml",
+          "entityId": "L2ST_LC09_L2SP_145035_20240105_20240107_02_T1_MTL_XML",
+          "datasetId": "5f85f041c828327a",
+          "available": true,
+          "filesize": 22465,
+          "productName": "Landsat Collection 2 Level-2 Band File",
+          "productCode": "D693",
+          "bulkAvailable": true,
+          "downloadSystem": "ls_s3",
+          "secondaryDownloads": [],
+          "fileGroups": null,
+          "displayOrder": 54,
+          "checksum": [
+            {
+              "id": "sha512",
+              "value": "e78aea312ff017e9df9aa2ace1b0cf9605a15f526abefd12f80347430a6f44d4d31bdc42013514377c89c1255855b275e61ee8fc8dae093437306a2712174e26"
+            }
+          ]
+        },
+        {
+          "id": "5f85f041a2ea6695",
+          "downloadName": null,
+          "displayId": "LC09_L2SP_145035_20240105_20240107_02_T1_QA_PIXEL.TIF",
+          "entityId": "L2SR_LC09_L2SP_145035_20240105_20240107_02_T1_QA_PIXEL_TIF",
+          "datasetId": "5f85f041c828327a",
+          "available": true,
+          "filesize": 5410324,
+          "productName": "Landsat Collection 2 Level-2 Band File",
+          "productCode": "D693",
+          "bulkAvailable": true,
+          "downloadSystem": "ls_s3",
+          "secondaryDownloads": [],
+          "fileGroups": null,
+          "displayOrder": 54,
+          "checksum": [
+            {
+              "id": "sha512",
+              "value": "fa3e5a873911ba4b996de4437ce485ac7388e64dabf88e5a63a23ac15c66b6eec19fd70ebbdcca889216f923fcdce1333ccc6f90d71b9725d1ff9e76c14d44ea"
+            }
+          ]
+        },
+        {
+          "id": "5f85f041a2ea6695",
+          "downloadName": null,
+          "displayId": "LC09_L2SP_145035_20240105_20240107_02_T1_QA_RADSAT.TIF",
+          "entityId": "L2SR_LC09_L2SP_145035_20240105_20240107_02_T1_QA_RADSAT_TIF",
+          "datasetId": "5f85f041c828327a",
+          "available": true,
+          "filesize": 230455,
+          "productName": "Landsat Collection 2 Level-2 Band File",
+          "productCode": "D693",
+          "bulkAvailable": true,
+          "downloadSystem": "ls_s3",
+          "secondaryDownloads": [],
+          "fileGroups": null,
+          "displayOrder": 54,
+          "checksum": [
+            {
+              "id": "sha512",
+              "value": "b410439ef869ed327668a86ae6a9cf2f2e330eba9b4dba4a7aed7bf256657f65227f7a2bbbcc39965f7766e3780eae276a4a3ab2e01652902a72c297209be0d6"
+            }
+          ]
+        },
+        {
+          "id": "5f85f041a2ea6695",
+          "downloadName": null,
+          "displayId": "LC09_L2SP_145035_20240105_20240107_02_T1_SR_B1.TIF",
+          "entityId": "L2SR_LC09_L2SP_145035_20240105_20240107_02_T1_SR_B1_TIF",
+          "datasetId": "5f85f041c828327a",
+          "available": true,
+          "filesize": 93608488,
+          "productName": "Landsat Collection 2 Level-2 Band File",
+          "productCode": "D693",
+          "bulkAvailable": true,
+          "downloadSystem": "ls_s3",
+          "secondaryDownloads": [],
+          "fileGroups": null,
+          "displayOrder": 54,
+          "checksum": [
+            {
+              "id": "sha512",
+              "value": "45b43375688f339b03743361f983b0f05f94c666b64bbfd545b2f6273280602e51f589640d169ded03964ae8e9c84bf0f7a349669c5700fb9a9942d21cfed2ed"
+            }
+          ]
+        },
+        {
+          "id": "5f85f041a2ea6695",
+          "downloadName": null,
+          "displayId": "LC09_L2SP_145035_20240105_20240107_02_T1_SR_B2.TIF",
+          "entityId": "L2SR_LC09_L2SP_145035_20240105_20240107_02_T1_SR_B2_TIF",
+          "datasetId": "5f85f041c828327a",
+          "available": true,
+          "filesize": 94480860,
+          "productName": "Landsat Collection 2 Level-2 Band File",
+          "productCode": "D693",
+          "bulkAvailable": true,
+          "downloadSystem": "ls_s3",
+          "secondaryDownloads": [],
+          "fileGroups": null,
+          "displayOrder": 54,
+          "checksum": [
+            {
+              "id": "sha512",
+              "value": "43ef68ca0a868b0f5637de5dfa588973dab35ebc8972284ddf75d7f1a1d25b3989b2973fe4250e76674ebc6d68a246714727ed33ff12e2f67f2534dc2a3e7311"
+            }
+          ]
+        },
+        {
+          "id": "5f85f041a2ea6695",
+          "downloadName": null,
+          "displayId": "LC09_L2SP_145035_20240105_20240107_02_T1_SR_B3.TIF",
+          "entityId": "L2SR_LC09_L2SP_145035_20240105_20240107_02_T1_SR_B3_TIF",
+          "datasetId": "5f85f041c828327a",
+          "available": true,
+          "filesize": 96222225,
+          "productName": "Landsat Collection 2 Level-2 Band File",
+          "productCode": "D693",
+          "bulkAvailable": true,
+          "downloadSystem": "ls_s3",
+          "secondaryDownloads": [],
+          "fileGroups": null,
+          "displayOrder": 54,
+          "checksum": [
+            {
+              "id": "sha512",
+              "value": "24a8b3f4286914f78bceb48241cf0b4d7e034ac80454e485d843a0db61692d8544675fcb28d66963a5aa0f33c7b27f3895bde3de6b5e18577efd74b0fab53480"
+            }
+          ]
+        },
+        {
+          "id": "5f85f041a2ea6695",
+          "downloadName": null,
+          "displayId": "LC09_L2SP_145035_20240105_20240107_02_T1_SR_B4.TIF",
+          "entityId": "L2SR_LC09_L2SP_145035_20240105_20240107_02_T1_SR_B4_TIF",
+          "datasetId": "5f85f041c828327a",
+          "available": true,
+          "filesize": 97178731,
+          "productName": "Landsat Collection 2 Level-2 Band File",
+          "productCode": "D693",
+          "bulkAvailable": true,
+          "downloadSystem": "ls_s3",
+          "secondaryDownloads": [],
+          "fileGroups": null,
+          "displayOrder": 54,
+          "checksum": [
+            {
+              "id": "sha512",
+              "value": "723973580deb59b75d58e08069c31a73692d1363e92b7011a8ebd9e6aea1886338d83406e5bf404d42ef24075915d90b921f5c9e8092c1959d5c643e632d69de"
+            }
+          ]
+        },
+        {
+          "id": "5f85f041a2ea6695",
+          "downloadName": null,
+          "displayId": "LC09_L2SP_145035_20240105_20240107_02_T1_SR_B5.TIF",
+          "entityId": "L2SR_LC09_L2SP_145035_20240105_20240107_02_T1_SR_B5_TIF",
+          "datasetId": "5f85f041c828327a",
+          "available": true,
+          "filesize": 97425819,
+          "productName": "Landsat Collection 2 Level-2 Band File",
+          "productCode": "D693",
+          "bulkAvailable": true,
+          "downloadSystem": "ls_s3",
+          "secondaryDownloads": [],
+          "fileGroups": null,
+          "displayOrder": 54,
+          "checksum": [
+            {
+              "id": "sha512",
+              "value": "8f903e3afcae86e33e8d92cc25b7ae850874d39236d84e5b2241977ce9d06c778a0039745e0fa26f08bf03e450ae373bf4849eb02690b7e799e11fa1ca704c87"
+            }
+          ]
+        },
+        {
+          "id": "5f85f041a2ea6695",
+          "downloadName": null,
+          "displayId": "LC09_L2SP_145035_20240105_20240107_02_T1_SR_B6.TIF",
+          "entityId": "L2SR_LC09_L2SP_145035_20240105_20240107_02_T1_SR_B6_TIF",
+          "datasetId": "5f85f041c828327a",
+          "available": true,
+          "filesize": 95864162,
+          "productName": "Landsat Collection 2 Level-2 Band File",
+          "productCode": "D693",
+          "bulkAvailable": true,
+          "downloadSystem": "ls_s3",
+          "secondaryDownloads": [],
+          "fileGroups": null,
+          "displayOrder": 54,
+          "checksum": [
+            {
+              "id": "sha512",
+              "value": "5c13a1c6fde1139fd95d60e99957bab2aede4cda3cb660ade183d6fcddc28aae9c73d0ae0b2323b1d22663c9f7a7bb4d692297ea118012bf81e221deee3f6861"
+            }
+          ]
+        },
+        {
+          "id": "5f85f041a2ea6695",
+          "downloadName": null,
+          "displayId": "LC09_L2SP_145035_20240105_20240107_02_T1_SR_B7.TIF",
+          "entityId": "L2SR_LC09_L2SP_145035_20240105_20240107_02_T1_SR_B7_TIF",
+          "datasetId": "5f85f041c828327a",
+          "available": true,
+          "filesize": 95257113,
+          "productName": "Landsat Collection 2 Level-2 Band File",
+          "productCode": "D693",
+          "bulkAvailable": true,
+          "downloadSystem": "ls_s3",
+          "secondaryDownloads": [],
+          "fileGroups": null,
+          "displayOrder": 54,
+          "checksum": [
+            {
+              "id": "sha512",
+              "value": "e04203eedb82eec67227354e22e0ecfb2b4cc3ef80ae3dec2fb5a9642ec95a70481d9416d5af366a93e256e6576baa1863265d2dcfd72a400af456d01aed10ae"
+            }
+          ]
+        },
+        {
+          "id": "5f85f041a2ea6695",
+          "downloadName": null,
+          "displayId": "LC09_L2SP_145035_20240105_20240107_02_T1_SR_QA_AEROSOL.TIF",
+          "entityId": "L2SR_LC09_L2SP_145035_20240105_20240107_02_T1_SR_QA_AEROSOL_TIF",
+          "datasetId": "5f85f041c828327a",
+          "available": true,
+          "filesize": 5046638,
+          "productName": "Landsat Collection 2 Level-2 Band File",
+          "productCode": "D693",
+          "bulkAvailable": true,
+          "downloadSystem": "ls_s3",
+          "secondaryDownloads": [],
+          "fileGroups": null,
+          "displayOrder": 54,
+          "checksum": [
+            {
+              "id": "sha512",
+              "value": "dda566f9476f95bd5befa2be2ef6bf4f56267a4bdc133c37d1283567f02e3b010f143a1f33a23bf5aa962d84c2370abd569b9ee46819c17e9e705c37d09f6371"
+            }
+          ]
+        },
+        {
+          "id": "5f85f041a2ea6695",
+          "downloadName": null,
+          "displayId": "LC09_L2SP_145035_20240105_20240107_02_T1_ST_ATRAN.TIF",
+          "entityId": "L2ST_LC09_L2SP_145035_20240105_20240107_02_T1_ST_ATRAN_TIF",
+          "datasetId": "5f85f041c828327a",
+          "available": true,
+          "filesize": 13912260,
+          "productName": "Landsat Collection 2 Level-2 Band File",
+          "productCode": "D693",
+          "bulkAvailable": true,
+          "downloadSystem": "ls_s3",
+          "secondaryDownloads": [],
+          "fileGroups": null,
+          "displayOrder": 54,
+          "checksum": [
+            {
+              "id": "sha512",
+              "value": "8886127ed33beaf86a523eec21c855d849d23d8fb552bf23ab7b06bd098f2ed1a3c69e2abf6294471dcf74f521726c8dd0cfaa63348c1a6222a8ab34aec8125d"
+            }
+          ]
+        },
+        {
+          "id": "5f85f041a2ea6695",
+          "downloadName": null,
+          "displayId": "LC09_L2SP_145035_20240105_20240107_02_T1_ST_B10.TIF",
+          "entityId": "L2ST_LC09_L2SP_145035_20240105_20240107_02_T1_ST_B10_TIF",
+          "datasetId": "5f85f041c828327a",
+          "available": true,
+          "filesize": 85953257,
+          "productName": "Landsat Collection 2 Level-2 Band File",
+          "productCode": "D693",
+          "bulkAvailable": true,
+          "downloadSystem": "ls_s3",
+          "secondaryDownloads": [],
+          "fileGroups": null,
+          "displayOrder": 54,
+          "checksum": [
+            {
+              "id": "sha512",
+              "value": "1ce0f04779a00397f9f30523d83c653a3baaf422f8e0400f13f432babdcab7345fc1fbb7d4edbe41ed5de01f646d97bbc380e9925ed3814954e3cae505279890"
+            }
+          ]
+        },
+        {
+          "id": "5f85f041a2ea6695",
+          "downloadName": null,
+          "displayId": "LC09_L2SP_145035_20240105_20240107_02_T1_ST_CDIST.TIF",
+          "entityId": "L2ST_LC09_L2SP_145035_20240105_20240107_02_T1_ST_CDIST_TIF",
+          "datasetId": "5f85f041c828327a",
+          "available": true,
+          "filesize": 18701623,
+          "productName": "Landsat Collection 2 Level-2 Band File",
+          "productCode": "D693",
+          "bulkAvailable": true,
+          "downloadSystem": "ls_s3",
+          "secondaryDownloads": [],
+          "fileGroups": null,
+          "displayOrder": 54,
+          "checksum": [
+            {
+              "id": "sha512",
+              "value": "c8574fcca130fad491eb3d7ba8c217477a3fea83d8cdffaa0442fa9dd4c23c04cc484c0a37835579baa518bc293432328df8968da1fd5939f902752491bcc863"
+            }
+          ]
+        },
+        {
+          "id": "5f85f041a2ea6695",
+          "downloadName": null,
+          "displayId": "LC09_L2SP_145035_20240105_20240107_02_T1_ST_DRAD.TIF",
+          "entityId": "L2ST_LC09_L2SP_145035_20240105_20240107_02_T1_ST_DRAD_TIF",
+          "datasetId": "5f85f041c828327a",
+          "available": true,
+          "filesize": 6775485,
+          "productName": "Landsat Collection 2 Level-2 Band File",
+          "productCode": "D693",
+          "bulkAvailable": true,
+          "downloadSystem": "ls_s3",
+          "secondaryDownloads": [],
+          "fileGroups": null,
+          "displayOrder": 54,
+          "checksum": [
+            {
+              "id": "sha512",
+              "value": "2cc72467098a2de97f7f857feddaa6f85c0e6ad193754c199f2e97539940cb9578bc7a853a8f487d9447cdc8f5a523860a00cea65a72657e899a080af3fc1b2e"
+            }
+          ]
+        },
+        {
+          "id": "5f85f041a2ea6695",
+          "downloadName": null,
+          "displayId": "LC09_L2SP_145035_20240105_20240107_02_T1_ST_EMIS.TIF",
+          "entityId": "L2ST_LC09_L2SP_145035_20240105_20240107_02_T1_ST_EMIS_TIF",
+          "datasetId": "5f85f041c828327a",
+          "available": true,
+          "filesize": 17332156,
+          "productName": "Landsat Collection 2 Level-2 Band File",
+          "productCode": "D693",
+          "bulkAvailable": true,
+          "downloadSystem": "ls_s3",
+          "secondaryDownloads": [],
+          "fileGroups": null,
+          "displayOrder": 54,
+          "checksum": [
+            {
+              "id": "sha512",
+              "value": "7a7648695abcc78c8da85077981444211683a1715d6e85fce7dbeb200d1117ca593f8669740a2da8baa34847ebc8010218896662e5f1b9553c40623b1797c75e"
+            }
+          ]
+        },
+        {
+          "id": "5f85f041a2ea6695",
+          "downloadName": null,
+          "displayId": "LC09_L2SP_145035_20240105_20240107_02_T1_ST_EMSD.TIF",
+          "entityId": "L2ST_LC09_L2SP_145035_20240105_20240107_02_T1_ST_EMSD_TIF",
+          "datasetId": "5f85f041c828327a",
+          "available": true,
+          "filesize": 17031584,
+          "productName": "Landsat Collection 2 Level-2 Band File",
+          "productCode": "D693",
+          "bulkAvailable": true,
+          "downloadSystem": "ls_s3",
+          "secondaryDownloads": [],
+          "fileGroups": null,
+          "displayOrder": 54,
+          "checksum": [
+            {
+              "id": "sha512",
+              "value": "50f8d3eb254f9403252bea7014445a0123295a9c0e382629e36aae5a3f16e923180b2c9ab4e8c12ea2c35c8719336bc14387df4194eb3dc749f698fa8c6fda48"
+            }
+          ]
+        },
+        {
+          "id": "5f85f041a2ea6695",
+          "downloadName": null,
+          "displayId": "LC09_L2SP_145035_20240105_20240107_02_T1_ST_QA.TIF",
+          "entityId": "L2ST_LC09_L2SP_145035_20240105_20240107_02_T1_ST_QA_TIF",
+          "datasetId": "5f85f041c828327a",
+          "available": true,
+          "filesize": 36626535,
+          "productName": "Landsat Collection 2 Level-2 Band File",
+          "productCode": "D693",
+          "bulkAvailable": true,
+          "downloadSystem": "ls_s3",
+          "secondaryDownloads": [],
+          "fileGroups": null,
+          "displayOrder": 54,
+          "checksum": [
+            {
+              "id": "sha512",
+              "value": "f01ec37427b020d28cb5fe822030246b32668e36b49ad40259aa985a3909626a528e9680c38f11f0c685a3d8f228dce18c4c47c25fd5b77b203379de084c6a26"
+            }
+          ]
+        },
+        {
+          "id": "5f85f041a2ea6695",
+          "downloadName": null,
+          "displayId": "LC09_L2SP_145035_20240105_20240107_02_T1_ST_TRAD.TIF",
+          "entityId": "L2ST_LC09_L2SP_145035_20240105_20240107_02_T1_ST_TRAD_TIF",
+          "datasetId": "5f85f041c828327a",
+          "available": true,
+          "filesize": 76410538,
+          "productName": "Landsat Collection 2 Level-2 Band File",
+          "productCode": "D693",
+          "bulkAvailable": true,
+          "downloadSystem": "ls_s3",
+          "secondaryDownloads": [],
+          "fileGroups": null,
+          "displayOrder": 54,
+          "checksum": [
+            {
+              "id": "sha512",
+              "value": "52e427b5b0f12d7e8ac163310a0e082be9475cebfdec2b8f56e7e208b10cfd08e8f9ad01111948724d0d17d8f7a6709c2baa09c36574a6361b4ad6f6504de9f6"
+            }
+          ]
+        },
+        {
+          "id": "5f85f041a2ea6695",
+          "downloadName": null,
+          "displayId": "LC09_L2SP_145035_20240105_20240107_02_T1_ST_URAD.TIF",
+          "entityId": "L2ST_LC09_L2SP_145035_20240105_20240107_02_T1_ST_URAD_TIF",
+          "datasetId": "5f85f041c828327a",
+          "available": true,
+          "filesize": 9305427,
+          "productName": "Landsat Collection 2 Level-2 Band File",
+          "productCode": "D693",
+          "bulkAvailable": true,
+          "downloadSystem": "ls_s3",
+          "secondaryDownloads": [],
+          "fileGroups": null,
+          "displayOrder": 54,
+          "checksum": [
+            {
+              "id": "sha512",
+              "value": "20c6978443f8a2f765afc6e057cc665a75f75412c98bb2a0745bd71ce95c747b0c1867741becea5761ee311d56b803dffbf90df8d001dfe6eb73c4ca03136fb7"
+            }
+          ]
+        }
+      ],
+      "fileGroups": null,
+      "checksum": [
+        {
+          "id": "sha512",
+          "value": null
+        }
+      ]
+    },
+    {
+      "id": "632210d4770592cf",
+      "downloadName": null,
+      "displayId": "LC09_L2SP_145035_20240105_20240107_02_T1",
+      "entityId": "LC91450352024005LGN00",
+      "datasetId": "5e83d14f2fc39685",
+      "available": false,
+      "filesize": 962928790,
+      "productName": "Landsat Collection 2 Level-2 Product Bundle",
+      "productCode": "D806",
+      "bulkAvailable": false,
+      "downloadSystem": "dds_ms",
+      "secondaryDownloads": [
+        {
+          "id": "5f85f041a2ea6695",
+          "downloadName": null,
+          "displayId": "LC09_L2SP_145035_20240105_20240107_02_T1_ANG.txt",
+          "entityId": "L2ST_LC09_L2SP_145035_20240105_20240107_02_T1_ANG_TXT",
+          "datasetId": "5f85f041c828327a",
+          "available": true,
+          "filesize": 117391,
+          "productName": "Landsat Collection 2 Level-2 Band File",
+          "productCode": "D693",
+          "bulkAvailable": true,
+          "downloadSystem": "ls_s3",
+          "secondaryDownloads": [],
+          "fileGroups": null,
+          "displayOrder": 54,
+          "checksum": [
+            {
+              "id": "sha512",
+              "value": "71c719761e37727b76fd8b313156f80c7581052b9ae8566eb2a2a30529e67097fb3916a9b9e8fc11fc33a40059797307404b733256b371a63724b3863a76fe7e"
+            }
+          ]
+        },
+        {
+          "id": "5f85f041a2ea6695",
+          "downloadName": null,
+          "displayId": "LC09_L2SP_145035_20240105_20240107_02_T1_MTL.txt",
+          "entityId": "L2ST_LC09_L2SP_145035_20240105_20240107_02_T1_MTL_TXT",
+          "datasetId": "5f85f041c828327a",
+          "available": true,
+          "filesize": 15254,
+          "productName": "Landsat Collection 2 Level-2 Band File",
+          "productCode": "D693",
+          "bulkAvailable": true,
+          "downloadSystem": "ls_s3",
+          "secondaryDownloads": [],
+          "fileGroups": null,
+          "displayOrder": 54,
+          "checksum": [
+            {
+              "id": "sha512",
+              "value": "7cd4ce73519d70340fcc7dad99dd6ab8ed3caf2a7a179988a7215a5a411a3be925735650544d47729c4d94e9a3c6915bacb74d903063f79756074e97610809ba"
+            }
+          ]
+        },
+        {
+          "id": "5f85f041a2ea6695",
+          "downloadName": null,
+          "displayId": "LC09_L2SP_145035_20240105_20240107_02_T1_MTL.xml",
+          "entityId": "L2ST_LC09_L2SP_145035_20240105_20240107_02_T1_MTL_XML",
+          "datasetId": "5f85f041c828327a",
+          "available": true,
+          "filesize": 22465,
+          "productName": "Landsat Collection 2 Level-2 Band File",
+          "productCode": "D693",
+          "bulkAvailable": true,
+          "downloadSystem": "ls_s3",
+          "secondaryDownloads": [],
+          "fileGroups": null,
+          "displayOrder": 54,
+          "checksum": [
+            {
+              "id": "sha512",
+              "value": "e78aea312ff017e9df9aa2ace1b0cf9605a15f526abefd12f80347430a6f44d4d31bdc42013514377c89c1255855b275e61ee8fc8dae093437306a2712174e26"
+            }
+          ]
+        },
+        {
+          "id": "5f85f041a2ea6695",
+          "downloadName": null,
+          "displayId": "LC09_L2SP_145035_20240105_20240107_02_T1_QA_PIXEL.TIF",
+          "entityId": "L2SR_LC09_L2SP_145035_20240105_20240107_02_T1_QA_PIXEL_TIF",
+          "datasetId": "5f85f041c828327a",
+          "available": true,
+          "filesize": 5410324,
+          "productName": "Landsat Collection 2 Level-2 Band File",
+          "productCode": "D693",
+          "bulkAvailable": true,
+          "downloadSystem": "ls_s3",
+          "secondaryDownloads": [],
+          "fileGroups": null,
+          "displayOrder": 54,
+          "checksum": [
+            {
+              "id": "sha512",
+              "value": "fa3e5a873911ba4b996de4437ce485ac7388e64dabf88e5a63a23ac15c66b6eec19fd70ebbdcca889216f923fcdce1333ccc6f90d71b9725d1ff9e76c14d44ea"
+            }
+          ]
+        },
+        {
+          "id": "5f85f041a2ea6695",
+          "downloadName": null,
+          "displayId": "LC09_L2SP_145035_20240105_20240107_02_T1_QA_RADSAT.TIF",
+          "entityId": "L2SR_LC09_L2SP_145035_20240105_20240107_02_T1_QA_RADSAT_TIF",
+          "datasetId": "5f85f041c828327a",
+          "available": true,
+          "filesize": 230455,
+          "productName": "Landsat Collection 2 Level-2 Band File",
+          "productCode": "D693",
+          "bulkAvailable": true,
+          "downloadSystem": "ls_s3",
+          "secondaryDownloads": [],
+          "fileGroups": null,
+          "displayOrder": 54,
+          "checksum": [
+            {
+              "id": "sha512",
+              "value": "b410439ef869ed327668a86ae6a9cf2f2e330eba9b4dba4a7aed7bf256657f65227f7a2bbbcc39965f7766e3780eae276a4a3ab2e01652902a72c297209be0d6"
+            }
+          ]
+        },
+        {
+          "id": "5f85f041a2ea6695",
+          "downloadName": null,
+          "displayId": "LC09_L2SP_145035_20240105_20240107_02_T1_SR_B1.TIF",
+          "entityId": "L2SR_LC09_L2SP_145035_20240105_20240107_02_T1_SR_B1_TIF",
+          "datasetId": "5f85f041c828327a",
+          "available": true,
+          "filesize": 93608488,
+          "productName": "Landsat Collection 2 Level-2 Band File",
+          "productCode": "D693",
+          "bulkAvailable": true,
+          "downloadSystem": "ls_s3",
+          "secondaryDownloads": [],
+          "fileGroups": null,
+          "displayOrder": 54,
+          "checksum": [
+            {
+              "id": "sha512",
+              "value": "45b43375688f339b03743361f983b0f05f94c666b64bbfd545b2f6273280602e51f589640d169ded03964ae8e9c84bf0f7a349669c5700fb9a9942d21cfed2ed"
+            }
+          ]
+        },
+        {
+          "id": "5f85f041a2ea6695",
+          "downloadName": null,
+          "displayId": "LC09_L2SP_145035_20240105_20240107_02_T1_SR_B2.TIF",
+          "entityId": "L2SR_LC09_L2SP_145035_20240105_20240107_02_T1_SR_B2_TIF",
+          "datasetId": "5f85f041c828327a",
+          "available": true,
+          "filesize": 94480860,
+          "productName": "Landsat Collection 2 Level-2 Band File",
+          "productCode": "D693",
+          "bulkAvailable": true,
+          "downloadSystem": "ls_s3",
+          "secondaryDownloads": [],
+          "fileGroups": null,
+          "displayOrder": 54,
+          "checksum": [
+            {
+              "id": "sha512",
+              "value": "43ef68ca0a868b0f5637de5dfa588973dab35ebc8972284ddf75d7f1a1d25b3989b2973fe4250e76674ebc6d68a246714727ed33ff12e2f67f2534dc2a3e7311"
+            }
+          ]
+        },
+        {
+          "id": "5f85f041a2ea6695",
+          "downloadName": null,
+          "displayId": "LC09_L2SP_145035_20240105_20240107_02_T1_SR_B3.TIF",
+          "entityId": "L2SR_LC09_L2SP_145035_20240105_20240107_02_T1_SR_B3_TIF",
+          "datasetId": "5f85f041c828327a",
+          "available": true,
+          "filesize": 96222225,
+          "productName": "Landsat Collection 2 Level-2 Band File",
+          "productCode": "D693",
+          "bulkAvailable": true,
+          "downloadSystem": "ls_s3",
+          "secondaryDownloads": [],
+          "fileGroups": null,
+          "displayOrder": 54,
+          "checksum": [
+            {
+              "id": "sha512",
+              "value": "24a8b3f4286914f78bceb48241cf0b4d7e034ac80454e485d843a0db61692d8544675fcb28d66963a5aa0f33c7b27f3895bde3de6b5e18577efd74b0fab53480"
+            }
+          ]
+        },
+        {
+          "id": "5f85f041a2ea6695",
+          "downloadName": null,
+          "displayId": "LC09_L2SP_145035_20240105_20240107_02_T1_SR_B4.TIF",
+          "entityId": "L2SR_LC09_L2SP_145035_20240105_20240107_02_T1_SR_B4_TIF",
+          "datasetId": "5f85f041c828327a",
+          "available": true,
+          "filesize": 97178731,
+          "productName": "Landsat Collection 2 Level-2 Band File",
+          "productCode": "D693",
+          "bulkAvailable": true,
+          "downloadSystem": "ls_s3",
+          "secondaryDownloads": [],
+          "fileGroups": null,
+          "displayOrder": 54,
+          "checksum": [
+            {
+              "id": "sha512",
+              "value": "723973580deb59b75d58e08069c31a73692d1363e92b7011a8ebd9e6aea1886338d83406e5bf404d42ef24075915d90b921f5c9e8092c1959d5c643e632d69de"
+            }
+          ]
+        },
+        {
+          "id": "5f85f041a2ea6695",
+          "downloadName": null,
+          "displayId": "LC09_L2SP_145035_20240105_20240107_02_T1_SR_B5.TIF",
+          "entityId": "L2SR_LC09_L2SP_145035_20240105_20240107_02_T1_SR_B5_TIF",
+          "datasetId": "5f85f041c828327a",
+          "available": true,
+          "filesize": 97425819,
+          "productName": "Landsat Collection 2 Level-2 Band File",
+          "productCode": "D693",
+          "bulkAvailable": true,
+          "downloadSystem": "ls_s3",
+          "secondaryDownloads": [],
+          "fileGroups": null,
+          "displayOrder": 54,
+          "checksum": [
+            {
+              "id": "sha512",
+              "value": "8f903e3afcae86e33e8d92cc25b7ae850874d39236d84e5b2241977ce9d06c778a0039745e0fa26f08bf03e450ae373bf4849eb02690b7e799e11fa1ca704c87"
+            }
+          ]
+        },
+        {
+          "id": "5f85f041a2ea6695",
+          "downloadName": null,
+          "displayId": "LC09_L2SP_145035_20240105_20240107_02_T1_SR_B6.TIF",
+          "entityId": "L2SR_LC09_L2SP_145035_20240105_20240107_02_T1_SR_B6_TIF",
+          "datasetId": "5f85f041c828327a",
+          "available": true,
+          "filesize": 95864162,
+          "productName": "Landsat Collection 2 Level-2 Band File",
+          "productCode": "D693",
+          "bulkAvailable": true,
+          "downloadSystem": "ls_s3",
+          "secondaryDownloads": [],
+          "fileGroups": null,
+          "displayOrder": 54,
+          "checksum": [
+            {
+              "id": "sha512",
+              "value": "5c13a1c6fde1139fd95d60e99957bab2aede4cda3cb660ade183d6fcddc28aae9c73d0ae0b2323b1d22663c9f7a7bb4d692297ea118012bf81e221deee3f6861"
+            }
+          ]
+        },
+        {
+          "id": "5f85f041a2ea6695",
+          "downloadName": null,
+          "displayId": "LC09_L2SP_145035_20240105_20240107_02_T1_SR_B7.TIF",
+          "entityId": "L2SR_LC09_L2SP_145035_20240105_20240107_02_T1_SR_B7_TIF",
+          "datasetId": "5f85f041c828327a",
+          "available": true,
+          "filesize": 95257113,
+          "productName": "Landsat Collection 2 Level-2 Band File",
+          "productCode": "D693",
+          "bulkAvailable": true,
+          "downloadSystem": "ls_s3",
+          "secondaryDownloads": [],
+          "fileGroups": null,
+          "displayOrder": 54,
+          "checksum": [
+            {
+              "id": "sha512",
+              "value": "e04203eedb82eec67227354e22e0ecfb2b4cc3ef80ae3dec2fb5a9642ec95a70481d9416d5af366a93e256e6576baa1863265d2dcfd72a400af456d01aed10ae"
+            }
+          ]
+        },
+        {
+          "id": "5f85f041a2ea6695",
+          "downloadName": null,
+          "displayId": "LC09_L2SP_145035_20240105_20240107_02_T1_SR_QA_AEROSOL.TIF",
+          "entityId": "L2SR_LC09_L2SP_145035_20240105_20240107_02_T1_SR_QA_AEROSOL_TIF",
+          "datasetId": "5f85f041c828327a",
+          "available": true,
+          "filesize": 5046638,
+          "productName": "Landsat Collection 2 Level-2 Band File",
+          "productCode": "D693",
+          "bulkAvailable": true,
+          "downloadSystem": "ls_s3",
+          "secondaryDownloads": [],
+          "fileGroups": null,
+          "displayOrder": 54,
+          "checksum": [
+            {
+              "id": "sha512",
+              "value": "dda566f9476f95bd5befa2be2ef6bf4f56267a4bdc133c37d1283567f02e3b010f143a1f33a23bf5aa962d84c2370abd569b9ee46819c17e9e705c37d09f6371"
+            }
+          ]
+        },
+        {
+          "id": "5f85f041a2ea6695",
+          "downloadName": null,
+          "displayId": "LC09_L2SP_145035_20240105_20240107_02_T1_ST_ATRAN.TIF",
+          "entityId": "L2ST_LC09_L2SP_145035_20240105_20240107_02_T1_ST_ATRAN_TIF",
+          "datasetId": "5f85f041c828327a",
+          "available": true,
+          "filesize": 13912260,
+          "productName": "Landsat Collection 2 Level-2 Band File",
+          "productCode": "D693",
+          "bulkAvailable": true,
+          "downloadSystem": "ls_s3",
+          "secondaryDownloads": [],
+          "fileGroups": null,
+          "displayOrder": 54,
+          "checksum": [
+            {
+              "id": "sha512",
+              "value": "8886127ed33beaf86a523eec21c855d849d23d8fb552bf23ab7b06bd098f2ed1a3c69e2abf6294471dcf74f521726c8dd0cfaa63348c1a6222a8ab34aec8125d"
+            }
+          ]
+        },
+        {
+          "id": "5f85f041a2ea6695",
+          "downloadName": null,
+          "displayId": "LC09_L2SP_145035_20240105_20240107_02_T1_ST_B10.TIF",
+          "entityId": "L2ST_LC09_L2SP_145035_20240105_20240107_02_T1_ST_B10_TIF",
+          "datasetId": "5f85f041c828327a",
+          "available": true,
+          "filesize": 85953257,
+          "productName": "Landsat Collection 2 Level-2 Band File",
+          "productCode": "D693",
+          "bulkAvailable": true,
+          "downloadSystem": "ls_s3",
+          "secondaryDownloads": [],
+          "fileGroups": null,
+          "displayOrder": 54,
+          "checksum": [
+            {
+              "id": "sha512",
+              "value": "1ce0f04779a00397f9f30523d83c653a3baaf422f8e0400f13f432babdcab7345fc1fbb7d4edbe41ed5de01f646d97bbc380e9925ed3814954e3cae505279890"
+            }
+          ]
+        },
+        {
+          "id": "5f85f041a2ea6695",
+          "downloadName": null,
+          "displayId": "LC09_L2SP_145035_20240105_20240107_02_T1_ST_CDIST.TIF",
+          "entityId": "L2ST_LC09_L2SP_145035_20240105_20240107_02_T1_ST_CDIST_TIF",
+          "datasetId": "5f85f041c828327a",
+          "available": true,
+          "filesize": 18701623,
+          "productName": "Landsat Collection 2 Level-2 Band File",
+          "productCode": "D693",
+          "bulkAvailable": true,
+          "downloadSystem": "ls_s3",
+          "secondaryDownloads": [],
+          "fileGroups": null,
+          "displayOrder": 54,
+          "checksum": [
+            {
+              "id": "sha512",
+              "value": "c8574fcca130fad491eb3d7ba8c217477a3fea83d8cdffaa0442fa9dd4c23c04cc484c0a37835579baa518bc293432328df8968da1fd5939f902752491bcc863"
+            }
+          ]
+        },
+        {
+          "id": "5f85f041a2ea6695",
+          "downloadName": null,
+          "displayId": "LC09_L2SP_145035_20240105_20240107_02_T1_ST_DRAD.TIF",
+          "entityId": "L2ST_LC09_L2SP_145035_20240105_20240107_02_T1_ST_DRAD_TIF",
+          "datasetId": "5f85f041c828327a",
+          "available": true,
+          "filesize": 6775485,
+          "productName": "Landsat Collection 2 Level-2 Band File",
+          "productCode": "D693",
+          "bulkAvailable": true,
+          "downloadSystem": "ls_s3",
+          "secondaryDownloads": [],
+          "fileGroups": null,
+          "displayOrder": 54,
+          "checksum": [
+            {
+              "id": "sha512",
+              "value": "2cc72467098a2de97f7f857feddaa6f85c0e6ad193754c199f2e97539940cb9578bc7a853a8f487d9447cdc8f5a523860a00cea65a72657e899a080af3fc1b2e"
+            }
+          ]
+        },
+        {
+          "id": "5f85f041a2ea6695",
+          "downloadName": null,
+          "displayId": "LC09_L2SP_145035_20240105_20240107_02_T1_ST_EMIS.TIF",
+          "entityId": "L2ST_LC09_L2SP_145035_20240105_20240107_02_T1_ST_EMIS_TIF",
+          "datasetId": "5f85f041c828327a",
+          "available": true,
+          "filesize": 17332156,
+          "productName": "Landsat Collection 2 Level-2 Band File",
+          "productCode": "D693",
+          "bulkAvailable": true,
+          "downloadSystem": "ls_s3",
+          "secondaryDownloads": [],
+          "fileGroups": null,
+          "displayOrder": 54,
+          "checksum": [
+            {
+              "id": "sha512",
+              "value": "7a7648695abcc78c8da85077981444211683a1715d6e85fce7dbeb200d1117ca593f8669740a2da8baa34847ebc8010218896662e5f1b9553c40623b1797c75e"
+            }
+          ]
+        },
+        {
+          "id": "5f85f041a2ea6695",
+          "downloadName": null,
+          "displayId": "LC09_L2SP_145035_20240105_20240107_02_T1_ST_EMSD.TIF",
+          "entityId": "L2ST_LC09_L2SP_145035_20240105_20240107_02_T1_ST_EMSD_TIF",
+          "datasetId": "5f85f041c828327a",
+          "available": true,
+          "filesize": 17031584,
+          "productName": "Landsat Collection 2 Level-2 Band File",
+          "productCode": "D693",
+          "bulkAvailable": true,
+          "downloadSystem": "ls_s3",
+          "secondaryDownloads": [],
+          "fileGroups": null,
+          "displayOrder": 54,
+          "checksum": [
+            {
+              "id": "sha512",
+              "value": "50f8d3eb254f9403252bea7014445a0123295a9c0e382629e36aae5a3f16e923180b2c9ab4e8c12ea2c35c8719336bc14387df4194eb3dc749f698fa8c6fda48"
+            }
+          ]
+        },
+        {
+          "id": "5f85f041a2ea6695",
+          "downloadName": null,
+          "displayId": "LC09_L2SP_145035_20240105_20240107_02_T1_ST_QA.TIF",
+          "entityId": "L2ST_LC09_L2SP_145035_20240105_20240107_02_T1_ST_QA_TIF",
+          "datasetId": "5f85f041c828327a",
+          "available": true,
+          "filesize": 36626535,
+          "productName": "Landsat Collection 2 Level-2 Band File",
+          "productCode": "D693",
+          "bulkAvailable": true,
+          "downloadSystem": "ls_s3",
+          "secondaryDownloads": [],
+          "fileGroups": null,
+          "displayOrder": 54,
+          "checksum": [
+            {
+              "id": "sha512",
+              "value": "f01ec37427b020d28cb5fe822030246b32668e36b49ad40259aa985a3909626a528e9680c38f11f0c685a3d8f228dce18c4c47c25fd5b77b203379de084c6a26"
+            }
+          ]
+        },
+        {
+          "id": "5f85f041a2ea6695",
+          "downloadName": null,
+          "displayId": "LC09_L2SP_145035_20240105_20240107_02_T1_ST_TRAD.TIF",
+          "entityId": "L2ST_LC09_L2SP_145035_20240105_20240107_02_T1_ST_TRAD_TIF",
+          "datasetId": "5f85f041c828327a",
+          "available": true,
+          "filesize": 76410538,
+          "productName": "Landsat Collection 2 Level-2 Band File",
+          "productCode": "D693",
+          "bulkAvailable": true,
+          "downloadSystem": "ls_s3",
+          "secondaryDownloads": [],
+          "fileGroups": null,
+          "displayOrder": 54,
+          "checksum": [
+            {
+              "id": "sha512",
+              "value": "52e427b5b0f12d7e8ac163310a0e082be9475cebfdec2b8f56e7e208b10cfd08e8f9ad01111948724d0d17d8f7a6709c2baa09c36574a6361b4ad6f6504de9f6"
+            }
+          ]
+        },
+        {
+          "id": "5f85f041a2ea6695",
+          "downloadName": null,
+          "displayId": "LC09_L2SP_145035_20240105_20240107_02_T1_ST_URAD.TIF",
+          "entityId": "L2ST_LC09_L2SP_145035_20240105_20240107_02_T1_ST_URAD_TIF",
+          "datasetId": "5f85f041c828327a",
+          "available": true,
+          "filesize": 9305427,
+          "productName": "Landsat Collection 2 Level-2 Band File",
+          "productCode": "D693",
+          "bulkAvailable": true,
+          "downloadSystem": "ls_s3",
+          "secondaryDownloads": [],
+          "fileGroups": null,
+          "displayOrder": 54,
+          "checksum": [
+            {
+              "id": "sha512",
+              "value": "20c6978443f8a2f765afc6e057cc665a75f75412c98bb2a0745bd71ce95c747b0c1867741becea5761ee311d56b803dffbf90df8d001dfe6eb73c4ca03136fb7"
+            }
+          ]
+        }
+      ],
+      "fileGroups": null
+    },
+    {
+      "id": "6448198c62023764",
+      "downloadName": "C2L2 Tile Product Files",
+      "displayId": "LC09_L2SP_145035_20240105_20240107_02_T1",
+      "entityId": "LC91450352024005LGN00",
+      "datasetId": "5e83d14f2fc39685",
+      "available": true,
+      "filesize": 0,
+      "productName": "Landsat Collection 2 Level-2 Band File",
+      "productCode": "D691",
+      "bulkAvailable": true,
+      "downloadSystem": "folder",
+      "secondaryDownloads": [
+        {
+          "id": "5f85f041a2ea6695",
+          "downloadName": null,
+          "displayId": "LC09_L2SP_145035_20240105_20240107_02_T1_ANG.txt",
+          "entityId": "L2ST_LC09_L2SP_145035_20240105_20240107_02_T1_ANG_TXT",
+          "datasetId": "5f85f041c828327a",
+          "available": true,
+          "filesize": 117391,
+          "productName": "Landsat Collection 2 Level-2 Band File",
+          "productCode": "D693",
+          "bulkAvailable": true,
+          "downloadSystem": "ls_s3",
+          "secondaryDownloads": [],
+          "fileGroups": null,
+          "displayOrder": 54,
+          "checksum": [
+            {
+              "id": "sha512",
+              "value": "71c719761e37727b76fd8b313156f80c7581052b9ae8566eb2a2a30529e67097fb3916a9b9e8fc11fc33a40059797307404b733256b371a63724b3863a76fe7e"
+            }
+          ]
+        },
+        {
+          "id": "5f85f041a2ea6695",
+          "downloadName": null,
+          "displayId": "LC09_L2SP_145035_20240105_20240107_02_T1_MTL.txt",
+          "entityId": "L2ST_LC09_L2SP_145035_20240105_20240107_02_T1_MTL_TXT",
+          "datasetId": "5f85f041c828327a",
+          "available": true,
+          "filesize": 15254,
+          "productName": "Landsat Collection 2 Level-2 Band File",
+          "productCode": "D693",
+          "bulkAvailable": true,
+          "downloadSystem": "ls_s3",
+          "secondaryDownloads": [],
+          "fileGroups": null,
+          "displayOrder": 54,
+          "checksum": [
+            {
+              "id": "sha512",
+              "value": "7cd4ce73519d70340fcc7dad99dd6ab8ed3caf2a7a179988a7215a5a411a3be925735650544d47729c4d94e9a3c6915bacb74d903063f79756074e97610809ba"
+            }
+          ]
+        },
+        {
+          "id": "5f85f041a2ea6695",
+          "downloadName": null,
+          "displayId": "LC09_L2SP_145035_20240105_20240107_02_T1_MTL.xml",
+          "entityId": "L2ST_LC09_L2SP_145035_20240105_20240107_02_T1_MTL_XML",
+          "datasetId": "5f85f041c828327a",
+          "available": true,
+          "filesize": 22465,
+          "productName": "Landsat Collection 2 Level-2 Band File",
+          "productCode": "D693",
+          "bulkAvailable": true,
+          "downloadSystem": "ls_s3",
+          "secondaryDownloads": [],
+          "fileGroups": null,
+          "displayOrder": 54,
+          "checksum": [
+            {
+              "id": "sha512",
+              "value": "e78aea312ff017e9df9aa2ace1b0cf9605a15f526abefd12f80347430a6f44d4d31bdc42013514377c89c1255855b275e61ee8fc8dae093437306a2712174e26"
+            }
+          ]
+        },
+        {
+          "id": "5f85f041a2ea6695",
+          "downloadName": null,
+          "displayId": "LC09_L2SP_145035_20240105_20240107_02_T1_QA_PIXEL.TIF",
+          "entityId": "L2SR_LC09_L2SP_145035_20240105_20240107_02_T1_QA_PIXEL_TIF",
+          "datasetId": "5f85f041c828327a",
+          "available": true,
+          "filesize": 5410324,
+          "productName": "Landsat Collection 2 Level-2 Band File",
+          "productCode": "D693",
+          "bulkAvailable": true,
+          "downloadSystem": "ls_s3",
+          "secondaryDownloads": [],
+          "fileGroups": null,
+          "displayOrder": 54,
+          "checksum": [
+            {
+              "id": "sha512",
+              "value": "fa3e5a873911ba4b996de4437ce485ac7388e64dabf88e5a63a23ac15c66b6eec19fd70ebbdcca889216f923fcdce1333ccc6f90d71b9725d1ff9e76c14d44ea"
+            }
+          ]
+        },
+        {
+          "id": "5f85f041a2ea6695",
+          "downloadName": null,
+          "displayId": "LC09_L2SP_145035_20240105_20240107_02_T1_QA_RADSAT.TIF",
+          "entityId": "L2SR_LC09_L2SP_145035_20240105_20240107_02_T1_QA_RADSAT_TIF",
+          "datasetId": "5f85f041c828327a",
+          "available": true,
+          "filesize": 230455,
+          "productName": "Landsat Collection 2 Level-2 Band File",
+          "productCode": "D693",
+          "bulkAvailable": true,
+          "downloadSystem": "ls_s3",
+          "secondaryDownloads": [],
+          "fileGroups": null,
+          "displayOrder": 54,
+          "checksum": [
+            {
+              "id": "sha512",
+              "value": "b410439ef869ed327668a86ae6a9cf2f2e330eba9b4dba4a7aed7bf256657f65227f7a2bbbcc39965f7766e3780eae276a4a3ab2e01652902a72c297209be0d6"
+            }
+          ]
+        },
+        {
+          "id": "5f85f041a2ea6695",
+          "downloadName": null,
+          "displayId": "LC09_L2SP_145035_20240105_20240107_02_T1_SR_B1.TIF",
+          "entityId": "L2SR_LC09_L2SP_145035_20240105_20240107_02_T1_SR_B1_TIF",
+          "datasetId": "5f85f041c828327a",
+          "available": true,
+          "filesize": 93608488,
+          "productName": "Landsat Collection 2 Level-2 Band File",
+          "productCode": "D693",
+          "bulkAvailable": true,
+          "downloadSystem": "ls_s3",
+          "secondaryDownloads": [],
+          "fileGroups": null,
+          "displayOrder": 54,
+          "checksum": [
+            {
+              "id": "sha512",
+              "value": "45b43375688f339b03743361f983b0f05f94c666b64bbfd545b2f6273280602e51f589640d169ded03964ae8e9c84bf0f7a349669c5700fb9a9942d21cfed2ed"
+            }
+          ]
+        },
+        {
+          "id": "5f85f041a2ea6695",
+          "downloadName": null,
+          "displayId": "LC09_L2SP_145035_20240105_20240107_02_T1_SR_B2.TIF",
+          "entityId": "L2SR_LC09_L2SP_145035_20240105_20240107_02_T1_SR_B2_TIF",
+          "datasetId": "5f85f041c828327a",
+          "available": true,
+          "filesize": 94480860,
+          "productName": "Landsat Collection 2 Level-2 Band File",
+          "productCode": "D693",
+          "bulkAvailable": true,
+          "downloadSystem": "ls_s3",
+          "secondaryDownloads": [],
+          "fileGroups": null,
+          "displayOrder": 54,
+          "checksum": [
+            {
+              "id": "sha512",
+              "value": "43ef68ca0a868b0f5637de5dfa588973dab35ebc8972284ddf75d7f1a1d25b3989b2973fe4250e76674ebc6d68a246714727ed33ff12e2f67f2534dc2a3e7311"
+            }
+          ]
+        },
+        {
+          "id": "5f85f041a2ea6695",
+          "downloadName": null,
+          "displayId": "LC09_L2SP_145035_20240105_20240107_02_T1_SR_B3.TIF",
+          "entityId": "L2SR_LC09_L2SP_145035_20240105_20240107_02_T1_SR_B3_TIF",
+          "datasetId": "5f85f041c828327a",
+          "available": true,
+          "filesize": 96222225,
+          "productName": "Landsat Collection 2 Level-2 Band File",
+          "productCode": "D693",
+          "bulkAvailable": true,
+          "downloadSystem": "ls_s3",
+          "secondaryDownloads": [],
+          "fileGroups": null,
+          "displayOrder": 54,
+          "checksum": [
+            {
+              "id": "sha512",
+              "value": "24a8b3f4286914f78bceb48241cf0b4d7e034ac80454e485d843a0db61692d8544675fcb28d66963a5aa0f33c7b27f3895bde3de6b5e18577efd74b0fab53480"
+            }
+          ]
+        },
+        {
+          "id": "5f85f041a2ea6695",
+          "downloadName": null,
+          "displayId": "LC09_L2SP_145035_20240105_20240107_02_T1_SR_B4.TIF",
+          "entityId": "L2SR_LC09_L2SP_145035_20240105_20240107_02_T1_SR_B4_TIF",
+          "datasetId": "5f85f041c828327a",
+          "available": true,
+          "filesize": 97178731,
+          "productName": "Landsat Collection 2 Level-2 Band File",
+          "productCode": "D693",
+          "bulkAvailable": true,
+          "downloadSystem": "ls_s3",
+          "secondaryDownloads": [],
+          "fileGroups": null,
+          "displayOrder": 54,
+          "checksum": [
+            {
+              "id": "sha512",
+              "value": "723973580deb59b75d58e08069c31a73692d1363e92b7011a8ebd9e6aea1886338d83406e5bf404d42ef24075915d90b921f5c9e8092c1959d5c643e632d69de"
+            }
+          ]
+        },
+        {
+          "id": "5f85f041a2ea6695",
+          "downloadName": null,
+          "displayId": "LC09_L2SP_145035_20240105_20240107_02_T1_SR_B5.TIF",
+          "entityId": "L2SR_LC09_L2SP_145035_20240105_20240107_02_T1_SR_B5_TIF",
+          "datasetId": "5f85f041c828327a",
+          "available": true,
+          "filesize": 97425819,
+          "productName": "Landsat Collection 2 Level-2 Band File",
+          "productCode": "D693",
+          "bulkAvailable": true,
+          "downloadSystem": "ls_s3",
+          "secondaryDownloads": [],
+          "fileGroups": null,
+          "displayOrder": 54,
+          "checksum": [
+            {
+              "id": "sha512",
+              "value": "8f903e3afcae86e33e8d92cc25b7ae850874d39236d84e5b2241977ce9d06c778a0039745e0fa26f08bf03e450ae373bf4849eb02690b7e799e11fa1ca704c87"
+            }
+          ]
+        },
+        {
+          "id": "5f85f041a2ea6695",
+          "downloadName": null,
+          "displayId": "LC09_L2SP_145035_20240105_20240107_02_T1_SR_B6.TIF",
+          "entityId": "L2SR_LC09_L2SP_145035_20240105_20240107_02_T1_SR_B6_TIF",
+          "datasetId": "5f85f041c828327a",
+          "available": true,
+          "filesize": 95864162,
+          "productName": "Landsat Collection 2 Level-2 Band File",
+          "productCode": "D693",
+          "bulkAvailable": true,
+          "downloadSystem": "ls_s3",
+          "secondaryDownloads": [],
+          "fileGroups": null,
+          "displayOrder": 54,
+          "checksum": [
+            {
+              "id": "sha512",
+              "value": "5c13a1c6fde1139fd95d60e99957bab2aede4cda3cb660ade183d6fcddc28aae9c73d0ae0b2323b1d22663c9f7a7bb4d692297ea118012bf81e221deee3f6861"
+            }
+          ]
+        },
+        {
+          "id": "5f85f041a2ea6695",
+          "downloadName": null,
+          "displayId": "LC09_L2SP_145035_20240105_20240107_02_T1_SR_B7.TIF",
+          "entityId": "L2SR_LC09_L2SP_145035_20240105_20240107_02_T1_SR_B7_TIF",
+          "datasetId": "5f85f041c828327a",
+          "available": true,
+          "filesize": 95257113,
+          "productName": "Landsat Collection 2 Level-2 Band File",
+          "productCode": "D693",
+          "bulkAvailable": true,
+          "downloadSystem": "ls_s3",
+          "secondaryDownloads": [],
+          "fileGroups": null,
+          "displayOrder": 54,
+          "checksum": [
+            {
+              "id": "sha512",
+              "value": "e04203eedb82eec67227354e22e0ecfb2b4cc3ef80ae3dec2fb5a9642ec95a70481d9416d5af366a93e256e6576baa1863265d2dcfd72a400af456d01aed10ae"
+            }
+          ]
+        },
+        {
+          "id": "5f85f041a2ea6695",
+          "downloadName": null,
+          "displayId": "LC09_L2SP_145035_20240105_20240107_02_T1_SR_QA_AEROSOL.TIF",
+          "entityId": "L2SR_LC09_L2SP_145035_20240105_20240107_02_T1_SR_QA_AEROSOL_TIF",
+          "datasetId": "5f85f041c828327a",
+          "available": true,
+          "filesize": 5046638,
+          "productName": "Landsat Collection 2 Level-2 Band File",
+          "productCode": "D693",
+          "bulkAvailable": true,
+          "downloadSystem": "ls_s3",
+          "secondaryDownloads": [],
+          "fileGroups": null,
+          "displayOrder": 54,
+          "checksum": [
+            {
+              "id": "sha512",
+              "value": "dda566f9476f95bd5befa2be2ef6bf4f56267a4bdc133c37d1283567f02e3b010f143a1f33a23bf5aa962d84c2370abd569b9ee46819c17e9e705c37d09f6371"
+            }
+          ]
+        },
+        {
+          "id": "5f85f041a2ea6695",
+          "downloadName": null,
+          "displayId": "LC09_L2SP_145035_20240105_20240107_02_T1_ST_ATRAN.TIF",
+          "entityId": "L2ST_LC09_L2SP_145035_20240105_20240107_02_T1_ST_ATRAN_TIF",
+          "datasetId": "5f85f041c828327a",
+          "available": true,
+          "filesize": 13912260,
+          "productName": "Landsat Collection 2 Level-2 Band File",
+          "productCode": "D693",
+          "bulkAvailable": true,
+          "downloadSystem": "ls_s3",
+          "secondaryDownloads": [],
+          "fileGroups": null,
+          "displayOrder": 54,
+          "checksum": [
+            {
+              "id": "sha512",
+              "value": "8886127ed33beaf86a523eec21c855d849d23d8fb552bf23ab7b06bd098f2ed1a3c69e2abf6294471dcf74f521726c8dd0cfaa63348c1a6222a8ab34aec8125d"
+            }
+          ]
+        },
+        {
+          "id": "5f85f041a2ea6695",
+          "downloadName": null,
+          "displayId": "LC09_L2SP_145035_20240105_20240107_02_T1_ST_B10.TIF",
+          "entityId": "L2ST_LC09_L2SP_145035_20240105_20240107_02_T1_ST_B10_TIF",
+          "datasetId": "5f85f041c828327a",
+          "available": true,
+          "filesize": 85953257,
+          "productName": "Landsat Collection 2 Level-2 Band File",
+          "productCode": "D693",
+          "bulkAvailable": true,
+          "downloadSystem": "ls_s3",
+          "secondaryDownloads": [],
+          "fileGroups": null,
+          "displayOrder": 54,
+          "checksum": [
+            {
+              "id": "sha512",
+              "value": "1ce0f04779a00397f9f30523d83c653a3baaf422f8e0400f13f432babdcab7345fc1fbb7d4edbe41ed5de01f646d97bbc380e9925ed3814954e3cae505279890"
+            }
+          ]
+        },
+        {
+          "id": "5f85f041a2ea6695",
+          "downloadName": null,
+          "displayId": "LC09_L2SP_145035_20240105_20240107_02_T1_ST_CDIST.TIF",
+          "entityId": "L2ST_LC09_L2SP_145035_20240105_20240107_02_T1_ST_CDIST_TIF",
+          "datasetId": "5f85f041c828327a",
+          "available": true,
+          "filesize": 18701623,
+          "productName": "Landsat Collection 2 Level-2 Band File",
+          "productCode": "D693",
+          "bulkAvailable": true,
+          "downloadSystem": "ls_s3",
+          "secondaryDownloads": [],
+          "fileGroups": null,
+          "displayOrder": 54,
+          "checksum": [
+            {
+              "id": "sha512",
+              "value": "c8574fcca130fad491eb3d7ba8c217477a3fea83d8cdffaa0442fa9dd4c23c04cc484c0a37835579baa518bc293432328df8968da1fd5939f902752491bcc863"
+            }
+          ]
+        },
+        {
+          "id": "5f85f041a2ea6695",
+          "downloadName": null,
+          "displayId": "LC09_L2SP_145035_20240105_20240107_02_T1_ST_DRAD.TIF",
+          "entityId": "L2ST_LC09_L2SP_145035_20240105_20240107_02_T1_ST_DRAD_TIF",
+          "datasetId": "5f85f041c828327a",
+          "available": true,
+          "filesize": 6775485,
+          "productName": "Landsat Collection 2 Level-2 Band File",
+          "productCode": "D693",
+          "bulkAvailable": true,
+          "downloadSystem": "ls_s3",
+          "secondaryDownloads": [],
+          "fileGroups": null,
+          "displayOrder": 54,
+          "checksum": [
+            {
+              "id": "sha512",
+              "value": "2cc72467098a2de97f7f857feddaa6f85c0e6ad193754c199f2e97539940cb9578bc7a853a8f487d9447cdc8f5a523860a00cea65a72657e899a080af3fc1b2e"
+            }
+          ]
+        },
+        {
+          "id": "5f85f041a2ea6695",
+          "downloadName": null,
+          "displayId": "LC09_L2SP_145035_20240105_20240107_02_T1_ST_EMIS.TIF",
+          "entityId": "L2ST_LC09_L2SP_145035_20240105_20240107_02_T1_ST_EMIS_TIF",
+          "datasetId": "5f85f041c828327a",
+          "available": true,
+          "filesize": 17332156,
+          "productName": "Landsat Collection 2 Level-2 Band File",
+          "productCode": "D693",
+          "bulkAvailable": true,
+          "downloadSystem": "ls_s3",
+          "secondaryDownloads": [],
+          "fileGroups": null,
+          "displayOrder": 54,
+          "checksum": [
+            {
+              "id": "sha512",
+              "value": "7a7648695abcc78c8da85077981444211683a1715d6e85fce7dbeb200d1117ca593f8669740a2da8baa34847ebc8010218896662e5f1b9553c40623b1797c75e"
+            }
+          ]
+        },
+        {
+          "id": "5f85f041a2ea6695",
+          "downloadName": null,
+          "displayId": "LC09_L2SP_145035_20240105_20240107_02_T1_ST_EMSD.TIF",
+          "entityId": "L2ST_LC09_L2SP_145035_20240105_20240107_02_T1_ST_EMSD_TIF",
+          "datasetId": "5f85f041c828327a",
+          "available": true,
+          "filesize": 17031584,
+          "productName": "Landsat Collection 2 Level-2 Band File",
+          "productCode": "D693",
+          "bulkAvailable": true,
+          "downloadSystem": "ls_s3",
+          "secondaryDownloads": [],
+          "fileGroups": null,
+          "displayOrder": 54,
+          "checksum": [
+            {
+              "id": "sha512",
+              "value": "50f8d3eb254f9403252bea7014445a0123295a9c0e382629e36aae5a3f16e923180b2c9ab4e8c12ea2c35c8719336bc14387df4194eb3dc749f698fa8c6fda48"
+            }
+          ]
+        },
+        {
+          "id": "5f85f041a2ea6695",
+          "downloadName": null,
+          "displayId": "LC09_L2SP_145035_20240105_20240107_02_T1_ST_QA.TIF",
+          "entityId": "L2ST_LC09_L2SP_145035_20240105_20240107_02_T1_ST_QA_TIF",
+          "datasetId": "5f85f041c828327a",
+          "available": true,
+          "filesize": 36626535,
+          "productName": "Landsat Collection 2 Level-2 Band File",
+          "productCode": "D693",
+          "bulkAvailable": true,
+          "downloadSystem": "ls_s3",
+          "secondaryDownloads": [],
+          "fileGroups": null,
+          "displayOrder": 54,
+          "checksum": [
+            {
+              "id": "sha512",
+              "value": "f01ec37427b020d28cb5fe822030246b32668e36b49ad40259aa985a3909626a528e9680c38f11f0c685a3d8f228dce18c4c47c25fd5b77b203379de084c6a26"
+            }
+          ]
+        },
+        {
+          "id": "5f85f041a2ea6695",
+          "downloadName": null,
+          "displayId": "LC09_L2SP_145035_20240105_20240107_02_T1_ST_TRAD.TIF",
+          "entityId": "L2ST_LC09_L2SP_145035_20240105_20240107_02_T1_ST_TRAD_TIF",
+          "datasetId": "5f85f041c828327a",
+          "available": true,
+          "filesize": 76410538,
+          "productName": "Landsat Collection 2 Level-2 Band File",
+          "productCode": "D693",
+          "bulkAvailable": true,
+          "downloadSystem": "ls_s3",
+          "secondaryDownloads": [],
+          "fileGroups": null,
+          "displayOrder": 54,
+          "checksum": [
+            {
+              "id": "sha512",
+              "value": "52e427b5b0f12d7e8ac163310a0e082be9475cebfdec2b8f56e7e208b10cfd08e8f9ad01111948724d0d17d8f7a6709c2baa09c36574a6361b4ad6f6504de9f6"
+            }
+          ]
+        },
+        {
+          "id": "5f85f041a2ea6695",
+          "downloadName": null,
+          "displayId": "LC09_L2SP_145035_20240105_20240107_02_T1_ST_URAD.TIF",
+          "entityId": "L2ST_LC09_L2SP_145035_20240105_20240107_02_T1_ST_URAD_TIF",
+          "datasetId": "5f85f041c828327a",
+          "available": true,
+          "filesize": 9305427,
+          "productName": "Landsat Collection 2 Level-2 Band File",
+          "productCode": "D693",
+          "bulkAvailable": true,
+          "downloadSystem": "ls_s3",
+          "secondaryDownloads": [],
+          "fileGroups": null,
+          "displayOrder": 54,
+          "checksum": [
+            {
+              "id": "sha512",
+              "value": "20c6978443f8a2f765afc6e057cc665a75f75412c98bb2a0745bd71ce95c747b0c1867741becea5761ee311d56b803dffbf90df8d001dfe6eb73c4ca03136fb7"
+            }
+          ]
+        }
+      ],
+      "fileGroups": null,
+      "checksum": [
+        {
+          "id": "sha512",
+          "value": null
+        }
+      ]
+    }
+  ],
+  "errorCode": null,
+  "errorMessage": null
+}
