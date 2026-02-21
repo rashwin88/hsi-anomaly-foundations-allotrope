@@ -38,7 +38,10 @@ def test_patch_plan_works_on_divisible_patches(patch_examples):
 
     # Create a patch request
     request_1 = PatchRequest(
-        input_cube=patch_examples.get("simple_1_band"), width=10, height=10, stride=10
+        input_cube=patch_examples.get("simple_1_band").shape,
+        width=10,
+        height=10,
+        stride=10,
     )
 
     patch_plan_1 = patch_generator.generate_patching_plan(request_1)
@@ -47,7 +50,7 @@ def test_patch_plan_works_on_divisible_patches(patch_examples):
     assert len(patch_plan_1.patch_coordinates) == 100
 
     request_2 = PatchRequest(
-        input_cube=patch_examples.get("simple_1_band_variation"),
+        input_cube=patch_examples.get("simple_1_band_variation").shape,
         width=10,
         height=10,
         stride=10,
@@ -60,7 +63,7 @@ def test_patch_plan_works_on_divisible_patches(patch_examples):
     ### Test out some errors
     with pytest.raises(ValueError):
         request_3 = PatchRequest(
-            input_cube=patch_examples.get("simple_1_band_variation"),
+            input_cube=patch_examples.get("simple_1_band_variation").shape,
             width=10,
             height=10,
             stride=0,
@@ -69,7 +72,7 @@ def test_patch_plan_works_on_divisible_patches(patch_examples):
 
     ### Pure horizontal patching
     request_4 = PatchRequest(
-        input_cube=patch_examples.get("100_band_pure_horizontal"),
+        input_cube=patch_examples.get("100_band_pure_horizontal").shape,
         width=10,
         height=10,
         stride=10,

@@ -139,5 +139,8 @@ class LandsatDataBuilder(DatasetBuilder):
         overall_mask = cloud_mask * validity_mask
 
         return VendableThermalDataset(
-            normalized_thermal_cube=st_image, validity_cube=overall_mask
+            normalized_thermal_cube=st_image,
+            validity_cube=overall_mask,
+            pure_validity_mask=validity_mask,
+            cloud_mask=cloud_mask,
         )

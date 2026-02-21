@@ -2,6 +2,7 @@
 Defines what a patching request to an image must contain
 """
 
+from typing import Tuple
 import numpy as np
 
 from pydantic import BaseModel, Field, ConfigDict, SkipValidation
@@ -17,9 +18,9 @@ class PatchRequest(BaseModel):
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
-    input_cube: SkipValidation[np.ndarray] = Field(
+    input_cube: Tuple[int, int, int] = Field(
         ...,
-        description="The pixel cube which is to be patched",
+        description="The pixel cube shape which is to be patched",
     )
 
     width: int = Field(..., description="The width of the patch in pixels")
