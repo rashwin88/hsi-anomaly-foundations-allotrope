@@ -13,3 +13,5 @@ pytest-benchmark
 scikit-learn
 python-dotenv
 requests
+tqdm
+boto3
