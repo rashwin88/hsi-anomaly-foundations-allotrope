@@ -19,6 +19,7 @@ Must Haves:
 - [x] Implement random selection
 - [x] Initiate download of scenes
 - [x] Fix the masking aspect of the databuilder, where in even the granular masks are exposed for landsat
+- [x] Try loading in actual ground truth cloud coverage data
 
 Good to have:
 
