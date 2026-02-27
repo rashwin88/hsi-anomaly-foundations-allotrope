@@ -56,3 +56,28 @@ class VendableThermalDataset(BaseModel):
         ...,
         description="The full validity cube. Here validity refers to the presence or absence of clouds.",
     )
+
+    cloud_mask: Optional[SkipValidation[np.ndarray]] = Field(
+        ..., description="The pure cloud mask where 0 means cloud and 1 means clear."
+    )
+
+    pure_validity_mask: Optional[SkipValidation[np.ndarray]] = Field(
+        ..., description="Pure validity mask"
+    )
+
+    #### Provider specific data - we dont have access to this usually (use with care)
+
+    provider_cloud_presence: Optional[SkipValidation[np.ndarray]] = Field(
+        default=None,
+        description="The cloud mask that comes from the provider of the data 1 means cloud 0 means no cloud",
+    )
+
+    provider_water_presence: Optional[SkipValidation[np.ndarray]] = Field(
+        default=None,
+        description="The water mask that comes from the provider of the data 1 means water 0 means no water",
+    )
+
+    provider_snow_presence: Optional[SkipValidation[np.ndarray]] = Field(
+        default=None,
+        description="The snow mask that comes from the provider of the data 1 means snow 0 means no snow",
+    )
