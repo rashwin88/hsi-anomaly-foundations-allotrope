@@ -95,7 +95,7 @@ class DatasetBuilder(ABC):
         pass
 
     @abstractmethod
-    def vend_dataset(self) -> Union[VendableHyperspectralDataset]:
+    def vend_dataset(self, **kwargs) -> Union[VendableHyperspectralDataset]:
         """
         Constructs the complete dataset in a form that can be used in downstream
         applications in full.
