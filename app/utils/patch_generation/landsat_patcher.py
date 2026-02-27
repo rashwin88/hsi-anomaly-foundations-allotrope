@@ -65,7 +65,7 @@ def patch_landsat_vendable(
             col_coords : col_coords + patching_plan.originating_request.width,
         ]
 
-        if vendable.pure_validity_mask is not None:
+        if vendable.provider_cloud_presence is not None:
             output_object["provider_cloud_presence.npy"] = (
                 vendable.provider_cloud_presence[
                     :,

@@ -16,3 +16,4 @@ requests
 tqdm
 boto3
 pympler
+webdataset
