@@ -161,29 +161,31 @@ class LandsatIntermediateSharder(IntermediateSharder):
             # Truncate to save time
             if scenes:
                 scene_prefixes = scene_prefixes[0 : min(scenes, len(scene_prefixes))]
-
-            print(scenes)
             # Loop through
             for scene in tqdm(scene_prefixes, desc="Scene Number"):
-                manifest = self.s3_downloader(scene)
-                # create the patcher
-                patches = self.patch_generator(manifest)
-                for patch_sample in tqdm(patches, desc="Patch"):
-                    # Calculate to see if the patch needs to be kept or not
-                    valid_pixels = patch_sample.get("pure_validity_mask.npy").sum()
-                    b, h, w = patch_sample.get("pure_validity_mask.npy").shape
+                try:
+                    print(f"Processing Scene: {scene}")
+                    manifest = self.s3_downloader(scene)
+                    # create the patcher
+                    patches = self.patch_generator(manifest)
+                    for patch_sample in tqdm(patches, desc="Patch"):
+                        # Calculate to see if the patch needs to be kept or not
+                        valid_pixels = patch_sample.get("pure_validity_mask.npy").sum()
+                        b, h, w = patch_sample.get("pure_validity_mask.npy").shape
 
-                    if valid_pixels / (b * h * w) > 0.5:
-                        sink.write(patch_sample)
-                        valid_patches += 1
-                    processed_patches += 1
-                # Delete the files in the manifest
-                for file_path in manifest.values():
-                    if isinstance(file_path, str) and os.path.exists(file_path):
-                        try:
-                            os.remove(file_path)
-                        except Exception as e:
-                            print(f"Failed to delete {file_path}: {e}")
+                        if valid_pixels / (b * h * w) > 0.5:
+                            sink.write(patch_sample)
+                            valid_patches += 1
+                        processed_patches += 1
+                    # Delete the files in the manifest
+                    for file_path in manifest.values():
+                        if isinstance(file_path, str) and os.path.exists(file_path):
+                            try:
+                                os.remove(file_path)
+                            except Exception as e:
+                                print(f"Failed to delete {file_path}: {e}")
+                except Exception as err:
+                    print(f"Failed to download scene {scene}. Moving on.")
         print(f"Processed Patches: {processed_patches}")
         print(f"Valid Patches : {valid_patches}")
 
