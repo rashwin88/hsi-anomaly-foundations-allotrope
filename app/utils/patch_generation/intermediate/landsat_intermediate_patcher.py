@@ -162,6 +162,7 @@ class LandsatIntermediateSharder(IntermediateSharder):
             if scenes:
                 scene_prefixes = scene_prefixes[0 : min(scenes, len(scene_prefixes))]
 
+            print(scenes)
             # Loop through
             for scene in tqdm(scene_prefixes, desc="Scene Number"):
                 manifest = self.s3_downloader(scene)
@@ -176,6 +177,13 @@ class LandsatIntermediateSharder(IntermediateSharder):
                         sink.write(patch_sample)
                         valid_patches += 1
                     processed_patches += 1
+                # Delete the files in the manifest
+                for file_path in manifest.values():
+                    if isinstance(file_path, str) and os.path.exists(file_path):
+                        try:
+                            os.remove(file_path)
+                        except Exception as e:
+                            print(f"Failed to delete {file_path}: {e}")
         print(f"Processed Patches: {processed_patches}")
         print(f"Valid Patches : {valid_patches}")
 
@@ -190,8 +198,8 @@ if __name__ == "__main__":
     console_handler.setFormatter(formatter)
 
     patcher = LandsatIntermediateSharder(
-        source_folder="/Users/ashwinravi/Desktop/",
-        destination_folder="/Users/ashwinravi/Desktop/",
+        source_folder="/home/ubuntu/",
+        destination_folder="/home/ubuntu/",
         destination_prefix="patches/intermediate/test1",
     )
-    patcher.sharder(scenes=200)
+    patcher.sharder(scenes=2)
