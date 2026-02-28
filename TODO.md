@@ -11,7 +11,7 @@ Must Haves:
 - [x] Dataset Builder impl for Landsat data. be very careful about masking, because masks are native to rasterio read. Cloud detection is also needed.
 - [x] full visual confirmation that the dataset builder for landsat is working as expected.
 - [ ] Procure necessary AWS resources for patching experiments
-- [ ] Workout patch data model.
+- [x] Workout patch data model.
 - [x] Implement basic patching plan generator
 - [x] Write extensive tests for the patch plan generator.
 - [x] Implement a scene search API client for USGS
