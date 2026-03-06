@@ -1,0 +1,61 @@
+<mxfile host="Electron" agent="Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) draw.io/29.3.6 Chrome/140.0.7339.249 Electron/38.8.0 Safari/537.36" version="29.3.6">
+  <diagram name="Page-1" id="dCYqzsBMwumk78gWZN-v">
+    <mxGraphModel dx="1358" dy="842" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="850" pageHeight="1100" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="GARh4rxmVtgRemuKpu_u-1" parent="1" style="rounded=0;whiteSpace=wrap;html=1;" value="PRISMA dataset &amp;amp; ground truth tiff for taking only anamoly pixels" vertex="1">
+          <mxGeometry height="60" width="270" x="70" y="110" as="geometry" />
+        </mxCell>
+        <mxCell id="GARh4rxmVtgRemuKpu_u-3" parent="1" style="rounded=0;whiteSpace=wrap;html=1;" value="Taking Manmade materials from USGS library and downsample it to PRISMA wavelengths using gaussian filters" vertex="1">
+          <mxGeometry height="60" width="270" x="70" y="280" as="geometry" />
+        </mxCell>
+        <mxCell id="GARh4rxmVtgRemuKpu_u-4" edge="1" parent="1" source="GARh4rxmVtgRemuKpu_u-1" style="endArrow=classic;html=1;rounded=0;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" target="ErCK7I-0IPDXVOP9pddr-1" value="">
+          <mxGeometry height="50" relative="1" width="50" as="geometry">
+            <mxPoint x="400" y="460" as="sourcePoint" />
+            <mxPoint x="200" y="210" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="GARh4rxmVtgRemuKpu_u-5" parent="1" style="rounded=0;whiteSpace=wrap;html=1;" value="Caculate NS3 metric for similarity&amp;nbsp;" vertex="1">
+          <mxGeometry height="60" width="270" x="70" y="370" as="geometry" />
+        </mxCell>
+        <mxCell id="GARh4rxmVtgRemuKpu_u-6" parent="1" style="rounded=0;whiteSpace=wrap;html=1;" value="Rank top 3 score or with cut-off of&amp;nbsp;B &amp;lt; 0.1–0.15 " vertex="1">
+          <mxGeometry height="60" width="270" x="70" y="460" as="geometry" />
+        </mxCell>
+        <mxCell id="GARh4rxmVtgRemuKpu_u-7" parent="1" style="rounded=0;whiteSpace=wrap;html=1;" value="Add these material tags while creating shape file" vertex="1">
+          <mxGeometry height="60" width="270" x="70" y="550" as="geometry" />
+        </mxCell>
+        <mxCell id="GARh4rxmVtgRemuKpu_u-8" edge="1" parent="1" style="endArrow=classic;html=1;rounded=0;exitX=0.5;exitY=1;exitDx=0;exitDy=0;" value="">
+          <mxGeometry height="50" relative="1" width="50" as="geometry">
+            <mxPoint x="204.5" y="430" as="sourcePoint" />
+            <mxPoint x="204.5" y="460" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="GARh4rxmVtgRemuKpu_u-9" edge="1" parent="1" style="endArrow=classic;html=1;rounded=0;exitX=0.5;exitY=1;exitDx=0;exitDy=0;" value="">
+          <mxGeometry height="50" relative="1" width="50" as="geometry">
+            <mxPoint x="204.5" y="340" as="sourcePoint" />
+            <mxPoint x="204.5" y="370" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="GARh4rxmVtgRemuKpu_u-10" edge="1" parent="1" style="endArrow=classic;html=1;rounded=0;exitX=0.5;exitY=1;exitDx=0;exitDy=0;" value="">
+          <mxGeometry height="50" relative="1" width="50" as="geometry">
+            <mxPoint x="204.5" y="520" as="sourcePoint" />
+            <mxPoint x="204.5" y="550" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="GARh4rxmVtgRemuKpu_u-12" parent="1" style="shape=callout;whiteSpace=wrap;html=1;perimeter=calloutPerimeter;" value="find out better algorithms for library search in determining top scores" vertex="1">
+          <mxGeometry height="80" width="255" x="425" y="110" as="geometry" />
+        </mxCell>
+        <mxCell id="ErCK7I-0IPDXVOP9pddr-1" parent="1" style="rounded=0;whiteSpace=wrap;html=1;" value="Apply savitzky-golay filter for smoothing the PRISMA spectral data and increase signal by suppressing water absorption bands&amp;nbsp;(~1350–1450 nm, ~1800–1950 nm)" vertex="1">
+          <mxGeometry height="60" width="270" x="70" y="200" as="geometry" />
+        </mxCell>
+        <mxCell id="ErCK7I-0IPDXVOP9pddr-8" edge="1" parent="1" source="ErCK7I-0IPDXVOP9pddr-1" style="endArrow=classic;html=1;rounded=0;exitX=0.5;exitY=1;exitDx=0;exitDy=0;" target="GARh4rxmVtgRemuKpu_u-3" value="">
+          <mxGeometry height="50" relative="1" width="50" as="geometry">
+            <mxPoint x="290" y="258" as="sourcePoint" />
+            <mxPoint x="290" y="288" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
