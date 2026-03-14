@@ -17,3 +17,6 @@ tqdm
 boto3
 pympler
 webdataset
+torchvision
+flask
+psutil
