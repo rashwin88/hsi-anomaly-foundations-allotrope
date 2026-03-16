@@ -68,10 +68,141 @@ $$
 Q[(B, N, C_{out})] \rightarrow (Reshape) \rightarrow Q[(B,N, H,d)] \rightarrow (Transpose) \rightarrow Q[(B,H, N, d)]
 $$
 $$
-Q[(B, N, C_{out})] \rightarrow (Reshape) \rightarrow Q[(B,N, H,d)] \rightarrow (Transpose) \rightarrow Q[(B,H, N, d)]
+K[(B, \frac{N}{R^2}, C_{out})] \rightarrow (Reshape) \rightarrow K[(B, \frac{N}{R^2}, H, d)] \rightarrow (Transpose) \rightarrow K[(B, H, \frac{N}{R^2}, d)]
 $$
 $$
 V[(B, \frac{N}{R^2}, C_{out})] \rightarrow (Reshape) \rightarrow V[(B, \frac{N}{R^2}, H, d)] \rightarrow (Transpose) \rightarrow V[(B, H, \frac{N}{R^2}, d)]
 $$
+9. We then perform the attention operation as follows, we begin by computing the attention scores:
+$$
+AttnScore[(B,H,N,\frac{N}{R^2})] = \frac{Q[(B,H,N,d)] @ K^T[(B,H,d,\frac{N}{R^2})]}{\sqrt{d}}
+$$
+$$
+Attn[(B,H,N,\frac{N}{R^2})] = SoftMax(AttnScore, dim=-1)
+$$
+10. We then get the final output as 
+$$
+out[(B,H,N,d)] = Attn[(B,H,N,\frac{N}{R^2})] @ V[(B, H, \frac{N}{R^2}, d)] ->(Reshape) -> out[(B,N,C_out)]
+$$
+11. The output is fed into a linear layer as 
+$$
+out[(B,N,C_out)] = out[(B,N,C_out)] @ W[(C_out, C_out)]
+$$
 
+12. Then we add the residual connection as 
+$$
+final[(B,N,C_out)] = out[(B,N,C_out)] + x[(B,N,C_{out})]
+$$
+
+##### Mix-FFN
+1. Apply LayerNorm to the output of the ESA block.
+2. Apply a linear layer to expand the embedding dimension
+$$
+x'[(B, N, C_{out} \times E)] = x[(B, N, C_{out})] \times W_1^T[(C_{out}, C_{out} \times E)]
+$$
+where $E$ is the expansion ratio (typically 4).
+
+3. Reshape to spatial form for the depthwise convolution
+$$
+x'[(B, N, C_{out} \times E)] \rightarrow (Reshape) \rightarrow x'[(B, C_{out} \times E, H', W')]
+$$
+
+4. Apply a depthwise convolution with kernel size 3, stride 1, padding 1 and groups $= C_{out} \times E$.
+$$
+x'[(B, C_{out} \times E, H', W')] \rightarrow (DWConv \: K=3, S=1, P=1, \: groups=C_{out} \times E) \rightarrow x'[(B, C_{out} \times E, H', W')]
+$$
+
+##### Detour on Depthwise Convolution mechanics
+In a standard `Conv2d`, each filter has the shape $(C_{in}, K, K)$ — it looks at **all** input channels at each spatial position and sums across them. If we have $C_{out}$ such filters, the weight tensor has shape $(C_{out}, C_{in}, K, K)$.
+
+In a depthwise convolution, we set `groups` $= C_{in}$ and $C_{out} = C_{in}$. This means each channel gets its own independent filter of shape $(1, K, K)$. The weight tensor has shape $(C_{in}, 1, K, K)$.
+
+For a standard conv, the output at channel $m$, position $(i,j)$ is:
+$$
+out[m, i, j] = \sum_c \sum_p \sum_q \: input[c, \: i+p, \: j+q] \cdot W[m, \: c, \: p, \: q]
+$$
+
+For a depthwise conv, there is no sum over $c$ — each channel is convolved independently:
+$$
+out[c, i, j] = \sum_p \sum_q \: input[c, \: i+p, \: j+q] \cdot W[c, \: 0, \: p, \: q]
+$$
+
+Channel 0's filter only sees channel 0, channel 1's filter only sees channel 1, etc. No cross-channel mixing happens.
+
+| Type | Weight shape | Param count |
+|------|-------------|-------------|
+| Standard Conv2d | $(C_{out}, C_{in}, K, K)$ | $C_{out} \times C_{in} \times K^2$ |
+| Depthwise Conv2d | $(C_{in}, 1, K, K)$ | $C_{in} \times K^2$ |
+
+For $C_{in} = C_{out} = 128, K = 3$: standard $= 147,456$ params, depthwise $= 1,152$ params — $128\times$ fewer.
+
+Cross-channel mixing is not needed here because the linear layers before and after the DWConv already handle it. The DWConv's only job is to inject **spatial** information — each channel independently learns a $3 \times 3$ spatial pattern. This is what gives SegFormer positional awareness without needing explicit positional encodings.
+
+5. Reshape back to token form
+$$
+x'[(B, C_{out} \times E, H', W')] \rightarrow (Reshape) \rightarrow x'[(B, N, C_{out} \times E)]
+$$
+
+6. Apply GELU activation.
+
+7. Apply a linear layer to project back to the original embedding dimension
+$$
+out[(B, N, C_{out})] = x'[(B, N, C_{out} \times E)] \times W_2^T[(C_{out} \times E, C_{out})]
+$$
+
+8. Add the residual connection
+$$
+final[(B, N, C_{out})] = out[(B, N, C_{out})] + x[(B, N, C_{out})]
+$$
+
+#### The 4-Stage Encoder
+
+SegFormer has 4 stages. Each stage consists of an Overlap Patch Embedding followed by $N$ repeated Transformer Blocks (ESA + Mix-FFN). Each stage progressively reduces the spatial resolution and increases the channel dimension.
+
+| Stage | Spatial Resolution | Channel Dim | Reduction Ratio $R$ |
+|-------|-------------------|-------------|---------------------|
+| 1 | $\frac{H}{4} \times \frac{W}{4}$ | $C_1$ | 8 |
+| 2 | $\frac{H}{8} \times \frac{W}{8}$ | $C_2$ | 4 |
+| 3 | $\frac{H}{16} \times \frac{W}{16}$ | $C_3$ | 2 |
+| 4 | $\frac{H}{32} \times \frac{W}{32}$ | $C_4$ | 1 |
+
+Early stages have more tokens so they need more spatial reduction in ESA. Later stages have fewer tokens and can afford full attention ($R=1$).
+
+Each stage $i$ outputs a feature map $F_i$ of shape $(B, C_i, H_i, W_i)$.
+
+#### MLP Decode Head (Reconstruction)
+
+Since we are building a reconstruction network for anomaly detection (not a segmentation network), the decode head must reconstruct the full input image rather than produce class labels. The decode head takes the outputs from all 4 stages and fuses them.
+
+1. For each stage $i$, take the output $F_i[(B, C_i, H_i, W_i)]$ and apply a `Conv2d` with $K=1, S=1, P=0$ to unify the channel dimensions
+$$
+F_i[(B, C_i, H_i, W_i)] \rightarrow (Conv2D \: K=1, S=1, P=0) \rightarrow F_i'[(B, C_{embed}, H_i, W_i)]
+$$
+
+2. Upsample all 4 feature maps to the same spatial size (the resolution of Stage 1, i.e. $\frac{H}{4} \times \frac{W}{4}$)
+$$
+F_i'[(B, C_{embed}, H_i, W_i)] \rightarrow (Upsample) \rightarrow F_i'[(B, C_{embed}, \frac{H}{4}, \frac{W}{4})]
+$$
+
+3. Concatenate all 4 along the channel dimension
+$$
+F_{fused}[(B, 4 \times C_{embed}, \frac{H}{4}, \frac{W}{4})] = Concat(F_1', F_2', F_3', F_4')
+$$
+
+4. Apply a `Conv2d` with $K=1, S=1, P=0$ to fuse the concatenated features
+$$
+F_{fused}[(B, 4 \times C_{embed}, \frac{H}{4}, \frac{W}{4})] \rightarrow (Conv2D \: K=1, S=1, P=0) \rightarrow F_{fused}'[(B, C_{embed}, \frac{H}{4}, \frac{W}{4})]
+$$
+
+5. Upsample to the original input spatial resolution
+$$
+F_{fused}'[(B, C_{embed}, \frac{H}{4}, \frac{W}{4})] \rightarrow (Upsample \: 4\times) \rightarrow F_{fused}'[(B, C_{embed}, H, W)]
+$$
+
+6. Apply a final `Conv2d` with kernel size $K=3$, stride $S=1$ and padding $P=1$ to project back to the original number of input channels (e.g. 256 spectral bands)
+$$
+F_{fused}'[(B, C_{embed}, H, W)] \rightarrow (Conv2D \: K=3, S=1, P=1) \rightarrow out[(B, C_{in}, H, W)]
+$$
+
+At inference time, anomalies are detected by computing the per-pixel reconstruction error between the input and the output. Regions the network cannot reconstruct well (high error) are flagged as anomalous.
 
