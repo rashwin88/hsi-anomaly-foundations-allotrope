@@ -18,6 +18,7 @@ from app.models.hyperspectral_concepts.references import ReferenceDefinition
 from app.models.hyperspectral_concepts.file_components import (
     HyperspectralFileComponents,
     ThermalComponents,
+    EnmapFileComponents,
 )
 
 
@@ -34,7 +35,8 @@ class FileHelper(ABC, Generic[T]):
         self,
         file_source_config: FileSourceConfig,
         template: Dict[
-            Union[HyperspectralFileComponents, ThermalComponents], ReferenceDefinition
+            Union[HyperspectralFileComponents, ThermalComponents, EnmapFileComponents],
+            ReferenceDefinition,
         ],
     ):
         self.file_source_config = file_source_config
