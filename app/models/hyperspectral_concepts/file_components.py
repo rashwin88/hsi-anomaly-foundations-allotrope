@@ -30,6 +30,23 @@ class HyperspectralFileComponents(str, Enum):
     L2_SCALE_MIN_SWIR = "L2_SCALE_MIN_SWIR"
 
 
+class EnmapFileComponents(str, Enum):
+    """
+    Defines the different components of an EnMAP L2A scene folder.
+    Each component maps to a file suffix within the scene folder.
+    """
+
+    SPECTRAL_IMAGE = "SPECTRAL_IMAGE"
+    PIXEL_MASK = "PIXEL_MASK"
+    QUALITY_CLOUD = "QUALITY_CLOUD"
+    QUALITY_CIRRUS = "QUALITY_CIRRUS"
+    QUALITY_CLOUDSHADOW = "QUALITY_CLOUDSHADOW"
+    QUALITY_HAZE = "QUALITY_HAZE"
+    QUALITY_SNOW = "QUALITY_SNOW"
+    QUALITY_CLASSES = "QUALITY_CLASSES"
+    METADATA_XML = "METADATA_XML"
+
+
 class ThermalComponents(Enum):
     """
     Defines the different components and properties

@@ -7,7 +7,7 @@ $$
 H' = floor\left(\frac{H+2P -K} {S}\right) + 1
 $$
 
-$$
+$$ 
 W' = floor\left(\frac{W+2P -K} {S}\right) + 1
 $$
 

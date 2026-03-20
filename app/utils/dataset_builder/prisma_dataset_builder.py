@@ -283,4 +283,5 @@ class PrismaDatasetBuilder(DatasetBuilder):
             ),
             spectral_family_order=spectral_family_by_position,
             band_cw_order=band_cw_by_position,
+            band_validity_by_position=band_validity_by_position
         )

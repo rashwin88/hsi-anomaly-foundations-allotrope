@@ -41,6 +41,8 @@ class FileSourceConfig(BaseModel):
                 self.file_category = FileCategory.HDFS
             elif self.source_path.lower().endswith(".tif"):  # pylint: disable=no-member
                 self.file_category = FileCategory.TIF
+            elif "ENMAP" in self.source_path and "L2A" in self.source_path:
+                self.file_category = FileCategory.ENMAP_FOLDER
             else:
                 raise ValueError("Unrecognized File Extension")
         return self
