@@ -17,6 +17,7 @@ a pixel must look anomalous under both global and local statistics).
 """
 
 import logging
+import time
 from typing import List
 
 import numpy as np
@@ -115,6 +116,8 @@ class StatisticalEnsembler(AnomalyDetector):
         if not self._fitted:
             raise RuntimeError("Call fit() before detect().")
 
+        t_pipeline = time.time()
+
         do_destripe = kwargs.pop("destripe", True)
         fft_kwargs = kwargs.pop("fft_kwargs", {})
         default_strategy = kwargs.pop("default_strategy", "product")
@@ -127,6 +130,7 @@ class StatisticalEnsembler(AnomalyDetector):
         # --- optional destriping -----------------------------------------
         if do_destripe:
             logger.info("StatisticalEnsembler: applying CombinedDestriper…")
+            t0 = time.time()
             destriper = CombinedDestriper(**fft_kwargs)
             working_cube = destriper.transform(
                 cube,
@@ -137,21 +141,26 @@ class StatisticalEnsembler(AnomalyDetector):
                 ),
                 diagnostics=True,
             )
-            logger.info("StatisticalEnsembler: destriping complete.")
+            logger.info("StatisticalEnsembler: destriping complete in %.2fs", time.time() - t0)
         else:
             working_cube = cube
 
         # --- GRX ---------------------------------------------------------
         logger.info("StatisticalEnsembler: running Global RX…")
+        t0 = time.time()
         grx_scores = self._grx.detect(working_cube, validity_mask=validity)
         grx_result = self._grx.result
+        logger.info("StatisticalEnsembler: GRX complete in %.2fs", time.time() - t0)
 
         # --- LRX ---------------------------------------------------------
         logger.info("StatisticalEnsembler: running Local RX…")
+        t0 = time.time()
         lrx_scores = self._lrx.detect(working_cube, validity_mask=validity, **kwargs)
         lrx_result = self._lrx.result
+        logger.info("StatisticalEnsembler: LRX complete in %.2fs", time.time() - t0)
 
         # --- normalization & fusion --------------------------------------
+        t0 = time.time()
         combined_mask = grx_result.spatial_mask & lrx_result.computed_mask
 
         norm_grx = cdf_normalize(grx_scores, combined_mask)
@@ -161,7 +170,13 @@ class StatisticalEnsembler(AnomalyDetector):
         n_valid = int(combined_mask.sum())
 
         logger.info(
-            "StatisticalEnsembler: %d pixels scored by both detectors.", n_valid
+            "StatisticalEnsembler: normalization + fusion done in %.2fs | "
+            "%d pixels scored by both detectors",
+            time.time() - t0, n_valid,
+        )
+        logger.info(
+            "StatisticalEnsembler: full pipeline done in %.2fs",
+            time.time() - t_pipeline,
         )
 
         self._last_result = EnsembleRXResult(

@@ -13,6 +13,7 @@ in detect(), contributing zero anomaly signal.
 """
 
 import logging
+import time
 from typing import List, Dict
 
 import numpy as np
@@ -171,11 +172,18 @@ class GlobalRXDetector(AnomalyDetector):
         mask = self._spatial_mask
         n_valid = int(mask.sum())
 
+        t_total = time.time()
+
         # Work on a copy so the caller's cube is untouched
         working = cube[good].copy()  # (B_good, H, W)
+        logger.info(
+            "GRX: %d bands x (%d, %d) | %d valid pixels",
+            len(good), H, W, n_valid,
+        )
 
         # Band-mean fill: for each good band, fill pixels that are in the
         # spatial mask but missing that specific band
+        t_fill = time.time()
         total_filled = 0
         max_filled_per_pixel = 0
         if n_valid > 0:
@@ -195,9 +203,10 @@ class GlobalRXDetector(AnomalyDetector):
             max_filled_per_pixel = int(fill_count[mask].max()) if n_valid > 0 else 0
             n_pixels_with_fill = int((fill_count[mask] > 0).sum())
             logger.info(
-                "Band-mean fill: %d band-pixels filled across %d pixels "
-                "(max %d bands filled at one pixel)",
+                "GRX band-mean fill: %d band-pixels filled across %d pixels "
+                "(max %d bands filled at one pixel) in %.2fs",
                 total_filled, n_pixels_with_fill, max_filled_per_pixel,
+                time.time() - t_fill,
             )
 
         # Validate: all valid pixel values must be finite
@@ -211,15 +220,28 @@ class GlobalRXDetector(AnomalyDetector):
 
         # Transpose to (N_valid, B_good) — each row is one pixel's spectrum
         pixels = valid_values.T
+        logger.info("GRX: computing RX scores for %d pixels x %d bands…", pixels.shape[0], pixels.shape[1])
 
         # spy.rx expects (rows, cols, bands) → (N_valid, 1, B_good)
+        t_rx = time.time()
         rx_scores_flat = spectral.rx(
             np.asarray(pixels[:, np.newaxis, :])
         ).ravel()
+        logger.info("GRX: spectral.rx done in %.2fs", time.time() - t_rx)
 
         # Map scores back to (H, W), NaN where invalid
         score_map = np.full((H, W), np.nan, dtype=np.float64)
         score_map[mask] = rx_scores_flat
+
+        valid_scores = rx_scores_flat[np.isfinite(rx_scores_flat)]
+        if len(valid_scores) > 0:
+            logger.info(
+                "GRX: score range [%.4f, %.4f] median=%.4f p99=%.4f",
+                float(valid_scores.min()), float(valid_scores.max()),
+                float(np.median(valid_scores)),
+                float(np.percentile(valid_scores, 99)),
+            )
+        logger.info("GRX: total %.2fs", time.time() - t_total)
 
         self._last_result = GlobalRXResult(
             rx_score_map=score_map,
