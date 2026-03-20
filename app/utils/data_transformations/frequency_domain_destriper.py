@@ -595,8 +595,11 @@ class FrequencyDomainDestriper(DataTransformer):
         notch: np.ndarray,
         diag: FrequencyDestripeDiagnostics | None,
     ) -> np.ndarray:
+        """Apply notch filter to every band. Fill, pad, FFT, crop, and
+        validity-restore are all done on-device per batch — no large
+        intermediate CPU arrays."""
         B, H, W = cube.shape
-        output = cube.copy()
+        output = cube.copy()               # only large CPU allocation
         p = PAD_WIDTH
         pH, pW = H + 2 * p, W + 2 * p
 
@@ -606,44 +609,21 @@ class FrequencyDomainDestriper(DataTransformer):
             B, device, pH, pW,
         )
 
-        # Prepare validity and band means (CPU)
-        validity_bool = validity.astype(bool)            # (B, H, W)
+        # Compute per-band means on CPU (cheap — one scalar per band)
+        validity_bool = validity.astype(bool)             # (B, H, W)
         band_means = np.array([
             cube[b][validity_bool[b]].mean() if validity_bool[b].any() else 0.0
             for b in range(B)
-        ])                                                # (B,)
+        ], dtype=np.float32)                              # (B,)
 
-        # Fill invalid pixels per band, then pad
-        filled = cube.copy()                              # (B, H, W)
-        for b in range(B):
-            filled[b][~validity_bool[b]] = band_means[b]
-
-        # Pad all bands at once: (B, pH, pW)
-        padded = np.pad(
-            filled,
-            pad_width=((0, 0), (p, p), (p, p)),
-            mode="constant",
-            constant_values=0,
-        )
-        # Fix pad values per band (np.pad constant_values is scalar)
-        for b in range(B):
-            padded[b, :p, :] = band_means[b]
-            padded[b, -p:, :] = band_means[b]
-            padded[b, :, :p] = band_means[b]
-            padded[b, :, -p:] = band_means[b]
-
-        del filled  # free ~1.4 GB before torch allocations
-
-        # Move to device and batch FFT
+        # Notch filter on device (lives for the whole loop, ~18 MB)
         notch_t = torch.from_numpy(notch).to(device=device, dtype=torch.complex64)
-        # Determine batch size based on available memory.
-        # Each band needs: float32 input + complex64 fft + complex64 filtered + float32 result
-        bytes_per_band = pH * pW * (4 + 8 + 8 + 4)  # ~24 bytes per pixel per band
+
+        # Batch size: budget per-band covers padded input + FFT intermediates
+        bytes_per_band = pH * pW * (4 + 8 + 8 + 4)
         if device.type == "cuda":
-            # Dedicated VRAM — budget ~2 GB for FFT workspace
             mem_budget = 2e9
         else:
-            # CPU or MPS (unified memory) — stay small to avoid swap pressure
             mem_budget = 500e6
         max_batch = max(1, int(mem_budget / bytes_per_band))
         batch_size = min(B, max_batch)
@@ -652,21 +632,63 @@ class FrequencyDomainDestriper(DataTransformer):
             batch_size, bytes_per_band / 1e6,
         )
 
-        # Capture diagnostics rep band index
         diag_rep = diag.representative_band_index if diag is not None else None
+        t_prep = 0.0
+        t_fft = 0.0
+        t_write = 0.0
 
-        corrected_all = np.empty_like(padded)  # (B, pH, pW)
         for start in range(0, B, batch_size):
             end = min(start + batch_size, B)
+            n = end - start
+            t0 = time.time()
+
+            # --- fill + pad on device (no large CPU intermediates) ---
+            # Move raw bands to device
             chunk = torch.from_numpy(
-                padded[start:end].astype(np.float32)
-            ).to(device)                                   # (chunk, pH, pW)
+                cube[start:end].astype(np.float32)
+            ).to(device)                                   # (n, H, W)
+            val_chunk = torch.from_numpy(
+                validity_bool[start:end]
+            ).to(device)                                   # (n, H, W) bool
+            means = torch.from_numpy(
+                band_means[start:end]
+            ).to(device)                                   # (n,)
 
-            fft_shifted = torch.fft.fftshift(torch.fft.fft2(chunk), dim=(-2, -1))
+            # Fill invalid pixels with band mean on device
+            means_expanded = means[:, None, None].expand_as(chunk)
+            chunk = torch.where(val_chunk, chunk, means_expanded)
+
+            # Pad with band mean on device
+            # F.pad order: (left, right, top, bottom) for last 2 dims
+            padded = torch.nn.functional.pad(chunk, (p, p, p, p), mode="constant", value=0)
+            # Fix per-band pad values (broadcasting)
+            padded[:, :p, :] = means[:, None, None]
+            padded[:, -p:, :] = means[:, None, None]
+            padded[:, :, :p] = means[:, None, None]
+            padded[:, :, -p:] = means[:, None, None]
+
+            del chunk, val_chunk, means_expanded
+            t_prep += time.time() - t0
+
+            # --- FFT → notch → IFFT on device ---
+            t0 = time.time()
+            fft_shifted = torch.fft.fftshift(torch.fft.fft2(padded), dim=(-2, -1))
             filtered = fft_shifted * notch_t
-            result = torch.fft.ifft2(torch.fft.ifftshift(filtered, dim=(-2, -1))).real
+            corrected = torch.fft.ifft2(
+                torch.fft.ifftshift(filtered, dim=(-2, -1))
+            ).real                                         # (n, pH, pW)
+            t_fft += time.time() - t0
 
-            corrected_all[start:end] = result.cpu().numpy()
+            # --- crop + validity write-back on device ---
+            t0 = time.time()
+            cropped = corrected[:, p:p + H, p:p + W]      # (n, H, W) view
+
+            # Move result + validity to CPU and write into output
+            cropped_np = cropped.cpu().numpy()
+            val_np = validity_bool[start:end]
+            for i in range(n):
+                output[start + i][val_np[i]] = cropped_np[i][val_np[i]]
+            t_write += time.time() - t0
 
             # Capture diagnostics for the representative band
             if diag_rep is not None and start <= diag_rep < end:
@@ -675,18 +697,18 @@ class FrequencyDomainDestriper(DataTransformer):
                     np.abs(filtered[local_idx].cpu().numpy()) ** 2 + 1e-10
                 )
 
-            if start == 0:
-                logger.info("FFT filter: first batch done (%d bands)", end - start)
+            del padded, fft_shifted, filtered, corrected, cropped_np
 
-        # Crop and restore only valid pixels
-        for b in range(B):
-            cropped = corrected_all[b, p:p + H, p:p + W]
-            output[b][validity_bool[b]] = cropped[validity_bool[b]]
+            if start == 0:
+                logger.info("FFT filter: first batch done (%d bands)", n)
 
         # Diagnostics: before/after for rep band
         if diag is not None and diag_rep is not None:
             diag.band_before = cube[diag_rep].copy()
             diag.band_after = output[diag_rep].copy()
 
-        logger.info("FFT filter: done — %d bands filtered on %s", B, device)
+        logger.info(
+            "FFT filter: done — %d bands on %s | prep=%.2fs fft=%.2fs write=%.2fs",
+            B, device, t_prep, t_fft, t_write,
+        )
         return output
