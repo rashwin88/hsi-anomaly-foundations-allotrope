@@ -8,15 +8,17 @@ Works for any sensor and any stripe angle.
 Three stages:
     1. Find the stripe angle from multiple bands' power spectra (consensus).
     2. Build a tapered notch filter at that angle.
-    3. Apply the filter to every band (with mean-fill padding to suppress
-       edge artefacts).
+    3. Apply the filter to every band (batched via torch.fft on the best
+       available device: CUDA > MPS > CPU).
 """
 
 import logging
+import time
 from dataclasses import dataclass, field
 from typing import List, Tuple
 
 import numpy as np
+import torch
 from scipy.ndimage import gaussian_filter
 
 from app.abstract_classes.data_transformer import DataTransformer
@@ -32,6 +34,15 @@ ANGLE_SEARCH_STEP = 0.5
 RADIAL_SKIP = 10
 ANGLE_TOLERANCE = 3.0  # degrees — max spread for consensus across bands
 PAD_WIDTH = 128
+
+
+def _select_device() -> torch.device:
+    """Pick best available torch device: cuda > mps > cpu."""
+    if torch.cuda.is_available():
+        return torch.device("cuda")
+    if hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
+        return torch.device("mps")
+    return torch.device("cpu")
 
 
 @dataclass
@@ -110,14 +121,17 @@ class FrequencyDomainDestriper(DataTransformer):
 
         original_dtype = input_data.dtype
         B, H, W = input_data.shape
+        logger.info("FFT destriper: cube (%d, %d, %d), dtype=%s", B, H, W, original_dtype)
 
         # Stage 1: find all stripe angles with strength
+        t0 = time.time()
         angle_strength_pairs = self._find_stripe_angles(
             input_data, validity_mask, diag,
             band_wavelengths=band_wavelengths,
             exclusion_ranges=exclusion_ranges,
             spectral_family_order=spectral_family_order,
         )
+        logger.info("FFT destriper: angle detection done in %.2fs", time.time() - t0)
 
         if not angle_strength_pairs:
             logger.warning("No significant stripes detected. Returning cube unchanged.")
@@ -152,8 +166,10 @@ class FrequencyDomainDestriper(DataTransformer):
             diag.detected_angles = angles_only
             diag.detected_angle = angles_only[0]
 
-        # Stage 3: apply to every band
+        # Stage 3: apply to every band (batched on device)
+        t0 = time.time()
         output = self._apply_filter(input_data, validity_mask, notch, diag)
+        logger.info("FFT destriper: applied notch to %d bands in %.2fs", B, time.time() - t0)
 
         return output.astype(original_dtype)
 
@@ -495,32 +511,44 @@ class FrequencyDomainDestriper(DataTransformer):
         """
         For angles 0–179 in half-degree steps, sum power along radial lines
         from the center, skipping the inner RADIAL_SKIP pixels.
+
+        Fully vectorized: precomputes all (angle, radius) sample coordinates
+        in one shot, then gathers and sums via reshape.
         """
         H, W = log_power.shape
         cy, cx = H // 2, W // 2
         max_radius = min(cy, cx)
 
         angles = np.arange(0, 180, ANGLE_SEARCH_STEP)
-        sums = np.zeros(len(angles))
-
+        n_angles = len(angles)
         radii = np.arange(RADIAL_SKIP, max_radius)
+        n_radii = len(radii)
 
-        for i, angle_deg in enumerate(angles):
-            angle_rad = np.deg2rad(angle_deg)
-            sin_a, cos_a = np.sin(angle_rad), np.cos(angle_rad)
+        # (n_angles,) and (n_radii,) → broadcast to (n_angles, n_radii)
+        angles_rad = np.deg2rad(angles)
+        sin_a = np.sin(angles_rad)[:, np.newaxis]   # (n_angles, 1)
+        cos_a = np.cos(angles_rad)[:, np.newaxis]   # (n_angles, 1)
+        r = radii[np.newaxis, :]                     # (1, n_radii)
 
-            # Sample both directions from center
-            rows = np.concatenate([
-                cy + (radii * sin_a).astype(int),
-                cy - (radii * sin_a).astype(int),
-            ])
-            cols = np.concatenate([
-                cx + (radii * cos_a).astype(int),
-                cx - (radii * cos_a).astype(int),
-            ])
+        # Both directions from center → (n_angles, 2 * n_radii)
+        rows = np.concatenate([
+            cy + (r * sin_a).astype(int),
+            cy - (r * sin_a).astype(int),
+        ], axis=1)
+        cols = np.concatenate([
+            cx + (r * cos_a).astype(int),
+            cx - (r * cos_a).astype(int),
+        ], axis=1)
 
-            mask = (rows >= 0) & (rows < H) & (cols >= 0) & (cols < W)
-            sums[i] = log_power[rows[mask], cols[mask]].sum()
+        # Clamp to valid bounds
+        valid = (rows >= 0) & (rows < H) & (cols >= 0) & (cols < W)
+        rows_safe = np.clip(rows, 0, H - 1)
+        cols_safe = np.clip(cols, 0, W - 1)
+
+        # Gather all values, zero out-of-bounds, sum per angle
+        values = log_power[rows_safe, cols_safe]
+        values[~valid] = 0.0
+        sums = values.sum(axis=1)
 
         return angles, sums
 
@@ -557,7 +585,7 @@ class FrequencyDomainDestriper(DataTransformer):
         return notch
 
     # ------------------------------------------------------------------
-    # Stage 3 — Apply filter to every band
+    # Stage 3 — Apply filter to every band (batched via torch.fft)
     # ------------------------------------------------------------------
 
     def _apply_filter(
@@ -570,36 +598,88 @@ class FrequencyDomainDestriper(DataTransformer):
         B, H, W = cube.shape
         output = cube.copy()
         p = PAD_WIDTH
+        pH, pW = H + 2 * p, W + 2 * p
 
+        device = _select_device()
+        logger.info(
+            "FFT filter: %d bands on %s, padded shape (%d, %d)",
+            B, device, pH, pW,
+        )
+
+        # Prepare validity and band means (CPU)
+        validity_bool = validity.astype(bool)            # (B, H, W)
+        band_means = np.array([
+            cube[b][validity_bool[b]].mean() if validity_bool[b].any() else 0.0
+            for b in range(B)
+        ])                                                # (B,)
+
+        # Fill invalid pixels per band, then pad
+        filled = cube.copy()                              # (B, H, W)
         for b in range(B):
-            valid = validity[b].astype(bool)
-            band_mean = cube[b][valid].mean() if valid.any() else 0.0
+            filled[b][~validity_bool[b]] = band_means[b]
 
-            filled = self._fill_invalid(cube[b], valid, band_mean)
+        # Pad all bands at once: (B, pH, pW)
+        padded = np.pad(
+            filled,
+            pad_width=((0, 0), (p, p), (p, p)),
+            mode="constant",
+            constant_values=0,
+        )
+        # Fix pad values per band (np.pad constant_values is scalar)
+        for b in range(B):
+            padded[b, :p, :] = band_means[b]
+            padded[b, -p:, :] = band_means[b]
+            padded[b, :, :p] = band_means[b]
+            padded[b, :, -p:] = band_means[b]
 
-            # Pad with band mean to suppress edge discontinuities
-            padded = np.pad(
-                filled, pad_width=p, mode="constant", constant_values=band_mean
-            )
+        # Move to device and batch FFT
+        notch_t = torch.from_numpy(notch).to(device=device, dtype=torch.complex64)
+        # Determine batch size based on available memory
+        # Each band padded: pH*pW complex64 = pH*pW*8 bytes
+        # FFT in-place roughly same. Budget ~2 GB for safety.
+        bytes_per_band = pH * pW * 8 * 3  # input + fft + filtered
+        max_batch = max(1, int(2e9 / bytes_per_band))
+        batch_size = min(B, max_batch)
+        logger.info(
+            "FFT filter: batch_size=%d (%.0f MB per band)",
+            batch_size, bytes_per_band / 1e6,
+        )
 
-            # FFT → filter → IFFT
-            fft_shifted = np.fft.fftshift(np.fft.fft2(padded))
-            filtered = fft_shifted * notch
-            corrected = np.real(np.fft.ifft2(np.fft.ifftshift(filtered)))
+        # Capture diagnostics rep band index
+        diag_rep = diag.representative_band_index if diag is not None else None
 
-            # Crop back to original size
-            corrected = corrected[p:p + H, p:p + W]
+        corrected_all = np.empty_like(padded)  # (B, pH, pW)
+        for start in range(0, B, batch_size):
+            end = min(start + batch_size, B)
+            chunk = torch.from_numpy(
+                padded[start:end].astype(np.float32)
+            ).to(device)                                   # (chunk, pH, pW)
 
-            # Restore only valid pixels
-            output[b][valid] = corrected[valid]
+            fft_shifted = torch.fft.fftshift(torch.fft.fft2(chunk), dim=(-2, -1))
+            filtered = fft_shifted * notch_t
+            result = torch.fft.ifft2(torch.fft.ifftshift(filtered, dim=(-2, -1))).real
+
+            corrected_all[start:end] = result.cpu().numpy()
 
             # Capture diagnostics for the representative band
-            if diag is not None and b == diag.representative_band_index:
-                diag.band_before = cube[b].copy()
-                diag.band_after = output[b].copy()
+            if diag_rep is not None and start <= diag_rep < end:
+                local_idx = diag_rep - start
                 diag.log_power_after = np.log(
-                    np.abs(filtered) ** 2 + 1e-10
+                    np.abs(filtered[local_idx].cpu().numpy()) ** 2 + 1e-10
                 )
 
-        logger.info("Applied notch filter to %d bands.", B)
+            if start == 0:
+                logger.info("FFT filter: first batch done (%d bands)", end - start)
+
+        # Crop and restore only valid pixels
+        for b in range(B):
+            cropped = corrected_all[b, p:p + H, p:p + W]
+            output[b][validity_bool[b]] = cropped[validity_bool[b]]
+
+        # Diagnostics: before/after for rep band
+        if diag is not None and diag_rep is not None:
+            diag.band_before = cube[diag_rep].copy()
+            diag.band_after = output[diag_rep].copy()
+
+        logger.info("FFT filter: done — %d bands filtered on %s", B, device)
         return output

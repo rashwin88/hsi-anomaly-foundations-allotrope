@@ -48,7 +48,16 @@ Test connection:
 ssh -T git@github.com
 ```
 
-## 5. Clone Repo
+## 5. Limit OpenBLAS Threads
+
+The pip-installed NumPy/SciPy ship with OpenBLAS (`MAX_THREADS=64`). On a many-core VM this causes massive thread oversubscription for workloads with many small matrix operations (e.g. LRX per-pixel `np.linalg.solve`). Set single-threaded BLAS:
+
+```bash
+echo 'export OPENBLAS_NUM_THREADS=1' >> ~/.bashrc
+source ~/.bashrc
+```
+
+## 6. Clone Repo
 
 ```bash
 git clone git@github.com:rashwin88/hsi-anomaly-foundations-allotrope.git

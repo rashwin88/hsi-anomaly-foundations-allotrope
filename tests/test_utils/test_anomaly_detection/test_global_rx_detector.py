@@ -25,7 +25,7 @@ def _make_vendable(
         normalized_hyperspectral_cube=cube,
         validity_cube=validity,
         spectral_family_order=["VNIR"] * C,
-        band_cw_order=[400.0 + i * 10 for i in range(C)],
+        band_cw_order=[500.0 + i * 5 for i in range(C)],
         band_fwhm_order=[5.0] * C,
         band_validity_by_position=band_validity,
     )
