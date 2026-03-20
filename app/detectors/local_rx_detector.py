@@ -260,7 +260,7 @@ class LocalRXDetector(AnomalyDetector):
         )
         if device.type == "cuda":
             gpu_name = torch.cuda.get_device_name(device)
-            gpu_mem = torch.cuda.get_device_properties(device).total_mem / (1024 ** 3)
+            gpu_mem = torch.cuda.get_device_properties(device).total_memory / (1024 ** 3)
             logger.info("LRX: GPU=%s (%.1f GB)", gpu_name, gpu_mem)
 
         # Sub-cube: (B_good, H, W) float64 — copy so we can fill in place
