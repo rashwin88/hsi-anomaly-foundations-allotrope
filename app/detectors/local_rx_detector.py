@@ -242,7 +242,6 @@ class LocalRXDetector(AnomalyDetector):
         inner      = int(kwargs.get("inner_window",   DEFAULT_INNER_WINDOW))
         reg        = float(kwargs.get("regularization", DEFAULT_REGULARIZATION))
         stride     = int(kwargs.get("stride", 1))
-        batch_size = int(kwargs.get("batch_size", DEFAULT_BATCH_SIZE))
 
         good = self._good_indices
         mask = self._spatial_mask
@@ -251,9 +250,23 @@ class LocalRXDetector(AnomalyDetector):
 
         min_bg = int(kwargs.get("min_bg_pixels", B + 1))
 
-        # Device selection
+        # Device selection + auto batch size
         device = _select_device()
         compute_dtype = "float32" if device.type != "cpu" else "float64"
+
+        if "batch_size" in kwargs:
+            batch_size = int(kwargs["batch_size"])
+        elif device.type == "cuda":
+            # Large batches to keep the GPU busy; each element uses
+            # ~2 * max_bg * B * 4 bytes (X_bg + dX) + B^2 * 4 (cov).
+            max_bg = (2 * outer + 1) ** 2 - (2 * inner + 1) ** 2
+            bytes_per_elem = (2 * max_bg * B + B * B) * 4
+            vram = torch.cuda.get_device_properties(device).total_memory
+            # Use up to 25% of VRAM for the batch
+            batch_size = max(256, int(0.25 * vram / bytes_per_elem))
+        else:
+            batch_size = DEFAULT_BATCH_SIZE
+
         logger.info(
             "LRX: device=%s | compute_dtype=%s | batch_size=%d",
             device, compute_dtype, batch_size,
