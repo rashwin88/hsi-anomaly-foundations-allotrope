@@ -28,12 +28,18 @@ A `stride` parameter subsamples the spatial grid (default 1 = full
 resolution). With stride > 1 the score map is bilinearly interpolated
 back to full resolution. For PRISMA scenes (≈1200×1250, 177 bands) a
 stride of 2 reduces computation ≈4×.
+
+Covariance and Mahalanobis distance computations are batched via
+torch.linalg.solve, automatically selecting the best available device
+(CUDA > MPS > CPU).
 """
 
 import logging
+import time
 from typing import List
 
 import numpy as np
+import torch
 from scipy.ndimage import zoom
 
 from app.abstract_classes.anomaly_detector import AnomalyDetector, VendableDataset
@@ -43,9 +49,72 @@ from app.utils.data_transformations.spectral_band_filter import SpectralBandFilt
 logger = logging.getLogger(__name__)
 
 DEFAULT_BAND_FAILURE_THRESHOLD = 0.05
-DEFAULT_OUTER_WINDOW = 25   
-DEFAULT_INNER_WINDOW = 5 
+DEFAULT_OUTER_WINDOW = 25
+DEFAULT_INNER_WINDOW = 5
 DEFAULT_REGULARIZATION = 1e-4
+DEFAULT_BATCH_SIZE = 256
+
+
+# ------------------------------------------------------------------
+# device selection
+# ------------------------------------------------------------------
+
+def _select_device() -> torch.device:
+    """Pick best available torch device: cuda > mps > cpu."""
+    if torch.cuda.is_available():
+        return torch.device("cuda")
+    if hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
+        return torch.device("mps")
+    return torch.device("cpu")
+
+
+# ------------------------------------------------------------------
+# batched Mahalanobis on device
+# ------------------------------------------------------------------
+
+def _batch_mahalanobis(
+    X_bg_padded: np.ndarray,   # (N, max_bg, B) float64
+    n_bg_arr: np.ndarray,      # (N,) int64 — actual bg count per pixel
+    x_test: np.ndarray,        # (N, B) float64 — test pixel spectra
+    count: int,                # how many entries in this batch are valid
+    B: int,
+    reg: float,
+    device: torch.device,
+) -> np.ndarray:
+    """Batched covariance + solve + Mahalanobis on device. Returns (count,) scores."""
+    # Use float32 on GPU for speed; float64 on CPU for precision
+    dtype = torch.float32 if device.type != "cpu" else torch.float64
+
+    X = torch.from_numpy(X_bg_padded[:count]).to(device=device, dtype=dtype)
+    n = torch.from_numpy(n_bg_arr[:count]).to(device=device)
+    xt = torch.from_numpy(x_test[:count]).to(device=device, dtype=dtype)
+
+    max_bg = X.shape[1]
+    # Validity mask: (count, max_bg) — True for real background entries
+    indices = torch.arange(max_bg, device=device).unsqueeze(0)
+    mask = indices < n.unsqueeze(1)
+
+    # Masked mean: zero out padding, sum, divide by count
+    X_masked = X * mask.unsqueeze(-1)
+    counts_f = mask.sum(dim=1, keepdim=True).to(dtype)       # (count, 1)
+    mu = X_masked.sum(dim=1) / counts_f                       # (count, B)
+
+    # Centered data (padding stays zero)
+    dX = (X - mu.unsqueeze(1)) * mask.unsqueeze(-1)           # (count, max_bg, B)
+
+    # Batched covariance: (count, B, B)
+    cov = dX.transpose(-1, -2) @ dX
+    cov = cov / (counts_f.unsqueeze(-1) - 1)
+    cov += reg * torch.eye(B, device=device, dtype=dtype)
+
+    # Test vector relative to local mean
+    x = xt - mu                                                # (count, B)
+
+    # Batched solve: cov @ sol = x  →  sol = cov⁻¹ x
+    sol = torch.linalg.solve(cov, x)                           # (count, B)
+    scores = (x * sol).sum(dim=1)                              # (count,)
+
+    return scores.cpu().to(torch.float64).numpy()
 
 
 class LocalRXDetector(AnomalyDetector):
@@ -137,7 +206,7 @@ class LocalRXDetector(AnomalyDetector):
 
     def detect(self, cube: np.ndarray, validity_mask: np.ndarray = None, **kwargs) -> np.ndarray:
         """
-        Run Local RX.
+        Run Local RX with batched torch.linalg.solve on the best available device.
 
         Missing bands at spatial-mask pixels are filled with the band mean
         so they contribute zero anomaly signal.  The caller's cube is not
@@ -154,10 +223,13 @@ class LocalRXDetector(AnomalyDetector):
                             Default: n_good_bands + 1.
             stride:         Spatial subsampling factor. 1 = full resolution.
                             Default 1.
+            batch_size:     Number of pixels per GPU batch. Default 256.
 
         Returns:
             (H, W) score map; NaN for pixels without a valid score.
         """
+        t_total = time.time()
+
         if self._good_indices is None or self._spatial_mask is None:
             raise RuntimeError("Call fit() before detect().")
 
@@ -166,10 +238,11 @@ class LocalRXDetector(AnomalyDetector):
             else self._vendable.validity_cube
         )
 
-        outer   = int(kwargs.get("outer_window",   DEFAULT_OUTER_WINDOW))
-        inner   = int(kwargs.get("inner_window",   DEFAULT_INNER_WINDOW))
-        reg     = float(kwargs.get("regularization", DEFAULT_REGULARIZATION))
-        stride  = int(kwargs.get("stride", 1))
+        outer      = int(kwargs.get("outer_window",   DEFAULT_OUTER_WINDOW))
+        inner      = int(kwargs.get("inner_window",   DEFAULT_INNER_WINDOW))
+        reg        = float(kwargs.get("regularization", DEFAULT_REGULARIZATION))
+        stride     = int(kwargs.get("stride", 1))
+        batch_size = int(kwargs.get("batch_size", DEFAULT_BATCH_SIZE))
 
         good = self._good_indices
         mask = self._spatial_mask
@@ -178,7 +251,20 @@ class LocalRXDetector(AnomalyDetector):
 
         min_bg = int(kwargs.get("min_bg_pixels", B + 1))
 
+        # Device selection
+        device = _select_device()
+        compute_dtype = "float32" if device.type != "cpu" else "float64"
+        logger.info(
+            "LRX: device=%s | compute_dtype=%s | batch_size=%d",
+            device, compute_dtype, batch_size,
+        )
+        if device.type == "cuda":
+            gpu_name = torch.cuda.get_device_name(device)
+            gpu_mem = torch.cuda.get_device_properties(device).total_mem / (1024 ** 3)
+            logger.info("LRX: GPU=%s (%.1f GB)", gpu_name, gpu_mem)
+
         # Sub-cube: (B_good, H, W) float64 — copy so we can fill in place
+        t_prep = time.time()
         sub = cube[good].astype(np.float64)
 
         # Band-mean fill: fill missing bands at spatial-mask pixels
@@ -196,48 +282,85 @@ class LocalRXDetector(AnomalyDetector):
         if total_filled > 0:
             logger.info("LRX band-mean fill: %d band-pixels filled", total_filled)
 
-        # Spatial validity per band merged into one 2-D mask
-        spatial_valid = mask  # (H, W) bool
-
+        spatial_valid = mask   # (H, W) bool
         score_map = np.full((H, W), np.nan, dtype=np.float64)
+        t_prep = time.time() - t_prep
+        logger.info("LRX: sub-cube prep done in %.2fs", t_prep)
 
+        # Theoretical max background pixels in the annulus
+        max_bg = (2 * outer + 1) ** 2 - (2 * inner + 1) ** 2
 
-        # Row index set for progress logging
+        # Pre-allocate batch buffers (reused every flush)
+        batch_X_bg = np.zeros((batch_size, max_bg, B), dtype=np.float64)
+        batch_n_bg = np.zeros(batch_size, dtype=np.int64)
+        batch_x_test = np.zeros((batch_size, B), dtype=np.float64)
+        batch_coords: list[tuple[int, int]] = []
+        batch_idx = 0
+
+        n_scored = 0
+        n_skipped_bg = 0
+        n_skipped_invalid = 0
+        t_extract = 0.0
+        t_solve = 0.0
+        n_batches_flushed = 0
+
         rows_to_process = range(0, H, stride)
+        cols_to_process = range(0, W, stride)
+        total_pixels = len(rows_to_process) * len(cols_to_process)
         log_every = max(1, len(rows_to_process) // 10)
 
         logger.info(
-            "LRX: outer=%d inner=%d stride=%d min_bg=%d | "
-            "scoring %d rows × %d cols",
-            outer, inner, stride,
-            min_bg,
-            len(rows_to_process),
-            len(range(0, W, stride)),
+            "LRX: outer=%d inner=%d stride=%d reg=%.0e min_bg=%d | "
+            "grid=%d rows x %d cols = %d pixels | max_bg=%d",
+            outer, inner, stride, reg, min_bg,
+            len(rows_to_process), len(cols_to_process),
+            total_pixels, max_bg,
         )
 
+        def _flush_batch():
+            """Send accumulated batch to device, compute scores, write back."""
+            nonlocal batch_idx, n_scored, n_batches_flushed, t_solve
+            if batch_idx == 0:
+                return
+            t0 = time.time()
+            scores = _batch_mahalanobis(
+                batch_X_bg, batch_n_bg, batch_x_test,
+                batch_idx, B, reg, device,
+            )
+            for i, (br, bc) in enumerate(batch_coords):
+                score_map[br, bc] = scores[i]
+            n_scored += batch_idx
+            n_batches_flushed += 1
+            t_solve += time.time() - t0
+            batch_idx = 0
+            batch_coords.clear()
+
+        # ----- main pixel loop (CPU extraction, GPU linalg) -----
         for step_r, r in enumerate(rows_to_process):
             if step_r % log_every == 0:
-                logger.info("LRX progress: row %d / %d", r, H)
+                pct = 100.0 * step_r / len(rows_to_process) if len(rows_to_process) > 0 else 0
+                logger.info(
+                    "LRX progress: row %d / %d (%.0f%%) | scored=%d skipped_bg=%d",
+                    r, H, pct, n_scored, n_skipped_bg,
+                )
 
-            # Background row range (clamped to image bounds)
             r0 = max(0, r - outer)
             r1 = min(H, r + outer + 1)
 
-            for c in range(0, W, stride):
+            for c in cols_to_process:
                 if not spatial_valid[r, c]:
+                    n_skipped_invalid += 1
                     continue
 
-                # Background column range
+                t0 = time.time()
+
                 c0 = max(0, c - outer)
                 c1 = min(W, c + outer + 1)
 
-                # Extract window validity and spectra
-                win_valid = spatial_valid[r0:r1, c0:c1]        # (wr, wc)
-                win_sub   = sub[:, r0:r1, c0:c1]               # (B, wr, wc)
+                win_valid = spatial_valid[r0:r1, c0:c1]
+                win_sub   = sub[:, r0:r1, c0:c1]
 
-                # Build background mask: valid AND outside guard window
                 bg_mask = win_valid.copy()
-                # Compute the guard patch position within this window
                 gr0 = max(0, r - inner) - r0
                 gr1 = min(H, r + inner + 1) - r0
                 gc0 = max(0, c - inner) - c0
@@ -246,27 +369,49 @@ class LocalRXDetector(AnomalyDetector):
 
                 n_bg = int(bg_mask.sum())
                 if n_bg < min_bg:
+                    n_skipped_bg += 1
+                    t_extract += time.time() - t0
                     continue
 
-                # Background spectra: (n_bg, B)
                 X_bg = win_sub[:, bg_mask].T   # (n_bg, B)
 
-                mu  = X_bg.mean(axis=0)                        # (B,)
-                dX  = X_bg - mu                                 # (n_bg, B)
-                cov = (dX.T @ dX) / (n_bg - 1) + reg * np.eye(B)
+                batch_X_bg[batch_idx, :n_bg] = X_bg
+                batch_n_bg[batch_idx] = n_bg
+                batch_x_test[batch_idx] = sub[:, r, c]
+                batch_coords.append((r, c))
+                batch_idx += 1
+                t_extract += time.time() - t0
 
-                # Test pixel
-                x   = sub[:, r, c] - mu                        # (B,)
+                if batch_idx == batch_size:
+                    _flush_batch()
 
-                # Mahalanobis: x @ cov⁻¹ @ x  via solve (numerically stable)
-                score_map[r, c] = float(x @ np.linalg.solve(cov, x))
+        # Flush remaining
+        _flush_batch()
+
+        logger.info(
+            "LRX compute done | scored=%d skipped_bg=%d skipped_invalid=%d | "
+            "batches=%d",
+            n_scored, n_skipped_bg, n_skipped_invalid, n_batches_flushed,
+        )
+        logger.info(
+            "LRX timing | extract=%.2fs solve=%.2fs (%.1f%% on device)",
+            t_extract, t_solve,
+            100.0 * t_solve / (t_extract + t_solve) if (t_extract + t_solve) > 0 else 0,
+        )
 
         # If stride > 1, interpolate NaN-free scored pixels to full resolution
         if stride > 1:
+            t_interp = time.time()
             score_map = self._interpolate_strided(score_map, spatial_valid, stride)
+            t_interp = time.time() - t_interp
+            logger.info("LRX: stride=%d interpolation done in %.2fs", stride, t_interp)
 
-        n_scored = int(np.sum(~np.isnan(score_map) & spatial_valid))
-        logger.info("LRX: scored %d / %d valid pixels.", n_scored, int(spatial_valid.sum()))
+        n_scored_final = int(np.sum(~np.isnan(score_map) & spatial_valid))
+        t_total = time.time() - t_total
+        logger.info(
+            "LRX: total %.2fs | scored %d / %d valid pixels",
+            t_total, n_scored_final, int(spatial_valid.sum()),
+        )
 
         self._last_result = LocalRXResult(
             lrx_score_map=score_map,
@@ -275,7 +420,7 @@ class LocalRXDetector(AnomalyDetector):
             good_band_indices=good,
             good_band_wavelengths=self._good_wavelengths,
             n_valid_pixels=int(mask.sum()),
-            n_scored_pixels=n_scored,
+            n_scored_pixels=n_scored_final,
             n_good_bands=B,
             outer_window=outer,
             inner_window=inner,
@@ -301,8 +446,7 @@ class LocalRXDetector(AnomalyDetector):
         """
         H, W = score_map.shape
 
-        # Extract the strided sub-grid (values were placed at stride-multiples)
-        sub = score_map[::stride, ::stride]          # shape ~ (H/s, W/s)
+        sub = score_map[::stride, ::stride]
         sub_valid = ~np.isnan(sub)
 
         filled = sub.copy()

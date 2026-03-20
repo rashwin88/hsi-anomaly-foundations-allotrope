@@ -11,6 +11,7 @@ orchestrator composes them but either can be used standalone.
 """
 
 import logging
+import time
 from dataclasses import dataclass, field
 
 import numpy as np
@@ -98,6 +99,8 @@ class CombinedDestriper(DataTransformer):
         self._diagnostics = diag
 
         # Stage 1: FFT notch (also detects the stripe angle)
+        t0 = time.time()
+        logger.info("CombinedDestriper: starting FFT destripe stage…")
         fft_result = self._fft_destriper.transform(
             input_data,
             validity_mask=validity_mask,
@@ -106,6 +109,7 @@ class CombinedDestriper(DataTransformer):
             exclusion_ranges=exclusion_ranges,
             spectral_family_order=spectral_family_order,
         )
+        logger.info("CombinedDestriper: FFT stage done in %.2fs", time.time() - t0)
 
         fft_diag = self._fft_destriper._diagnostics
         angles = self._fft_destriper._last_detected_angles or None
@@ -137,6 +141,8 @@ class CombinedDestriper(DataTransformer):
 
         # Stage 2: Tilted moment-matching — sequentially for each angle
         # with σ safety guard: skip any angle that makes things worse
+        logger.info("CombinedDestriper: starting moment-matching for %d angle(s)…", len(angles))
+        t_mm = time.time()
         result = fft_result
         for angle in angles:
             logger.info(
@@ -161,6 +167,8 @@ class CombinedDestriper(DataTransformer):
                     continue
 
             result = candidate
+
+        logger.info("CombinedDestriper: moment-matching done in %.2fs", time.time() - t_mm)
 
         if diag is not None:
             diag.sigma_after_combined = self._column_mean_sigma(

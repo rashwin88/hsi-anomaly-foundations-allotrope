@@ -38,6 +38,11 @@ class StacCreator:
             self.media_type = MediaType.COG
         elif self.file_name.endswith(("he5")):
             self.media_type = MediaType.HDF5
+        elif not self.file_name.startswith("ENMAP"):
+            raise TypeError(
+                f"Unsupported file type: {self.file_name!r}. "
+                "Expected .TIF, .TIFF, .he5, or an EnMAP folder."
+            )
         else:
             # For folder-based sources (e.g., EnMAP), defer media type until after parsing
             self.media_type = None
