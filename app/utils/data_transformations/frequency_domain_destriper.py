@@ -632,13 +632,20 @@ class FrequencyDomainDestriper(DataTransformer):
             padded[b, :, :p] = band_means[b]
             padded[b, :, -p:] = band_means[b]
 
+        del filled  # free ~1.4 GB before torch allocations
+
         # Move to device and batch FFT
         notch_t = torch.from_numpy(notch).to(device=device, dtype=torch.complex64)
-        # Determine batch size based on available memory
-        # Each band padded: pH*pW complex64 = pH*pW*8 bytes
-        # FFT in-place roughly same. Budget ~2 GB for safety.
-        bytes_per_band = pH * pW * 8 * 3  # input + fft + filtered
-        max_batch = max(1, int(2e9 / bytes_per_band))
+        # Determine batch size based on available memory.
+        # Each band needs: float32 input + complex64 fft + complex64 filtered + float32 result
+        bytes_per_band = pH * pW * (4 + 8 + 8 + 4)  # ~24 bytes per pixel per band
+        if device.type == "cuda":
+            # Dedicated VRAM — budget ~2 GB for FFT workspace
+            mem_budget = 2e9
+        else:
+            # CPU or MPS (unified memory) — stay small to avoid swap pressure
+            mem_budget = 500e6
+        max_batch = max(1, int(mem_budget / bytes_per_band))
         batch_size = min(B, max_batch)
         logger.info(
             "FFT filter: batch_size=%d (%.0f MB per band)",
