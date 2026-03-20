@@ -200,10 +200,6 @@ class LocalRXDetector(AnomalyDetector):
             n_valid, n_spatial, n_valid / n_good if n_good else 0,
         )
 
-    # ------------------------------------------------------------------
-    # detect
-    # ------------------------------------------------------------------
-
     def detect(self, cube: np.ndarray, validity_mask: np.ndarray = None, **kwargs) -> np.ndarray:
         """
         Run Local RX with batched torch.linalg.solve on the best available device.
