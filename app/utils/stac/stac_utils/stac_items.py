@@ -11,6 +11,7 @@ from pystac import Item, Asset, MediaType
 from app.utils.stac.stac_utils.file_name_parsers import FileNameParser
 from app.utils.stac.stac_utils.get_landsat_bounding_box import get_landsat_bounding_box
 from app.utils.stac.stac_utils.get_prisma_bounding_box import get_prisma_bounding_box
+from app.utils.stac.stac_utils.get_enmap_bounding_box import get_enmap_bounding_box
 from app.utils.stac.stac_configurations.asset_roles import AssetRole
 
 logger = logging.getLogger("STACItemCreator")
@@ -38,8 +39,8 @@ class StacCreator:
         elif self.file_name.endswith(("he5")):
             self.media_type = MediaType.HDF5
         else:
-            logger.error("The file : %s has no recognized file type", self.file_name)
-            raise TypeError("FileType not recognized")
+            # For folder-based sources (e.g., EnMAP), defer media type until after parsing
+            self.media_type = None
 
         # Create the metadata helper
         self.helper: FileNameParser = FileNameParser()
@@ -47,13 +48,17 @@ class StacCreator:
 
         # Collect bounding boxes
         # And also set the asset roles
-        # TODO: There is a small issue here as we tie the asset roles to the platform.
         if self.metadata.get("platform") == "Prisma":
             self.bounding_box: List[float] = get_prisma_bounding_box(self.file_path)
             self.asset_role = AssetRole.HYPERSPECTRAL.value
         elif self.metadata.get("platform") == "landsat-9":
             self.bounding_box: List[float] = get_landsat_bounding_box(self.file_path)
             self.asset_role = AssetRole.THERMAL.value
+        elif self.metadata.get("platform") == "EnMAP":
+            self.bounding_box: List[float] = get_enmap_bounding_box(self.file_path)
+            self.asset_role = AssetRole.HYPERSPECTRAL.value
+            if self.media_type is None:
+                self.media_type = MediaType.COG
         self.geom = self._build_geojson_geometry()
 
     def _build_geojson_geometry(self) -> Dict[str, Any]:

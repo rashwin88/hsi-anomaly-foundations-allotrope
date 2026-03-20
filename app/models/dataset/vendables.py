@@ -39,6 +39,10 @@ class VendableHyperspectralDataset(BaseModel):
         default=[], description="An ordered list of FWHM of the wavelengths"
     )
 
+    band_validity_by_position : List[int] = Field(
+        ..., description="The band validity order."
+    )
+
 
 class VendableThermalDataset(BaseModel):
     """
@@ -80,4 +84,68 @@ class VendableThermalDataset(BaseModel):
     provider_snow_presence: Optional[SkipValidation[np.ndarray]] = Field(
         default=None,
         description="The snow mask that comes from the provider of the data 1 means snow 0 means no snow",
+    )
+
+
+class VendableEnmapHyperspectralDataset(BaseModel):
+    """
+    Vendable dataset for EnMAP L2A hyperspectral data.
+    Includes separate quality layer masks (cloud, cirrus, haze, cloud shadow, snow)
+    and detector boundary info for VNIR/SWIR channel tracking.
+    """
+
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+    normalized_hyperspectral_cube: SkipValidation[np.ndarray] = Field(
+        ..., description="224-band surface reflectance cube in BSQ (C, H, W)"
+    )
+
+    validity_cube: SkipValidation[np.ndarray] = Field(
+        ...,
+        description="Combined validity mask (pixel mask AND nodata). 1=valid, 0=invalid.",
+    )
+
+    spectral_family_order: List[SpectralFamily] = Field(
+        ..., description="Per-band spectral family assignment (VNIR or SWIR)"
+    )
+
+    band_cw_order: List[float] = Field(
+        ..., description="Center wavelength of each band in order (nm)"
+    )
+
+    band_fwhm_order: List[float] = Field(
+        default=[], description="FWHM of each band in order (nm)"
+    )
+
+    band_validity_by_position: List[int] = Field(
+        ..., description="1 if band is valid, 0 otherwise"
+    )
+
+    # EnMAP quality layer masks (each is H x W, uint8)
+    cloud_mask: Optional[SkipValidation[np.ndarray]] = Field(
+        default=None, description="Cloud mask from QL_QUALITY_CLOUD"
+    )
+
+    cirrus_mask: Optional[SkipValidation[np.ndarray]] = Field(
+        default=None, description="Cirrus mask from QL_QUALITY_CIRRUS"
+    )
+
+    haze_mask: Optional[SkipValidation[np.ndarray]] = Field(
+        default=None, description="Haze mask from QL_QUALITY_HAZE"
+    )
+
+    cloud_shadow_mask: Optional[SkipValidation[np.ndarray]] = Field(
+        default=None, description="Cloud shadow mask from QL_QUALITY_CLOUDSHADOW"
+    )
+
+    snow_mask: Optional[SkipValidation[np.ndarray]] = Field(
+        default=None, description="Snow mask from QL_QUALITY_SNOW"
+    )
+
+    vnir_channel_indices: List[int] = Field(
+        ..., description="1-based channel numbers belonging to the VNIR detector"
+    )
+
+    swir_channel_indices: List[int] = Field(
+        ..., description="1-based channel numbers belonging to the SWIR detector"
     )

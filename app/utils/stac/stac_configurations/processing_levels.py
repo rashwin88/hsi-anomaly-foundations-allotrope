@@ -12,3 +12,4 @@ class ProcessingLevels(str, Enum):
 
     L2SP = "L2SP"
     L2D = "L2D"
+    L2A = "L2A"

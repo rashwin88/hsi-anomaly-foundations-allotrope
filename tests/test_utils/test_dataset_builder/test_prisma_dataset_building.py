@@ -47,3 +47,4 @@ def test_initialization_of_dataset_builder(live_source_data):
     assert vendable.normalized_hyperspectral_cube.max() <= 1
     assert vendable.validity_cube.sum() > 0
     assert vendable.validity_cube.shape[0] == 239
+    assert len(vendable.band_validity_by_position) == 239

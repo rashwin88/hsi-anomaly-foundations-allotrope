@@ -9,3 +9,4 @@ class FileCategory(Enum):
 
     HDFS = "he5"
     TIF = "tif"
+    ENMAP_FOLDER = "enmap_folder"

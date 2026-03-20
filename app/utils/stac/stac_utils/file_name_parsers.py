@@ -36,6 +36,8 @@ class FileNameParser:
             return FileNameParser.prisma
         elif file_name.startswith("LC09"):
             return FileNameParser.landsat_09
+        elif file_name.startswith("ENMAP"):
+            return FileNameParser.enmap
 
     @staticmethod
     def prisma(file_name: str) -> Dict[str, str]:
@@ -73,4 +75,30 @@ class FileNameParser:
             ),
             ApplicableFields.PRODUCT_TYPE.value: parts[7],
             ApplicableFields.BAND.value: parts[8],
+        }
+
+    @staticmethod
+    def enmap(file_name: str) -> Dict[str, str]:
+        """
+        Parses EnMAP folder/file names.
+        Pattern: ENMAP01-____L2A-DT{datatake_id}_{datetime}Z_{tile_id}_V{version}_{processing_datetime}Z
+        """
+        # Split on hyphens to get: ['ENMAP01', '____L2A', 'DT0000059367_20240128T063655Z_018_V010506_20260305T173243Z']
+        parts = file_name.split("-")
+        platform_code = parts[0]  # ENMAP01
+
+        # The DT segment contains the core metadata separated by underscores
+        dt_segment = parts[2]
+        dt_parts = dt_segment.split("_")
+        # dt_parts: ['DT0000059367', '20240128T063655Z', '018', 'V010506', '20260305T173243Z']
+
+        datetime_str = dt_parts[1].rstrip("Z")  # '20240128T063655'
+
+        return {
+            ApplicableFields.PLATFORM.value: PLATFORM_MAPPINGS.get(platform_code),
+            ApplicableFields.PROCESSING_LEVEL.value: ProcessingLevels.L2A.value,
+            ApplicableFields.DATETIME.value: datetime.datetime.strptime(
+                datetime_str, "%Y%m%dT%H%M%S"
+            ),
+            ApplicableFields.PRODUCT_TYPE.value: "STANDARD_ALL",
         }

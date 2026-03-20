@@ -15,7 +15,10 @@ from app.models.hyperspectral_concepts.band import (
     HyperpectralBandInformation,
 )
 from app.models.hyperspectral_concepts.spectral_family import SpectralFamily
-from app.models.dataset.vendables import VendableHyperspectralDataset
+from app.models.dataset.vendables import (
+    VendableHyperspectralDataset,
+    VendableEnmapHyperspectralDataset,
+)
 
 # Other abstract classes
 from app.abstract_classes.file_helper import FileHelper
@@ -23,6 +26,7 @@ from app.abstract_classes.file_helper import FileHelper
 # utility classes
 from app.utils.files.he5_helper import HE5Helper
 from app.utils.files.tif_helper import TIFHelper
+from app.utils.files.enmap_helper import EnmapHelper
 
 
 class DatasetBuilder(ABC):
@@ -88,14 +92,16 @@ class DatasetBuilder(ABC):
         pass
 
     @abstractmethod
-    def initialize_helper(self) -> Union[HE5Helper, TIFHelper]:
+    def initialize_helper(self) -> Union[HE5Helper, TIFHelper, EnmapHelper]:
         """
         Initializes the helper and populates the helper property
         """
         pass
 
     @abstractmethod
-    def vend_dataset(self, **kwargs) -> Union[VendableHyperspectralDataset]:
+    def vend_dataset(
+        self, **kwargs
+    ) -> Union[VendableHyperspectralDataset, VendableEnmapHyperspectralDataset]:
         """
         Constructs the complete dataset in a form that can be used in downstream
         applications in full.
