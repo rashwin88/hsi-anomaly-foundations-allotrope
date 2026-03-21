@@ -56,7 +56,7 @@ class StacCreator:
         if self.metadata.get("platform") == "Prisma":
             self.bounding_box: List[float] = get_prisma_bounding_box(self.file_path)
             self.asset_role = AssetRole.HYPERSPECTRAL.value
-        elif self.metadata.get("platform") == "landsat-9":
+        elif self.metadata.get("platform") in ("landsat-8", "landsat-9"):
             self.bounding_box: List[float] = get_landsat_bounding_box(self.file_path)
             self.asset_role = AssetRole.THERMAL.value
         elif self.metadata.get("platform") == "EnMAP":
