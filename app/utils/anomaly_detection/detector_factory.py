@@ -8,12 +8,14 @@ from app.abstract_classes.anomaly_detector import AnomalyDetector
 from app.models.ad_models.ad_model import ADModel
 from app.detectors.global_rx_detector import GlobalRXDetector
 from app.detectors.local_rx_detector import LocalRXDetector
+from app.detectors.mnf_compression_detector import MNFCompressionDetector
 
 # Registry: ADModel → concrete AnomalyDetector class.
 # Populate as detectors are implemented.
 _REGISTRY: dict[ADModel, Type[AnomalyDetector]] = {
     ADModel.RX:  GlobalRXDetector,
     ADModel.LRX: LocalRXDetector,
+    ADModel.MNF_RX: MNFCompressionDetector,
     # ADModel.CRD: CRDDetector,
 }
 

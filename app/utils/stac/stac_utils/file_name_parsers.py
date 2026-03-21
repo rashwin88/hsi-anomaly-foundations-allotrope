@@ -34,8 +34,8 @@ class FileNameParser:
         """
         if file_name.startswith("PRS"):
             return FileNameParser.prisma
-        elif file_name.startswith("LC09"):
-            return FileNameParser.landsat_09
+        elif file_name.startswith(("LC08", "LC09")):
+            return FileNameParser.landsat
         elif file_name.startswith("ENMAP"):
             return FileNameParser.enmap
 
@@ -58,9 +58,9 @@ class FileNameParser:
         }
 
     @staticmethod
-    def landsat_09(file_name: str) -> Dict[str, str]:
+    def landsat(file_name: str) -> Dict[str, str]:
         """
-        Parses LC09 file names
+        Parses Landsat file names (LC08, LC09).
         """
         file_id = file_name.split(".")[0]
         parts = file_id.split("_")

@@ -47,14 +47,14 @@ class LandsatDataBuilder(DatasetBuilder):
         """
         super().__init__(file_source_configuration=file_source_configuration)
         # Create the STAC item as early as possible for metadata access.
-        logger.info("Creating STAC item for PRISMA dataset.")
+        logger.info("Creating STAC item for Landsat dataset.")
         self._stac_item = StacCreator(
             file_path=self.file_source_config.source_path
         ).build_stack()
         # Load the helper for TIF access and parse band metadata.
-        logger.info("Initializing HE5 helper and extracting band metadata.")
+        logger.info("Initializing TIF helper.")
         self._file_helper: TIFHelper = self.initialize_helper()
-        logger.info("Band metadata loaded for SWIR/VNIR.")
+        logger.info("TIF helper ready.")
         self.dn_to_surface_temperature_transformer = Lc09L2spStTransformer()
         self.b10_cloud_masker = B10AdaptiveCloudMasker()
         logger.info("Loaded all transformations")
