@@ -18,6 +18,7 @@ class ADModel(str, Enum):
     RX = "rx"
     LRX = "lrx"
     CRD = "crd"
+    MNF_RX = "mnf_rx"
 
     # Deep learning detectors
     # (add as implemented)
