@@ -65,6 +65,16 @@ def patch_landsat_vendable(
             col_coords : col_coords + patching_plan.originating_request.width,
         ]
 
+        if vendable.custom_quality_mask is not None:
+            # custom_quality_mask: 0 = invalid, 1 = valid.
+            # Must be multiplied with pure_validity_mask before use.
+            output_object["custom_quality_mask.npy"] = (
+                vendable.custom_quality_mask[
+                    :,
+                    row_coords : row_coords + patching_plan.originating_request.height,
+                    col_coords : col_coords + patching_plan.originating_request.width,
+                ]
+            )
         if vendable.provider_cloud_presence is not None:
             output_object["provider_cloud_presence.npy"] = (
                 vendable.provider_cloud_presence[
