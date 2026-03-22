@@ -268,20 +268,31 @@ class PrismaDatasetBuilder(DatasetBuilder):
         # Combine all validity signals into a single mask.
         overall_validity_mask = valid_band_cube * error_pixel_cube * invalid_value_cube
 
-        logger.info("Vendable dataset assembled. Cube shape: %s", output_cube.shape)
-        # Reshape and produce vendable
+        # Convert to BSQ for the vendable output.
+        bsq_cube = self.cube_reshaper.convert_cube(
+            cube=output_cube,
+            from_format=self.default_cube_representation,
+            to_format=CubeRepresentation.BSQ,
+        )
+        bsq_validity = self.cube_reshaper.convert_cube(
+            cube=overall_validity_mask,
+            from_format=self.default_cube_representation,
+            to_format=CubeRepresentation.BSQ,
+        )
+
+        # Compute per-band valid pixel percentage from the BSQ validity cube (C, H, W).
+        pixels_per_band = bsq_validity.shape[1] * bsq_validity.shape[2]
+        band_level_validity_score = [
+            float(bsq_validity[b].sum() / pixels_per_band * 100.0)
+            for b in range(bsq_validity.shape[0])
+        ]
+
+        logger.info("Vendable dataset assembled. Cube shape: %s", bsq_cube.shape)
         return VendableHyperspectralDataset(
-            normalized_hyperspectral_cube=self.cube_reshaper.convert_cube(
-                cube=output_cube,
-                from_format=self.default_cube_representation,
-                to_format=CubeRepresentation.BSQ,
-            ),
-            validity_cube=self.cube_reshaper.convert_cube(
-                cube=overall_validity_mask,
-                from_format=self.default_cube_representation,
-                to_format=CubeRepresentation.BSQ,
-            ),
+            normalized_hyperspectral_cube=bsq_cube,
+            validity_cube=bsq_validity,
             spectral_family_order=spectral_family_by_position,
             band_cw_order=band_cw_by_position,
-            band_validity_by_position=band_validity_by_position
+            band_validity_by_position=band_validity_by_position,
+            band_level_validity_score=band_level_validity_score,
         )
