@@ -165,9 +165,13 @@ class EnmapDatasetBuilder(DatasetBuilder):
                 spectral_family_order.append(SpectralFamily.SWIR)
             band_cw_order.append(band_char.wavelength_center)
             band_fwhm_order.append(band_char.fwhm)
+            # Ashwin's Note:
+            # Band validity as a concept does not exist in EnMap as opposed to PRISMA
+            # So all bands are marked as valid.
             band_validity_by_position.append(1)
 
         # 7. Read quality masks
+        logger.info(f"Extracting Quality Mask")
         cloud_mask = self.file_helper.extract_quality_mask(
             EnmapFileComponents.QUALITY_CLOUD
         )
@@ -184,6 +188,13 @@ class EnmapDatasetBuilder(DatasetBuilder):
             EnmapFileComponents.QUALITY_SNOW
         )
 
+        # Compute per-band valid pixel percentage from the validity cube (C, H, W).
+        pixels_per_band = overall_validity.shape[1] * overall_validity.shape[2]
+        band_level_validity_score = [
+            float(overall_validity[b].sum() / pixels_per_band * 100.0)
+            for b in range(overall_validity.shape[0])
+        ]
+
         logger.info("Vendable EnMAP dataset assembled. Cube shape: %s", sr_cube.shape)
         return VendableEnmapHyperspectralDataset(
             normalized_hyperspectral_cube=sr_cube,
@@ -192,11 +203,13 @@ class EnmapDatasetBuilder(DatasetBuilder):
             band_cw_order=band_cw_order,
             band_fwhm_order=band_fwhm_order,
             band_validity_by_position=band_validity_by_position,
+            band_level_validity_score=band_level_validity_score,
             cloud_mask=cloud_mask,
             cirrus_mask=cirrus_mask,
             haze_mask=haze_mask,
             cloud_shadow_mask=cloud_shadow_mask,
             snow_mask=snow_mask,
+            # TODO: I think these will not be needed we already have the spectral family order anyway
             vnir_channel_indices=metadata.detector_boundary.vnir_expected_channels,
             swir_channel_indices=metadata.detector_boundary.swir_expected_channels,
         )

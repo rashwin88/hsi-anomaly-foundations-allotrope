@@ -21,6 +21,10 @@ def _make_vendable(
     band_validity: list[int],
 ) -> VendableHyperspectralDataset:
     C = cube.shape[0]
+    pixels_per_band = validity.shape[1] * validity.shape[2]
+    band_level_validity_score = [
+        float(validity[b].sum() / pixels_per_band * 100.0) for b in range(C)
+    ]
     return VendableHyperspectralDataset(
         normalized_hyperspectral_cube=cube,
         validity_cube=validity,
@@ -28,6 +32,7 @@ def _make_vendable(
         band_cw_order=[500.0 + i * 5 for i in range(C)],
         band_fwhm_order=[5.0] * C,
         band_validity_by_position=band_validity,
+        band_level_validity_score=band_level_validity_score,
     )
 
 

@@ -90,6 +90,10 @@ def test_vend_dataset(enmap_builder):
     assert vendable.cloud_shadow_mask is not None
     assert vendable.snow_mask is not None
 
+    # Band-level validity scores
+    assert len(vendable.band_level_validity_score) == 224
+    assert all(0.0 <= s <= 100.0 for s in vendable.band_level_validity_score)
+
     # Channel indices
     assert len(vendable.vnir_channel_indices) == 91
     assert len(vendable.swir_channel_indices) == 133

@@ -9,6 +9,8 @@ from app.models.ad_models.ad_model import ADModel
 from app.detectors.global_rx_detector import GlobalRXDetector
 from app.detectors.local_rx_detector import LocalRXDetector
 from app.detectors.mnf_compression_detector import MNFCompressionDetector
+from app.detectors.mnf_compression_lrx_detector import MNFCompressionLRXDetector
+from app.detectors.thermal_grx_detector import ThermalGRXDetector
 
 # Registry: ADModel → concrete AnomalyDetector class.
 # Populate as detectors are implemented.
@@ -16,6 +18,8 @@ _REGISTRY: dict[ADModel, Type[AnomalyDetector]] = {
     ADModel.RX:  GlobalRXDetector,
     ADModel.LRX: LocalRXDetector,
     ADModel.MNF_RX: MNFCompressionDetector,
+    ADModel.MNF_LRX: MNFCompressionLRXDetector,
+    ADModel.THERMAL_GRX: ThermalGRXDetector,
     # ADModel.CRD: CRDDetector,
 }
 

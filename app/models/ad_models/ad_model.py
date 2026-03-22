@@ -19,6 +19,8 @@ class ADModel(str, Enum):
     LRX = "lrx"
     CRD = "crd"
     MNF_RX = "mnf_rx"
+    MNF_LRX = "mnf_lrx"
+    THERMAL_GRX = "thermal_grx"
 
     # Deep learning detectors
     # (add as implemented)

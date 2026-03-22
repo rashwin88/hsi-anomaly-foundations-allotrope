@@ -43,6 +43,11 @@ class VendableHyperspectralDataset(BaseModel):
         ..., description="The band validity order."
     )
 
+    band_level_validity_score: List[float] = Field(
+        ...,
+        description="Percentage of valid pixels in each band (0.0 to 100.0), derived from the validity cube.",
+    )
+
 
 class VendableThermalDataset(BaseModel):
     """
@@ -119,6 +124,11 @@ class VendableEnmapHyperspectralDataset(BaseModel):
 
     band_validity_by_position: List[int] = Field(
         ..., description="1 if band is valid, 0 otherwise"
+    )
+
+    band_level_validity_score: List[float] = Field(
+        ...,
+        description="Percentage of valid pixels in each band (0.0 to 100.0), derived from the validity cube.",
     )
 
     # EnMAP quality layer masks (each is H x W, uint8)

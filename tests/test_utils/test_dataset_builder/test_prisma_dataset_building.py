@@ -48,3 +48,5 @@ def test_initialization_of_dataset_builder(live_source_data):
     assert vendable.validity_cube.sum() > 0
     assert vendable.validity_cube.shape[0] == 239
     assert len(vendable.band_validity_by_position) == 239
+    assert len(vendable.band_level_validity_score) == 239
+    assert all(0.0 <= s <= 100.0 for s in vendable.band_level_validity_score)

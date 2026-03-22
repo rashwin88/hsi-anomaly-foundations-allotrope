@@ -3,7 +3,7 @@ Generates intermediate patches for landsat
 """
 
 import logging
-from typing import List, Dict, Generator
+from typing import List, Dict, Generator, Literal
 import random
 import os
 from functools import partial
@@ -29,32 +29,64 @@ S3_BUCKET: str = "allotrope-raw-data-india"
 
 class LandsatIntermediateSharder(IntermediateSharder):
     """
-    Landsat intermediate sharder
+    Landsat intermediate sharder.
+
+    Discovers all scenes from S3, splits them deterministically into train/test
+    based on the provided seed and test_fraction, then patches only the scenes
+    belonging to the requested split.
+
+    S3 destination prefix is computed automatically as:
+        patches/landsat/{split}/intermediate/w{width}_h{height}_s{stride}/
     """
+
+    SENSOR = "landsat"
 
     def __init__(
         self,
         source_folder: str,
         destination_folder: str,
-        destination_prefix: str,
+        split: Literal["train", "test"] = "train",
+        test_fraction: float = 0.2,
+        seed: int = 42,
         width: int = 128,
         height: int = 128,
         stride: int = 64,
     ):
-        """
-        Class Constructor
-        """
-
         self.s3_client = boto3.client("s3", region_name="ap-south-1")
         self.paginator = self.s3_client.get_paginator("list_objects_v2")
         self._source_folder = source_folder
         self._destination_folder = destination_folder
-        # The destination prefix is where we want to write to s3 to.
-        self.destination_prefix = destination_prefix
+        self.split = split
         self.width = width
         self.height = height
         self.stride = stride
         self.target_size = 1 * 1024 * 1024 * 1024  # 1 GB per shard
+
+        # Discover all scenes and split deterministically
+        all_scenes = sorted(self.s3_searcher())
+        rng = random.Random(seed)
+        rng.shuffle(all_scenes)
+        split_idx = int(len(all_scenes) * (1 - test_fraction))
+        if split == "train":
+            self._scene_prefixes = all_scenes[:split_idx]
+        else:
+            self._scene_prefixes = all_scenes[split_idx:]
+
+        print(
+            f"Split '{split}': {len(self._scene_prefixes)} scenes "
+            f"(of {len(all_scenes)} total, seed={seed}, test_fraction={test_fraction})"
+        )
+
+        # Build the structured S3 prefix
+        self.destination_prefix = self.build_prefix(
+            sensor=self.SENSOR,
+            split=self.split,
+            stage="intermediate",
+            width=self.width,
+            height=self.height,
+            stride=self.stride,
+        )
+
         self.shard_pattern = f"{self.destination_folder}intermediate_shard_%04d.tar"
 
         # Build the upload hook
@@ -75,7 +107,7 @@ class LandsatIntermediateSharder(IntermediateSharder):
 
     def s3_searcher(self) -> List:
         """
-        Runs through the S3 bucket and returns specific fodlers representing scenes
+        Runs through the S3 bucket and returns specific folders representing scenes
         """
         output = []
         # Build the page iterator
@@ -147,16 +179,16 @@ class LandsatIntermediateSharder(IntermediateSharder):
 
     def sharder(self, scenes: int = None):
         """
-        Orcherstrates the intermediate sharding process.
+        Orchestrates the intermediate sharding process.
+        Only processes scenes belonging to this instance's split.
         """
         processed_patches = 0
         valid_patches = 0
         with wds.ShardWriter(
             self.shard_pattern, maxsize=self.target_size, post=self.upload_hook
         ) as sink:
-            # Search S3
-            scene_prefixes = self.s3_searcher()
-            # Randomly mix the scene prefixes because there may be some regularity here
+            scene_prefixes = list(self._scene_prefixes)
+            # Shuffle within the split for shard diversity
             random.shuffle(scene_prefixes)
             # Truncate to save time
             if scenes:
@@ -199,9 +231,18 @@ if __name__ == "__main__":
     formatter = logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s")
     console_handler.setFormatter(formatter)
 
-    patcher = LandsatIntermediateSharder(
+    train_sharder = LandsatIntermediateSharder(
         source_folder="/home/ubuntu/",
         destination_folder="/home/ubuntu/",
-        destination_prefix="patches/intermediate/test1",
+        split="train",
+        seed=42,
     )
-    patcher.sharder(scenes=2)
+    train_sharder.sharder(scenes=2)
+
+    test_sharder = LandsatIntermediateSharder(
+        source_folder="/home/ubuntu/",
+        destination_folder="/home/ubuntu/",
+        split="test",
+        seed=42,
+    )
+    test_sharder.sharder(scenes=2)

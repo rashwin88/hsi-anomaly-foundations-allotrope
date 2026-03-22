@@ -1,11 +1,15 @@
 """
-Final patching is basically a mixing operation with some sort of
-shuffle buffer in play. Final patching is basically provider independent IMO
+Final patching is a mixing operation with a shuffle buffer.
+It reads intermediate shards for a specific sensor/split, shuffles patches
+across scenes, and writes final ML-ready shards.
+
+Final patching is provider-independent — it only needs to know which
+intermediate prefix to read from.
 """
 
-from multiprocessing import process
 import os
 import boto3
+from typing import Literal
 from functools import partial
 
 from torch.utils.data import DataLoader
@@ -13,6 +17,7 @@ import webdataset as wds
 from tqdm import tqdm
 import torch
 
+from app.abstract_classes.intermediate_sharder import IntermediateSharder
 from app.utils.general_utils.s3_upload_and_delete import s3_upload_and_cleanup
 
 S3_BUCKET: str = "allotrope-raw-data-india"
@@ -22,26 +27,47 @@ TARGET_GB = 1024**3
 
 class FinalPatchShuffler:
     """
-    Implements a final patch shuffler
+    Reads intermediate shards for a given sensor/split/patch-size from S3,
+    shuffles patches across scenes, and writes final shards.
+
+    S3 paths are computed automatically:
+        Source: patches/{sensor}/{split}/intermediate/w{width}_h{height}_s{stride}/
+        Dest:   patches/{sensor}/{split}/final/w{width}_h{height}_s{stride}/
     """
 
     def __init__(
         self,
-        intermediate_patch_s3_key: str,  # Needs the / at the end
-        final_s3_key: str,
-        shard_temp_location="/Users/ashwinravi/Desktop/",
+        sensor: str,
+        split: Literal["train", "test"],
+        width: int = 128,
+        height: int = 128,
+        stride: int = 64,
+        shard_temp_location: str = "/tmp/",
         worker_count: int = 10,
         shuffle_size: int = 10,
         patch_write_count: int = 10_000,
     ):
-        """
-        We only need the intermediate location and the final location with no other information.
-        """
-
         self.s3_client = boto3.client("s3", region_name="ap-south-1")
         self.paginator = self.s3_client.get_paginator("list_objects_v2")
-        self._source_key = intermediate_patch_s3_key
-        self._destination_key = final_s3_key
+
+        # Build structured prefixes
+        self._source_key = IntermediateSharder.build_prefix(
+            sensor=sensor,
+            split=split,
+            stage="intermediate",
+            width=width,
+            height=height,
+            stride=stride,
+        )
+        self._destination_key = IntermediateSharder.build_prefix(
+            sensor=sensor,
+            split=split,
+            stage="final",
+            width=width,
+            height=height,
+            stride=stride,
+        )
+
         self.shard_temp_location = f"{shard_temp_location}{FINAL_SHARD_PATTERN}"
 
         # We immediately need to compute the shard ranges
@@ -51,7 +77,7 @@ class FinalPatchShuffler:
             f"pipe: aws s3 cp s3://{S3_BUCKET}/{self._source_key}{self._shard_ranges} -"
         )
 
-        # Create the upoload hook
+        # Create the upload hook
         self.upload_hook = partial(
             s3_upload_and_cleanup,
             bucket_name=S3_BUCKET,
@@ -73,6 +99,13 @@ class FinalPatchShuffler:
         # Create the dataloader
         self.dataloader = DataLoader(
             self.dataset, num_workers=self.worker_count, batch_size=None
+        )
+
+        print(
+            f"FinalPatchShuffler ready\n"
+            f"  Source:      s3://{S3_BUCKET}/{self._source_key}\n"
+            f"  Destination: s3://{S3_BUCKET}/{self._destination_key}\n"
+            f"  Patches to write: {self.patch_write_count}"
         )
 
     def _compute_shard_ranges(self):
@@ -122,8 +155,8 @@ class FinalPatchShuffler:
                     print("Reached Total Patch Count. Halting")
                     break
                 ## A Key element here is to convert every tensor back to numpy.
-                # This is important because of tensors cannpt be handled natively by webdataset but dataloader sort of converts them to tensors
-                # Automatically
+                # This is important because tensors cannot be handled natively by webdataset
+                # but dataloader automatically converts them to tensors
                 for key, value in patch_dict.items():
                     if isinstance(value, torch.Tensor):
                         patch_dict[key] = value.cpu().numpy()
@@ -133,8 +166,20 @@ class FinalPatchShuffler:
 
 
 if __name__ == "__main__":
-    finals = FinalPatchShuffler(
-        intermediate_patch_s3_key="patches/intermediate/s200w128h128s64/",
-        final_s3_key="patches/final/test2/",
+    train_final = FinalPatchShuffler(
+        sensor="landsat",
+        split="train",
+        width=128,
+        height=128,
+        stride=64,
     )
-    finals.write_shards()
+    train_final.write_shards()
+
+    test_final = FinalPatchShuffler(
+        sensor="landsat",
+        split="test",
+        width=128,
+        height=128,
+        stride=64,
+    )
+    test_final.write_shards()
