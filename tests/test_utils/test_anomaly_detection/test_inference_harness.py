@@ -59,6 +59,7 @@ def hyperspectral_vendable() -> VendableHyperspectralDataset:
         band_cw_order=[400.0 + i * 10 for i in range(C)],
         band_fwhm_order=[5.0] * C,
         band_validity_by_position=[1] * C,
+        band_level_validity_score=[100.0] * C,
     )
 
 
@@ -197,6 +198,7 @@ def test_overlapping_patches_average_correctly():
         band_cw_order=[400.0 + i * 10 for i in range(C)],
         band_fwhm_order=[5.0] * C,
         band_validity_by_position=[1] * C,
+        band_level_validity_score=[100.0] * C,
     )
 
     pc = PatchConfig(patch_height=40, patch_width=40, stride=20)
@@ -265,6 +267,7 @@ def test_patched_non_divisible_dimensions():
         band_cw_order=[400.0 + i * 10 for i in range(C)],
         band_fwhm_order=[5.0] * C,
         band_validity_by_position=[1] * C,
+        band_level_validity_score=[100.0] * C,
     )
 
     pc = PatchConfig(patch_height=32, patch_width=32, stride=32)

@@ -3,16 +3,37 @@ Abstraction for intermediate sharding
 """
 
 from abc import ABC, abstractmethod
-from typing import Generator, List, Dict
+from typing import Generator, List, Dict, Literal
 
 
 class IntermediateSharder(ABC):
     """
-    Defines an intermediate sharder
+    Defines an intermediate sharder.
+
+    Subclasses must define the sensor name and accept a split + patch dimensions.
+    The S3 destination prefix is computed automatically as:
+        patches/{sensor}/{split}/intermediate/w{width}_h{height}_s{stride}/
     """
+
+    SENSOR: str  # Subclasses must set this (e.g. "landsat", "enmap", "prisma")
 
     def __init__(self):
         pass
+
+    @staticmethod
+    def build_prefix(
+        sensor: str,
+        split: str,
+        stage: str,
+        width: int,
+        height: int,
+        stride: int,
+    ) -> str:
+        """
+        Builds a structured S3 prefix from the given parameters.
+        Example: patches/landsat/train/intermediate/w128_h128_s64/
+        """
+        return f"patches/{sensor}/{split}/{stage}/w{width}_h{height}_s{stride}/"
 
     @property
     @abstractmethod
@@ -40,7 +61,7 @@ class IntermediateSharder(ABC):
     @abstractmethod
     def s3_downloader(self, key: str) -> Dict | None:
         """
-        Downlaods the target file from S3
+        Downloads the target file from S3
         """
         pass
 
