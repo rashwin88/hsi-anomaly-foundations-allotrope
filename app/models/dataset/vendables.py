@@ -76,6 +76,15 @@ class VendableThermalDataset(BaseModel):
 
     #### Provider specific data - we dont have access to this usually (use with care)
 
+    custom_quality_mask: Optional[SkipValidation[np.ndarray]] = Field(
+        default=None,
+        description=(
+            "QA_PIXEL-derived quality mask. 0 = invalid (fill, cloud, dilated cloud, "
+            "cloud shadow, or medium/high cirrus), 1 = valid. "
+            "Must be multiplied with pure_validity_mask before use."
+        ),
+    )
+
     provider_cloud_presence: Optional[SkipValidation[np.ndarray]] = Field(
         default=None,
         description="The cloud mask that comes from the provider of the data 1 means cloud 0 means no cloud",

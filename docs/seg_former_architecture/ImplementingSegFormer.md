@@ -1,7 +1,30 @@
 ### Implementation of the SegFormer Architecture
 
+#### Spectral Compressor (Learnable MNF Analogue)
+
+Before any spatial processing, we compress the spectral channels from $C_{in}$ (e.g. 256 bands) down to $C_{compressed}$ using a $1 \times 1$ convolution. This is conceptually analogous to MNF (Minimum Noise Fraction) — it learns a linear projection of the input spectra that is optimized end-to-end with the reconstruction objective.
+
+At each spatial position $(i, j)$, the output channel $m$ is:
+
+$$
+z_{(b, m, i, j)} = \sum_{c=1}^{C_{in}} W_{(m,c)} \cdot x_{(b,c,i,j)} + b_m
+$$
+
+Each output channel is a learned weighted sum across all input spectral bands — a linear combination, same family as PCA/MNF but trained jointly with the full network.
+
+1. Apply a `Conv2d` with kernel size $1$, stride $1$, padding $0$ to map $C_{in} \rightarrow C_{compressed}$
+$$
+x[(B, C_{in}, H, W)] \rightarrow (Conv2D \: K=1, S=1, P=0) \rightarrow x'[(B, C_{compressed}, H, W)]
+$$
+
+2. Apply `BatchNorm2d` to stabilize per-channel statistics across the batch. We use BatchNorm rather than LayerNorm here because the data is still in spatial $(B, C, H, W)$ form and BN normalizes per-channel across the batch dimension.
+
+3. No nonlinearity is applied — keeping the projection strictly linear preserves interpretability. The learned weight matrix $W[(C_{compressed}, C_{in})]$ can be inspected post-training to see which spectral bands contribute most to each compressed channel, effectively revealing the "virtual MNF components" the network discovered.
+
+The output $x'[(B, C_{compressed}, H, W)]$ becomes the input to the Overlap Patch Embedding, so $C_{compressed}$ replaces $C_{in}$ in all downstream stages.
+
 #### Overlap Patch Embedding
-Let us imagine that the input image has a size $ (B, C , H, W) $. We first apply the `Conv2d` with a kernel size `K`, stride `S` and padding `P`. The output of the convolution is a tensor of size $ (B,C_{out}, H', W') $.  Where
+The input to this stage is now $ (B, C_{compressed} , H, W) $. We apply the `Conv2d` with a kernel size `K`, stride `S` and padding `P`. The output of the convolution is a tensor of size $ (B,C_{out}, H', W') $.  Where
 
 $$
 H' = floor\left(\frac{H+2P -K} {S}\right) + 1

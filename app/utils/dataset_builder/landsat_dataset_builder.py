@@ -164,13 +164,37 @@ class LandsatDataBuilder(DatasetBuilder):
             )
 
             # Now that we have the data, we can create the masks we need
-            # First we get the provider cloud presence
-            # We remove dilated clouds, cirrus, cloud and cloud shadow to be absolutely sure
+            # QA_PIXEL bit layout (Landsat 9 Collection 2):
+            #   Bit 0:     Fill
+            #   Bit 1:     Dilated Cloud
+            #   Bit 2:     Cirrus (simple flag)
+            #   Bit 3:     Cloud
+            #   Bit 4:     Cloud Shadow
+            #   Bit 5:     Snow
+            #   Bit 6:     Clear
+            #   Bit 7:     Water
+            #   Bits 14-15: Cirrus confidence (00=none, 01=low, 10=medium, 11=high)
+
+            # custom_quality_mask: 0 = invalid, 1 = valid.
+            # Flags fill, cloud, dilated cloud, cloud shadow, medium/high cirrus.
+            # Must be multiplied with pure_validity_mask before use.
+            flagged = (
+                ((qa_data >> 0) & 1)   # Bit 0:  Fill
+                | ((qa_data >> 1) & 1)   # Bit 1:  Dilated Cloud
+                | ((qa_data >> 3) & 1)   # Bit 3:  Cloud
+                | ((qa_data >> 4) & 1)   # Bit 4:  Cloud Shadow
+                | ((qa_data >> 15) & 1)  # Bit 15: Cirrus confidence high bit (medium + high)
+            )
+            custom_quality_mask = (1 - flagged).astype(np.int8)
+
+            # provider_cloud_presence combines cloud, shadow, cirrus, snow, and water.
+            # 1 = flagged (unusable), 0 = clear.
             provider_cloud_presence = (
-                ((qa_data >> 1) & 1)
-                | ((qa_data >> 2) & 1)
-                | ((qa_data >> 3) & 1)
-                | ((qa_data >> 4) & 1)
+                ((qa_data >> 2) & 1)  # Cirrus
+                | ((qa_data >> 3) & 1)  # Cloud
+                | ((qa_data >> 4) & 1)  # Cloud Shadow
+                | ((qa_data >> 5) & 1)  # Snow
+                | ((qa_data >> 7) & 1)  # Water
             )
 
             provider_water_presence = (qa_data >> 7) & 1
@@ -181,6 +205,7 @@ class LandsatDataBuilder(DatasetBuilder):
                 validity_cube=overall_mask,
                 pure_validity_mask=validity_mask,
                 cloud_mask=cloud_mask,
+                custom_quality_mask=custom_quality_mask,
                 provider_water_presence=provider_water_presence,
                 provider_snow_presence=provider_snow_presence,
                 provider_cloud_presence=provider_cloud_presence,
