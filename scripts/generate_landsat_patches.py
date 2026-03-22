@@ -135,7 +135,7 @@ def main():
         help="Local temp dir for shard files",
     )
     parser.add_argument(
-        "",
+        "--shard-temp-location",
         type=str,
         default="/home/ubuntu/",
         help="Local temp dir for final shard files",
