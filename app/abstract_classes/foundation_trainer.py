@@ -12,6 +12,7 @@ import random
 import shutil
 import subprocess
 from abc import ABC, abstractmethod
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 from tqdm import tqdm
@@ -368,12 +369,15 @@ class FoundationTrainer(ABC):
         subdir = f"{split}/{data.stage}/w{size}_h{size}_s{size // 2}"
         return Path(self.config.hot_storage.local_cache_dir) / subdir
 
-    def _sync_shards(self, split: str, size: int, num_shards: int) -> None:
+    def _sync_shards(
+        self, split: str, size: int, num_shards: int, max_parallel: int = 10
+    ) -> None:
         """
         Sync a random subset of shards from S3 to local disk.
 
         Lists all available shards for this split/size, randomly selects
-        num_shards of them, and downloads via aws s3 cp.
+        num_shards of them, and downloads via aws s3 cp in parallel
+        using a thread pool (max_parallel concurrent downloads).
         """
         data = self.config.data
         shard_key = data.resolve_shard_key(split=split, size=size)
@@ -400,11 +404,7 @@ class FoundationTrainer(ABC):
         local_dir = self._local_shard_dir(split, size)
         local_dir.mkdir(parents=True, exist_ok=True)
 
-        for key in tqdm(
-            selected,
-            desc=f"Syncing {split}/{size}px shards",
-            unit="shard",
-        ):
+        def _download_one(key: str) -> None:
             filename = key.split("/")[-1]
             local_path = local_dir / filename
             s3_url = f"s3://{data.bucket_name}/{key}"
@@ -414,6 +414,18 @@ class FoundationTrainer(ABC):
                 check=True,
                 capture_output=True,
             )
+
+        # Download in parallel with tqdm progress
+        with ThreadPoolExecutor(max_workers=max_parallel) as pool:
+            futures = {pool.submit(_download_one, key): key for key in selected}
+            with tqdm(
+                total=len(selected),
+                desc=f"Syncing {split}/{size}px shards",
+                unit="shard",
+            ) as pbar:
+                for future in as_completed(futures):
+                    future.result()  # raises if download failed
+                    pbar.update(1)
 
     def _clear_local_shards(self, split: str) -> None:
         """Delete all locally cached shards for a given split."""
