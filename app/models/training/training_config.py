@@ -135,14 +135,15 @@ class HotStorageConfig(BaseModel):
     """
     Controls local shard caching for fast training.
 
-    Instead of streaming every batch from S3, a rotating window of shards
-    is synced to local disk. Training reads from local NVMe/SSD, then
-    shards are swapped out for fresh ones every epochs_per_rotation epochs.
+    Sync-once strategy: shards are downloaded from S3 once and kept on
+    local disk for the entire training run (and future runs if
+    skip_sync_if_exists=True). No rotation — shardshuffle provides
+    different ordering each epoch for data diversity.
 
-    Test shards are synced once and kept for the entire run to ensure
-    consistent validation.
+    To get fresh data, either set skip_sync_if_exists=False or delete
+    the local_cache_dir manually before running.
 
-    Disk usage per rotation = shards_per_size × num_patch_sizes × ~1GB per shard.
+    Disk usage = (train_shards_per_size + test_shards_per_size) × num_sizes × ~1GB.
     """
 
     enabled: bool = Field(
@@ -154,19 +155,24 @@ class HotStorageConfig(BaseModel):
         description="Local directory for cached shards",
     )
     train_shards_per_size: int = Field(
-        default=20,
+        default=200,
         gt=0,
-        description="Number of train shards to sync per patch size per rotation",
+        description="Number of train shards to sync per patch size (one-time)",
     )
     test_shards_per_size: int = Field(
-        default=5,
+        default=10,
         gt=0,
-        description="Number of test shards to sync per patch size (synced once)",
+        description="Number of test shards to sync per patch size (one-time)",
     )
-    epochs_per_rotation: int = Field(
-        default=5,
+    skip_sync_if_exists: bool = Field(
+        default=True,
+        description="Skip S3 download if local shards already exist. "
+        "Avoids repeated egress costs across training runs.",
+    )
+    max_parallel_downloads: int = Field(
+        default=30,
         gt=0,
-        description="Train this many epochs before swapping shards",
+        description="Max concurrent aws s3 cp downloads during sync",
     )
 
 

@@ -119,11 +119,17 @@ def _run_one_final(
     worker_count: int,
     shuffle_size: int,
 ):
-    """Single final sharding job."""
+    """Single final sharding job. Each job gets its own temp dir to avoid clobbering."""
     config = PATCH_CONFIGS[size]
     patch_count = config["patch_write_count"]
     label = f"[Final] {split} w{config['width']}_h{config['height']}_s{config['stride']}"
     print(f"  {label}  (patch_write_count={patch_count:,})")
+
+    # Each job writes to its own temp dir to avoid multiple workers
+    # writing to the same shard file when running in parallel
+    job_temp_dir = tempfile.mkdtemp(
+        prefix=f"final_{split}_{size}_", dir=shard_temp_location
+    )
 
     start = time.time()
     shuffler = FinalPatchShuffler(
@@ -132,13 +138,18 @@ def _run_one_final(
         width=config["width"],
         height=config["height"],
         stride=config["stride"],
-        shard_temp_location=shard_temp_location,
+        shard_temp_location=job_temp_dir + "/",
         worker_count=worker_count,
         shuffle_size=shuffle_size,
         patch_write_count=patch_count,
     )
     shuffler.write_shards()
     elapsed = time.time() - start
+
+    # Clean up empty temp dir (shards are uploaded to S3 and deleted by the hook)
+    if os.path.exists(job_temp_dir) and not os.listdir(job_temp_dir):
+        os.rmdir(job_temp_dir)
+
     print(f"  {label} done in {elapsed:.1f}s")
     return label, elapsed
 

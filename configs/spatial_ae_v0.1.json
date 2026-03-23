@@ -29,8 +29,9 @@
     "hot_storage": {
         "enabled": true,
         "local_cache_dir": "/tmp/hot_shards/",
-        "train_shards_per_size": 50,
+        "train_shards_per_size": 200,
         "test_shards_per_size": 10,
-        "epochs_per_rotation": 5
+        "skip_sync_if_exists": true,
+        "max_parallel_downloads": 30
     }
 }

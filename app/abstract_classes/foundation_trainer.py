@@ -9,7 +9,6 @@ and validation_step().
 
 import logging
 import random
-import shutil
 import subprocess
 from abc import ABC, abstractmethod
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -142,62 +141,41 @@ class FoundationTrainer(ABC):
 
     def _train_with_hot_storage(self) -> None:
         """
-        Hot storage training loop with shard rotation.
+        Sync-once hot storage training loop.
 
-        1. Sync test shards once (fixed for entire run)
-        2. For each rotation:
-           a. Sync a random subset of train shards to local disk
-           b. Build local dataloaders
-           c. Train for epochs_per_rotation epochs
-           d. Delete local train shards
+        1. Sync train and test shards to local disk (skipped if already present
+           and skip_sync_if_exists=True — avoids repeated S3 egress costs)
+        2. Build local dataloaders
+        3. Train all epochs from local disk (shardshuffle provides data diversity)
+        4. Shards are NOT deleted at the end — kept for future runs
         """
         data = self.config.data
         hot = self.config.hot_storage
         patch_sizes = data.patch_sizes
 
-        # Sync test shards once — they stay for the entire run
-        logger.info("Syncing test shards to local disk (one-time)...")
-        for size in patch_sizes:
-            self._sync_shards(split="test", size=size, num_shards=hot.test_shards_per_size)
+        # Sync shards (one-time unless skip_sync_if_exists is False)
+        self._ensure_local_shards(
+            split="test", sizes=patch_sizes, num_shards=hot.test_shards_per_size
+        )
+        self._ensure_local_shards(
+            split="train", sizes=patch_sizes, num_shards=hot.train_shards_per_size
+        )
+
+        # Build local dataloaders
+        train_loaders = {
+            size: self._build_local_dataloader(split="train", size=size)
+            for size in patch_sizes
+        }
         test_loaders = {
             size: self._build_local_dataloader(split="test", size=size)
             for size in patch_sizes
         }
 
-        # Calculate rotations needed to cover all epochs
-        total_epochs = data.num_epochs
-        epochs_per_rot = hot.epochs_per_rotation
-        num_rotations = (total_epochs + epochs_per_rot - 1) // epochs_per_rot
-        global_epoch = 0
+        # Train all epochs from local disk
+        for epoch in range(data.num_epochs):
+            self._run_epoch(epoch, train_loaders, test_loaders)
 
-        for rotation in range(num_rotations):
-            # Sync fresh train shards
-            logger.info(
-                f"Rotation {rotation + 1}/{num_rotations} — "
-                f"syncing {hot.train_shards_per_size} train shards per size..."
-            )
-            self._clear_local_shards(split="train")
-            for size in patch_sizes:
-                self._sync_shards(
-                    split="train", size=size, num_shards=hot.train_shards_per_size
-                )
-
-            train_loaders = {
-                size: self._build_local_dataloader(split="train", size=size)
-                for size in patch_sizes
-            }
-
-            # Train for epochs_per_rotation epochs on these shards
-            for _ in range(epochs_per_rot):
-                if global_epoch >= total_epochs:
-                    break
-                self._run_epoch(global_epoch, train_loaders, test_loaders)
-                global_epoch += 1
-
-        # Cleanup all local shards at the end
-        self._clear_local_shards(split="train")
-        self._clear_local_shards(split="test")
-        logger.info("Training complete. Local shards cleaned up.")
+        logger.info("Training complete. Local shards kept for future runs.")
 
     def _run_epoch(
         self,
@@ -369,70 +347,108 @@ class FoundationTrainer(ABC):
         subdir = f"{split}/{data.stage}/w{size}_h{size}_s{size // 2}"
         return Path(self.config.hot_storage.local_cache_dir) / subdir
 
-    def _sync_shards(
-        self, split: str, size: int, num_shards: int, max_parallel: int = 10
+    def _ensure_local_shards(
+        self, split: str, sizes: list[int], num_shards: int
     ) -> None:
         """
-        Sync a random subset of shards from S3 to local disk.
+        Ensure local shards exist for all sizes. If skip_sync_if_exists
+        is True and shards are already present, skip the download entirely.
+        """
+        hot = self.config.hot_storage
 
-        Lists all available shards for this split/size, randomly selects
-        num_shards of them, and downloads via aws s3 cp in parallel
-        using a thread pool (max_parallel concurrent downloads).
+        if hot.skip_sync_if_exists:
+            # Check if all sizes already have shards locally
+            all_present = all(
+                any(self._local_shard_dir(split, size).glob("*.tar"))
+                for size in sizes
+                if self._local_shard_dir(split, size).exists()
+            )
+            if all_present and all(
+                self._local_shard_dir(split, size).exists() for size in sizes
+            ):
+                total = sum(
+                    len(list(self._local_shard_dir(split, size).glob("*.tar")))
+                    for size in sizes
+                )
+                logger.info(
+                    f"  Local {split} shards already exist ({total} shards). "
+                    f"Skipping S3 sync."
+                )
+                return
+
+        logger.info(f"Syncing {split} shards to local disk (one-time)...")
+        self._sync_shards_all_sizes(split=split, sizes=sizes, num_shards=num_shards)
+
+    def _sync_shards_all_sizes(
+        self, split: str, sizes: list[int], num_shards: int
+    ) -> None:
+        """
+        Sync shards for ALL patch sizes in one parallel pool.
+
+        Flattens all download jobs across all sizes into a single thread pool.
+        Skips files that already exist locally (partial resume support).
         """
         data = self.config.data
-        shard_key = data.resolve_shard_key(split=split, size=size)
+        max_parallel = self.config.hot_storage.max_parallel_downloads
 
-        # List all shard keys in S3
-        all_keys = get_all_objects_paginated(
-            bucket_name=data.bucket_name,
-            prefix_key=shard_key,
-            region_name=data.region_name,
-            page_size=500,
-        )
-        # Filter to .tar files only
-        tar_keys = [k for k in all_keys if k.endswith(".tar")]
+        # Build the full download list across all sizes
+        download_jobs = []  # list of (s3_key, local_path)
 
-        if not tar_keys:
-            raise FileNotFoundError(
-                f"No shards found at s3://{data.bucket_name}/{shard_key}"
+        for size in sizes:
+            shard_key = data.resolve_shard_key(split=split, size=size)
+            all_keys = get_all_objects_paginated(
+                bucket_name=data.bucket_name,
+                prefix_key=shard_key,
+                region_name=data.region_name,
+                page_size=500,
             )
+            tar_keys = [k for k in all_keys if k.endswith(".tar")]
 
-        # Random subset
-        selected = random.sample(tar_keys, min(num_shards, len(tar_keys)))
+            if not tar_keys:
+                raise FileNotFoundError(
+                    f"No shards found at s3://{data.bucket_name}/{shard_key}"
+                )
 
-        # Download to local dir
-        local_dir = self._local_shard_dir(split, size)
-        local_dir.mkdir(parents=True, exist_ok=True)
+            selected = random.sample(tar_keys, min(num_shards, len(tar_keys)))
 
-        def _download_one(key: str) -> None:
-            filename = key.split("/")[-1]
-            local_path = local_dir / filename
+            local_dir = self._local_shard_dir(split, size)
+            local_dir.mkdir(parents=True, exist_ok=True)
+
+            for key in selected:
+                filename = key.split("/")[-1]
+                local_path = local_dir / filename
+                # Skip files that already exist (partial resume)
+                if not local_path.exists():
+                    download_jobs.append((key, str(local_path)))
+
+        if not download_jobs:
+            logger.info(f"  All {split} shards already downloaded. Nothing to sync.")
+            return
+
+        def _download_one(job: tuple) -> None:
+            key, local_path = job
             s3_url = f"s3://{data.bucket_name}/{key}"
             subprocess.run(
-                ["aws", "s3", "cp", s3_url, str(local_path),
+                ["aws", "s3", "cp", s3_url, local_path,
                  "--region", data.region_name],
                 check=True,
                 capture_output=True,
             )
 
-        # Download in parallel with tqdm progress
+        logger.info(
+            f"  Downloading {len(download_jobs)} shards across "
+            f"{len(sizes)} sizes ({max_parallel} parallel)..."
+        )
         with ThreadPoolExecutor(max_workers=max_parallel) as pool:
-            futures = {pool.submit(_download_one, key): key for key in selected}
+            futures = {pool.submit(_download_one, job): job for job in download_jobs}
             with tqdm(
-                total=len(selected),
-                desc=f"Syncing {split}/{size}px shards",
+                total=len(download_jobs),
+                desc=f"Syncing {split} shards",
                 unit="shard",
             ) as pbar:
                 for future in as_completed(futures):
                     future.result()  # raises if download failed
                     pbar.update(1)
-
-    def _clear_local_shards(self, split: str) -> None:
-        """Delete all locally cached shards for a given split."""
-        base = Path(self.config.hot_storage.local_cache_dir) / split
-        if base.exists():
-            shutil.rmtree(base)
-            logger.info(f"  Cleared local shards: {base}")
 
     # ------------------------------------------------------------------
     # LR Scheduler
