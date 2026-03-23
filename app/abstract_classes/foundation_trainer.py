@@ -173,7 +173,7 @@ class FoundationTrainer(ABC):
             # Sync fresh train shards
             logger.info(
                 f"Rotation {rotation + 1}/{num_rotations} — "
-                f"syncing {hot.shards_per_size} train shards per size..."
+                f"syncing {hot.train_shards_per_size} train shards per size..."
             )
             self._clear_local_shards(split="train")
             for size in patch_sizes:
