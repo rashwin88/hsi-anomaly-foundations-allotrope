@@ -13,7 +13,7 @@
         "test_samples_per_epoch": {"64": 200, "128": 200, "256": 200, "512": 200},
         "stage": "intermediate",
         "batch_size": 128,
-        "num_workers": 16
+        "num_workers": 20
     },
     "learning_rate": 1e-3,
     "lr_schedule": {
@@ -29,7 +29,7 @@
     "hot_storage": {
         "enabled": true,
         "local_cache_dir": "/tmp/hot_shards/",
-        "train_shards_per_size": 200,
+        "train_shards_per_size": 100,
         "test_shards_per_size": 10,
         "skip_sync_if_exists": true,
         "max_parallel_downloads": 30
