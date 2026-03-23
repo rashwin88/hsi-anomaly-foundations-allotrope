@@ -127,6 +127,50 @@ class DataConfig(BaseModel):
 
 
 # ---------------------------------------------------------------------------
+# Hot storage config
+# ---------------------------------------------------------------------------
+
+
+class HotStorageConfig(BaseModel):
+    """
+    Controls local shard caching for fast training.
+
+    Instead of streaming every batch from S3, a rotating window of shards
+    is synced to local disk. Training reads from local NVMe/SSD, then
+    shards are swapped out for fresh ones every epochs_per_rotation epochs.
+
+    Test shards are synced once and kept for the entire run to ensure
+    consistent validation.
+
+    Disk usage per rotation = shards_per_size × num_patch_sizes × ~1GB per shard.
+    """
+
+    enabled: bool = Field(
+        default=False,
+        description="Enable hot storage. When False, streams directly from S3.",
+    )
+    local_cache_dir: str = Field(
+        default="/tmp/hot_shards/",
+        description="Local directory for cached shards",
+    )
+    train_shards_per_size: int = Field(
+        default=20,
+        gt=0,
+        description="Number of train shards to sync per patch size per rotation",
+    )
+    test_shards_per_size: int = Field(
+        default=5,
+        gt=0,
+        description="Number of test shards to sync per patch size (synced once)",
+    )
+    epochs_per_rotation: int = Field(
+        default=5,
+        gt=0,
+        description="Train this many epochs before swapping shards",
+    )
+
+
+# ---------------------------------------------------------------------------
 # LR schedule config
 # ---------------------------------------------------------------------------
 
@@ -229,6 +273,7 @@ class TrainingConfig(BaseModel):
     data: DataConfig
     checkpoint: CheckpointConfig = CheckpointConfig()
     lr_schedule: LRScheduleConfig = LRScheduleConfig()
+    hot_storage: HotStorageConfig = HotStorageConfig()
     learning_rate: float = 1e-3
     device: str | None = Field(
         default=None, description="None = auto-detect via get_device()"

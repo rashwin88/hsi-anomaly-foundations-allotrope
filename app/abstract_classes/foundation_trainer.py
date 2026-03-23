@@ -2,19 +2,26 @@
 Abstract base class for foundation model training.
 
 Provides the training loop, dataloader construction, LR scheduling,
-checkpointing, and device management. Concrete trainers implement
-build_model(), compute_loss(), and validation_step().
+checkpointing, device management, and hot storage (local shard caching
+with rotation). Concrete trainers implement build_model(), compute_loss(),
+and validation_step().
 """
 
 import logging
+import random
+import shutil
+import subprocess
 from abc import ABC, abstractmethod
 from pathlib import Path
+
+from tqdm import tqdm
 
 import torch
 import torch.nn as nn
 import webdataset as wds
 
 from app.models.training.training_config import TrainingConfig
+from app.utils.general_utils.paginated_s3_listing import get_all_objects_paginated
 from app.utils.general_utils.shard_pipe_expression_builder import (
     shard_pipe_expression_builder,
 )
@@ -95,6 +102,10 @@ class FoundationTrainer(ABC):
         """
         Full training loop.
 
+        If hot storage is enabled, shards are synced to local disk in
+        rotating windows. Test shards are synced once and reused.
+        If disabled, streams directly from S3 (original behavior).
+
         Each epoch:
           1. Train on all patch sizes (each capped at train_samples_per_epoch)
           2. Validate on all patch sizes (each capped at test_samples_per_epoch)
@@ -103,11 +114,19 @@ class FoundationTrainer(ABC):
         """
         data = self.config.data
         patch_sizes = data.patch_sizes
+        hot = self.config.hot_storage
 
-        # Build all dataloaders once upfront — avoids re-listing S3 objects
-        # and re-resolving pipe expressions every epoch.
-        # WebDataset iterators are stateless (shard shuffle happens on each
-        # iteration), so reusing the loader is safe.
+        if hot.enabled:
+            self._train_with_hot_storage()
+        else:
+            self._train_streaming()
+
+    def _train_streaming(self) -> None:
+        """Original S3 streaming training loop."""
+        data = self.config.data
+        patch_sizes = data.patch_sizes
+
+        # Build all dataloaders once upfront
         train_loaders = {
             size: self._build_dataloader(split="train", size=size)
             for size in patch_sizes
@@ -118,57 +137,128 @@ class FoundationTrainer(ABC):
         }
 
         for epoch in range(data.num_epochs):
-            # --- Training ---
-            self.model.train()
-            epoch_train_loss = 0.0
-            epoch_train_samples = 0
+            self._run_epoch(epoch, train_loaders, test_loaders)
 
-            for size in patch_sizes:
-                cap = data.train_samples_per_epoch[size]
-                size_loss, size_samples = self._run_train_pass(
-                    train_loaders[size], cap
-                )
-                epoch_train_loss += size_loss
-                epoch_train_samples += size_samples
+    def _train_with_hot_storage(self) -> None:
+        """
+        Hot storage training loop with shard rotation.
 
-            avg_train_loss = epoch_train_loss / max(epoch_train_samples, 1)
+        1. Sync test shards once (fixed for entire run)
+        2. For each rotation:
+           a. Sync a random subset of train shards to local disk
+           b. Build local dataloaders
+           c. Train for epochs_per_rotation epochs
+           d. Delete local train shards
+        """
+        data = self.config.data
+        hot = self.config.hot_storage
+        patch_sizes = data.patch_sizes
 
-            # --- Validation ---
-            self.model.eval()
-            val_losses = {}
+        # Sync test shards once — they stay for the entire run
+        logger.info("Syncing test shards to local disk (one-time)...")
+        for size in patch_sizes:
+            self._sync_shards(split="test", size=size, num_shards=hot.test_shards_per_size)
+        test_loaders = {
+            size: self._build_local_dataloader(split="test", size=size)
+            for size in patch_sizes
+        }
 
-            for size in patch_sizes:
-                cap = data.test_samples_per_epoch[size]
-                val_loss = self._run_val_pass(test_loaders[size], cap)
-                val_losses[size] = val_loss
+        # Calculate rotations needed to cover all epochs
+        total_epochs = data.num_epochs
+        epochs_per_rot = hot.epochs_per_rotation
+        num_rotations = (total_epochs + epochs_per_rot - 1) // epochs_per_rot
+        global_epoch = 0
 
-            avg_val_loss = sum(val_losses.values()) / len(val_losses)
-
-            # --- LR schedule ---
-            if self.scheduler is not None:
-                if self.config.lr_schedule.scheduler_type == "plateau":
-                    self.scheduler.step(avg_val_loss)
-                else:
-                    self.scheduler.step()
-
-            # --- Logging ---
-            current_lr = self.optimizer.param_groups[0]["lr"]
-            val_str = ", ".join(
-                f"{s}px: {l:.6f}" for s, l in sorted(val_losses.items())
-            )
+        for rotation in range(num_rotations):
+            # Sync fresh train shards
             logger.info(
-                f"Epoch {epoch + 1}/{data.num_epochs} | "
-                f"train_loss: {avg_train_loss:.6f} | "
-                f"val_loss: [{val_str}] | "
-                f"avg_val: {avg_val_loss:.6f} | "
-                f"lr: {current_lr:.2e}"
+                f"Rotation {rotation + 1}/{num_rotations} — "
+                f"syncing {hot.shards_per_size} train shards per size..."
             )
+            self._clear_local_shards(split="train")
+            for size in patch_sizes:
+                self._sync_shards(
+                    split="train", size=size, num_shards=hot.train_shards_per_size
+                )
 
-            # --- Checkpointing ---
-            ckpt = self.config.checkpoint
-            if (epoch + 1) % ckpt.save_every_n_epochs == 0:
-                self._save_checkpoint(epoch + 1, avg_train_loss, val_losses)
-                self._cleanup_checkpoints()
+            train_loaders = {
+                size: self._build_local_dataloader(split="train", size=size)
+                for size in patch_sizes
+            }
+
+            # Train for epochs_per_rotation epochs on these shards
+            for _ in range(epochs_per_rot):
+                if global_epoch >= total_epochs:
+                    break
+                self._run_epoch(global_epoch, train_loaders, test_loaders)
+                global_epoch += 1
+
+        # Cleanup all local shards at the end
+        self._clear_local_shards(split="train")
+        self._clear_local_shards(split="test")
+        logger.info("Training complete. Local shards cleaned up.")
+
+    def _run_epoch(
+        self,
+        epoch: int,
+        train_loaders: dict,
+        test_loaders: dict,
+    ) -> None:
+        """Run a single epoch: train all sizes, validate all sizes, schedule, checkpoint."""
+        data = self.config.data
+        patch_sizes = data.patch_sizes
+
+        # --- Training ---
+        self.model.train()
+        epoch_train_loss = 0.0
+        epoch_train_samples = 0
+
+        for size in patch_sizes:
+            cap = data.train_samples_per_epoch[size]
+            size_loss, size_samples = self._run_train_pass(
+                train_loaders[size], cap
+            )
+            epoch_train_loss += size_loss
+            epoch_train_samples += size_samples
+
+        avg_train_loss = epoch_train_loss / max(epoch_train_samples, 1)
+
+        # --- Validation ---
+        self.model.eval()
+        val_losses = {}
+
+        for size in patch_sizes:
+            cap = data.test_samples_per_epoch[size]
+            val_loss = self._run_val_pass(test_loaders[size], cap)
+            val_losses[size] = val_loss
+
+        avg_val_loss = sum(val_losses.values()) / len(val_losses)
+
+        # --- LR schedule ---
+        if self.scheduler is not None:
+            if self.config.lr_schedule.scheduler_type == "plateau":
+                self.scheduler.step(avg_val_loss)
+            else:
+                self.scheduler.step()
+
+        # --- Logging ---
+        current_lr = self.optimizer.param_groups[0]["lr"]
+        val_str = ", ".join(
+            f"{s}px: {l:.6f}" for s, l in sorted(val_losses.items())
+        )
+        logger.info(
+            f"Epoch {epoch + 1}/{data.num_epochs} | "
+            f"train_loss: {avg_train_loss:.6f} | "
+            f"val_loss: [{val_str}] | "
+            f"avg_val: {avg_val_loss:.6f} | "
+            f"lr: {current_lr:.2e}"
+        )
+
+        # --- Checkpointing ---
+        ckpt = self.config.checkpoint
+        if (epoch + 1) % ckpt.save_every_n_epochs == 0:
+            self._save_checkpoint(epoch + 1, avg_train_loss, val_losses)
+            self._cleanup_checkpoints()
 
     def _run_train_pass(
         self, loader, sample_cap: int
@@ -230,7 +320,7 @@ class FoundationTrainer(ABC):
     # ------------------------------------------------------------------
 
     def _build_dataloader(self, split: str, size: int):
-        """Build a webdataset dataloader for a given split and patch size."""
+        """Build a webdataset dataloader streaming from S3."""
         shard_key = self.config.data.resolve_shard_key(split=split, size=size)
         pipe_expr = shard_pipe_expression_builder(
             data_key=shard_key,
@@ -246,6 +336,91 @@ class FoundationTrainer(ABC):
             batch_size=self.config.data.batch_size,
             num_workers=self.config.data.num_workers,
         )
+
+    def _build_local_dataloader(self, split: str, size: int):
+        """Build a webdataset dataloader reading from local cached shards."""
+        local_dir = self._local_shard_dir(split, size)
+        shard_paths = sorted(local_dir.glob("*.tar"))
+
+        if not shard_paths:
+            raise FileNotFoundError(
+                f"No shards found in {local_dir}. Did _sync_shards run?"
+            )
+
+        urls = [str(p) for p in shard_paths]
+        dataset = wds.WebDataset(
+            urls, shardshuffle=self.config.data.shardshuffle
+        ).decode()
+
+        return torch.utils.data.DataLoader(
+            dataset,
+            batch_size=self.config.data.batch_size,
+            num_workers=self.config.data.num_workers,
+        )
+
+    # ------------------------------------------------------------------
+    # Hot storage helpers
+    # ------------------------------------------------------------------
+
+    def _local_shard_dir(self, split: str, size: int) -> Path:
+        """Local directory for cached shards of a given split and size."""
+        data = self.config.data
+        subdir = f"{split}/{data.stage}/w{size}_h{size}_s{size // 2}"
+        return Path(self.config.hot_storage.local_cache_dir) / subdir
+
+    def _sync_shards(self, split: str, size: int, num_shards: int) -> None:
+        """
+        Sync a random subset of shards from S3 to local disk.
+
+        Lists all available shards for this split/size, randomly selects
+        num_shards of them, and downloads via aws s3 cp.
+        """
+        data = self.config.data
+        shard_key = data.resolve_shard_key(split=split, size=size)
+
+        # List all shard keys in S3
+        all_keys = get_all_objects_paginated(
+            bucket_name=data.bucket_name,
+            prefix_key=shard_key,
+            region_name=data.region_name,
+            page_size=500,
+        )
+        # Filter to .tar files only
+        tar_keys = [k for k in all_keys if k.endswith(".tar")]
+
+        if not tar_keys:
+            raise FileNotFoundError(
+                f"No shards found at s3://{data.bucket_name}/{shard_key}"
+            )
+
+        # Random subset
+        selected = random.sample(tar_keys, min(num_shards, len(tar_keys)))
+
+        # Download to local dir
+        local_dir = self._local_shard_dir(split, size)
+        local_dir.mkdir(parents=True, exist_ok=True)
+
+        for key in tqdm(
+            selected,
+            desc=f"Syncing {split}/{size}px shards",
+            unit="shard",
+        ):
+            filename = key.split("/")[-1]
+            local_path = local_dir / filename
+            s3_url = f"s3://{data.bucket_name}/{key}"
+            subprocess.run(
+                ["aws", "s3", "cp", s3_url, str(local_path),
+                 "--region", data.region_name],
+                check=True,
+                capture_output=True,
+            )
+
+    def _clear_local_shards(self, split: str) -> None:
+        """Delete all locally cached shards for a given split."""
+        base = Path(self.config.hot_storage.local_cache_dir) / split
+        if base.exists():
+            shutil.rmtree(base)
+            logger.info(f"  Cleared local shards: {base}")
 
     # ------------------------------------------------------------------
     # LR Scheduler
