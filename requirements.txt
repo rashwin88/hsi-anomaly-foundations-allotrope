@@ -21,3 +21,4 @@ torchvision
 flask
 psutil
 pandas
+wandb

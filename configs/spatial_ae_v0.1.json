@@ -1,0 +1,28 @@
+{
+    "foundation_model_name": "spatial_autoencoder",
+    "version": "0.1.0",
+    "model_config": {
+        "model_type": "spatial_autoencoder",
+        "in_channels": 1,
+        "base_channels": 32,
+        "num_stages": 3
+    },
+    "data": {
+        "num_epochs": 5,
+        "train_samples_per_epoch": {"64": 5, "128": 5, "256": 1, "512": 1},
+        "test_samples_per_epoch": {"64": 5, "128": 5, "256": 1, "512": 1},
+        "stage": "intermediate",
+        "batch_size": 32
+    },
+    "learning_rate": 1e-3,
+    "lr_schedule": {
+        "scheduler_type": "cosine",
+        "warmup_epochs": 2,
+        "min_lr": 1e-6
+    },
+    "checkpoint": {
+        "checkpoint_dir": "checkpoints/spatial_ae/",
+        "save_every_n_epochs": 5,
+        "keep_top_k": 3
+    }
+}
