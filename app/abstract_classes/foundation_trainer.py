@@ -7,7 +7,6 @@ build_model(), compute_loss(), and validation_step().
 """
 
 import logging
-import os
 from abc import ABC, abstractmethod
 from pathlib import Path
 
@@ -15,10 +14,7 @@ import torch
 import torch.nn as nn
 import webdataset as wds
 
-from app.models.training.training_config import (
-    TrainingConfig,
-    LRScheduleConfig,
-)
+from app.models.training.training_config import TrainingConfig
 from app.utils.general_utils.shard_pipe_expression_builder import (
     shard_pipe_expression_builder,
 )
@@ -108,6 +104,19 @@ class FoundationTrainer(ABC):
         data = self.config.data
         patch_sizes = data.patch_sizes
 
+        # Build all dataloaders once upfront — avoids re-listing S3 objects
+        # and re-resolving pipe expressions every epoch.
+        # WebDataset iterators are stateless (shard shuffle happens on each
+        # iteration), so reusing the loader is safe.
+        train_loaders = {
+            size: self._build_dataloader(split="train", size=size)
+            for size in patch_sizes
+        }
+        test_loaders = {
+            size: self._build_dataloader(split="test", size=size)
+            for size in patch_sizes
+        }
+
         for epoch in range(data.num_epochs):
             # --- Training ---
             self.model.train()
@@ -116,8 +125,9 @@ class FoundationTrainer(ABC):
 
             for size in patch_sizes:
                 cap = data.train_samples_per_epoch[size]
-                loader = self._build_dataloader(split="train", size=size)
-                size_loss, size_samples = self._run_train_pass(loader, cap)
+                size_loss, size_samples = self._run_train_pass(
+                    train_loaders[size], cap
+                )
                 epoch_train_loss += size_loss
                 epoch_train_samples += size_samples
 
@@ -129,8 +139,7 @@ class FoundationTrainer(ABC):
 
             for size in patch_sizes:
                 cap = data.test_samples_per_epoch[size]
-                loader = self._build_dataloader(split="test", size=size)
-                val_loss = self._run_val_pass(loader, cap)
+                val_loss = self._run_val_pass(test_loaders[size], cap)
                 val_losses[size] = val_loss
 
             avg_val_loss = sum(val_losses.values()) / len(val_losses)
