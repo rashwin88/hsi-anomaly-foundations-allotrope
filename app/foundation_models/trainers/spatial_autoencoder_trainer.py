@@ -85,7 +85,9 @@ class SpatialAutoencoderTrainer(FoundationTrainer):
         # Zero invalid pixels before forward pass
         x = pixels * mask
         x_hat, _ = model(x)
-
+        
+        # Note that we are computing the average loss
+        # per valid pixel, so we multiply by num_kept to get the total MSE loss for this batch.
         loss = ((x_hat - x) ** 2 * mask).sum() / mask.sum().clamp(min=1)
         return loss, num_kept
 

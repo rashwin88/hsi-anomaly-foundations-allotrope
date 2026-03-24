@@ -50,6 +50,7 @@ class FoundationTrainer(ABC):
 
     def __init__(self, config: TrainingConfig):
         self.config = config
+        self.start_epoch = 0
 
         # Device
         if config.device is not None:
@@ -63,6 +64,10 @@ class FoundationTrainer(ABC):
             self.model.parameters(), lr=config.learning_rate
         )
         self.scheduler = self._build_scheduler()
+
+        # Resume from checkpoint if specified
+        if config.resume_from is not None:
+            self._load_checkpoint(config.resume_from)
 
     # ------------------------------------------------------------------
     # Abstract methods — concrete trainers must implement these
@@ -112,8 +117,6 @@ class FoundationTrainer(ABC):
           3. Step LR scheduler
           4. Checkpoint if due
         """
-        data = self.config.data
-        patch_sizes = data.patch_sizes
         hot = self.config.hot_storage
 
         if hot.enabled:
@@ -136,7 +139,7 @@ class FoundationTrainer(ABC):
             for size in patch_sizes
         }
 
-        for epoch in range(data.num_epochs):
+        for epoch in range(self.start_epoch, data.num_epochs):
             self._run_epoch(epoch, train_loaders, test_loaders)
 
     def _train_with_hot_storage(self) -> None:
@@ -172,7 +175,7 @@ class FoundationTrainer(ABC):
         }
 
         # Train all epochs from local disk
-        for epoch in range(data.num_epochs):
+        for epoch in range(self.start_epoch, data.num_epochs):
             self._run_epoch(epoch, train_loaders, test_loaders)
 
         logger.info("Training complete. Local shards kept for future runs.")
@@ -265,6 +268,8 @@ class FoundationTrainer(ABC):
             loss.backward()
             self.optimizer.step()
 
+            # Assumes we return the average per pixel loss per valid sample from compute_loss, 
+            # so we multiply back by num_kept to get the total loss for this batch.
             total_loss += loss.item() * num_kept
             valid_samples += num_kept
 
@@ -288,7 +293,9 @@ class FoundationTrainer(ABC):
 
                 if num_kept == 0:
                     continue
-
+                
+                # Assumes we return the average per pixel loss per valid sample from compute_loss, 
+                # so we multiply back by num_kept to get the total loss for this batch.
                 total_loss += loss * num_kept
                 valid_samples += num_kept
 
@@ -337,10 +344,6 @@ class FoundationTrainer(ABC):
             num_workers=self.config.data.num_workers,
         )
 
-    # ------------------------------------------------------------------
-    # Hot storage helpers
-    # ------------------------------------------------------------------
-
     def _local_shard_dir(self, split: str, size: int) -> Path:
         """Local directory for cached shards of a given split and size."""
         data = self.config.data
@@ -358,23 +361,30 @@ class FoundationTrainer(ABC):
 
         if hot.skip_sync_if_exists:
             # Check if all sizes already have shards locally
-            all_present = all(
+            all_dirs_exist = all(
+                self._local_shard_dir(split, size).exists() for size in sizes
+            )
+            all_have_shards = all_dirs_exist and all(
                 any(self._local_shard_dir(split, size).glob("*.tar"))
                 for size in sizes
-                if self._local_shard_dir(split, size).exists()
             )
-            if all_present and all(
-                self._local_shard_dir(split, size).exists() for size in sizes
-            ):
-                total = sum(
-                    len(list(self._local_shard_dir(split, size).glob("*.tar")))
+            if all_have_shards:
+                counts = {
+                    size: len(list(self._local_shard_dir(split, size).glob("*.tar")))
                     for size in sizes
-                )
-                logger.info(
-                    f"  Local {split} shards already exist ({total} shards). "
-                    f"Skipping S3 sync."
-                )
-                return
+                }
+                missing = {s: num_shards - c for s, c in counts.items() if c < num_shards}
+                if missing:
+                    logger.warning(
+                        f"  Local {split} shards incomplete — expected {num_shards} "
+                        f"per size, missing: {missing}. Re-syncing from S3."
+                    )
+                else:
+                    logger.info(
+                        f"  Local {split} shards verified ({sum(counts.values())} shards, "
+                        f"{num_shards} per size). Skipping S3 sync."
+                    )
+                    return
 
         logger.info(f"Syncing {split} shards to local disk (one-time)...")
         self._sync_shards_all_sizes(split=split, sizes=sizes, num_shards=num_shards)
@@ -409,17 +419,24 @@ class FoundationTrainer(ABC):
                     f"No shards found at s3://{data.bucket_name}/{shard_key}"
                 )
 
-            selected = random.sample(tar_keys, min(num_shards, len(tar_keys)))
-
             local_dir = self._local_shard_dir(split, size)
             local_dir.mkdir(parents=True, exist_ok=True)
+
+            # Count shards already on disk and only download the deficit
+            existing = set(p.name for p in local_dir.glob("*.tar"))
+            needed = num_shards - len(existing)
+
+            if needed <= 0:
+                continue
+
+            # Only pick from shards we don't already have
+            remaining_keys = [k for k in tar_keys if k.split("/")[-1] not in existing]
+            selected = random.sample(remaining_keys, min(needed, len(remaining_keys)))
 
             for key in selected:
                 filename = key.split("/")[-1]
                 local_path = local_dir / filename
-                # Skip files that already exist (partial resume)
-                if not local_path.exists():
-                    download_jobs.append((key, str(local_path)))
+                download_jobs.append((key, str(local_path)))
 
         if not download_jobs:
             logger.info(f"  All {split} shards already downloaded. Nothing to sync.")
@@ -450,12 +467,14 @@ class FoundationTrainer(ABC):
                     future.result()  # raises if download failed
                     pbar.update(1)
 
-    # ------------------------------------------------------------------
-    # LR Scheduler
-    # ------------------------------------------------------------------
-
-    def _build_scheduler(self):
-        """Build the LR scheduler from config."""
+    def _build_scheduler(self, last_epoch: int = -1):
+        """
+        Build the LR scheduler from config.
+        Last epoch defaults to -1 so, in the 
+        case of training from scratch, the scheduler starts fresh and when scheduler initializes
+        and calls step() for the first time, it will move to epoch 0.
+        In the case of resuming, last_epoch is set to the epoch we are resuming from, so the scheduler will pick up where it left off.
+        """
         cfg = self.config.lr_schedule
         stype = cfg.scheduler_type
 
@@ -464,12 +483,14 @@ class FoundationTrainer(ABC):
                 self.optimizer,
                 T_max=self.config.data.num_epochs,
                 eta_min=cfg.min_lr,
+                last_epoch=last_epoch,
             )
         elif stype == "step":
             return torch.optim.lr_scheduler.StepLR(
                 self.optimizer,
                 step_size=cfg.step_size,
                 gamma=cfg.step_gamma,
+                last_epoch=last_epoch,
             )
         elif stype == "plateau":
             return torch.optim.lr_scheduler.ReduceLROnPlateau(
@@ -487,6 +508,42 @@ class FoundationTrainer(ABC):
     # Checkpointing
     # ------------------------------------------------------------------
 
+    def _load_checkpoint(self, path: str) -> None:
+        """
+        Load from a checkpoint.
+
+        In *resume* mode the full training state is restored (weights,
+        optimizer, epoch, scheduler) so the run picks up where it left off.
+
+        In *finetune* mode only model weights are loaded — optimizer,
+        scheduler, and epoch start fresh.
+        """
+        mode = self.config.resume_mode
+        logger.info(f"Loading checkpoint ({mode}): {path}")
+        # Weights only set to False as the config is also pickled and we also want to unpack that part.
+        ckpt = torch.load(path, map_location=self.device, weights_only=False)
+
+        self.model.load_state_dict(ckpt["model_state_dict"])
+
+        if mode == "resume":
+            self.optimizer.load_state_dict(ckpt["optimizer_state_dict"])
+            self.start_epoch = ckpt["epoch"]
+
+            # Rebuild scheduler with current config but starting at resumed epoch.
+            # This uses the new num_epochs for T_max while respecting where we left off.
+            self.scheduler = self._build_scheduler(last_epoch=self.start_epoch)
+
+            logger.info(
+                f"  Resumed at epoch {self.start_epoch}, "
+                f"train_loss: {ckpt.get('train_loss', 'N/A')}, "
+                f"avg_val_loss: {ckpt.get('avg_val_loss', 'N/A')}"
+            )
+        else:
+            logger.info(
+                f"  Loaded weights from epoch {ckpt.get('epoch', '?')} "
+                f"for fine-tuning (fresh optimizer, scheduler, epoch=0)"
+            )
+
     def _save_checkpoint(
         self, epoch: int, train_loss: float, val_losses: dict[int, float]
     ) -> None:
@@ -503,6 +560,9 @@ class FoundationTrainer(ABC):
             "epoch": epoch,
             "model_state_dict": self.model.state_dict(),
             "optimizer_state_dict": self.optimizer.state_dict(),
+            "scheduler_state_dict": (
+                self.scheduler.state_dict() if self.scheduler is not None else None
+            ),
             "train_loss": train_loss,
             "val_losses": val_losses,
             "avg_val_loss": sum(val_losses.values()) / len(val_losses),

@@ -86,8 +86,11 @@ class DataConfig(BaseModel):
         "e.g. {64: 100, 128: 100, 256: 100, 512: 100}",
     )
     num_epochs: int = Field(..., gt=0, description="Total training epochs")
+    data_provider: str = Field(
+        ..., description="Data provider - prsima, landsat .etc")
     shard_key_template: str = Field(
-        default="patches/landsat/{split}/{stage}/w{size}_h{size}_s{stride}/",
+        # Important to set this properly The default is landsat which is dangerous.
+        default="patches/{provider}/{split}/{stage}/w{size}_h{size}_s{stride}/",
         description="S3 key template. Formatted with split, stage, size, stride.",
     )
     stage: str = Field(
@@ -108,6 +111,7 @@ class DataConfig(BaseModel):
     def resolve_shard_key(self, split: str, size: int) -> str:
         """Build the S3 shard key for a given split and patch size."""
         return self.shard_key_template.format(
+            provider=self.data_provider,
             split=split,
             stage=self.stage,
             size=size,
@@ -283,6 +287,15 @@ class TrainingConfig(BaseModel):
     learning_rate: float = 1e-3
     device: str | None = Field(
         default=None, description="None = auto-detect via get_device()"
+    )
+    resume_from: str | None = Field(
+        default=None,
+        description="Path to a .pt checkpoint to load from.",
+    )
+    resume_mode: Literal["resume", "finetune"] = Field(
+        default="resume",
+        description="'resume' restores weights, optimizer, epoch, and scheduler. "
+        "'finetune' loads weights only — fresh optimizer, scheduler, and epoch.",
     )
 
     @model_validator(mode="after")

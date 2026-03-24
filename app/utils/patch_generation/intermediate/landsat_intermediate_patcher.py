@@ -222,27 +222,3 @@ class LandsatIntermediateSharder(IntermediateSharder):
         print(f"Valid Patches : {valid_patches}")
 
 
-if __name__ == "__main__":
-    # Configure root logger to show all logs (DEBUG and above) in the console.
-    import sys
-
-    console_handler = logging.StreamHandler(sys.stdout)
-    console_handler.setLevel(logging.DEBUG)
-    formatter = logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s")
-    console_handler.setFormatter(formatter)
-
-    train_sharder = LandsatIntermediateSharder(
-        source_folder="/home/ubuntu/",
-        destination_folder="/home/ubuntu/",
-        split="train",
-        seed=42,
-    )
-    train_sharder.sharder(scenes=2)
-
-    test_sharder = LandsatIntermediateSharder(
-        source_folder="/home/ubuntu/",
-        destination_folder="/home/ubuntu/",
-        split="test",
-        seed=42,
-    )
-    test_sharder.sharder(scenes=2)
