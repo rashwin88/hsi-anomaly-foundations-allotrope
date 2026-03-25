@@ -69,9 +69,21 @@ class FoundationTrainer(ABC):
         if config.resume_from is not None:
             self._load_checkpoint(config.resume_from)
 
-    # ------------------------------------------------------------------
-    # Abstract methods — concrete trainers must implement these
-    # ------------------------------------------------------------------
+        # Wandb
+        self._wandb_enabled = config.wandb.enabled
+        if self._wandb_enabled:
+            import wandb
+
+            run_name = config.wandb.run_name or (
+                f"{config.foundation_model_name.value}_v{config.version}"
+            )
+            wandb.init(
+                project=config.wandb.project,
+                name=run_name,
+                tags=config.wandb.tags,
+                config=config.model_dump(mode="json", by_alias=True),
+            )
+
 
     @abstractmethod
     def build_model(self) -> nn.Module:
@@ -99,9 +111,6 @@ class FoundationTrainer(ABC):
         """
         ...
 
-    # ------------------------------------------------------------------
-    # Training loop
-    # ------------------------------------------------------------------
 
     def train(self) -> None:
         """
@@ -119,10 +128,15 @@ class FoundationTrainer(ABC):
         """
         hot = self.config.hot_storage
 
-        if hot.enabled:
-            self._train_with_hot_storage()
-        else:
-            self._train_streaming()
+        try:
+            if hot.enabled:
+                self._train_with_hot_storage()
+            else:
+                self._train_streaming()
+        finally:
+            if self._wandb_enabled:
+                import wandb
+                wandb.finish()
 
     def _train_streaming(self) -> None:
         """Original S3 streaming training loop."""
@@ -236,7 +250,19 @@ class FoundationTrainer(ABC):
             f"lr: {current_lr:.2e}"
         )
 
-        # --- Checkpointing ---
+        # --- Wandb ---
+        if self._wandb_enabled:
+            import wandb
+
+            metrics = {
+                "train/loss": avg_train_loss,
+                "val/avg_loss": avg_val_loss,
+                "lr": current_lr,
+            }
+            for size, loss in val_losses.items():
+                metrics[f"val/loss_{size}px"] = loss
+            wandb.log(metrics, step=epoch)
+
         ckpt = self.config.checkpoint
         if (epoch + 1) % ckpt.save_every_n_epochs == 0:
             self._save_checkpoint(epoch + 1, avg_train_loss, val_losses)

@@ -243,6 +243,22 @@ class CheckpointConfig(BaseModel):
 
 
 # ---------------------------------------------------------------------------
+# Wandb config
+# ---------------------------------------------------------------------------
+
+
+class WandbConfig(BaseModel):
+    """Weights & Biases logging configuration."""
+
+    enabled: bool = False
+    project: str = "allotrope"
+    run_name: str | None = Field(
+        default=None, description="Auto-generated from model name + version if None"
+    )
+    tags: list[str] = []
+
+
+# ---------------------------------------------------------------------------
 # Top-level training config
 # ---------------------------------------------------------------------------
 
@@ -284,6 +300,7 @@ class TrainingConfig(BaseModel):
     checkpoint: CheckpointConfig = CheckpointConfig()
     lr_schedule: LRScheduleConfig = LRScheduleConfig()
     hot_storage: HotStorageConfig = HotStorageConfig()
+    wandb: WandbConfig = WandbConfig()
     learning_rate: float = 1e-3
     device: str | None = Field(
         default=None, description="None = auto-detect via get_device()"
