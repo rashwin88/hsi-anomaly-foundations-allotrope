@@ -44,11 +44,6 @@ def patch_landsat_vendable(
             row_coords : row_coords + patching_plan.originating_request.height,
             col_coords : col_coords + patching_plan.originating_request.width,
         ]
-        output_object["pixels.npy"] = vendable.normalized_thermal_cube[
-            :,
-            row_coords : row_coords + patching_plan.originating_request.height,
-            col_coords : col_coords + patching_plan.originating_request.width,
-        ]
         output_object["validity_cube.npy"] = vendable.validity_cube[
             :,
             row_coords : row_coords + patching_plan.originating_request.height,

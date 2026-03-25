@@ -340,7 +340,9 @@ class FoundationTrainer(ABC):
             region_name=self.config.data.region_name,
         )
         dataset = wds.WebDataset(
-            pipe_expr, shardshuffle=self.config.data.shardshuffle
+            pipe_expr,
+            shardshuffle=self.config.data.shardshuffle,
+            handler=wds.warn_and_continue,
         ).decode()
 
         return torch.utils.data.DataLoader(
@@ -361,7 +363,9 @@ class FoundationTrainer(ABC):
 
         urls = [str(p) for p in shard_paths]
         dataset = wds.WebDataset(
-            urls, shardshuffle=self.config.data.shardshuffle
+            urls,
+            shardshuffle=self.config.data.shardshuffle,
+            handler=wds.warn_and_continue,
         ).decode()
 
         return torch.utils.data.DataLoader(

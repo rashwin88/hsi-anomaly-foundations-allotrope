@@ -48,7 +48,7 @@ class PatchPlanGenerator:
             if row >= cube_height:
                 break
             # Check if the patch lies outside the cube
-            if row + request.height >= cube_height:
+            if row + request.height > cube_height:
                 # In the even that the patch lies outside the cube
                 # Set the patch row coord to be such that row + patch_height  = height. So row = Height - patch_height
                 # this is the last patch basically
@@ -67,7 +67,7 @@ class PatchPlanGenerator:
             if col >= cube_width:
                 break
             # Check if the patch lies outside the cube
-            if col + request.width >= cube_width:
+            if col + request.width > cube_width:
                 # In the even that the patch lies outside the cube
                 # Set the patch x coord to be such that col + patch_width  = width. So x = width - patch_width
                 # this is the last patch basically

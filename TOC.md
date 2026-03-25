@@ -41,6 +41,7 @@
 - [HSI Wavelengths](docs/model_designs/hsi_wavelengths.md)
 - [Spatial Autoencoder](docs/model_designs/SpatialAutoencoder.md)
 - [Training System](docs/model_designs/TrainingSystem.md)
+- [Inference System](docs/model_designs/InferenceSystem.md)
 
 ## Paper Reads
 - [Denoising](docs/paper_reads/denoising.md)
