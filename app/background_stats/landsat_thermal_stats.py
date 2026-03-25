@@ -89,7 +89,7 @@ def compute_stats(config: TrainingConfig, patch_size: int, max_patches: int):
 
         total_patches +=1
         if total_patches % 100 == 0:
-            running_mean = sum_x /np.maxnimum(count, 1)
+            running_mean = sum_x /np.maximum(count, 1)
             print(f"  [{total_patches}] running mean = {running_mean}")
         
         if total_patches >= max_patches:
