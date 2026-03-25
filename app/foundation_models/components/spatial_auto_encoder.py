@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 from app.foundation_models.components.spatial_encoder import SpatialEncoder
 from app.foundation_models.components.spatial_decoder import SpatialDecoder
+from app.foundation_models.components.pixel_normalization import PixelDenormalize, PixelNormalize
 
 
 class SpatialAutoencoder(nn.Module):
@@ -33,13 +34,21 @@ class SpatialAutoencoder(nn.Module):
     in_channels is passed to both so the decoder knows what to reconstruct.
     """
 
-    def __init__(self, in_channels=1, base_channels=32, num_stages=3):
+    def __init__(self, in_channels=1, base_channels=32, num_stages=3, pixel_mean=None, pixel_std=None):
         super().__init__()
+        self.normalize = PixelNormalize(pixel_mean, pixel_std) if pixel_mean is not None else None
+        self.denormalize = PixelDenormalize(pixel_mean, pixel_std) if pixel_mean is not None else None
         self.encoder = SpatialEncoder(in_channels, base_channels, num_stages)
         # out_channels = in_channels so decoder reconstructs to original channel count
         self.decoder = SpatialDecoder(in_channels, base_channels, num_stages)
 
-    def forward(self, x):
+    def forward(self, x, mask=None):
+        if self.normalize is not None:
+            x = self.normalize(x)
+        if mask is not None:
+            x = x * mask
         z = self.encoder(x)       # (B, bc * 2^(num_stages-1), H/2^n, W/2^n)
-        x_hat = self.decoder(z)   # (B, in_channels, H, W)
+        x_hat = self.decoder(z)
+        if self.denormalize is not None:
+            x_hat = self.denormalize(x_hat)   # (B, in_channels, H, W)
         return x_hat, z

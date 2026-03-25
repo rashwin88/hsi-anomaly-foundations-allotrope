@@ -51,3 +51,8 @@ class InferenceConfig(BaseModel):
     device: str | None = Field(
         default=None, description="None = auto-detect via get_device()"
     )
+    pixel_stats_path: str | None = Field(
+        default=None,
+        description="Path to pixel normalization stats JSON (mean/std). "
+        "Required for normalized training.",
+    )

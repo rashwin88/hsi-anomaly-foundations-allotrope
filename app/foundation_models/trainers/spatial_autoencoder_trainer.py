@@ -8,10 +8,14 @@ Patches with less than 40% valid pixels are discarded from the batch
 before training — they are mostly invalid and would add noise.
 """
 
+import logging
+
 import torch
 import torch.nn as nn
 
 from app.abstract_classes.foundation_trainer import FoundationTrainer
+
+logger = logging.getLogger("SpatialAutoencoderTrainer")
 from app.foundation_models.components.spatial_auto_encoder import SpatialAutoencoder
 from app.models.training.training_config import (
     TrainingConfig,
@@ -25,10 +29,21 @@ class SpatialAutoencoderTrainer(FoundationTrainer):
 
     def build_model(self) -> nn.Module:
         cfg: SpatialAutoencoderConfig = self.config.model_config_
+        pixel_mean, pixel_std = None, None
+        stats_path = self.config.data.pixel_stats_path
+        if stats_path is not None:
+            import json
+            with open(stats_path) as f:
+                stats = json.load(f)
+            pixel_mean = stats["mean"]
+            pixel_std = stats["std"]
+            logger.info(f"Pixel normalization stats loaded: mean={pixel_mean}, std={pixel_std}")
         return SpatialAutoencoder(
             in_channels=cfg.in_channels,
             base_channels=cfg.base_channels,
             num_stages=cfg.num_stages,
+            pixel_mean=pixel_mean,
+            pixel_std=pixel_std,
         )
 
     def _build_mask(self, batch: dict) -> torch.Tensor:
@@ -83,13 +98,12 @@ class SpatialAutoencoderTrainer(FoundationTrainer):
             return torch.tensor(0.0, device=self.device, requires_grad=True), 0
 
         # Zero invalid pixels before forward pass
-        x = pixels * mask
-        x_hat, _ = model(x)
+        x_hat, _ = model(pixels, mask=mask)
         
         # Note that we are computing the average loss
         # per valid pixel across batches, so we multiply by num_kept to get the total MSE loss for this batch.
         # This is done downstream 
-        loss = ((x_hat - x) ** 2 * mask).sum() / mask.sum().clamp(min=1)
+        loss = ((x_hat - pixels) ** 2 * mask).sum() / mask.sum().clamp(min=1)
         return loss, num_kept
 
     def validation_step(

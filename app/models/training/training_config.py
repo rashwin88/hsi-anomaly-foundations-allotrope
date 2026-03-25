@@ -103,6 +103,12 @@ class DataConfig(BaseModel):
     num_workers: int = 2
     shardshuffle: int = 10
 
+    pixel_stats_path: str | None = Field(
+        default=None,
+        description="Path to pixel normalization stats JSON (mean/std). "
+        "Required for normalized training.",
+    )
+
     @property
     def patch_sizes(self) -> list[int]:
         """Derive patch sizes from the train sample keys."""

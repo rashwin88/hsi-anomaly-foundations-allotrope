@@ -29,10 +29,21 @@ class SpatialAutoencoderInferencer(FoundationInferencer):
 
     def build_model(self) -> nn.Module:
         cfg: SpatialAutoencoderConfig = self.config.model_config_
+        pixel_mean, pixel_std = None, None
+        stats_path = self.config.pixel_stats_path
+        if stats_path is not None:
+            import json
+            with open(stats_path) as f:
+                stats = json.load(f)
+            pixel_mean = stats["mean"]
+            pixel_std = stats["std"]
+            logger.info(f"Pixel normalization stats loaded: mean={pixel_mean}, std={pixel_std}")
         return SpatialAutoencoder(
             in_channels=cfg.in_channels,
             base_channels=cfg.base_channels,
             num_stages=cfg.num_stages,
+            pixel_mean=pixel_mean,
+            pixel_std=pixel_std,
         )
 
     def _build_checkerboard(self, h: int, w: int, invert: bool = False) -> torch.Tensor:
@@ -93,12 +104,12 @@ class SpatialAutoencoderInferencer(FoundationInferencer):
         checker_inv = 1 - checker
 
         # Pass 1: null where checker=1, reconstruct those cells
-        x_masked_1 = tensor * checker_inv * mask
-        x_hat_1, _ = self.model(x_masked_1)
+        mask_1 = checker_inv * mask
+        x_hat_1, _ = self.model(tensor, mask=mask_1)
 
         # Pass 2: null where checker=0, reconstruct those cells
-        x_masked_2 = tensor * checker * mask
-        x_hat_2, _ = self.model(x_masked_2)
+        mask_2 = checker * mask
+        x_hat_2, _ = self.model(tensor, mask=mask_2)
 
         # Combine: take each pixel's reconstruction from the pass where it was nulled
         reconstruction = x_hat_1 * checker + x_hat_2 * checker_inv  # (B, C, H, W)
