@@ -50,6 +50,7 @@ class SpatialDecoderBlock(nn.Module):
             # Intermediate block: stabilize activations before next stage
             layers.append(nn.BatchNorm2d(out_channels))
             layers.append(nn.GELU())
+            layers.append(nn.Dropout2d(0.3))
         # Final block: raw output, free to match any value distribution
         self.block = nn.Sequential(*layers)
 
