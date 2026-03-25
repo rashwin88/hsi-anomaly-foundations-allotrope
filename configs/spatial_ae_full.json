@@ -2,7 +2,7 @@
     "_comment": "Run: python scripts/train_foundation_model.py configs/spatial_ae_full.json",
 
     "foundation_model_name": "spatial_autoencoder",
-    "version": "3.1.0",
+    "version": "4.1.0",
 
     "model_config": {
         "model_type": "spatial_autoencoder",
@@ -14,7 +14,7 @@
     "data": {
         "num_epochs": 100,
         "data_provider": "landsat",
-        "train_samples_per_epoch": {"64": 50000, "128": 12500, "256": 3125, "512": 780},
+        "train_samples_per_epoch": {"64": 50000, "128": 25000, "256": 5000, "512": 10000},
         "test_samples_per_epoch": {"64": 2000, "128": 500, "256": 200, "512": 200},
         "shard_key_template": "patches/{provider}/{split}/{stage}/w{size}_h{size}_s{stride}/",
         "stage": "final",
@@ -26,11 +26,11 @@
         "pixel_stats_path": "/home/user57/constants/thermal.json"
     },
 
-    "learning_rate": 1e-3,
+    "learning_rate": 1e-4,
 
     "lr_schedule": {
         "scheduler_type": "cosine",
-        "warmup_epochs": 2,
+        "warmup_epochs": 5,
         "min_lr": 1e-6,
         "step_size": 10,
         "step_gamma": 0.5
@@ -38,7 +38,7 @@
 
     "checkpoint": {
         "checkpoint_dir": "/home/user57/checkpoints/spatial_ae_v2/",
-        "save_every_n_epochs": 5,
+        "save_every_n_epochs": 1,
         "keep_top_k": 3,
         "save_to_s3": false,
         "s3_checkpoint_key": null
@@ -56,7 +56,7 @@
     "wandb": {
         "enabled": true,
         "project": "allotrope",
-        "run_name": "allotrope-spatial-autoencoder-v3.1.0",
+        "run_name": "allotrope-spatial-autoencoder-v4.1.0",
         "tags": ["spatial_autoencoder", "landsat", "thermal"]
     },
 
