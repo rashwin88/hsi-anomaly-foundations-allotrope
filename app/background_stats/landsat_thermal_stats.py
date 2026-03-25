@@ -134,3 +134,6 @@ def main():
         json.dump(stats, f, indent=2)
 
     print(f"\nSaved to {output_path}")
+
+if __name__ =="__main__":
+    main()
