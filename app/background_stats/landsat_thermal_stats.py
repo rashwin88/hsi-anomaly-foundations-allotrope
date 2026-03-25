@@ -61,8 +61,8 @@ def compute_stats(config: TrainingConfig, patch_size: int, max_patches: int):
     count = np.zeros(in_channels, dtype=np.float64)
 
     print("Setting up dataset and loader")
-    dataset = wds.WebDataset(urls, shardshuffle=False, handler=wds.handlers.warn_and_continue)
-    loader = torch.utils.data.DataLoader(dataset, batch_size=2, num_workers=4)
+    dataset = wds.WebDataset(urls, shardshuffle=False, handler=wds.handlers.warn_and_continue).decode()
+    loader = torch.utils.data.DataLoader(dataset, batch_size=1, num_workers=4)
 
     total_patches = 0
 
@@ -70,9 +70,6 @@ def compute_stats(config: TrainingConfig, patch_size: int, max_patches: int):
         pixels = sample["pixels.npy"]
         pv = sample["pure_validity_mask.npy"]
         cq = sample["custom_quality_mask.npy"]
-        print(type(pv), type(cq))
-        print(pv if not hasattr(pv, 'shape') else pv.shape)
-        break
 
         # Note: mask is always pv * cq
         mask = (pv *cq).float()
