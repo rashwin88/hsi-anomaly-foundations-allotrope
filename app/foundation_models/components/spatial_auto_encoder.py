@@ -43,10 +43,10 @@ class SpatialAutoencoder(nn.Module):
         self.decoder = SpatialDecoder(in_channels, base_channels, num_stages)
 
     def forward(self, x, mask=None):
-        if self.normalize is not None:
-            x = self.normalize(x)
         if mask is not None:
             x = x * mask
+        if self.normalize is not None:
+            x = self.normalize(x)
         z = self.encoder(x)       # (B, bc * 2^(num_stages-1), H/2^n, W/2^n)
         x_hat = self.decoder(z)
         if self.denormalize is not None:
