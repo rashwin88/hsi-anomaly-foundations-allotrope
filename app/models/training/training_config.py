@@ -21,6 +21,7 @@ class FoundationModelName(str, Enum):
     SPATIAL_AUTOENCODER = "spatial_autoencoder"
     SPECTRAL_COMPRESSOR = "spectral_compressor"
     SPATIAL_MASKED_AUTOENCODER = "spatial_masked_autoencoder"
+    SPATIAL_MASKED_AUTOENCODER_L1 = "spatial_masked_autoencoder_l1"
 
 
 
