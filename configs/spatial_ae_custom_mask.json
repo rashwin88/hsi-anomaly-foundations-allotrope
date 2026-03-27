@@ -1,7 +1,7 @@
 {
     "_comment": "Run: python scripts/train_foundation_model.py configs/spatial_ae_full.json",
 
-    "foundation_model_name": "spatial_autoencoder_custom_masking",
+    "foundation_model_name": "spatial_autoencoder",
     "version": "6.1.0",
 
     "model_config": {
