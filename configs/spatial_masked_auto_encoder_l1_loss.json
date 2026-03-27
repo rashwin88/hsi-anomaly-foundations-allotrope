@@ -2,7 +2,7 @@
     "_comment": "Run: python scripts/train_foundation_model.py configs/spatial_ae_full.json",
 
     "foundation_model_name": "spatial_masked_autoencoder_l1",
-    "version": "0.2.0",
+    "version": "0.3.0",
 
     "model_config": {
         "model_type": "spatial_autoencoder",
@@ -14,13 +14,13 @@
     "data": {
         "num_epochs": 300,
         "data_provider": "landsat",
-        "train_samples_per_epoch": { "128": 10000, "256": 5000, "512": 2500},
+        "train_samples_per_epoch": { "128": 30000, "256": 15000, "512": 2500},
         "test_samples_per_epoch": {"128": 500, "256": 500, "512": 200},
         "shard_key_template": "patches/{provider}/{split}/{stage}/w{size}_h{size}_s{stride}/",
         "stage": "final",
         "bucket_name": "allotrope-raw-data-india",
         "region_name": "ap-south-1",
-        "batch_size": 64,
+        "batch_size": 128,
         "num_workers": 10,
         "shardshuffle": 30,
         "pixel_stats_path": "/home/user57/constants/thermal.json"
@@ -56,7 +56,7 @@
     "wandb": {
         "enabled": true,
         "project": "allotrope",
-        "run_name": "allotrope-spatial-masked_autoencoder-l1-v0.1.0",
+        "run_name": "allotrope-spatial-masked_autoencoder-l1-v0.3.0",
         "tags": ["spatial_autoencoder", "landsat", "thermal"]
     },
 
