@@ -50,7 +50,9 @@ class SpatialAutoencoderTrainer(FoundationTrainer):
         """Combine pure validity and custom quality masks."""
         pure_validity = batch["pure_validity_mask.npy"].to(self.device)    # (B, 1, H, W)
         custom_quality = batch["custom_quality_mask.npy"].to(self.device)  # (B, 1, H, W)
-        return (pure_validity * custom_quality).float()                      # (B, 1, H, W)
+        # Also picking up the modelled cloud mask
+        modelled_cloud_mask = batch["predicted_cloud_mask.npy"].to(self.device)
+        return (pure_validity * modelled_cloud_mask).float()                      # (B, 1, H, W)
 
     def _filter_batch(
         self, pixels: torch.Tensor, mask: torch.Tensor
