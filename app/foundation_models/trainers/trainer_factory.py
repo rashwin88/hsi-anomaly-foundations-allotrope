@@ -9,6 +9,10 @@ from app.abstract_classes.foundation_trainer import FoundationTrainer
 from app.foundation_models.trainers.spatial_autoencoder_trainer import (
     SpatialAutoencoderTrainer,
 )
+from app.foundation_models.trainers.spatial_masked_autoencoder_trainer import (
+    SpatialMaskedAutoencoderTrainer,
+)
+
 from app.models.training.training_config import (
     FoundationModelName,
     TrainingConfig,
@@ -16,6 +20,7 @@ from app.models.training.training_config import (
 
 _REGISTRY: dict[FoundationModelName, type[FoundationTrainer]] = {
     FoundationModelName.SPATIAL_AUTOENCODER: SpatialAutoencoderTrainer,
+    FoundationModelName.SPATIAL_MASKED_AUTOENCODER: SpatialMaskedAutoencoderTrainer
 }
 
 

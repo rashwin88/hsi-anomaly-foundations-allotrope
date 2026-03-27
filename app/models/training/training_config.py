@@ -20,6 +20,8 @@ from pydantic import BaseModel, Field, model_validator
 class FoundationModelName(str, Enum):
     SPATIAL_AUTOENCODER = "spatial_autoencoder"
     SPECTRAL_COMPRESSOR = "spectral_compressor"
+    SPATIAL_MASKED_AUTOENCODER = "spatial_masked_autoencoder"
+
 
 
 # ---------------------------------------------------------------------------
