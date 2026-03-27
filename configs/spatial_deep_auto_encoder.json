@@ -2,7 +2,7 @@
     "_comment": "Run: python scripts/train_foundation_model.py configs/spatial_ae_full.json",
 
     "foundation_model_name": "spatial_autoencoder",
-    "version": "7.1.0",
+    "version": "8.1.0",
 
     "model_config": {
         "model_type": "spatial_autoencoder",
@@ -56,7 +56,7 @@
     "wandb": {
         "enabled": true,
         "project": "allotrope",
-        "run_name": "allotrope-spatial-autoencoder-custom-masking-v6.1.0",
+        "run_name": "allotrope-spatial-autoencoder-deep-v6.1.0",
         "tags": ["spatial_autoencoder", "landsat", "thermal"]
     },
 
