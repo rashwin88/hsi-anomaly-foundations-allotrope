@@ -2,7 +2,7 @@
     "_comment": "Run: python scripts/train_foundation_model.py configs/exp_no_4.json",
 
     "foundation_model_name": "normalized_masked_autoencoder",
-    "version": "0.2.0",
+    "version": "1.2.0",
 
     "model_config": {
         "model_type": "normalized_masked_autoencoder",
@@ -58,7 +58,7 @@
     "wandb": {
         "enabled": true,
         "project": "allotrope",
-        "run_name": "allotrope-normalized-masked-autoencoder-v0.2.0",
+        "run_name": "allotrope-normalized-masked-autoencoder-v1.2.0",
         "tags": ["normalized_masked_autoencoder", "landsat", "thermal"]
     },
 
