@@ -46,7 +46,7 @@ class SpatialMaskedAutoEncoderConfig(BaseModel):
     in_channels: int = 1
     base_channels: int = 32
     num_stages: int = 3
-    masking_range: Tuple[int, int] = (0.35, 0.55)
+    masking_range: Tuple[float, float] = (0.35, 0.55)
 
 class SpectralCompressorConfig(BaseModel):
     """Architecture config for SpectralCompressor (linear autoencoder)."""

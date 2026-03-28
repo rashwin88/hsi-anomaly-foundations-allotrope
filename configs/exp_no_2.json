@@ -56,7 +56,7 @@
     "wandb": {
         "enabled": true,
         "project": "allotrope",
-        "run_name": "allotrope-spatial-masked_autoencoder-unnormalized-l1-v0.1.0",
+        "run_name": "allotrope-spatial-masked_autoencoder-unnormalized-l1-v0.2.0",
         "tags": ["spatial_autoencoder", "landsat", "thermal"]
     },
 
