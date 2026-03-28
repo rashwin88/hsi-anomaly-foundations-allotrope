@@ -42,10 +42,10 @@ class NormalizedMaskedSpatialAutoencoder(nn.Module):
     def forward(self, x, validity_mask=None, input_mask=None):
         if validity_mask is not None:
             x = x * validity_mask
-        if self.normalize is not None:
-            x = self.normalize(x)
         if input_mask is not None:
             x = x * input_mask
+        if self.normalize is not None:
+            x = self.normalize(x)
         model_input = torch.cat([x, validity_mask, input_mask], dim=1)  # (B, 3, H, W)
         z = self.encoder(model_input)
         x_hat = self.decoder(z)

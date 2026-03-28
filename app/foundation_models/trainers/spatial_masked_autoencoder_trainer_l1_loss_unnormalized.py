@@ -1,8 +1,10 @@
 """
-Concrete trainer for the SpatialAutoencoder.
+Concrete trainer for the UnNormalizedSpatialAutoencoder with masked L1 loss.
 
 Implements build_model(), compute_loss(), and validation_step()
 for masked spatial reconstruction on single-band thermal patches.
+Uses L1 (absolute error) loss with explicit 3-channel mask input
+(pixels + validity_mask + input_mask) in raw temperature space.
 
 Patches with less than 40% valid pixels are discarded from the batch
 before training — they are mostly invalid and would add noise.
@@ -68,17 +70,16 @@ class UnNormalizedSpatialMaskedAutoencoderTrainerL1Loss(FoundationTrainer):
         self, batch: dict, model: nn.Module, min_masking: float = 0.35, max_masking: float = 0.55
     ) -> tuple[torch.Tensor, int]:
         """
-        Masked MSE reconstruction loss with patch-level filtering.
+        Masked L1 reconstruction loss with patch-level filtering.
 
-        Patches with < 40% valid pixels are discarded. Invalid pixels
-        in surviving patches are zeroed before the forward pass so they
-        don't skew BatchNorm statistics. The mask excludes them from the
-        loss so the network only learns from valid surface observations.
+        Patches with < 40% valid pixels are discarded. A random prediction
+        mask is generated from valid pixels, and the model receives
+        validity_mask and input_mask as explicit channels.
 
         Returns (loss, num_valid_samples) so the training loop can
         track how many samples actually contributed to training.
 
-        Loss = sum((x_hat - x)^2 * mask) / sum(mask)
+        Loss = sum(|x_hat - x| * prediction_mask) / sum(prediction_mask)
         """
         pixels = batch["pixels.npy"].to(self.device)  # (B, C, H, W)
         mask = self._build_mask(batch)                 # (B, 1, H, W)
@@ -108,17 +109,11 @@ class UnNormalizedSpatialMaskedAutoencoderTrainerL1Loss(FoundationTrainer):
         self, batch: dict, model: nn.Module
     ) -> tuple[torch.Tensor, int]:
         """
-        Masked MSE reconstruction loss with patch-level filtering.
+        L1 reconstruction loss on all valid pixels (no random masking).
 
-        Patches with < 40% valid pixels are discarded. Invalid pixels
-        in surviving patches are zeroed before the forward pass so they
-        don't skew BatchNorm statistics. The mask excludes them from the
-        loss so the network only learns from valid surface observations.
+        Returns (loss, num_valid_samples).
 
-        Returns (loss, num_valid_samples) so the training loop can
-        track how many samples actually contributed to training.
-
-        Loss = sum((x_hat - x)^2 * mask) / sum(mask)
+        Loss = sum(|x_hat - x| * mask) / sum(mask)
         """
         pixels = batch["pixels.npy"].to(self.device)  # (B, C, H, W)
         mask = self._build_mask(batch)                 # (B, 1, H, W)
