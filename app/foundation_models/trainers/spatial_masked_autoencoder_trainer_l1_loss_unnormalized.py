@@ -128,7 +128,6 @@ class UnNormalizedSpatialMaskedAutoencoderTrainerL1Loss(FoundationTrainer):
         if num_kept == 0:
             return torch.tensor(0.0, device=self.device, requires_grad=True), 0
 
-        # Zero invalid pixels before forward pass
         x_hat, _ = model(pixels, validity_mask=mask, input_mask = mask)
         
         # Note that we are computing the average loss
