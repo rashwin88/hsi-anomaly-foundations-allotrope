@@ -32,6 +32,7 @@ class UnNormalizedSpatialMaskedAutoencoderTrainerL1Loss(FoundationTrainer):
             in_channels=cfg.in_channels,
             base_channels=cfg.base_channels,
             num_stages=cfg.num_stages,
+            kernel_size=cfg.kernel_size,
         )
 
     def _build_mask(self, batch: dict) -> torch.Tensor:

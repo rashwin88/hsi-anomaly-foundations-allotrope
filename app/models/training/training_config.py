@@ -23,6 +23,7 @@ class FoundationModelName(str, Enum):
     SPATIAL_MASKED_AUTOENCODER = "spatial_masked_autoencoder"
     SPATIAL_MASKED_AUTOENCODER_L1 = "spatial_masked_autoencoder_l1"
     SPATIAL_MASKED_AUTOENCODER_L1_UNNORMALIZED = "spatial_masked_autoencoder_l1_unnormalized"
+    NORMALIZED_MASKED_AUTOENCODER = "normalized_masked_autoencoder"
 
 
 
@@ -38,6 +39,7 @@ class SpatialAutoencoderConfig(BaseModel):
     in_channels: int = 1
     base_channels: int = 32
     num_stages: int = 3
+    kernel_size: int = 4
 
 class SpatialMaskedAutoEncoderConfig(BaseModel):
     """Architecture config for SpatialMaskedAutoencoder."""
@@ -46,6 +48,17 @@ class SpatialMaskedAutoEncoderConfig(BaseModel):
     in_channels: int = 1
     base_channels: int = 32
     num_stages: int = 3
+    kernel_size: int = 4
+    masking_range: Tuple[float, float] = (0.35, 0.55)
+
+class NormalizedMaskedAutoEncoderConfig(BaseModel):
+    """Architecture config for NormalizedMaskedSpatialAutoencoder."""
+
+    model_type: Literal["normalized_masked_autoencoder"] = "normalized_masked_autoencoder"
+    in_channels: int = 1
+    base_channels: int = 32
+    num_stages: int = 3
+    kernel_size: int = 4
     masking_range: Tuple[float, float] = (0.35, 0.55)
 
 class SpectralCompressorConfig(BaseModel):
@@ -59,7 +72,7 @@ class SpectralCompressorConfig(BaseModel):
 # Pydantic picks the right config based on the model_type literal field.
 # Adding a new model = add a config class above and extend this union.
 ModelSpecificConfig = Annotated[
-    Union[SpatialAutoencoderConfig, SpectralCompressorConfig, SpatialMaskedAutoEncoderConfig],
+    Union[SpatialAutoencoderConfig, SpectralCompressorConfig, SpatialMaskedAutoEncoderConfig, NormalizedMaskedAutoEncoderConfig],
     Field(discriminator="model_type"),
 ]
 
@@ -339,7 +352,7 @@ class TrainingConfig(BaseModel):
         For spatial models, every patch size must be divisible by
         2^num_stages to ensure clean downsampling and upsampling.
         """
-        if isinstance(self.model_config_, SpatialAutoencoderConfig):
+        if isinstance(self.model_config_, (SpatialAutoencoderConfig, NormalizedMaskedAutoEncoderConfig)):
             divisor = 2 ** self.model_config_.num_stages
             for size in self.data.patch_sizes:
                 if size % divisor != 0:

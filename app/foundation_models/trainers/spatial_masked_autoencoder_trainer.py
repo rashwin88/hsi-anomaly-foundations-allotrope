@@ -44,6 +44,7 @@ class SpatialMaskedAutoencoderTrainer(FoundationTrainer):
             num_stages=cfg.num_stages,
             pixel_mean=pixel_mean,
             pixel_std=pixel_std,
+            kernel_size=cfg.kernel_size,
         )
 
     def _build_mask(self, batch: dict) -> torch.Tensor:

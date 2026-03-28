@@ -34,13 +34,13 @@ class SpatialAutoencoder(nn.Module):
     in_channels is passed to both so the decoder knows what to reconstruct.
     """
 
-    def __init__(self, in_channels=1, base_channels=32, num_stages=3, pixel_mean=None, pixel_std=None):
+    def __init__(self, in_channels=1, base_channels=32, num_stages=3, pixel_mean=None, pixel_std=None, kernel_size=4):
         super().__init__()
         self.normalize = PixelNormalize(pixel_mean, pixel_std) if pixel_mean is not None else None
         self.denormalize = PixelDenormalize(pixel_mean, pixel_std) if pixel_mean is not None else None
-        self.encoder = SpatialEncoder(in_channels, base_channels, num_stages)
+        self.encoder = SpatialEncoder(in_channels, base_channels, num_stages, kernel_size=kernel_size)
         # out_channels = in_channels so decoder reconstructs to original channel count
-        self.decoder = SpatialDecoder(in_channels, base_channels, num_stages)
+        self.decoder = SpatialDecoder(in_channels, base_channels, num_stages, kernel_size=kernel_size)
 
     def forward(self, x, mask=None):
         if mask is not None:

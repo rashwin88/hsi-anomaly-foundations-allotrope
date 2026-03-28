@@ -39,12 +39,14 @@ class SpatialDecoderBlock(nn.Module):
         the data requires.
     """
 
-    def __init__(self, in_channels, out_channels, final=False):
+    def __init__(self, in_channels, out_channels, final=False, kernel_size=4):
         super().__init__()
+        # padding = (K - 2) // 2 ensures exact 2x spatial upsampling for any even kernel size
+        padding = (kernel_size - 2) // 2
         # Constructed slightly differently from the encode block but the principle remains the same.
         layers = [
             # (B, in_channels, H, W) → (B, out_channels, 2*H, 2*W)
-            nn.ConvTranspose2d(in_channels, out_channels, kernel_size=4, stride=2, padding=1)
+            nn.ConvTranspose2d(in_channels, out_channels, kernel_size=kernel_size, stride=2, padding=padding)
         ]
         if not final:
             # Intermediate block: stabilize activations before next stage
@@ -84,12 +86,12 @@ class SpatialDecoder(nn.Module):
     and can match the original input distribution.
     """
 
-    def __init__(self, out_channels=1, base_channels=32, num_stages=3):
+    def __init__(self, out_channels=1, base_channels=32, num_stages=3, kernel_size=4):
         super().__init__()
         # Reverse the encoder's channel progression and append output channels
         channels = [base_channels * (2 ** i) for i in range(num_stages)][::-1] + [out_channels]
         self.stages = nn.Sequential(
-            *[SpatialDecoderBlock(channels[i], channels[i + 1], final=(i == num_stages - 1))
+            *[SpatialDecoderBlock(channels[i], channels[i + 1], final=(i == num_stages - 1), kernel_size=kernel_size)
               for i in range(num_stages)]
         )
 

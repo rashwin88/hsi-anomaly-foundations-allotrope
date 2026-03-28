@@ -33,6 +33,7 @@ class MaskedSpatialAutoencoderInferencer(FoundationInferencer):
             in_channels=cfg.in_channels,
             base_channels=cfg.base_channels,
             num_stages=cfg.num_stages,
+            kernel_size=cfg.kernel_size,
         )
 
     def _build_checkerboard(self, h: int, w: int, invert: bool = False) -> torch.Tensor:
@@ -92,14 +93,16 @@ class MaskedSpatialAutoencoderInferencer(FoundationInferencer):
         checker = self._build_checkerboard(h, w, invert=False)  # (1,1,H,W)
         checker_inv = 1 - checker
 
-        # Pass 1: null where checker=1, reconstruct those cells
+        # Pass 1: keep checker=1 cells visible, null checker=0 cells
         x_hat_1, _ = self.model(tensor, validity_mask=mask, input_mask=checker*mask)
 
-        # Pass 2: null where checker=0, reconstruct those cells
+        # Pass 2: keep checker=0 cells visible, null checker=1 cells
         x_hat_2, _ = self.model(tensor, validity_mask=mask, input_mask=checker_inv*mask)
 
-        # Combine: take each pixel's reconstruction from the pass where it was nulled
-        reconstruction = x_hat_1 * checker + x_hat_2 * checker_inv  # (B, C, H, W)
+        # Combine: take each pixel's reconstruction from the pass where it was HIDDEN
+        # Pass 1 hid checker=0 (checker_inv) cells → use x_hat_1 for those
+        # Pass 2 hid checker=1 (checker) cells     → use x_hat_2 for those
+        reconstruction = x_hat_1 * checker_inv + x_hat_2 * checker  # (B, C, H, W)
 
         # Zero out invalid pixels
         reconstruction = reconstruction * mask

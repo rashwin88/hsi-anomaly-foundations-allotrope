@@ -28,11 +28,13 @@ class SpatialEncoderBlock(nn.Module):
     blocks (e.g. 3 stages), H and W must be divisible by 2^3 = 8.
     """
 
-    def __init__(self, in_channels: int, out_channels: int):
+    def __init__(self, in_channels: int, out_channels: int, kernel_size: int = 4):
         super().__init__()
+        # padding = (K - 2) // 2 ensures exact 2x spatial reduction for any even kernel size
+        padding = (kernel_size - 2) // 2
         self.block = nn.Sequential(
             # (B, in_channels, H, W) → (B, out_channels, H/2, W/2)
-            nn.Conv2d(in_channels, out_channels, kernel_size=4, stride=2, padding=1),
+            nn.Conv2d(in_channels, out_channels, kernel_size=kernel_size, stride=2, padding=padding),
             nn.BatchNorm2d(out_channels),
             nn.GELU(),
             nn.Dropout2d(0.3),
@@ -68,12 +70,12 @@ class SpatialEncoder(nn.Module):
     H and W must be divisible by 2^num_stages.
     """
 
-    def __init__(self, in_channels=1, base_channels=32, num_stages=3):
+    def __init__(self, in_channels=1, base_channels=32, num_stages=3, kernel_size=4):
         super().__init__()
         # Build channel progression: [in_channels, bc, bc*2, bc*4, ...]
         channels = [in_channels] + [base_channels * (2 ** i) for i in range( num_stages)]
         self.stages = nn.Sequential(
-            *[SpatialEncoderBlock(channels[i], channels[i + 1]) for i in range(num_stages)]
+            *[SpatialEncoderBlock(channels[i], channels[i + 1], kernel_size=kernel_size) for i in range(num_stages)]
         )
 
     def forward(self, x):

@@ -31,12 +31,12 @@ class UnNormalizedSpatialAutoencoder(nn.Module):
       x_hat   (B, 1,   128, 128)   reconstructed temperature
     """
 
-    def __init__(self, in_channels=1, base_channels=32, num_stages=3):
+    def __init__(self, in_channels=1, base_channels=32, num_stages=3, kernel_size=4):
         super().__init__()
         # Encoder has to take in 3 channels : pixels + validity + input mask
-        self.encoder = SpatialEncoder(in_channels + 2, base_channels, num_stages)
+        self.encoder = SpatialEncoder(in_channels + 2, base_channels, num_stages, kernel_size=kernel_size)
         # out_channels = in_channels so decoder reconstructs to original channel count
-        self.decoder = SpatialDecoder(in_channels, base_channels, num_stages)
+        self.decoder = SpatialDecoder(in_channels, base_channels, num_stages, kernel_size=kernel_size)
 
     def forward(self, x, validity_mask=None, input_mask=None):
         if validity_mask is not None:
