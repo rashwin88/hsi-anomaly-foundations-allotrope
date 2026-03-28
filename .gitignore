@@ -4,6 +4,8 @@ __pycache__/
 *$py.class
 .claude/
 experiments/
+CONTEXT.md
+TODO.md
 
 # C extensions
 *.so
