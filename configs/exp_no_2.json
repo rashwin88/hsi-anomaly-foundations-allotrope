@@ -1,0 +1,66 @@
+{
+    "_comment": "Run: python scripts/train_foundation_model.py configs/spatial_ae_full.json",
+
+    "foundation_model_name": "spatial_masked_autoencoder_l1_unnormalized",
+    "version": "0.1.0",
+
+    "model_config": {
+        "model_type": "spatial_masked_autoencoder",
+        "in_channels": 1,
+        "base_channels": 64,
+        "num_stages": 2
+    },
+
+    "data": {
+        "num_epochs": 300,
+        "data_provider": "landsat",
+        "train_samples_per_epoch": { "128": 30000, "256": 15000, "512": 2500},
+        "test_samples_per_epoch": {"128": 500, "256": 500, "512": 200},
+        "shard_key_template": "patches/{provider}/{split}/{stage}/w{size}_h{size}_s{stride}/",
+        "stage": "final",
+        "bucket_name": "allotrope-raw-data-india",
+        "region_name": "ap-south-1",
+        "batch_size": 128,
+        "num_workers": 10,
+        "shardshuffle": 30,
+        "pixel_stats_path": "/home/user57/constants/thermal.json"
+    },
+
+    "learning_rate": 1e-3,
+
+    "lr_schedule": {
+        "scheduler_type": "cosine",
+        "warmup_epochs": 5,
+        "min_lr": 1e-6,
+        "step_size": 10,
+        "step_gamma": 0.5
+    },
+
+    "checkpoint": {
+        "checkpoint_dir": "/home/user57/checkpoints/spatial_mae_v1/",
+        "save_every_n_epochs": 1,
+        "keep_top_k": 3,
+        "save_to_s3": false,
+        "s3_checkpoint_key": null
+    },
+
+    "hot_storage": {
+        "enabled": true,
+        "local_cache_dir": "/tmp/hot_shards/",
+        "train_shards_per_size": 70,
+        "test_shards_per_size": 10,
+        "skip_sync_if_exists": true,
+        "max_parallel_downloads": 30
+    },
+
+    "wandb": {
+        "enabled": true,
+        "project": "allotrope",
+        "run_name": "allotrope-spatial-masked_autoencoder-unnormalized-l1-v0.1.0",
+        "tags": ["spatial_autoencoder", "landsat", "thermal"]
+    },
+
+    "device": null,
+    "resume_from": null,
+    "resume_mode": "resume"
+}

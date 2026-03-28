@@ -9,11 +9,15 @@ from app.abstract_classes.foundation_inferencer import FoundationInferencer
 from app.foundation_models.inferencers.spatial_autoencoder_inferencer import (
     SpatialAutoencoderInferencer,
 )
+from app.foundation_models.inferencers.masked_spatial_autoencoder_inferencer import (
+    MaskedSpatialAutoencoderInferencer,
+)
 from app.models.training.inference_config import InferenceConfig
 from app.models.training.training_config import FoundationModelName
 
 _REGISTRY: dict[FoundationModelName, type[FoundationInferencer]] = {
     FoundationModelName.SPATIAL_AUTOENCODER: SpatialAutoencoderInferencer,
+    FoundationModelName.SPATIAL_MASKED_AUTOENCODER_L1_UNNORMALIZED: MaskedSpatialAutoencoderInferencer
 }
 
 

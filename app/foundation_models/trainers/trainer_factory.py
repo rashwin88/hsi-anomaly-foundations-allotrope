@@ -15,6 +15,9 @@ from app.foundation_models.trainers.spatial_masked_autoencoder_trainer import (
 from app.foundation_models.trainers.spatial_masked_autoencoder_trainer_l1_loss import (
     SpatialMaskedAutoencoderTrainerL1Loss,
 )
+from app.foundation_models.trainers.spatial_masked_autoencoder_trainer_l1_loss_unnormalized import (
+    UnNormalizedSpatialMaskedAutoencoderTrainerL1Loss
+)
 
 from app.models.training.training_config import (
     FoundationModelName,
@@ -24,7 +27,8 @@ from app.models.training.training_config import (
 _REGISTRY: dict[FoundationModelName, type[FoundationTrainer]] = {
     FoundationModelName.SPATIAL_AUTOENCODER: SpatialAutoencoderTrainer,
     FoundationModelName.SPATIAL_MASKED_AUTOENCODER: SpatialMaskedAutoencoderTrainer,
-    FoundationModelName.SPATIAL_MASKED_AUTOENCODER_L1: SpatialMaskedAutoencoderTrainerL1Loss
+    FoundationModelName.SPATIAL_MASKED_AUTOENCODER_L1: SpatialMaskedAutoencoderTrainerL1Loss,
+    FoundationModelName.SPATIAL_MASKED_AUTOENCODER_L1_UNNORMALIZED: UnNormalizedSpatialMaskedAutoencoderTrainerL1Loss
 }
 
 

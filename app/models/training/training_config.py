@@ -7,7 +7,7 @@ and checkpointing.
 """
 
 from enum import Enum
-from typing import Annotated, Literal, Union
+from typing import Annotated, Literal, Union, Tuple
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -22,6 +22,7 @@ class FoundationModelName(str, Enum):
     SPECTRAL_COMPRESSOR = "spectral_compressor"
     SPATIAL_MASKED_AUTOENCODER = "spatial_masked_autoencoder"
     SPATIAL_MASKED_AUTOENCODER_L1 = "spatial_masked_autoencoder_l1"
+    SPATIAL_MASKED_AUTOENCODER_L1_UNNORMALIZED = "spatial_masked_autoencoder_l1_unnormalized"
 
 
 
@@ -38,6 +39,14 @@ class SpatialAutoencoderConfig(BaseModel):
     base_channels: int = 32
     num_stages: int = 3
 
+class SpatialMaskedAutoEncoderConfig(BaseModel):
+    """Architecture config for SpatialMaskedAutoencoder."""
+
+    model_type: Literal["spatial_masked_autoencoder"] = "spatial_masked_autoencoder"
+    in_channels: int = 1
+    base_channels: int = 32
+    num_stages: int = 3
+    masking_range: Tuple[int, int] = (0.35, 0.55)
 
 class SpectralCompressorConfig(BaseModel):
     """Architecture config for SpectralCompressor (linear autoencoder)."""
@@ -50,7 +59,7 @@ class SpectralCompressorConfig(BaseModel):
 # Pydantic picks the right config based on the model_type literal field.
 # Adding a new model = add a config class above and extend this union.
 ModelSpecificConfig = Annotated[
-    Union[SpatialAutoencoderConfig, SpectralCompressorConfig],
+    Union[SpatialAutoencoderConfig, SpectralCompressorConfig, SpatialMaskedAutoEncoderConfig],
     Field(discriminator="model_type"),
 ]
 
