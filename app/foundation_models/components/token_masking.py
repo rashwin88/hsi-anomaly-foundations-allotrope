@@ -9,6 +9,13 @@ Token removal workflow:
     2. generate_prediction_mask: from valid tokens, select prediction targets
     3. remove_tokens:  gather visible tokens from the full sequence
     4. restore_tokens: scatter encoded tokens back into full grid (zeros at masked positions)
+
+Edge handling:
+    erode_mask: shrinks the valid region by a buffer zone around invalid boundaries.
+    Pixels near the edge of the valid region have their OPE receptive fields partially
+    overlapping with invalid pixels, producing contaminated tokens and unreliable
+    reconstructions. Eroding the mask excludes these border pixels from loss and
+    anomaly scoring.
 """
 
 import torch
@@ -20,6 +27,51 @@ class TokenMasking:
     Static utility methods for token-level masking.
     No learnable parameters -- not an nn.Module.
     """
+
+    @staticmethod
+    def erode_mask(mask, kernel_size):
+        """
+        Erode a validity mask by shrinking the valid region inward from boundaries.
+
+        Pixels within kernel_size//2 of any invalid pixel are marked invalid.
+        This creates a buffer zone around invalid regions (clouds, nodata, scene
+        edges) where the OPE's receptive field would overlap with invalid pixels,
+        producing contaminated tokens and unreliable reconstructions.
+
+        Implementation: dilate the INVALID region using max_pool2d, then invert.
+        max_pool2d with stride=1, padding=kernel_size//2 expands any invalid pixel
+        (value=1 in the inverted mask) into its neighbors.
+
+        Args:
+            mask:        (B, 1, H, W) -- pixel validity (1=valid, 0=invalid)
+            kernel_size: erosion radius = kernel_size // 2 pixels
+                         Should match OPE kernel_size (7 for Stage 1) so the
+                         buffer zone covers the full receptive field overlap.
+
+        Returns:
+            eroded_mask: (B, 1, H, W) -- validity mask with border pixels removed
+
+        Example (1D, kernel_size=7, so erosion radius=3):
+            mask:        [0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0]
+                                 ^-- invalid border
+            eroded_mask: [0, 0, 0, 0, 0, 1, 1, 1, 1, 0, 0, 0]
+                                        ^-- 3 pixels eroded from each edge
+
+            The 3 valid pixels adjacent to the invalid boundary are now excluded.
+            These are the pixels whose OPE 7x7 kernel would have partially
+            overlapped with the invalid region.
+        """
+        padding = kernel_size // 2
+        # Invert: invalid=1, valid=0
+        invalid = 1.0 - mask
+        # Dilate invalid region: any invalid pixel expands into its neighbors
+        # max_pool2d with stride=1 preserves spatial dims
+        dilated_invalid = F.max_pool2d(
+            invalid, kernel_size=kernel_size, stride=1, padding=padding
+        )
+        # Invert back: valid=1, invalid=0 (now with eroded border)
+        eroded_mask = 1.0 - dilated_invalid
+        return eroded_mask
 
     @staticmethod
     def pixel_mask_to_token_mask(pixel_mask, kernel_size, stride):

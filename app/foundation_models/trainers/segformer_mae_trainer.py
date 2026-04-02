@@ -177,11 +177,15 @@ class SegFormerMAETrainer(FoundationTrainer):
         # Convert token prediction mask to pixel-level for loss
         pixel_pred_mask = self._pred_mask_to_pixel_mask(pred_mask, H, W)
 
-        # Also intersect with pixel validity -- only compute loss on
-        # pixels that are both prediction targets AND valid
-        loss_mask = pixel_pred_mask * mask
+        # Erode validity mask to exclude border pixels whose OPE receptive
+        # fields overlap with invalid regions — these produce unreliable
+        # reconstructions and noisy gradients
+        eroded_mask = TokenMasking.erode_mask(mask, kernel_size=STAGE1_KERNEL_SIZE)
 
-        # L1 loss only at masked valid pixel positions
+        # Intersect: prediction targets AND valid AND not at boundary
+        loss_mask = pixel_pred_mask * eroded_mask
+
+        # L1 loss only at masked, interior-valid pixel positions
         loss = ((x_hat - pixels).abs() * loss_mask).sum() / loss_mask.sum().clamp(min=1)
 
         return loss, num_kept
@@ -264,8 +268,11 @@ class SegFormerMAETrainer(FoundationTrainer):
         # Combine: each pixel from the pass where its token was masked
         x_hat = x_hat_1 * checker_inv_pixels + x_hat_2 * checker_pixels
 
-        # L1 loss on all valid pixels
-        loss = ((x_hat - pixels).abs() * mask).sum() / mask.sum().clamp(min=1)
+        # Erode validity mask to exclude border pixels
+        eroded_mask = TokenMasking.erode_mask(mask, kernel_size=STAGE1_KERNEL_SIZE)
+
+        # L1 loss on interior-valid pixels only
+        loss = ((x_hat - pixels).abs() * eroded_mask).sum() / eroded_mask.sum().clamp(min=1)
 
         return loss, num_kept
 

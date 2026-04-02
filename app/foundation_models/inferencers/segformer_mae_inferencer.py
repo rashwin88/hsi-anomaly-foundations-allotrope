@@ -26,6 +26,7 @@ import logging
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
 from app.abstract_classes.foundation_inferencer import FoundationInferencer
 from app.foundation_models.components.seg_former_mae import SegFormerMAE
@@ -201,6 +202,16 @@ class SegFormerMAEInferencer(FoundationInferencer):
         ps = self.config.patch_size
         stride = self.config.stride or ps // 2
 
+        # Erode the validity mask to exclude border pixels whose OPE
+        # receptive fields overlap with invalid regions. These pixels
+        # produce unreliable reconstructions and contaminate anomaly scores.
+        # The eroded mask is used for accumulation only — the model still
+        # receives the original mask (it needs the full validity info).
+        eroded_mask = TokenMasking.erode_mask(
+            mask.unsqueeze(0), kernel_size=STAGE1_KERNEL_SIZE
+        ).squeeze(0)
+        # eroded_mask: (1, H, W) — valid region shrunk by 3 pixels at boundaries
+
         request = PatchRequest(
             input_cube=(c, h, w),
             width=ps,
@@ -215,11 +226,13 @@ class SegFormerMAEInferencer(FoundationInferencer):
         for r, c_start in plan.patch_coordinates:
             patch = scene[:, r:r + ps, c_start:c_start + ps].unsqueeze(0)
             patch_mask = mask[:, r:r + ps, c_start:c_start + ps].unsqueeze(0)
+            patch_eroded = eroded_mask[:, r:r + ps, c_start:c_start + ps]
 
             recon = self.predict(patch, patch_mask)  # (1, C, ps, ps)
 
-            recon_sum[:, r:r + ps, c_start:c_start + ps] += recon.squeeze(0)
-            count[:, r:r + ps, c_start:c_start + ps] += patch_mask.squeeze(0)
+            # Accumulate only at eroded-valid positions — border pixels excluded
+            recon_sum[:, r:r + ps, c_start:c_start + ps] += recon.squeeze(0) * patch_eroded
+            count[:, r:r + ps, c_start:c_start + ps] += patch_eroded
 
         reconstruction = torch.where(count > 0, recon_sum / count, recon_sum)
 

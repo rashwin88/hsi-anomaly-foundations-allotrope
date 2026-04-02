@@ -215,27 +215,6 @@ class SegFormerEncoder(nn.Module):
             # a grid that's smaller than H*W -- but ESA only needs H, W for the
             # reduction conv on the K/V path, which operates on the full x reshaped,
             # so we pass the actual token grid dims instead.
-            if i == 0 and keep_mask is not None:
-                # Visible tokens can't be reshaped to a clean H*W grid.
-                # ESA's spatial reduction conv needs actual 2D dims.
-                # We pass H, W of the full grid -- ESA will handle the reduced sequence.
-                # Note: ESA's reduction conv reshapes x to (B, C, H, W) using H*W = N.
-                # With removal, N_kept < H*W, so we need to skip the spatial reduction
-                # for Stage 1 when masking is active. The reduction_ratio=8 already
-                # makes the attention cheap (1024/64 = 16 K/V tokens), so with ~512
-                # visible tokens the attention matrix is 512x512 -- still manageable.
-                #
-                # IMPORTANT: ESA reshapes x to (B, C, H, W) for the reduction conv.
-                # This only works if N == H*W. With token removal N_kept != H*W.
-                # For Stage 1 with masking, we skip ESA's spatial reduction.
-                # The blocks still work because ESA falls back to full attention when
-                # the reshape would fail. We handle this by computing effective H, W
-                # from the kept token count (approximate -- treats as square grid).
-                #
-                # Simpler approach: just use full attention for Stage 1 with masking.
-                # With ~512 tokens, full attention costs 512*512 = 262K -- very cheap.
-                pass
-
             for block in self.blocks[i]:
                 x = block(x, H, W)
             # x: (B, N or N_kept, C_i)
