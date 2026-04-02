@@ -224,16 +224,15 @@ class SegFormerMAETrainer(FoundationTrainer):
         self, batch: dict, model: nn.Module
     ) -> tuple[torch.Tensor, int]:
         """
-        Validation loss using two-pass checkerboard masking.
+        Validation loss using two-pass random masking.
 
-        Matches the inference regime: each pixel is reconstructed from context
-        only (never from itself). Loss is computed on all valid pixels across
-        both passes, combining each pixel's value from the pass where its
-        token was masked.
+        Matches the training regime: random 50% of valid tokens are masked,
+        complementary set masked in the second pass. Each pixel is reconstructed
+        from context only (never from itself). Loss is computed on all interior-
+        valid pixels across both passes.
 
-        This gives a val loss that tracks the actual inference performance,
-        unlike full reconstruction which is a different task than what the
-        model is trained for.
+        Random masking (rather than checkerboard) avoids systematic grid artifacts
+        and more closely matches what the model sees during training.
         """
         pixels = batch["pixels.npy"].to(self.device)
         mask = self._build_mask(batch)
@@ -245,28 +244,40 @@ class SegFormerMAETrainer(FoundationTrainer):
         _, _, H, W = pixels.shape
         H_tokens = H // STAGE1_STRIDE
         W_tokens = W // STAGE1_STRIDE
+        N = H_tokens * W_tokens
 
-        # Checkerboard at token level for combining passes
-        checker = TokenMasking.checkerboard_token_mask(
-            H_tokens, W_tokens, cell_size=1, device=self.device, invert=False,
+        # Token validity
+        token_validity = TokenMasking.pixel_mask_to_token_mask(
+            mask, kernel_size=STAGE1_KERNEL_SIZE, stride=STAGE1_STRIDE
         )
-        # Expand to pixel level: (1, N) -> (1, 1, H, W)
-        checker_pixels = checker.reshape(1, 1, H_tokens, W_tokens)
-        checker_pixels = torch.nn.functional.interpolate(
-            checker_pixels, size=(H, W), mode='nearest'
-        )
-        checker_inv_pixels = 1.0 - checker_pixels
 
-        # Pass 1: mask "black" tokens, reconstruct
-        keep_mask_1, _ = self._checkerboard_keep_mask(mask, invert=False)
+        # Random 50% split of valid tokens
+        rand_mask = (torch.rand(1, N, device=self.device) > 0.5).float()
+
+        # Pass 1: mask tokens where rand_mask=0
+        pred_mask_1 = token_validity * (1.0 - rand_mask)
+        keep_mask_1 = 1.0 - pred_mask_1
+
+        # Pass 2: mask tokens where rand_mask=1 (complement)
+        pred_mask_2 = token_validity * rand_mask
+        keep_mask_2 = 1.0 - pred_mask_2
+
+        # Expand to pixel level for combining
+        pass1_pixels = pred_mask_1.reshape(1, 1, H_tokens, W_tokens)
+        pass1_pixels = torch.nn.functional.interpolate(
+            pass1_pixels, size=(H, W), mode='nearest'
+        )
+        pass2_pixels = pred_mask_2.reshape(1, 1, H_tokens, W_tokens)
+        pass2_pixels = torch.nn.functional.interpolate(
+            pass2_pixels, size=(H, W), mode='nearest'
+        )
+
+        # Two-pass reconstruction
         x_hat_1 = model(pixels, mask=mask, keep_mask=keep_mask_1)
-
-        # Pass 2: mask "white" tokens, reconstruct
-        keep_mask_2, _ = self._checkerboard_keep_mask(mask, invert=True)
         x_hat_2 = model(pixels, mask=mask, keep_mask=keep_mask_2)
 
         # Combine: each pixel from the pass where its token was masked
-        x_hat = x_hat_1 * checker_inv_pixels + x_hat_2 * checker_pixels
+        x_hat = x_hat_1 * pass1_pixels + x_hat_2 * pass2_pixels
 
         # Erode validity mask to exclude border pixels
         eroded_mask = TokenMasking.erode_mask(mask, kernel_size=STAGE1_KERNEL_SIZE)
