@@ -263,11 +263,13 @@ class SegFormerMAETrainer(FoundationTrainer):
         keep_mask_2 = 1.0 - pred_mask_2
 
         # Expand to pixel level for combining
-        pass1_pixels = pred_mask_1.reshape(1, 1, H_tokens, W_tokens)
+        # pred_mask_1 is (B, N) — reshape to (B, 1, H_tokens, W_tokens)
+        B = pred_mask_1.shape[0]
+        pass1_pixels = pred_mask_1.reshape(B, 1, H_tokens, W_tokens)
         pass1_pixels = torch.nn.functional.interpolate(
             pass1_pixels, size=(H, W), mode='nearest'
         )
-        pass2_pixels = pred_mask_2.reshape(1, 1, H_tokens, W_tokens)
+        pass2_pixels = pred_mask_2.reshape(B, 1, H_tokens, W_tokens)
         pass2_pixels = torch.nn.functional.interpolate(
             pass2_pixels, size=(H, W), mode='nearest'
         )
