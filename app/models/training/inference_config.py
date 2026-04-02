@@ -5,6 +5,8 @@ An InferenceConfig specifies which model to load, which checkpoint
 to restore, and the patch size to infer on.
 """
 
+from typing import Literal
+
 from pydantic import BaseModel, Field
 
 from app.models.training.training_config import (
@@ -55,4 +57,11 @@ class InferenceConfig(BaseModel):
         default=None,
         description="Path to pixel normalization stats JSON (mean/std). "
         "Required for normalized training.",
+    )
+    masking_strategy: Literal["checkerboard", "random"] = Field(
+        default="checkerboard",
+        description="Inference masking strategy. "
+        "'checkerboard' uses a deterministic token-level checkerboard pattern. "
+        "'random' uses a random 50% mask with its complement for the two passes. "
+        "Random masking avoids systematic grid artifacts in the residual map.",
     )

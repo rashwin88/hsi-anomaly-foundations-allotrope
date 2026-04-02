@@ -115,15 +115,62 @@ class SegFormerMAEInferencer(FoundationInferencer):
 
         return keep_mask
 
+    def _token_mask_to_pixel_mask(self, token_mask, H_tokens, W_tokens, H, W):
+        """Expand a (B, N) or (1, N) token mask to (B, 1, H, W) pixel mask."""
+        B = token_mask.shape[0]
+        pixel_mask = token_mask.reshape(B, 1, H_tokens, W_tokens)
+        pixel_mask = F.interpolate(pixel_mask, size=(H, W), mode='nearest')
+        return pixel_mask
+
+    def _build_random_keep_mask(self, H_tokens, W_tokens, mask):
+        """
+        Build a random 50% token mask and its complement for two-pass inference.
+        No systematic grid pattern — artifacts are randomly distributed and
+        cancel out when averaged across overlapping patches.
+
+        Args:
+            H_tokens, W_tokens: token grid dimensions
+            mask: (B, 1, H, W) pixel validity mask
+
+        Returns:
+            keep_mask_1: (B, N) -- pass 1: keep these, mask the rest
+            keep_mask_2: (B, N) -- pass 2: exact complement of pass 1
+        """
+        N = H_tokens * W_tokens
+
+        # Token validity
+        token_validity = TokenMasking.pixel_mask_to_token_mask(
+            mask, kernel_size=STAGE1_KERNEL_SIZE, stride=STAGE1_STRIDE
+        )
+        # token_validity: (B, N)
+
+        # Random 50% split of valid tokens
+        # rand_mask: 1=visible in pass 1, 0=masked in pass 1
+        rand_mask = (torch.rand(1, N, device=self.device) > 0.5).float()
+
+        # Pass 1: prediction targets are valid tokens where rand_mask=0
+        pred_mask_1 = token_validity * (1.0 - rand_mask)
+        keep_mask_1 = 1.0 - pred_mask_1
+
+        # Pass 2: exact complement — prediction targets are valid tokens where rand_mask=1
+        pred_mask_2 = token_validity * rand_mask
+        keep_mask_2 = 1.0 - pred_mask_2
+
+        return keep_mask_1, keep_mask_2, rand_mask
+
     def infer(
         self, tensor: torch.Tensor, mask: torch.Tensor
     ) -> torch.Tensor:
         """
-        Two-pass checkerboard reconstruction for a batch of patches.
+        Two-pass reconstruction for a batch of patches.
 
-        Pass 1: Remove "black" checkerboard tokens, reconstruct -> take "black" pixels
-        Pass 2: Remove "white" checkerboard tokens, reconstruct -> take "white" pixels
-        Combine: Each pixel comes from the pass where its token was masked.
+        Supports two masking strategies (configured via inference_config.masking_strategy):
+            'checkerboard': deterministic token-level checkerboard pattern
+            'random': random 50% mask with complement for second pass
+
+        Both strategies ensure every pixel is predicted from context (never from itself).
+        Random masking avoids the systematic grid artifacts that checkerboard produces
+        at token boundaries.
 
         Args:
             tensor: (B, C, H, W) input patches, already on device.
@@ -136,42 +183,51 @@ class SegFormerMAEInferencer(FoundationInferencer):
         _, _, H, W = tensor.shape
         H_tokens = H // STAGE1_STRIDE
         W_tokens = W // STAGE1_STRIDE
+        strategy = self.config.masking_strategy
 
-        # Get checkerboard pattern at token level for combining passes
-        # (1, N) -- 1 at "white" positions, 0 at "black" positions
-        checker = TokenMasking.checkerboard_token_mask(
-            H_tokens, W_tokens,
-            cell_size=self.config.checkerboard_cell_size,
-            device=self.device,
-            invert=False,
-        )
-        checker_inv = 1.0 - checker
+        if strategy == "checkerboard":
+            # Deterministic checkerboard at token level
+            checker = TokenMasking.checkerboard_token_mask(
+                H_tokens, W_tokens,
+                cell_size=self.config.checkerboard_cell_size,
+                device=self.device,
+                invert=False,
+            )
+            pass1_pixels = self._token_mask_to_pixel_mask(
+                1.0 - checker, H_tokens, W_tokens, H, W
+            )
+            pass2_pixels = self._token_mask_to_pixel_mask(
+                checker, H_tokens, W_tokens, H, W
+            )
 
-        # Expand to pixel level for combining reconstructions
-        # (1, N) -> (1, 1, H_tokens, W_tokens) -> upsample -> (1, 1, H, W)
-        B_check = checker.shape[0]
-        checker_pixels = checker.reshape(B_check, 1, H_tokens, W_tokens)
-        checker_pixels = torch.nn.functional.interpolate(
-            checker_pixels, size=(H, W), mode='nearest'
-        )
-        # checker_pixels: (1, 1, H, W) -- 1 at "white" pixel positions
-        checker_inv_pixels = 1.0 - checker_pixels
+            keep_mask_1 = self._checkerboard_keep_mask(H, W, mask, invert=False)
+            keep_mask_2 = self._checkerboard_keep_mask(H, W, mask, invert=True)
 
-        # --- Pass 1: mask "black" tokens (checker=0), encode "white" tokens ---
-        # keep_mask_1: keeps "white" valid + all invalid, removes "black" valid
-        keep_mask_1 = self._checkerboard_keep_mask(H, W, mask, invert=False)
+        elif strategy == "random":
+            # Random 50% mask with complement
+            keep_mask_1, keep_mask_2, rand_mask = self._build_random_keep_mask(
+                H_tokens, W_tokens, mask
+            )
+            # pass1 masked tokens (rand_mask=0) → take pass1 reconstruction there
+            pass1_pixels = self._token_mask_to_pixel_mask(
+                1.0 - rand_mask, H_tokens, W_tokens, H, W
+            )
+            # pass2 masked tokens (rand_mask=1) → take pass2 reconstruction there
+            pass2_pixels = self._token_mask_to_pixel_mask(
+                rand_mask, H_tokens, W_tokens, H, W
+            )
+
+        else:
+            raise ValueError(f"Unknown masking strategy: {strategy}")
+
+        # --- Pass 1 ---
         x_hat_1 = self.model(tensor, mask=mask, keep_mask=keep_mask_1)
-        # x_hat_1: (B, C, H, W) -- reconstruction, good at "black" (predicted) positions
 
-        # --- Pass 2: mask "white" tokens (checker=1), encode "black" tokens ---
-        keep_mask_2 = self._checkerboard_keep_mask(H, W, mask, invert=True)
+        # --- Pass 2 ---
         x_hat_2 = self.model(tensor, mask=mask, keep_mask=keep_mask_2)
-        # x_hat_2: (B, C, H, W) -- reconstruction, good at "white" (predicted) positions
 
-        # --- Combine: each pixel from the pass where its token was MASKED ---
-        # Pass 1 masked "black" tokens -> use x_hat_1 at "black" pixel positions
-        # Pass 2 masked "white" tokens -> use x_hat_2 at "white" pixel positions
-        reconstruction = x_hat_1 * checker_inv_pixels + x_hat_2 * checker_pixels
+        # --- Combine: each pixel from the pass where its token was masked ---
+        reconstruction = x_hat_1 * pass1_pixels + x_hat_2 * pass2_pixels
 
         # Zero out invalid pixels
         reconstruction = reconstruction * mask
