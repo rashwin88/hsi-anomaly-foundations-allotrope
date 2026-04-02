@@ -24,6 +24,7 @@ class FoundationModelName(str, Enum):
     SPATIAL_MASKED_AUTOENCODER_L1 = "spatial_masked_autoencoder_l1"
     SPATIAL_MASKED_AUTOENCODER_L1_UNNORMALIZED = "spatial_masked_autoencoder_l1_unnormalized"
     NORMALIZED_MASKED_AUTOENCODER = "normalized_masked_autoencoder"
+    SEGFORMER_MAE = "segformer_mae"
 
 
 
@@ -61,6 +62,20 @@ class NormalizedMaskedAutoEncoderConfig(BaseModel):
     kernel_size: int = 4
     masking_range: Tuple[float, float] = (0.35, 0.55)
 
+class SegFormerMAEConfig(BaseModel):
+    """Architecture config for SegFormer MAE reconstruction model."""
+
+    model_type: Literal["segformer_mae"] = "segformer_mae"
+    in_channels: int = 1
+    embed_dims: list[int] = [32, 64, 160, 256]
+    num_heads: list[int] = [1, 2, 5, 8]
+    reduction_ratios: list[int] = [8, 4, 2, 1]
+    num_blocks: list[int] = [2, 2, 2, 2]
+    decoder_dim: int = 256
+    expansion_ratio: int = 4
+    drop_rate: float = 0.3
+    mask_ratio: float = 0.5
+
 class SpectralCompressorConfig(BaseModel):
     """Architecture config for SpectralCompressor (linear autoencoder)."""
 
@@ -72,7 +87,7 @@ class SpectralCompressorConfig(BaseModel):
 # Pydantic picks the right config based on the model_type literal field.
 # Adding a new model = add a config class above and extend this union.
 ModelSpecificConfig = Annotated[
-    Union[SpatialAutoencoderConfig, SpectralCompressorConfig, SpatialMaskedAutoEncoderConfig, NormalizedMaskedAutoEncoderConfig],
+    Union[SpatialAutoencoderConfig, SpectralCompressorConfig, SpatialMaskedAutoEncoderConfig, NormalizedMaskedAutoEncoderConfig, SegFormerMAEConfig],
     Field(discriminator="model_type"),
 ]
 
@@ -352,6 +367,16 @@ class TrainingConfig(BaseModel):
         For spatial models, every patch size must be divisible by
         2^num_stages to ensure clean downsampling and upsampling.
         """
+        if isinstance(self.model_config_, SegFormerMAEConfig):
+            # SegFormer total stride = 4 * 2 * 2 * 2 = 32
+            divisor = 32
+            for size in self.data.patch_sizes:
+                if size % divisor != 0:
+                    raise ValueError(
+                        f"patch_size {size} must be divisible by "
+                        f"SegFormer total stride = {divisor}"
+                    )
+            return self
         if isinstance(self.model_config_, (SpatialAutoencoderConfig, NormalizedMaskedAutoEncoderConfig)):
             divisor = 2 ** self.model_config_.num_stages
             for size in self.data.patch_sizes:
