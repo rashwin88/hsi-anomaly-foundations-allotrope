@@ -186,14 +186,50 @@ class SegFormerMAETrainer(FoundationTrainer):
 
         return loss, num_kept
 
+    def _checkerboard_keep_mask(
+        self, pixel_mask: torch.Tensor, invert: bool
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """
+        Build token-level keep/pred masks from a checkerboard pattern.
+        Used for validation to match inference regime.
+
+        Args:
+            pixel_mask: (B, 1, H, W) pixel validity
+            invert:     False for pass 1, True for pass 2
+
+        Returns:
+            keep_mask: (B, N) -- 1=keep, 0=remove
+            pred_mask: (B, N) -- 1=prediction target
+        """
+        _, _, H, W = pixel_mask.shape
+        H_tokens = H // STAGE1_STRIDE
+        W_tokens = W // STAGE1_STRIDE
+
+        checker = TokenMasking.checkerboard_token_mask(
+            H_tokens, W_tokens, cell_size=1,
+            device=self.device, invert=invert,
+        )
+        token_validity = TokenMasking.pixel_mask_to_token_mask(
+            pixel_mask, kernel_size=STAGE1_KERNEL_SIZE, stride=STAGE1_STRIDE
+        )
+        pred_mask = token_validity * (1.0 - checker)
+        keep_mask = 1.0 - pred_mask
+        return keep_mask, pred_mask
+
     def compute_validation_loss(
         self, batch: dict, model: nn.Module
     ) -> tuple[torch.Tensor, int]:
         """
-        Validation loss: full reconstruction without token removal.
+        Validation loss using two-pass checkerboard masking.
 
-        No masking -- the model sees all tokens. L1 loss on all valid pixels.
-        This measures the model's reconstruction quality when given full context.
+        Matches the inference regime: each pixel is reconstructed from context
+        only (never from itself). Loss is computed on all valid pixels across
+        both passes, combining each pixel's value from the pass where its
+        token was masked.
+
+        This gives a val loss that tracks the actual inference performance,
+        unlike full reconstruction which is a different task than what the
+        model is trained for.
         """
         pixels = batch["pixels.npy"].to(self.device)
         mask = self._build_mask(batch)
@@ -202,8 +238,31 @@ class SegFormerMAETrainer(FoundationTrainer):
         if num_kept == 0:
             return torch.tensor(0.0, device=self.device, requires_grad=True), 0
 
-        # Forward without masking (keep_mask=None)
-        x_hat = model(pixels, mask=mask, keep_mask=None)
+        _, _, H, W = pixels.shape
+        H_tokens = H // STAGE1_STRIDE
+        W_tokens = W // STAGE1_STRIDE
+
+        # Checkerboard at token level for combining passes
+        checker = TokenMasking.checkerboard_token_mask(
+            H_tokens, W_tokens, cell_size=1, device=self.device, invert=False,
+        )
+        # Expand to pixel level: (1, N) -> (1, 1, H, W)
+        checker_pixels = checker.reshape(1, 1, H_tokens, W_tokens)
+        checker_pixels = torch.nn.functional.interpolate(
+            checker_pixels, size=(H, W), mode='nearest'
+        )
+        checker_inv_pixels = 1.0 - checker_pixels
+
+        # Pass 1: mask "black" tokens, reconstruct
+        keep_mask_1, _ = self._checkerboard_keep_mask(mask, invert=False)
+        x_hat_1 = model(pixels, mask=mask, keep_mask=keep_mask_1)
+
+        # Pass 2: mask "white" tokens, reconstruct
+        keep_mask_2, _ = self._checkerboard_keep_mask(mask, invert=True)
+        x_hat_2 = model(pixels, mask=mask, keep_mask=keep_mask_2)
+
+        # Combine: each pixel from the pass where its token was masked
+        x_hat = x_hat_1 * checker_inv_pixels + x_hat_2 * checker_pixels
 
         # L1 loss on all valid pixels
         loss = ((x_hat - pixels).abs() * mask).sum() / mask.sum().clamp(min=1)
