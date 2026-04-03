@@ -1,0 +1,72 @@
+{
+    "_comment": "Run: python scripts/train_foundation_model.py configs/seg_former_exp_5.json",
+
+    "foundation_model_name": "segformer_mae",
+    "version": "0.5.0",
+
+    "model_config": {
+        "model_type": "segformer_mae",
+        "in_channels": 1,
+        "embed_dims": [16, 32, 64, 96],
+        "num_heads": [1, 2, 4, 8],
+        "reduction_ratios": [8, 4, 2, 1],
+        "num_blocks": [1, 1, 1, 1],
+        "decoder_dim": 96,
+        "expansion_ratio": 2,
+        "drop_rate": 0.3,
+        "mask_ratio": 0.5
+    },
+
+    "data": {
+        "num_epochs": 500,
+        "data_provider": "landsat",
+        "train_samples_per_epoch": { "256": 30000 },
+        "test_samples_per_epoch": { "256": 1000 },
+        "shard_key_template": "patches/{provider}/{split}/{stage}/w{size}_h{size}_s{stride}/",
+        "stage": "final",
+        "bucket_name": "allotrope-raw-data-india",
+        "region_name": "ap-south-1",
+        "batch_size": 64,
+        "num_workers": 10,
+        "shardshuffle": 30,
+        "pixel_stats_path": "/home/user57/constants/thermal.json"
+    },
+
+    "learning_rate": 1e-4,
+
+    "lr_schedule": {
+        "scheduler_type": "cosine",
+        "warmup_epochs": 5,
+        "min_lr": 1e-6,
+        "step_size": 10,
+        "step_gamma": 0.5
+    },
+
+    "checkpoint": {
+        "checkpoint_dir": "/home/user57/checkpoints/segformer_mae_v1/",
+        "save_every_n_epochs": 1,
+        "keep_top_k": 3,
+        "save_to_s3": false,
+        "s3_checkpoint_key": null
+    },
+
+    "hot_storage": {
+        "enabled": true,
+        "local_cache_dir": "/tmp/hot_shards/",
+        "train_shards_per_size": 70,
+        "test_shards_per_size": 10,
+        "skip_sync_if_exists": true,
+        "max_parallel_downloads": 30
+    },
+
+    "wandb": {
+        "enabled": true,
+        "project": "allotrope",
+        "run_name": "allotrope-segformer-mae-v0.5.0",
+        "tags": ["segformer_mae", "landsat", "thermal", "token_removal"]
+    },
+
+    "device": null,
+    "resume_from": null,
+    "resume_mode": "resume"
+}

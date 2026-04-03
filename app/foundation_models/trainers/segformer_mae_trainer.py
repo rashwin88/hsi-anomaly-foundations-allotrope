@@ -180,7 +180,7 @@ class SegFormerMAETrainer(FoundationTrainer):
         # Erode validity mask to exclude border pixels whose OPE receptive
         # fields overlap with invalid regions — these produce unreliable
         # reconstructions and noisy gradients
-        eroded_mask = TokenMasking.erode_mask(mask, kernel_size=STAGE1_KERNEL_SIZE)
+        eroded_mask = TokenMasking.erode_mask(mask, kernel_size=1)
 
         # Intersect: prediction targets AND valid AND not at boundary
         loss_mask = pixel_pred_mask * eroded_mask
@@ -282,7 +282,7 @@ class SegFormerMAETrainer(FoundationTrainer):
         x_hat = x_hat_1 * pass1_pixels + x_hat_2 * pass2_pixels
 
         # Erode validity mask to exclude border pixels
-        eroded_mask = TokenMasking.erode_mask(mask, kernel_size=STAGE1_KERNEL_SIZE)
+        eroded_mask = TokenMasking.erode_mask(mask, kernel_size=1)
 
         # L1 loss on interior-valid pixels only
         loss = ((x_hat - pixels).abs() * eroded_mask).sum() / eroded_mask.sum().clamp(min=1)
