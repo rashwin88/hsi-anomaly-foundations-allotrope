@@ -65,3 +65,9 @@ class InferenceConfig(BaseModel):
         "'random' uses a random 50% mask with its complement for the two passes. "
         "Random masking avoids systematic grid artifacts in the residual map.",
     )
+    inference_batch_size: int = Field(
+        default=16,
+        gt=0,
+        description="Number of patches to process in parallel during full-scene inference. "
+        "Higher values use more GPU memory but are significantly faster.",
+    )

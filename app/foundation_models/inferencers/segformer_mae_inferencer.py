@@ -238,11 +238,11 @@ class SegFormerMAEInferencer(FoundationInferencer):
         self, scene: torch.Tensor, mask: torch.Tensor
     ) -> torch.Tensor:
         """
-        Sliding-window checkerboard reconstruction over a full scene.
+        Batched sliding-window reconstruction over a full scene.
 
-        Extracts overlapping patches via PatchPlanGenerator, reconstructs
-        each with two-pass checkerboard masking, and overlap-averages back
-        into the full frame.
+        Extracts overlapping patches via PatchPlanGenerator, batches them
+        for efficient GPU utilization, reconstructs with two-pass masking,
+        and overlap-averages back into the full frame.
 
         Args:
             scene: (C, H, W) full scene tensor.
@@ -257,16 +257,12 @@ class SegFormerMAEInferencer(FoundationInferencer):
         c, h, w = scene.shape
         ps = self.config.patch_size
         stride = self.config.stride or ps // 2
+        batch_size = self.config.inference_batch_size
 
-        # Erode the validity mask to exclude border pixels whose OPE
-        # receptive fields overlap with invalid regions. These pixels
-        # produce unreliable reconstructions and contaminate anomaly scores.
-        # The eroded mask is used for accumulation only — the model still
-        # receives the original mask (it needs the full validity info).
+        # Erode the validity mask to exclude border pixels
         eroded_mask = TokenMasking.erode_mask(
             mask.unsqueeze(0), kernel_size=STAGE1_KERNEL_SIZE
         ).squeeze(0)
-        # eroded_mask: (1, H, W) — valid region shrunk by 3 pixels at boundaries
 
         request = PatchRequest(
             input_cube=(c, h, w),
@@ -275,20 +271,32 @@ class SegFormerMAEInferencer(FoundationInferencer):
             stride=stride,
         )
         plan = PatchPlanGenerator().generate_patching_plan(request)
+        coords = plan.patch_coordinates
 
         recon_sum = torch.zeros(c, h, w, device=self.device)
         count = torch.zeros(1, h, w, device=self.device)
 
-        for r, c_start in plan.patch_coordinates:
-            patch = scene[:, r:r + ps, c_start:c_start + ps].unsqueeze(0)
-            patch_mask = mask[:, r:r + ps, c_start:c_start + ps].unsqueeze(0)
-            patch_eroded = eroded_mask[:, r:r + ps, c_start:c_start + ps]
+        # Process patches in batches for GPU efficiency
+        for batch_start in range(0, len(coords), batch_size):
+            batch_coords = coords[batch_start:batch_start + batch_size]
+            B = len(batch_coords)
 
-            recon = self.predict(patch, patch_mask)  # (1, C, ps, ps)
+            # Stack patches into a batch
+            patches = torch.stack([
+                scene[:, r:r + ps, cs:cs + ps] for r, cs in batch_coords
+            ])  # (B, C, ps, ps)
+            patch_masks = torch.stack([
+                mask[:, r:r + ps, cs:cs + ps] for r, cs in batch_coords
+            ])  # (B, 1, ps, ps)
 
-            # Accumulate only at eroded-valid positions — border pixels excluded
-            recon_sum[:, r:r + ps, c_start:c_start + ps] += recon.squeeze(0) * patch_eroded
-            count[:, r:r + ps, c_start:c_start + ps] += patch_eroded
+            # Two-pass reconstruction on the whole batch at once
+            recon = self.predict(patches, patch_masks)  # (B, C, ps, ps)
+
+            # Scatter results back into the full scene
+            for i, (r, cs) in enumerate(batch_coords):
+                patch_eroded = eroded_mask[:, r:r + ps, cs:cs + ps]
+                recon_sum[:, r:r + ps, cs:cs + ps] += recon[i] * patch_eroded
+                count[:, r:r + ps, cs:cs + ps] += patch_eroded
 
         reconstruction = torch.where(count > 0, recon_sum / count, recon_sum)
 
