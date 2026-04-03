@@ -283,7 +283,7 @@ class SegFormerMAEInferencer(FoundationInferencer):
         # Matches training: patches with < 40% valid pixels were discarded.
         # The model never learned to reconstruct mostly-invalid patches,
         # so running inference on them produces garbage at boundaries.
-        MIN_VALID_FRACTION = 0.4
+        MIN_VALID_FRACTION = 0.1
 
         # Process patches in batches for GPU efficiency
         for batch_start in range(0, len(coords), batch_size):
