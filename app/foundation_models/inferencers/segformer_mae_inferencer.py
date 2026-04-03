@@ -259,9 +259,12 @@ class SegFormerMAEInferencer(FoundationInferencer):
         stride = self.config.stride or ps // 2
         batch_size = self.config.inference_batch_size
 
-        # Erode the validity mask to exclude border pixels
+        # Erode the validity mask to exclude border pixels whose reconstructions
+        # are unreliable. Uses the configurable erosion_kernel_size which should
+        # be >= OPE kernel size to cover the full receptive field overlap.
+        erosion_ks = self.config.erosion_kernel_size
         eroded_mask = TokenMasking.erode_mask(
-            mask.unsqueeze(0), kernel_size=STAGE1_KERNEL_SIZE
+            mask.unsqueeze(0), kernel_size=erosion_ks
         ).squeeze(0)
 
         request = PatchRequest(

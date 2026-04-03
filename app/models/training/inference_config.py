@@ -71,3 +71,11 @@ class InferenceConfig(BaseModel):
         description="Number of patches to process in parallel during full-scene inference. "
         "Higher values use more GPU memory but are significantly faster.",
     )
+    erosion_kernel_size: int = Field(
+        default=15,
+        gt=0,
+        description="Kernel size for eroding the validity mask at scene boundaries. "
+        "Pixels within kernel_size//2 of any invalid pixel are excluded from "
+        "reconstruction accumulation and residual computation. "
+        "Should be >= OPE kernel size (7) to cover the full receptive field overlap.",
+    )
