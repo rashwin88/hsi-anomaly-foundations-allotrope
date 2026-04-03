@@ -75,6 +75,7 @@ class SegFormerMAEConfig(BaseModel):
     expansion_ratio: int = 4
     drop_rate: float = 0.3
     mask_ratio: float = 0.5
+    trim_fraction: float = 0.0
 
 class SpectralCompressorConfig(BaseModel):
     """Architecture config for SpectralCompressor (linear autoencoder)."""

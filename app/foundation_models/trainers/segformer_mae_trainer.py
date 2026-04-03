@@ -146,14 +146,21 @@ class SegFormerMAETrainer(FoundationTrainer):
         self, batch: dict, model: nn.Module
     ) -> tuple[torch.Tensor, int]:
         """
-        MAE reconstruction loss with true token removal.
+        MAE reconstruction loss with true token removal and optional trimming.
 
         1. Build pixel validity mask
         2. Generate token-level prediction mask (50% of valid tokens)
         3. Forward pass with keep_mask (encoder removes prediction tokens)
         4. L1 loss only at prediction target pixel positions
+        5. If trim_fraction > 0, discard the top τ% of per-pixel losses
+           (likely unlabelled anomalies) before averaging
 
-        Loss = sum(|x_hat - x| * pred_pixel_mask) / sum(pred_pixel_mask)
+        Trimmed loss prevents the model from learning to reconstruct anomalous
+        pixels that happen to be in the training data. The highest-error pixels
+        are assumed to be anomalies — dropping them from the training signal
+        teaches the model to reconstruct only normal background patterns.
+
+        Loss = mean of bottom (1 - τ)% of per-pixel |x_hat - x| at masked positions
         """
         cfg: SegFormerMAEConfig = self.config.model_config_
 
@@ -178,15 +185,34 @@ class SegFormerMAETrainer(FoundationTrainer):
         pixel_pred_mask = self._pred_mask_to_pixel_mask(pred_mask, H, W)
 
         # Erode validity mask to exclude border pixels whose OPE receptive
-        # fields overlap with invalid regions — these produce unreliable
-        # reconstructions and noisy gradients
+        # fields overlap with invalid regions
         eroded_mask = TokenMasking.erode_mask(mask, kernel_size=1)
 
         # Intersect: prediction targets AND valid AND not at boundary
         loss_mask = pixel_pred_mask * eroded_mask
 
-        # L1 loss only at masked, interior-valid pixel positions
-        loss = ((x_hat - pixels).abs() * loss_mask).sum() / loss_mask.sum().clamp(min=1)
+        # Per-pixel L1 errors at masked valid positions
+        per_pixel_loss = (x_hat - pixels).abs()
+
+        # Extract losses only at masked valid positions
+        valid_losses = per_pixel_loss[loss_mask == 1]
+
+        if valid_losses.numel() == 0:
+            return torch.tensor(0.0, device=self.device, requires_grad=True), 0
+
+        # Trimmed loss: discard the top τ% (highest errors = likely anomalies)
+        trim_fraction = cfg.trim_fraction
+        if trim_fraction > 0:
+            num_keep = int(valid_losses.numel() * (1 - trim_fraction))
+            if num_keep > 0:
+                # Sort ascending, keep only the bottom (1 - τ)%
+                trimmed_losses, _ = valid_losses.sort()
+                loss = trimmed_losses[:num_keep].mean()
+            else:
+                loss = valid_losses.mean()
+        else:
+            # Standard L1: mean of all masked valid pixel losses
+            loss = valid_losses.mean()
 
         return loss, num_kept
 
