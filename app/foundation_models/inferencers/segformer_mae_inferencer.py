@@ -279,28 +279,48 @@ class SegFormerMAEInferencer(FoundationInferencer):
         recon_sum = torch.zeros(c, h, w, device=self.device)
         count = torch.zeros(1, h, w, device=self.device)
 
+        # Minimum valid pixel fraction to process a patch.
+        # Matches training: patches with < 40% valid pixels were discarded.
+        # The model never learned to reconstruct mostly-invalid patches,
+        # so running inference on them produces garbage at boundaries.
+        MIN_VALID_FRACTION = 0.4
+
         # Process patches in batches for GPU efficiency
         for batch_start in range(0, len(coords), batch_size):
             batch_coords = coords[batch_start:batch_start + batch_size]
-            B = len(batch_coords)
 
-            # Stack patches into a batch
-            patches = torch.stack([
-                scene[:, r:r + ps, cs:cs + ps] for r, cs in batch_coords
-            ])  # (B, C, ps, ps)
-            patch_masks = torch.stack([
-                mask[:, r:r + ps, cs:cs + ps] for r, cs in batch_coords
-            ])  # (B, 1, ps, ps)
+            # Extract patches and their masks
+            all_patches = [scene[:, r:r + ps, cs:cs + ps] for r, cs in batch_coords]
+            all_masks = [mask[:, r:r + ps, cs:cs + ps] for r, cs in batch_coords]
+
+            # Filter: skip patches below the validity threshold
+            # Same criterion as training — model never saw mostly-invalid patches
+            valid_indices = []
+            for i, m in enumerate(all_masks):
+                valid_frac = m.float().mean().item()
+                if valid_frac >= MIN_VALID_FRACTION:
+                    valid_indices.append(i)
+
+            if len(valid_indices) == 0:
+                continue
+
+            # Stack only the valid patches into a batch
+            patches = torch.stack([all_patches[i] for i in valid_indices])
+            patch_masks = torch.stack([all_masks[i] for i in valid_indices])
 
             # Two-pass reconstruction on the whole batch at once
-            recon = self.predict(patches, patch_masks)  # (B, C, ps, ps)
+            recon = self.predict(patches, patch_masks)  # (B_valid, C, ps, ps)
 
             # Scatter results back into the full scene
-            for i, (r, cs) in enumerate(batch_coords):
+            for j, idx in enumerate(valid_indices):
+                r, cs = batch_coords[idx]
                 patch_eroded = eroded_mask[:, r:r + ps, cs:cs + ps]
-                recon_sum[:, r:r + ps, cs:cs + ps] += recon[i] * patch_eroded
+                recon_sum[:, r:r + ps, cs:cs + ps] += recon[j] * patch_eroded
                 count[:, r:r + ps, cs:cs + ps] += patch_eroded
 
-        reconstruction = torch.where(count > 0, recon_sum / count, recon_sum)
+        # Where count > 0: average the overlapping reconstructions
+        # Where count == 0: no valid reconstruction — use the original scene value
+        # so these pixels have zero residual and don't create false detections
+        reconstruction = torch.where(count > 0, recon_sum / count, scene)
 
         return reconstruction
