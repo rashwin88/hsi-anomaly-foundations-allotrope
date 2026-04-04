@@ -32,8 +32,9 @@ logger = logging.getLogger("SegFormerMAETrainer")
 MIN_VALID_PIXEL_FRACTION = 0.4
 
 # Stage 1 patch embedding parameters (must match SegFormerEncoder)
-STAGE1_KERNEL_SIZE = 7
+STAGE1_KERNEL_SIZE = 4
 STAGE1_STRIDE = 4
+STAGE1_PADDING = 0  # Non-overlapping: kernel=stride, no padding
 
 
 class SegFormerMAETrainer(FoundationTrainer):
@@ -98,11 +99,12 @@ class SegFormerMAETrainer(FoundationTrainer):
             pred_mask: (B, N) -- 1=prediction target, 0=everything else
         """
         # Convert pixel validity to token validity
-        # Uses same kernel and stride as OPE Stage 1
+        # Uses same kernel, stride, and padding as OPE Stage 1
         token_mask = TokenMasking.pixel_mask_to_token_mask(
             pixel_mask,
             kernel_size=STAGE1_KERNEL_SIZE,
             stride=STAGE1_STRIDE,
+            padding=STAGE1_PADDING,
         )
 
         # From valid tokens, randomly select mask_ratio as prediction targets
@@ -240,7 +242,8 @@ class SegFormerMAETrainer(FoundationTrainer):
             device=self.device, invert=invert,
         )
         token_validity = TokenMasking.pixel_mask_to_token_mask(
-            pixel_mask, kernel_size=STAGE1_KERNEL_SIZE, stride=STAGE1_STRIDE
+            pixel_mask, kernel_size=STAGE1_KERNEL_SIZE, stride=STAGE1_STRIDE,
+            padding=STAGE1_PADDING,
         )
         pred_mask = token_validity * (1.0 - checker)
         keep_mask = 1.0 - pred_mask
@@ -274,7 +277,8 @@ class SegFormerMAETrainer(FoundationTrainer):
 
         # Token validity
         token_validity = TokenMasking.pixel_mask_to_token_mask(
-            mask, kernel_size=STAGE1_KERNEL_SIZE, stride=STAGE1_STRIDE
+            mask, kernel_size=STAGE1_KERNEL_SIZE, stride=STAGE1_STRIDE,
+            padding=STAGE1_PADDING,
         )
 
         # Random 50% split of valid tokens

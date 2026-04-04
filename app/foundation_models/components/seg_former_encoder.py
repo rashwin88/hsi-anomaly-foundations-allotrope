@@ -99,20 +99,26 @@ class SegFormerEncoder(nn.Module):
         self.num_stages = len(embed_dims)
 
         # --- Patch embeddings: one per stage ---
-        # Stage 1: kernel=7, stride=4 (large receptive field for raw image input)
-        # Stages 2-4: kernel=3, stride=2 (smaller kernel, halves spatial dims)
+        # Stage 1: kernel=4, stride=4 (NON-OVERLAPPING — zero information leakage
+        #          for MAE token removal. Each token sees exactly its own 4x4 block.)
+        # Stages 2-4: kernel=3, stride=2 (overlapping, halves spatial dims.
+        #             No token removal at these stages so overlap is beneficial.)
         # c_in for each stage: [in_channels, embed_dims[0], embed_dims[1], embed_dims[2]]
         self.patch_embeds = nn.ModuleList()
         for i in range(self.num_stages):
             c_in = in_channels if i == 0 else embed_dims[i - 1]
-            patch_size = 7 if i == 0 else 3
+            patch_size = 4 if i == 0 else 3
             stride = 4 if i == 0 else 2
+            # Stage 1: padding=0 for non-overlapping (kernel=stride=4)
+            # Stages 2-4: padding=kernel//2 for overlapping (default)
+            padding = 0 if i == 0 else None
             self.patch_embeds.append(
                 OverlapPatchEmbedding(
                     c_in=c_in,
                     patch_size=patch_size,
                     desired_compression=stride,
                     c_out=embed_dims[i],
+                    padding=padding,
                 )
             )
 

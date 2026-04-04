@@ -47,17 +47,19 @@ class OverlapPatchEmbedding(nn.Module):
         overlap = patch_size - desired_compression
     """
 
-    def __init__(self, c_in, patch_size, desired_compression, c_out):
+    def __init__(self, c_in, patch_size, desired_compression, c_out, padding=None):
         super().__init__()
 
-        # Overlapping convolution: projects each local patch into an embedding vector.
-        # padding = patch_size // 2 ensures H_out = H_in / stride exactly.
+        # Default padding = patch_size // 2 gives H_out = H_in / stride for overlapping patches.
+        # For non-overlapping patches (kernel=stride), use padding=0 for exact H_out = H_in / stride.
+        if padding is None:
+            padding = patch_size // 2
         self.proj = nn.Conv2d(
             in_channels=c_in,
             out_channels=c_out,
             kernel_size=patch_size,
             stride=desired_compression,
-            padding=patch_size // 2
+            padding=padding
         )
 
         # LayerNorm over the embedding dimension (c_out), applied per-token.

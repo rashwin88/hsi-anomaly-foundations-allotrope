@@ -38,8 +38,9 @@ from app.utils.patch_generation.generate_patch_plan import PatchPlanGenerator
 logger = logging.getLogger("SegFormerMAEInferencer")
 
 # Stage 1 patch embedding parameters (must match SegFormerEncoder)
-STAGE1_KERNEL_SIZE = 7
+STAGE1_KERNEL_SIZE = 4
 STAGE1_STRIDE = 4
+STAGE1_PADDING = 0  # Non-overlapping: kernel=stride, no padding
 
 
 class SegFormerMAEInferencer(FoundationInferencer):
@@ -101,7 +102,8 @@ class SegFormerMAEInferencer(FoundationInferencer):
 
         # Token validity: convert pixel mask to token mask
         token_validity = TokenMasking.pixel_mask_to_token_mask(
-            mask, kernel_size=STAGE1_KERNEL_SIZE, stride=STAGE1_STRIDE
+            mask, kernel_size=STAGE1_KERNEL_SIZE, stride=STAGE1_STRIDE,
+            padding=STAGE1_PADDING,
         )
         # token_validity: (B, N) -- 1=valid, 0=invalid
 
@@ -140,7 +142,8 @@ class SegFormerMAEInferencer(FoundationInferencer):
 
         # Token validity
         token_validity = TokenMasking.pixel_mask_to_token_mask(
-            mask, kernel_size=STAGE1_KERNEL_SIZE, stride=STAGE1_STRIDE
+            mask, kernel_size=STAGE1_KERNEL_SIZE, stride=STAGE1_STRIDE,
+            padding=STAGE1_PADDING,
         )
         # token_validity: (B, N)
 

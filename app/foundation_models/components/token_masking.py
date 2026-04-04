@@ -74,7 +74,7 @@ class TokenMasking:
         return eroded_mask
 
     @staticmethod
-    def pixel_mask_to_token_mask(pixel_mask, kernel_size, stride):
+    def pixel_mask_to_token_mask(pixel_mask, kernel_size, stride, padding=None):
         """
         Convert pixel-level validity mask to token-level validity mask.
 
@@ -88,34 +88,32 @@ class TokenMasking:
 
         Args:
             pixel_mask:  (B, 1, H, W) -- pixel validity (1=valid, 0=invalid)
-            kernel_size: OPE kernel size (7 for Stage 1, 3 for Stages 2-4)
+            kernel_size: OPE kernel size (4 for Stage 1 non-overlapping, 3 for Stages 2-4)
             stride:      OPE stride (4 for Stage 1, 2 for Stages 2-4)
+            padding:     OPE padding. None defaults to kernel_size // 2 (overlapping).
+                         Use 0 for non-overlapping (kernel=stride) patches.
 
         Returns:
             token_mask: (B, N) -- token validity (1=valid, 0=invalid)
                         where N = (H // stride) * (W // stride)
 
-        Example (B=1, H=16, W=16, kernel_size=7, stride=4):
-            OPE Token 0 sees pixels 0-6 (7x7 receptive field)
-            OPE Token 1 sees pixels 4-10
-            Overlap = kernel - stride = 3 pixels
-
-            avg_pool2d(kernel=7, stride=4, padding=3) -> (1, 1, 4, 4)
-            Each value = fraction of valid pixels in that token's 7x7 receptive field
+        Example (B=1, H=256, W=256, kernel_size=4, stride=4, padding=0):
+            Non-overlapping: each token covers exactly its own 4x4 block.
+            avg_pool2d(kernel=4, stride=4, padding=0) -> (1, 1, 64, 64)
+            Each value = fraction of valid pixels in that token's 4x4 block
             Threshold > 0.5 -> token valid or not
-            Flatten -> (1, 16) token mask
+            Flatten -> (1, 4096) token mask
         """
+        if padding is None:
+            padding = kernel_size // 2
         # Average pool with same params as OPE: fraction of valid pixels
-        # in each token's overlapping receptive field.
-        # padding = kernel_size // 2 ensures output count = H // stride (same as OPE)
+        # in each token's receptive field.
         # (B, 1, H, W) -> (B, 1, H/stride, W/stride)
-        #
-        # Example: (2, 1, 128, 128) with kernel=7, stride=4, padding=3 -> (2, 1, 32, 32)
         token_fractions = F.avg_pool2d(
             pixel_mask.float(),
             kernel_size=kernel_size,
             stride=stride,
-            padding=kernel_size // 2
+            padding=padding
         )
 
         # Threshold: >50% valid pixels -> valid token
