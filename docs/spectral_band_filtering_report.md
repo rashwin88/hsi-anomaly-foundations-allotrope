@@ -104,7 +104,9 @@ PCHIP is the standard choice in the HSI community for spectral gap-filling becau
 
 ### Stage 8: Spectral Resampling to Common Grid
 
-When `common_wavelength_grid` is set on `BandFilterConfig`, the cube is resampled from native sensor wavelengths onto a target grid using vectorized PCHIP interpolation. This is the final stage — it runs after all gaps are filled, so every valid pixel has a complete spectrum.
+When `common_wavelength_grid` is set on `BandFilterConfig`, the cube is resampled from native sensor wavelengths onto a target grid using vectorized linear interpolation. This is the final stage — it runs after all gaps are filled, so every valid pixel has a complete spectrum.
+
+Linear interpolation is used (rather than PCHIP) because the native bands are densely sampled (6–12nm apart) and the target grid is 10nm — the sample points barely move, so PCHIP offers no practical quality gain but costs significantly more memory.
 
 The default grid (`DEFAULT_COMMON_WAVELENGTH_GRID`) uses 10nm spacing from 460–2450nm but **excludes atmospheric absorption windows** to avoid fabricating spectral data in regions where bands were deliberately removed. This produces **165 bands across 5 clean spectral segments**:
 
@@ -149,6 +151,7 @@ Key optimizations:
 1. **Pattern grouping**: Pixels with identical invalid-band masks share one interpolator
 2. **Vectorized PCHIP**: `PchipInterpolator(x, y_2d, axis=0)` interpolates all pixels in a group at once
 3. **Hybrid threshold**: Only groups with >=5000 pixels use PCHIP; smaller groups use `np.interp` (C-accelerated) which is adequate for ~3-band gaps
+4. **Linear resampling** (Stage 8): Uses numpy vectorized linear interpolation instead of PCHIP — stays in float32, no large matrix allocation, ~165 iterations with broadcast multiply
 
 ## Results (Test Scenes)
 

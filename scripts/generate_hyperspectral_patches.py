@@ -372,10 +372,10 @@ def main():
 
     total_start = time.time()
 
-    # Stage 1: Intermediate sharding — per sensor
+    # Stage 1: Intermediate sharding — only the sensors requested
     if not args.skip_intermediate:
         print("\n" + "#" * 60)
-        print("  STAGE 1: INTERMEDIATE SHARDING")
+        print(f"  STAGE 1: INTERMEDIATE SHARDING ({args.sensors})")
         print("#" * 60)
         run_intermediate(
             sensors=args.sensors,
@@ -389,14 +389,16 @@ def main():
             max_workers=args.parallel,
         )
 
-    # Stage 2: Final sharding — mixed across sensors
+    # Stage 2: Final sharding — ALWAYS mixes all sensors that have intermediates
+    # (regardless of --sensors flag, which only controls Stage 1)
     if not args.skip_final:
+        all_sensors = list(SENSORS)  # always ["prisma", "enmap"]
         print("\n" + "#" * 60)
-        print(f"  STAGE 2: FINAL SHARDING (mixed {args.sensors})")
+        print(f"  STAGE 2: FINAL SHARDING (mixing {all_sensors})")
         print("#" * 60)
         run_final(
             sizes=args.sizes,
-            sensors=args.sensors,
+            sensors=all_sensors,
             shard_temp_location=args.shard_temp_location,
             worker_count=args.final_workers,
             shuffle_size=args.final_shuffle,

@@ -46,9 +46,23 @@ class EnmapHelper(FileHelper[EnmapMetadata]):
         )
 
     def _resolve_path(self, component: EnmapFileComponents) -> str:
-        """Resolves absolute path to a component file using the template suffix."""
+        """
+        Resolves absolute path to a component file using the template suffix.
+        Handles both standard (.TIF) and COG (.tiff) naming conventions:
+            Standard: SCENE-SPECTRAL_IMAGE.TIF
+            COG:      SCENE-SPECTRAL_IMAGE_COG.tiff
+        """
         suffix = self._template[component].property_name
-        return os.path.join(self.scene_folder, self.scene_name + suffix)
+        standard_path = os.path.join(self.scene_folder, self.scene_name + suffix)
+        if os.path.exists(standard_path):
+            return standard_path
+        # Try COG variant: -SPECTRAL_IMAGE.TIF → -SPECTRAL_IMAGE_COG.tiff
+        cog_suffix = suffix.replace(".TIF", "_COG.tiff").replace(".XML", ".XML")
+        cog_path = os.path.join(self.scene_folder, self.scene_name + cog_suffix)
+        if os.path.exists(cog_path):
+            return cog_path
+        # Fall back to standard path (will error downstream with a clear message)
+        return standard_path
 
     @property
     def file_metadata(self) -> EnmapMetadata:

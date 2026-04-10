@@ -155,7 +155,7 @@ Controls the full post-processing pipeline for hyperspectral vendables:
 ### Spectral Processing Pipeline
 - **SpectralBandFilter** — 4-stage band filtering (flags, wavelength, edge, coverage)
 - **SpectralInterpolator** — PCHIP/linear gap-fill for partially-valid pixels
-- **SpectralResampler** — PCHIP resampling to common wavelength grid
+- **SpectralResampler** — Linear resampling to common wavelength grid (float32, memory-efficient)
 
 ### Templates
 Dictionaries mapping logical file components to physical paths in HE5/TIF/EnMAP files via `ReferenceDefinition` objects. Three reference types: `FILE_REFERENCE`, `ROOT_METADATA_FIELD`, `DIRECT_PROPERTY_DEFINITION`.

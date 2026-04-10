@@ -59,6 +59,7 @@
 ## SegFormer Architecture
 - [Implementing SegFormer](docs/seg_former_architecture/ImplementingSegFormer.md)
 - [Thermal SegFormer](docs/seg_former_architecture/thermal_seg_former.md)
+- [Hyperspectral SegFormer](docs/seg_former_architecture/hyperspectral_seg_former.md)
 
 ## STAC
 - [STAC Basics](docs/stac/bascis.md)
