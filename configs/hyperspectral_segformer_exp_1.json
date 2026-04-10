@@ -55,7 +55,7 @@
         "gradient_accumulation_steps": 4,
         "num_workers": 10,
         "shardshuffle": 30,
-        "pixel_stats_path": "/home/ubuntu/constants/hyperspectral.json"
+        "pixel_stats_path": "/home/user57/constants/hyperspectral.json"
     },
 
     "learning_rate": 1e-4,
@@ -69,7 +69,7 @@
     },
 
     "checkpoint": {
-        "checkpoint_dir": "/home/ubuntu/checkpoints/hyperspectral_segformer_mae_v1/",
+        "checkpoint_dir": "/home/user57/checkpoints/hyperspectral_segformer_mae_v1/",
         "save_every_n_epochs": 1,
         "keep_top_k": 3,
         "save_to_s3": false,
@@ -79,8 +79,8 @@
     "hot_storage": {
         "enabled": true,
         "local_cache_dir": "/tmp/hot_shards_hsi/",
-        "train_shards_per_size": 50,
-        "test_shards_per_size": 10,
+        "train_shards_per_size": 500,
+        "test_shards_per_size": 100,
         "skip_sync_if_exists": true,
         "max_parallel_downloads": 20
     },
