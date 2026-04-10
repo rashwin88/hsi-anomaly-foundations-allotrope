@@ -38,11 +38,38 @@ class HyperspectralSegFormerMAETrainer(FoundationTrainer):
     def __init__(self, config):
         super().__init__(config)
         self._current_epoch = 0
+        # Accumulators for per-epoch component logging
+        self._epoch_l1_sum = 0.0
+        self._epoch_sam_sum = 0.0
+        self._epoch_loss_samples = 0
 
     def _run_epoch(self, epoch, train_loaders, test_loaders):
-        """Track current epoch for SAM ramp, then delegate to parent."""
+        """Track current epoch for SAM ramp, log components, then delegate to parent."""
         self._current_epoch = epoch
+        self._epoch_l1_sum = 0.0
+        self._epoch_sam_sum = 0.0
+        self._epoch_loss_samples = 0
+
         super()._run_epoch(epoch, train_loaders, test_loaders)
+
+        # Log component losses and λ after the base class logs the combined loss
+        sam_weight = self._get_sam_weight(epoch)
+        if self._epoch_loss_samples > 0:
+            avg_l1 = self._epoch_l1_sum / self._epoch_loss_samples
+            avg_sam = self._epoch_sam_sum / self._epoch_loss_samples
+            logger.info(
+                f"  L1: {avg_l1:.6f} | SAM: {avg_sam:.6f} rad "
+                f"({avg_sam * 180 / 3.14159:.2f} deg) | lambda: {sam_weight:.3f}"
+            )
+
+        if self._wandb_enabled:
+            import wandb
+            wandb.log({
+                "train/l1_loss": avg_l1 if self._epoch_loss_samples > 0 else 0.0,
+                "train/sam_loss": avg_sam if self._epoch_loss_samples > 0 else 0.0,
+                "train/sam_loss_deg": (avg_sam * 180 / 3.14159) if self._epoch_loss_samples > 0 else 0.0,
+                "train/sam_weight": sam_weight,
+            }, step=epoch)
 
     def build_model(self) -> nn.Module:
         cfg = self.config.model_config_
@@ -73,6 +100,56 @@ class HyperspectralSegFormerMAETrainer(FoundationTrainer):
         # Store SAM loss module on the trainer (not inside the model)
         self._sam_loss = SAMLoss()
         return model
+
+    def _run_train_pass(
+        self, loader, sample_cap: int
+    ) -> tuple[float, int]:
+        """
+        Train with gradient accumulation.
+
+        Accumulates gradients over N mini-batches before updating weights.
+        Effective batch size = batch_size × gradient_accumulation_steps.
+        Loss is scaled by 1/N so the gradient magnitude matches a single
+        large batch, keeping the learning rate meaningful.
+        """
+        accum_steps = self.config.data.gradient_accumulation_steps
+        if accum_steps <= 1:
+            return super()._run_train_pass(loader, sample_cap)
+
+        total_loss = 0.0
+        valid_samples = 0
+        accum_count = 0
+
+        self.optimizer.zero_grad()
+
+        for batch in loader:
+            if valid_samples >= sample_cap:
+                break
+
+            loss, num_kept = self.compute_loss(batch, self.model)
+
+            if num_kept == 0:
+                continue
+
+            # Scale loss by accumulation steps so gradient magnitude
+            # matches what a single large batch would produce
+            scaled_loss = loss / accum_steps
+            scaled_loss.backward()
+
+            total_loss += loss.item() * num_kept
+            valid_samples += num_kept
+            accum_count += 1
+
+            if accum_count % accum_steps == 0:
+                self.optimizer.step()
+                self.optimizer.zero_grad()
+
+        # Flush any remaining accumulated gradients
+        if accum_count % accum_steps != 0:
+            self.optimizer.step()
+            self.optimizer.zero_grad()
+
+        return total_loss, valid_samples
 
     def _build_mask(self, batch: dict) -> torch.Tensor:
         """
@@ -161,7 +238,7 @@ class HyperspectralSegFormerMAETrainer(FoundationTrainer):
         pixel_pred_mask = self._pred_mask_to_pixel_mask(pred_mask, H, W)
 
         # Erode validity mask
-        eroded_mask = TokenMasking.erode_mask(mask, kernel_size=1)
+        eroded_mask = TokenMasking.erode_mask(mask, kernel_size=cfg.erosion_kernel_size)
 
         # Loss mask: prediction targets AND valid AND interior
         loss_mask = pixel_pred_mask * eroded_mask  # (B, 1, H, W)
@@ -180,9 +257,9 @@ class HyperspectralSegFormerMAETrainer(FoundationTrainer):
         sam_loss = self._sam_loss(x_hat, pixels, loss_mask) if sam_weight > 0 else torch.tensor(0.0, device=self.device)
 
         # --- Combined loss with optional trimming ---
-        # Per-pixel combined loss for trimming
+        l1_loss = valid_l1.mean()
+
         if cfg.trim_fraction > 0:
-            # Per-pixel SAM for trimming (need individual pixel values)
             per_pixel_sam = self._per_pixel_sam(x_hat, pixels, loss_mask)
             per_pixel_combined = valid_l1 + sam_weight * per_pixel_sam
             num_keep = int(per_pixel_combined.numel() * (1 - cfg.trim_fraction))
@@ -192,8 +269,12 @@ class HyperspectralSegFormerMAETrainer(FoundationTrainer):
             else:
                 loss = per_pixel_combined.mean()
         else:
-            l1_loss = valid_l1.mean()
             loss = l1_loss + sam_weight * sam_loss
+
+        # Accumulate component losses for epoch-level logging
+        self._epoch_l1_sum += l1_loss.item() * num_kept
+        self._epoch_sam_sum += sam_loss.item() * num_kept
+        self._epoch_loss_samples += num_kept
 
         return loss, num_kept
 
@@ -212,6 +293,7 @@ class HyperspectralSegFormerMAETrainer(FoundationTrainer):
         self, batch: dict, model: nn.Module
     ) -> tuple[torch.Tensor, int]:
         """Two-pass random masking validation, matching training regime."""
+        cfg = self.config.model_config_
         pixels = batch["pixels.npy"].to(self.device)
         mask = self._build_mask(batch)
 
@@ -252,7 +334,7 @@ class HyperspectralSegFormerMAETrainer(FoundationTrainer):
 
         x_hat = x_hat_1 * pass1_pixels + x_hat_2 * pass2_pixels
 
-        eroded_mask = TokenMasking.erode_mask(mask, kernel_size=1)
+        eroded_mask = TokenMasking.erode_mask(mask, kernel_size=cfg.erosion_kernel_size)
 
         # L1 component
         l1 = ((x_hat - pixels).abs().mean(dim=1, keepdim=True) * eroded_mask).sum() / eroded_mask.sum().clamp(min=1)

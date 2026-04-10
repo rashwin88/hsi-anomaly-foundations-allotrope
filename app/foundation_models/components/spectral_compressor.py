@@ -24,8 +24,12 @@ class SpectralCompressor(nn.Module):
 class SpectralDecompressor(nn.Module):
     """
     Inverse spectral projection — expands compressed channels back to
-    full spectral dimension. No activation — output must be free to
-    represent any value in the normalised range.
+    full spectral dimension. No activation and no BatchNorm — output
+    must be free to represent any value in the normalised range.
+
+    (Asymmetric with SpectralCompressor which has BatchNorm: the compressor
+    stabilises input distribution for the encoder; the decompressor output
+    feeds into denormalisation which requires unconstrained values.)
 
     (B, D, H, W) → (B, C_out, H, W)
     """

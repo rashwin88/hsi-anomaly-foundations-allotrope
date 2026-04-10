@@ -95,6 +95,13 @@ class HyperspectralSegFormerMAEConfig(BaseModel):
     trim_fraction: float = 0.0
     sam_weight: float = 1.0
     sam_ramp_epochs: int = 20
+    erosion_kernel_size: int = Field(
+        default=1,
+        ge=1,
+        description="Kernel size for eroding validity mask at patch boundaries during training. "
+        "Excludes border pixels whose OPE receptive fields overlap with invalid regions. "
+        "1 = minimal erosion (default for training). Inference uses a larger value (e.g. 15).",
+    )
 
 
 class SpectralCompressorConfig(BaseModel):
@@ -163,6 +170,12 @@ class DataConfig(BaseModel):
     batch_size: int = 32
     num_workers: int = 2
     shardshuffle: int = 10
+    gradient_accumulation_steps: int = Field(
+        default=1,
+        ge=1,
+        description="Accumulate gradients over N mini-batches before updating. "
+        "Effective batch size = batch_size × gradient_accumulation_steps.",
+    )
 
     pixel_stats_path: str | None = Field(
         default=None,

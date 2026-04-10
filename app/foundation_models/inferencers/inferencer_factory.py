@@ -18,6 +18,9 @@ from app.foundation_models.inferencers.normalized_masked_autoencoder_inferencer 
 from app.foundation_models.inferencers.segformer_mae_inferencer import (
     SegFormerMAEInferencer,
 )
+from app.foundation_models.inferencers.hyperspectral_segformer_mae_inferencer import (
+    HyperspectralSegFormerMAEInferencer,
+)
 from app.models.training.inference_config import InferenceConfig
 from app.models.training.training_config import FoundationModelName
 
@@ -26,6 +29,7 @@ _REGISTRY: dict[FoundationModelName, type[FoundationInferencer]] = {
     FoundationModelName.SPATIAL_MASKED_AUTOENCODER_L1_UNNORMALIZED: MaskedSpatialAutoencoderInferencer,
     FoundationModelName.NORMALIZED_MASKED_AUTOENCODER: NormalizedMaskedAutoencoderInferencer,
     FoundationModelName.SEGFORMER_MAE: SegFormerMAEInferencer,
+    FoundationModelName.HYPERSPECTRAL_SEGFORMER_MAE: HyperspectralSegFormerMAEInferencer,
 }
 
 
