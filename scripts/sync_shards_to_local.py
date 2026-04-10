@@ -97,7 +97,8 @@ def sync_split(
         return
 
     keys = keys[:max_shards]
-    local_split_dir = os.path.join(local_dir, split, str(size))
+    # Match trainer's expected path: {local_dir}/{split}/{stage}/w{size}_h{size}_s{stride}/
+    local_split_dir = os.path.join(local_dir, split, stage, f"w{size}_h{size}_s{size // 2}")
     os.makedirs(local_split_dir, exist_ok=True)
 
     existing = len([f for f in os.listdir(local_split_dir) if f.endswith(".tar")])
@@ -167,15 +168,16 @@ def main():
 
     # Summary
     for split in ["train", "test"]:
-        split_dir = os.path.join(args.local_dir, split, str(args.size))
+        split_dir = os.path.join(args.local_dir, split, args.stage, f"w{args.size}_h{args.size}_s{args.size // 2}")
         if os.path.isdir(split_dir):
             tars = [f for f in os.listdir(split_dir) if f.endswith(".tar")]
             total_gb = sum(os.path.getsize(os.path.join(split_dir, f)) for f in tars) / 1024**3
             print(f"  {split}: {len(tars)} shards, {total_gb:.1f} GB → {split_dir}")
 
+    train_dir = os.path.join(args.local_dir, "train", args.stage, f"w{args.size}_h{args.size}_s{args.size // 2}")
     print(f"\nTo compute pixel stats:")
     print(f"  python -m scripts.compute_hyperspectral_pixel_stats \\")
-    print(f"      --shard-dir {os.path.join(args.local_dir, 'train', str(args.size))} \\")
+    print(f"      --shard-dir {train_dir} \\")
     print(f"      --output /home/ubuntu/constants/hyperspectral.json")
 
 
