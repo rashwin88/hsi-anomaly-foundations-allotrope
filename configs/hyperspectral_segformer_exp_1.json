@@ -87,7 +87,7 @@
 
     "wandb": {
         "enabled": true,
-        "project": "allotrope",
+        "project": "allotrope-had",
         "run_name": "allotrope-hsi-segformer-mae-v0.1.0",
         "tags": ["hyperspectral_segformer_mae", "prisma", "enmap", "spectral_compression", "sam_loss"]
     },
