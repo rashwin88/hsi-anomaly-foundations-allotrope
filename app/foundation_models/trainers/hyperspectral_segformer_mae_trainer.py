@@ -13,9 +13,13 @@ to the thermal trainer — reused via the same TokenMasking utilities.
 
 import json
 import logging
+import warnings
 
 import torch
 import torch.nn as nn
+
+# Suppress webdataset duplicate key warnings from resampled final shards
+warnings.filterwarnings("ignore", message=".*duplicate file name in tar file.*")
 
 from app.abstract_classes.foundation_trainer import FoundationTrainer
 from app.foundation_models.components.hyperspectral_seg_former_mae import (
@@ -281,12 +285,18 @@ class HyperspectralSegFormerMAETrainer(FoundationTrainer):
     def _per_pixel_sam(
         self, x_hat: torch.Tensor, x: torch.Tensor, mask: torch.Tensor
     ) -> torch.Tensor:
-        """Compute per-pixel SAM values at masked positions (for trimming)."""
-        dot = (x_hat * x * mask).sum(dim=1, keepdim=True)
-        norm_hat = (x_hat * x_hat * mask).sum(dim=1, keepdim=True).sqrt()
-        norm_x = (x * x * mask).sum(dim=1, keepdim=True).sqrt()
-        cos_sim = (dot / (norm_hat * norm_x + 1e-8)).clamp(-1.0, 1.0)
-        angles = torch.acos(cos_sim)
+        """Compute per-pixel SAM values at masked positions (for trimming).
+        Uses atan2 formulation to avoid arccos gradient instability."""
+        eps = 1e-8
+        x_m = x * mask
+        xh_m = x_hat * mask
+        dot = (xh_m * x_m).sum(dim=1, keepdim=True)
+        norm_hat = (xh_m * xh_m).sum(dim=1, keepdim=True).sqrt()
+        norm_x = (x_m * x_m).sum(dim=1, keepdim=True).sqrt()
+        cross_norm = (norm_hat * norm_x).clamp(min=eps)
+        cos_term = dot.clamp(-cross_norm, cross_norm)
+        sin_term = (cross_norm ** 2 - cos_term ** 2).clamp(min=0).sqrt()
+        angles = torch.atan2(sin_term, cos_term)
         return angles[mask == 1]
 
     def compute_validation_loss(

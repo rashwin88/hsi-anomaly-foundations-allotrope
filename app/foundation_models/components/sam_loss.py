@@ -46,25 +46,30 @@ class SAMLoss(nn.Module):
         Returns:
             Scalar SAM loss (mean over masked positions), in radians.
         """
-        # Broadcast mask to spectral dimension for element-wise ops
-        # mask: (B, 1, H, W) — same for all bands
-
         # Dot product along spectral axis: sum over C
-        dot = (x_hat * x * mask).sum(dim=1, keepdim=True)  # (B, 1, H, W)
+        # Mask broadcasts (B,1,H,W) → (B,C,H,W)
+        x_m = x * mask
+        xh_m = x_hat * mask
 
-        # Norms along spectral axis
-        norm_hat = (x_hat * x_hat * mask).sum(dim=1, keepdim=True).sqrt()  # (B, 1, H, W)
-        norm_x = (x * x * mask).sum(dim=1, keepdim=True).sqrt()            # (B, 1, H, W)
+        dot = (xh_m * x_m).sum(dim=1, keepdim=True)           # (B, 1, H, W)
+        norm_hat = (xh_m * xh_m).sum(dim=1, keepdim=True).sqrt()  # (B, 1, H, W)
+        norm_x = (x_m * x_m).sum(dim=1, keepdim=True).sqrt()      # (B, 1, H, W)
 
-        # Cosine similarity, clamped to [-1, 1] for numerical safety
-        cos_sim = dot / (norm_hat * norm_x + self.eps)
-        cos_sim = cos_sim.clamp(-1.0, 1.0)
+        # Cross product magnitude for atan2 formulation:
+        # ||a × b|| = ||a|| ||b|| sin(θ)
+        # a · b     = ||a|| ||b|| cos(θ)
+        # θ = atan2(sin_term, cos_term)
+        #
+        # This avoids arccos which has infinite gradient at ±1
+        # and is numerically stable everywhere.
+        cross_norm = (norm_hat * norm_x).clamp(min=self.eps)
+        cos_term = dot.clamp(-cross_norm, cross_norm)
+        sin_term = (cross_norm ** 2 - cos_term ** 2).clamp(min=0).sqrt()
 
-        # Spectral angle in radians
-        angles = torch.acos(cos_sim)  # (B, 1, H, W)
+        angles = torch.atan2(sin_term, cos_term)  # (B, 1, H, W), always in [0, π]
 
-        # Spatial mask: which pixels to include
-        spatial_mask = mask[:, 0:1, :, :]  # (B, 1, H, W) — already correct shape
+        # Spatial mask
+        spatial_mask = mask[:, 0:1, :, :]
 
         # Mean angle over masked positions
         num_valid = spatial_mask.sum().clamp(min=1)
