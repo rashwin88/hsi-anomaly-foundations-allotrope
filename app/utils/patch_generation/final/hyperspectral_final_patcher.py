@@ -77,14 +77,19 @@ class HyperspectralFinalShuffler:
 
         self.shard_temp_location = f"{shard_temp_location}{FINAL_SHARD_PATTERN}"
 
-        # Build pipe URLs for each sensor's intermediate shards
+        # Build one pipe URL per shard file for each sensor.
+        # We enumerate individual shard keys rather than using brace expansion
+        # because wds.WebDataset with a list of pipe: URLs does not reliably
+        # expand braces inside pipe commands.
         intermediate_urls = []
         for sensor, source_key in self._source_keys.items():
-            shard_range = self._compute_shard_ranges(source_key)
-            if shard_range is not None:
-                url = f"pipe: aws s3 cp s3://{S3_BUCKET}/{source_key}{shard_range} -"
-                intermediate_urls.append(url)
-                print(f"  [{sensor}] {url}")
+            shard_keys = self._list_shard_keys(source_key)
+            if shard_keys:
+                for key in shard_keys:
+                    intermediate_urls.append(
+                        f"pipe: aws s3 cp s3://{S3_BUCKET}/{key} -"
+                    )
+                print(f"  [{sensor}] {len(shard_keys)} shards from {source_key}")
 
         if not intermediate_urls:
             raise ValueError("No intermediate shards found for any sensor.")
@@ -118,10 +123,10 @@ class HyperspectralFinalShuffler:
             f"  Patches to write: {self.patch_write_count}"
         )
 
-    def _compute_shard_ranges(self, source_key: str):
+    def _list_shard_keys(self, source_key: str) -> list[str]:
         """
-        Computes the shard range string for a given source prefix.
-        Returns None if no shards are found.
+        Lists all shard S3 keys under a source prefix.
+        Returns empty list if no shards found.
         """
         output = []
         page_iterator = self.paginator.paginate(
@@ -130,21 +135,11 @@ class HyperspectralFinalShuffler:
             PaginationConfig={"PageSize": 500},
         )
         for page in page_iterator:
-            for key in page.get("Contents", []):
-                output.append(key.get("Key"))
-
-        if not output:
-            return None
-
-        shard_numbers = [
-            key.split("/")[-1].split(".")[0].split("_")[-1] for key in output
-        ]
-
-        sample_key = output[0]
-        shard_elements = sample_key.split("/")[-1].split(".")[0].split("_")
-        shard_identifier = "_".join(shard_elements[:2])
-
-        return f"{shard_identifier}_{{{min(shard_numbers)}..{max(shard_numbers)}}}.tar"
+            for obj in page.get("Contents", []):
+                key = obj.get("Key", "")
+                if key.endswith(".tar"):
+                    output.append(key)
+        return sorted(output)
 
     def write_shards(self):
         """
