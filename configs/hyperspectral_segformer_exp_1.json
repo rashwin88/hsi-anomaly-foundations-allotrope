@@ -51,9 +51,9 @@
         "stage": "final",
         "bucket_name": "allotrope-raw-data-india",
         "region_name": "ap-south-1",
-        "batch_size": 64,
+        "batch_size": 128,
         "gradient_accumulation_steps": 1,
-        "num_workers": 20,
+        "num_workers": 40,
         "shardshuffle": 30,
         "pixel_stats_path": "/home/user57/constants/hyperspectral.json"
     },

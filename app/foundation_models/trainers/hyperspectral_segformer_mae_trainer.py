@@ -256,9 +256,9 @@ class HyperspectralSegFormerMAETrainer(FoundationTrainer):
         if valid_l1.numel() == 0:
             return torch.tensor(0.0, device=self.device, requires_grad=True), 0
 
-        # --- SAM loss ---
+        # --- SAM loss (always computed for logging, only weighted into loss when λ > 0) ---
         sam_weight = self._get_sam_weight(self._current_epoch)
-        sam_loss = self._sam_loss(x_hat, pixels, loss_mask) if sam_weight > 0 else torch.tensor(0.0, device=self.device)
+        sam_loss = self._sam_loss(x_hat, pixels, loss_mask)
 
         # --- Combined loss with optional trimming ---
         l1_loss = valid_l1.mean()
