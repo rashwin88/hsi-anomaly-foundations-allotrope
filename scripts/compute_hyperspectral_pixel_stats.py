@@ -37,6 +37,7 @@ import sys
 
 import numpy as np
 import webdataset as wds
+from tqdm import tqdm
 
 logging.basicConfig(
     level=logging.INFO,
@@ -48,7 +49,7 @@ logger = logging.getLogger(__name__)
 
 def compute_stats(dataset, max_patches: int = None) -> dict:
     """
-    Compute per-band mean and std using Welford's online algorithm.
+    Compute per-band mean and std using vectorized Welford's online algorithm.
 
     Returns dict with 'mean' and 'std' lists (length = num bands).
     """
@@ -57,8 +58,9 @@ def compute_stats(dataset, max_patches: int = None) -> dict:
     m2 = None          # per-band running sum of squared deviations
 
     num_patches = 0
+    desc = f"Computing stats (max {max_patches})" if max_patches else "Computing stats"
 
-    for sample in dataset:
+    for sample in tqdm(dataset, desc=desc, unit="patch"):
         pixels = sample["pixels.npy"]          # (C, H, W)
         validity = sample["validity_cube.npy"]  # (C, H, W)
 
@@ -79,22 +81,23 @@ def compute_stats(dataset, max_patches: int = None) -> dict:
         valid_pixels = pixels[:, spatial_valid].astype(np.float64)
         batch_n = valid_pixels.shape[1]
 
-        # Welford's online update (per-band)
-        for c in range(C):
-            for val in valid_pixels[c]:
-                n[c] += 1
-                delta = val - mean[c]
-                mean[c] += delta / n[c]
-                delta2 = val - mean[c]
-                m2[c] += delta * delta2
+        # Vectorized batch Welford update (per-band, all pixels at once)
+        # For a batch of values, the parallel Welford formula is:
+        #   batch_mean = mean of this batch
+        #   delta = batch_mean - running_mean
+        #   running_mean += delta * batch_n / (n + batch_n)
+        #   m2 += batch_var * (batch_n - 1) + delta^2 * n * batch_n / (n + batch_n)
+        #   n += batch_n
+        batch_mean = valid_pixels.mean(axis=1)       # (C,)
+        batch_var = valid_pixels.var(axis=1, ddof=0)  # (C,) population variance
+
+        delta = batch_mean - mean
+        new_n = n + batch_n
+        mean += delta * batch_n / np.maximum(new_n, 1)
+        m2 += batch_var * batch_n + delta ** 2 * n * batch_n / np.maximum(new_n, 1)
+        n = new_n
 
         num_patches += 1
-
-        if num_patches % 500 == 0:
-            logger.info(
-                "Processed %d patches, ~%d valid pixels per band",
-                num_patches, int(n[0]),
-            )
 
         if max_patches is not None and num_patches >= max_patches:
             logger.info("Reached max_patches=%d, stopping.", max_patches)
