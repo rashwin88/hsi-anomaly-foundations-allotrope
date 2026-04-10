@@ -97,8 +97,9 @@ def _run_one_intermediate(
         stride=config["stride"],
         patch_validity_threshold=patch_validity_threshold,
         band_filter_config=band_filter_config,
+        max_scenes=max_scenes,
     )
-    sharder.sharder(scenes=max_scenes)
+    sharder.sharder()
     elapsed = time.time() - start
 
     if os.path.exists(work_dir) and not os.listdir(work_dir):

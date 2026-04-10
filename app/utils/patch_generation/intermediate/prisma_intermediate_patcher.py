@@ -56,6 +56,7 @@ class PrismaIntermediateSharder(IntermediateSharder):
         stride: int = 32,
         patch_validity_threshold: float = 0.5,
         band_filter_config: Optional[BandFilterConfig] = None,
+        max_scenes: Optional[int] = None,
     ):
         self.s3_client = boto3.client("s3", region_name="ap-south-1")
         self.paginator = self.s3_client.get_paginator("list_objects_v2")
@@ -69,10 +70,12 @@ class PrismaIntermediateSharder(IntermediateSharder):
         self.band_filter_config = band_filter_config if band_filter_config is not None else BandFilterConfig()
         self.target_size = 1 * 1024 * 1024 * 1024  # 1 GB per shard
 
-        # Discover all scenes and split deterministically
+        # Discover all scenes, cap to max_scenes, then split deterministically
         all_scenes = sorted(self.s3_searcher())
         rng = random.Random(seed)
         rng.shuffle(all_scenes)
+        if max_scenes is not None and max_scenes < len(all_scenes):
+            all_scenes = all_scenes[:max_scenes]
         split_idx = int(len(all_scenes) * (1 - test_fraction))
         if split == "train":
             self._scene_keys = all_scenes[:split_idx]
@@ -168,6 +171,7 @@ class PrismaIntermediateSharder(IntermediateSharder):
     def sharder(self, scenes: int = None):
         """
         Orchestrates the intermediate sharding process.
+        scenes arg is ignored — scene cap is applied at init via max_scenes.
         """
         processed_patches = 0
         valid_patches = 0
@@ -176,8 +180,6 @@ class PrismaIntermediateSharder(IntermediateSharder):
         ) as sink:
             scene_keys = list(self._scene_keys)
             random.shuffle(scene_keys)
-            if scenes:
-                scene_keys = scene_keys[: min(scenes, len(scene_keys))]
 
             for scene in tqdm(scene_keys, desc="PRISMA Scene"):
                 try:
