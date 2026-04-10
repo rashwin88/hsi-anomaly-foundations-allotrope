@@ -2,9 +2,13 @@
 Spectral resampling onto a common wavelength grid.
 
 Resamples a hyperspectral cube from its native (sensor-specific) wavelengths
-onto a target wavelength grid using PCHIP interpolation. This ensures all
+onto a target wavelength grid using linear interpolation. This ensures all
 sensors produce identical band counts and wavelengths, enabling mixed-sensor
 training with consistent tensor shapes.
+
+Linear interpolation is used because the native bands are densely sampled
+(6-12nm apart) and the target grid is 10nm — the sample points barely move,
+so PCHIP offers no practical quality gain but costs significantly more memory.
 
 Applied as the final stage of vendable construction, after band filtering,
 spatial masking, and spectral gap-filling. At this point, every valid pixel
@@ -18,7 +22,6 @@ import logging
 from typing import Tuple, List
 
 import numpy as np
-from scipy.interpolate import PchipInterpolator
 
 from app.models.hyperspectral_concepts.spectral_family import SpectralFamily
 
@@ -35,8 +38,9 @@ def resample_to_common_grid(
     """
     Resample a hyperspectral cube from native wavelengths to a common grid.
 
-    Uses PCHIP interpolation along the spectral axis. Only valid pixels
-    (fully valid column) are resampled; invalid pixels remain as zeros.
+    Uses vectorized linear interpolation along the spectral axis with
+    constant edge extrapolation. Only valid pixels (fully valid column)
+    are resampled; invalid pixels remain as zeros.
 
     Args:
         cube: Reflectance cube (C_src, H, W) float32.
@@ -63,13 +67,13 @@ def resample_to_common_grid(
         target_wavelengths[1] - target_wavelengths[0],
     )
 
-    # Sort source wavelengths ascending for PCHIP
+    # Sort source wavelengths ascending
     sort_idx = np.argsort(source_wavelengths)
     src_wl_sorted = source_wavelengths[sort_idx].astype(np.float64)
     tgt_wl = target_wavelengths.astype(np.float64)
 
     # Pre-sort the cubes
-    cube_sorted = cube[sort_idx]          # (C_src, H, W)
+    cube_sorted = cube[sort_idx]            # (C_src, H, W)
     valid_sorted = validity_cube[sort_idx]  # (C_src, H, W)
 
     # Allocate output
@@ -89,31 +93,29 @@ def resample_to_common_grid(
         len(valid_cols), len(valid_cols) / num_pixels * 100.0,
     )
 
-    # Reshape for columnar processing
+    # Reshape for columnar processing — stay in float32 to save memory
     cube_2d = cube_sorted.reshape(C_src, num_pixels)  # (C_src, N)
     out_2d = out_cube.reshape(C_tgt, num_pixels)       # (C_tgt, N)
+    valid_spectra = cube_2d[:, valid_cols]              # (C_src, n_valid), float32
 
-    # Vectorized PCHIP: pass all valid pixels as 2D array
-    valid_spectra = cube_2d[:, valid_cols].astype(np.float64)  # (C_src, n_valid)
+    # Vectorized linear interpolation: loop over 165 target wavelengths,
+    # each iteration processes all valid pixels via numpy broadcasting.
+    for i, twl in enumerate(tgt_wl):
+        idx_right = np.searchsorted(src_wl_sorted, twl, side="right")
+        idx_right = min(idx_right, C_src - 1)
+        idx_left = max(idx_right - 1, 0)
 
-    interp = PchipInterpolator(src_wl_sorted, valid_spectra, axis=0, extrapolate=False)
-    resampled = interp(tgt_wl)  # (C_tgt, n_valid)
-
-    # Handle NaN from extrapolation outside native range — clamp to edge values
-    nan_mask = np.isnan(resampled)
-    if nan_mask.any():
-        below = tgt_wl < src_wl_sorted[0]
-        above = tgt_wl > src_wl_sorted[-1]
-        for j in range(C_tgt):
-            if not nan_mask[j].any():
-                continue
-            nc = nan_mask[j]
-            if below[j]:
-                resampled[j, nc] = valid_spectra[0, nc]
-            elif above[j]:
-                resampled[j, nc] = valid_spectra[-1, nc]
-
-    out_2d[:, valid_cols] = resampled.astype(np.float32)
+        if idx_left == idx_right:
+            # Edge: target at or beyond source boundary — constant extrapolation
+            out_2d[i, valid_cols] = valid_spectra[idx_left]
+        else:
+            # Linear interpolation
+            wl_left = src_wl_sorted[idx_left]
+            wl_right = src_wl_sorted[idx_right]
+            t = np.float32((twl - wl_left) / (wl_right - wl_left))
+            out_2d[i, valid_cols] = (
+                valid_spectra[idx_left] * (1.0 - t) + valid_spectra[idx_right] * t
+            )
 
     # Valid pixels get all-1 validity in the resampled cube
     out_validity_2d = out_validity.reshape(C_tgt, num_pixels)
@@ -138,11 +140,9 @@ def _assign_families(
     sort_idx = np.argsort(source_wl_sorted)
     sorted_families = [source_families[i] for i in sort_idx] if not np.all(np.diff(source_wl_sorted) > 0) else source_families
 
-    # For already-sorted source, just do nearest neighbor
     nearest_idx = np.searchsorted(source_wl_sorted, target_wl, side="left")
     nearest_idx = np.clip(nearest_idx, 0, len(source_wl_sorted) - 1)
 
-    # Refine: check if the left or right neighbor is closer
     for i in range(len(nearest_idx)):
         idx = nearest_idx[i]
         if idx > 0 and idx < len(source_wl_sorted):
