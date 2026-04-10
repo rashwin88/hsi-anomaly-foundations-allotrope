@@ -2,11 +2,117 @@
 Defines vendable datasets for each dataset builder
 """
 
-from typing import List, Optional
+from typing import List, Optional, Tuple
 from pydantic import BaseModel, Field, ConfigDict, SkipValidation
 import numpy as np
 
 from app.models.hyperspectral_concepts.spectral_family import SpectralFamily
+
+
+def build_common_wavelength_grid(
+    start_nm: float = 460.0,
+    end_nm: float = 2450.0,
+    spacing_nm: float = 10.0,
+    exclusion_ranges: list = None,
+) -> np.ndarray:
+    """
+    Builds a common wavelength grid that skips atmospheric absorption windows.
+
+    The grid only contains wavelengths where real sensor data exists,
+    avoiding PCHIP interpolation across gaps where bands were deliberately
+    removed (water vapor, CO2 absorption, etc.).
+
+    Returns a 1-D float64 array of wavelengths in nm, ascending.
+    """
+    if exclusion_ranges is None:
+        exclusion_ranges = [
+            (0, 450),       # low SNR
+            (912, 978),     # water vapor
+            (1131, 1152),   # water vapor
+            (1350, 1450),   # water vapor absorption
+            (1800, 1950),   # water vapor + CO2
+        ]
+    full_grid = np.arange(start_nm, end_nm + spacing_nm / 2, spacing_nm)
+    mask = np.ones(len(full_grid), dtype=bool)
+    for lo, hi in exclusion_ranges:
+        mask &= ~((full_grid >= lo) & (full_grid <= hi))
+    return full_grid[mask]
+
+
+# 165 bands across 5 clean spectral segments, 10nm spacing.
+# Respects the coarsest sensor resolution (PRISMA ~12nm) and excludes
+# atmospheric absorption windows to avoid fabricating spectral data.
+DEFAULT_COMMON_WAVELENGTH_GRID = build_common_wavelength_grid()
+
+
+class BandFilterConfig(BaseModel):
+    """
+    Configuration for spectral band filtering applied during dataset vending.
+
+    Controls four filtering stages:
+    1. Sensor-flagged bad bands (always applied)
+    2. Wavelength exclusion ranges (atmospheric absorption windows)
+    3. Edge band trimming per detector
+    4. Coverage-aware pruning by valid pixel percentage
+    """
+
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+    exclusion_ranges: List[Tuple[float, float]] = Field(
+        default=[
+            (0, 450),       # low SNR, detector noise
+            (912, 978),     # water vapor
+            (1131, 1152),   # water vapor
+            (1350, 1450),   # water vapor absorption
+            (1800, 1950),   # water vapor + CO2 absorption
+        ],
+        description="Wavelength ranges (nm) to exclude. Each tuple is (low, high) inclusive.",
+    )
+
+    edge_bands_to_trim: int = Field(
+        default=3,
+        ge=0,
+        description="Number of bands to trim from each end of each detector (VNIR, SWIR).",
+    )
+
+    min_valid_pixel_pct: float = Field(
+        default=20.0,
+        ge=0.0,
+        le=100.0,
+        description="Minimum valid pixel percentage to keep a band (0.0–100.0).",
+    )
+
+    max_invalid_voxel_fraction: float = Field(
+        default=0.4,
+        ge=0.0,
+        le=1.0,
+        description=(
+            "Maximum fraction of invalid/missing voxels a pixel may have across "
+            "all bands before the entire pixel column is marked invalid. "
+            "E.g. 0.4 means pixels with >40%% invalid bands are fully invalidated."
+        ),
+    )
+
+    quality_masks_to_apply: List[str] = Field(
+        default=["cloud", "cloud_shadow", "haze"],
+        description=(
+            "Quality mask layers to use for spatial invalidation (EnMAP only). "
+            "Pixels flagged (>0) by any of these masks have their entire validity "
+            "column zeroed out. Applied before voxel-fraction spatial masking. "
+            "Available masks: cloud, cirrus, haze, cloud_shadow, snow."
+        ),
+    )
+
+    common_wavelength_grid: Optional[SkipValidation[np.ndarray]] = Field(
+        default=None,
+        description=(
+            "Target wavelength grid (1-D array, nm, ascending) to resample all "
+            "sensors onto. When set, the vendable cube is spectrally resampled "
+            "so that every sensor produces identical band count and wavelengths. "
+            "Use DEFAULT_COMMON_WAVELENGTH_GRID for the standard 10nm grid "
+            "(450–2450nm, 201 bands). None disables resampling."
+        ),
+    )
 
 
 class VendableHyperspectralDataset(BaseModel):

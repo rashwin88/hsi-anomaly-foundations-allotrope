@@ -38,14 +38,20 @@ These ranges can be overridden at construction time. For example, EnMAP experime
 
 ```python
 SpectralBandFilter(
-    band_wavelengths: List[float],        # center wavelength of each band (nm), length B
-    band_validity_flags: List[int],       # 1 = valid, 0 = invalid, length B
-    exclusion_ranges: List[Tuple[float, float]] = None,  # defaults to DEFAULT_EXCLUSION_RANGES
+    band_wavelengths: List[float],                          # center wavelength of each band (nm)
+    band_validity_flags: List[int],                         # 1 = valid, 0 = invalid
+    exclusion_ranges: List[Tuple[float, float]] = None,     # defaults to DEFAULT_EXCLUSION_RANGES
+    spectral_families: Optional[List[SpectralFamily]] = None,  # per-band VNIR/SWIR assignment
+    edge_bands_to_trim: int = 0,                            # bands to trim from each detector end
+    band_level_validity_scores: Optional[List[float]] = None,  # per-band valid pixel %
+    min_valid_pixel_pct: float = 20.0,                      # coverage threshold for pruning
 )
 ```
 
-- `band_wavelengths` and `band_validity_flags` must be the same length and in band order (i.e., index 0 corresponds to band 0 in the cube).
+- `band_wavelengths` and `band_validity_flags` must be the same length and in band order.
 - `exclusion_ranges` is a list of `(low_nm, high_nm)` tuples. A band is excluded if its center wavelength falls within **any** of these ranges (inclusive on both ends).
+- `spectral_families` is required when `edge_bands_to_trim > 0` to identify detector boundaries.
+- `band_level_validity_scores` is required for coverage-aware pruning (bands with < `min_valid_pixel_pct` valid pixels are dropped).
 
 ---
 
@@ -55,10 +61,12 @@ SpectralBandFilter(
 
 Returns the indices of bands that pass both filters. The result is cached — repeated calls return the same list without recomputation. On the first call, a summary is logged at `INFO` level.
 
-Filter logic per band:
+Filter logic per band (applied in order):
 1. If `band_validity_flags[i] != 1` → **dropped** (sensor flag).
 2. If the band's center wavelength falls within any exclusion range → **dropped** (atmospheric).
-3. Otherwise → **kept**.
+3. If the band is within the first/last N bands of its detector → **dropped** (edge trim).
+4. If `band_level_validity_scores[i] < min_valid_pixel_pct` → **dropped** (coverage).
+5. Otherwise → **kept**.
 
 The returned indices are in ascending order and can be used directly to slice the cube: `cube[good_indices]`.
 
@@ -73,20 +81,17 @@ Returns a detailed breakdown of the filtering:
 ```python
 {
     "total_bands": 224,
-    "dropped_by_flags": {
-        "count": 5,
-        "indices": [0, 1, 2, 220, 223]
-    },
-    "dropped_by_wavelength": {
-        "count": 30,
-        "indices": [10, 11, ...],
-        "ranges": {10: (912, 978), 11: (912, 978), ...}  # index → which range excluded it
-    },
-    "surviving": 189
+    "dropped_by_flags": {"count": 0, "indices": []},
+    "dropped_by_wavelength": {"count": 19, "indices": [...], "ranges": {...}},
+    "dropped_by_edge": {"count": 12, "indices": [...]},
+    "dropped_by_coverage": {"count": 5, "indices": [...], "threshold_pct": 20.0},
+    "surviving": 188
 }
 ```
 
-The `ranges` sub-dict maps each wavelength-excluded band index to the specific `(lo, hi)` exclusion range that caused its removal. This is useful for auditing — you can verify that the expected atmospheric windows are being caught.
+Each drop category only counts bands not already dropped by earlier stages. The `ranges` sub-dict maps each wavelength-excluded band index to the specific `(lo, hi)` exclusion range that caused its removal.
+
+**Note:** When used via `BandFilterConfig` inside `vend_dataset()`, the filter is part of a larger 8-stage pipeline that also includes quality mask invalidation, spatial masking, spectral interpolation, and optional resampling to a common wavelength grid. See `docs/spectral_band_filtering_report.md` for the full pipeline documentation.
 
 ---
 
@@ -110,16 +115,20 @@ It is also used internally by the `FrequencyDomainDestriper` to select probe ban
 
 ---
 
-#### Typical filtering results
+#### Typical filtering results (with default BandFilterConfig)
 
 For a 224-band EnMAP scene:
-- ~5–10 bands dropped by validity flags (sensor-reported dead/noisy bands)
-- ~20–35 bands dropped by wavelength exclusion (atmospheric absorption)
-- ~180–195 bands survive for anomaly detection
+- 0 bands dropped by validity flags (EnMAP has no per-band invalidity)
+- ~19 bands dropped by wavelength exclusion (atmospheric absorption)
+- ~12 bands dropped by edge trim (3 per detector end × 2 detectors × 2 ends)
+- ~5 bands dropped by coverage (<20% valid pixels)
+- **~188 bands survive**
 
 For a 239-band PRISMA scene:
-- ~5–15 bands dropped by validity flags
-- ~25–40 bands dropped by wavelength exclusion
-- ~185–210 bands survive
+- ~5 bands dropped by validity flags (0nm placeholder bands)
+- ~36 bands dropped by wavelength exclusion
+- ~12 bands dropped by edge trim
+- 0 bands dropped by coverage
+- **~186 bands survive**
 
-The exact numbers vary per scene because validity flags are scene-specific (a band may pass calibration in one acquisition but fail in another).
+When resampling to the common grid (`DEFAULT_COMMON_WAVELENGTH_GRID`), both sensors produce **165 bands** on a 10nm grid (460–2450nm, excluding atmospheric windows).

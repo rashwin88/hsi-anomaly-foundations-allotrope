@@ -17,6 +17,8 @@
 
 ## Dataset Builders
 - [PRISMA vs EnMAP Vendable Construction](docs/dataset_builders/prisma_vs_enmap_vendable_construction.md)
+- [Spectral Band Filtering & Interpolation Pipeline](docs/spectral_band_filtering_report.md)
+- [EnMAP Vendable Pipeline Walkthrough](notebooks/enmap_vendable_pipeline_walkthrough.ipynb)
 
 ## Design Decisions
 - [File Handling (2025-02-06)](docs/design_decisions/file_handling_20250206.md)
@@ -24,8 +26,12 @@
 ## Explorations
 - [Initial Exploration](docs/explorations/initial_exploration.md)
 
+## Experiments
+- [Spatial Masked Autoencoder Experiments](docs/experiments/spatial_masked_autoencoder_experiments.md)
+
 ## Patch Generation
 - [Landsat Patch Pipeline](docs/patch_generation/landsat_patch_pipeline.md)
+- [Landsat Intermediate Sharder](docs/landsat_intermediate_sharder.md)
 
 ## File Handling
 - [File Handling Design](docs/file_handling/file_handling_design.md)
@@ -52,6 +58,7 @@
 
 ## SegFormer Architecture
 - [Implementing SegFormer](docs/seg_former_architecture/ImplementingSegFormer.md)
+- [Thermal SegFormer](docs/seg_former_architecture/thermal_seg_former.md)
 
 ## STAC
 - [STAC Basics](docs/stac/bascis.md)

@@ -1,6 +1,8 @@
 # Building a Vendable: PRISMA vs EnMAP
 
-This document provides a detailed comparison of how `VendableHyperspectralDataset` (PRISMA) and `VendableEnmapHyperspectralDataset` (EnMAP) are constructed. Although both sensors produce hyperspectral imagery and both builders implement the same `DatasetBuilder` ABC, the differences in file format, metadata delivery, cube layout, DN transformation, and quality masking lead to fundamentally different construction pipelines.
+This document provides a detailed comparison of how `VendableHyperspectralDataset` (PRISMA) and `VendableEnmapHyperspectralDataset` (EnMAP) are constructed. Although both sensors produce hyperspectral imagery and both builders implement the same `DatasetBuilder` ABC, the differences in file format, metadata delivery, cube layout, DN transformation, and quality masking lead to different construction pipelines.
+
+Both builders support an optional `BandFilterConfig` parameter that activates an 8-stage post-processing pipeline (band filtering, spatial masking, spectral interpolation, common grid resampling). See `docs/spectral_band_filtering_report.md` for the full pipeline documentation.
 
 ---
 
@@ -16,7 +18,9 @@ PRISMA:
     ├── Concatenate SWIR + VNIR along band axis
     ├── Build validity: band_flags × error_pixels × nonzero_pixels
     ├── Convert BIL → BSQ
-    └── VendableHyperspectralDataset (239 bands)
+    ├── [Optional] 8-stage BandFilterConfig pipeline:
+    │     Band filtering → Spatial masking → Interpolation → Resampling
+    └── VendableHyperspectralDataset (239 → 165 bands on common grid)
 
 EnMAP:
   Scene Folder (13+ files)
@@ -26,9 +30,13 @@ EnMAP:
     ├── Uniform DN→SR transformation (gain=0.0001)
     ├── Build validity: nodata_mask × pixel_mask
     ├── Read 5 quality layer TIFs (cloud, cirrus, haze, shadow, snow)
-    ├── No cube format conversion needed
-    └── VendableEnmapHyperspectralDataset (224 bands)
+    ├── [Optional] 8-stage BandFilterConfig pipeline:
+    │     Band filtering → Quality mask invalidation → Spatial masking
+    │     → Interpolation → Resampling
+    └── VendableEnmapHyperspectralDataset (224 → 165 bands on common grid)
 ```
+
+When the common grid resampling is enabled, both sensors produce **identical (165, H, W) cubes** with identical wavelength arrays (460–2450nm, 10nm spacing, atmospheric windows excluded).
 
 ---
 

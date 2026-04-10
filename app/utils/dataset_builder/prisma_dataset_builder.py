@@ -3,14 +3,14 @@ Concrete implementation of the Prisma Dataset Builder
 """
 
 import logging
-from typing import Dict, Union, List
+from typing import Dict, Union, List, Optional
 
 import numpy as np
 from pystac import Item
 
 from app.abstract_classes.dataset_builder import DatasetBuilder
 from app.abstract_classes.file_helper import FileHelper
-from app.models.dataset.vendables import VendableHyperspectralDataset
+from app.models.dataset.vendables import VendableHyperspectralDataset, BandFilterConfig
 from app.models.file_processing.sources import FileSourceConfig
 from app.models.images.cube_representation import CubeRepresentation
 from app.utils.files.he5_helper import HE5Helper
@@ -22,6 +22,9 @@ from app.models.hyperspectral_concepts.band import (
 )
 from app.utils.image_transformation.image_cube_operations import ImageCubeOperations
 from app.models.hyperspectral_concepts.spectral_family import SpectralFamily
+from app.utils.data_transformations.spectral_band_filter import SpectralBandFilter
+from app.utils.data_transformations.spectral_interpolator import interpolate_spectral_gaps
+from app.utils.data_transformations.spectral_resampler import resample_to_common_grid
 
 from app.utils.data_transformations.prs_l2d_dn_to_surface_reflectance_transformer import (
     PrsL2dDnToSurfaceReflectanceTransformer,
@@ -191,10 +194,19 @@ class PrismaDatasetBuilder(DatasetBuilder):
         logger.info("Band information extracted for SWIR and VNIR.")
         return output_dict
 
-    def vend_dataset(self, **kwargs) -> VendableHyperspectralDataset:
+    def vend_dataset(
+        self,
+        band_filter_config: Optional[BandFilterConfig] = None,
+        **kwargs,
+    ) -> VendableHyperspectralDataset:
         """
         Vends the full hyperspectral dataset that is usable by downstream applications.
         For convention and ease of use, we force it to be a BSQ format in representation.
+
+        Args:
+            band_filter_config: If provided, applies spectral band filtering
+                (atmospheric exclusion, bad band removal, edge trimming,
+                coverage-aware pruning). Pass ``BandFilterConfig()`` for defaults.
         """
 
         # Assemble a normalized cube that merges SWIR and VNIR and build validity masks.
@@ -286,6 +298,85 @@ class PrismaDatasetBuilder(DatasetBuilder):
             float(bsq_validity[b].sum() / pixels_per_band * 100.0)
             for b in range(bsq_validity.shape[0])
         ]
+
+        # ── Apply band filtering if configured ──
+        if band_filter_config is not None:
+            logger.info("Applying spectral band filtering.")
+            band_filter = SpectralBandFilter(
+                band_wavelengths=band_cw_by_position,
+                band_validity_flags=band_validity_by_position,
+                exclusion_ranges=band_filter_config.exclusion_ranges,
+                spectral_families=spectral_family_by_position,
+                edge_bands_to_trim=band_filter_config.edge_bands_to_trim,
+                band_level_validity_scores=band_level_validity_score,
+                min_valid_pixel_pct=band_filter_config.min_valid_pixel_pct,
+            )
+            good_idx = band_filter.get_good_band_indices()
+            summary = band_filter.summary()
+            logger.info(
+                "Band filter: %d → %d bands. Dropped: %d flag, %d wavelength, "
+                "%d edge, %d coverage.",
+                summary["total_bands"],
+                summary["surviving"],
+                summary["dropped_by_flags"]["count"],
+                summary["dropped_by_wavelength"]["count"],
+                summary["dropped_by_edge"]["count"],
+                summary["dropped_by_coverage"]["count"],
+            )
+
+            idx_arr = np.array(good_idx)
+            bsq_cube = bsq_cube[idx_arr]
+            bsq_validity = bsq_validity[idx_arr]
+            spectral_family_by_position = [spectral_family_by_position[i] for i in good_idx]
+            band_cw_by_position = [band_cw_by_position[i] for i in good_idx]
+            band_validity_by_position = [band_validity_by_position[i] for i in good_idx]
+            band_level_validity_score = [band_level_validity_score[i] for i in good_idx]
+
+            # ── Spatial masking: invalidate pixel columns with too many bad voxels ──
+            num_bands = bsq_validity.shape[0]
+            valid_count_per_pixel = bsq_validity.sum(axis=0)  # (H, W)
+            invalid_fraction = 1.0 - (valid_count_per_pixel / num_bands)
+            bad_pixel_mask = invalid_fraction > band_filter_config.max_invalid_voxel_fraction  # (H, W)
+            num_masked = int(bad_pixel_mask.sum())
+            total_pixels = bad_pixel_mask.shape[0] * bad_pixel_mask.shape[1]
+            if num_masked > 0:
+                bsq_validity[:, bad_pixel_mask] = 0
+                logger.info(
+                    "Spatial masking: %d / %d pixels (%.1f%%) invalidated "
+                    "(>%.0f%% voxels invalid).",
+                    num_masked,
+                    total_pixels,
+                    num_masked / total_pixels * 100.0,
+                    band_filter_config.max_invalid_voxel_fraction * 100.0,
+                )
+            else:
+                logger.info("Spatial masking: no pixels exceeded the invalid voxel threshold.")
+
+            # ── Spectral interpolation: fill gaps in partially-valid pixels ──
+            interpolate_spectral_gaps(
+                cube=bsq_cube,
+                validity_cube=bsq_validity,
+                band_wavelengths=np.array(band_cw_by_position, dtype=np.float64),
+            )
+
+            # ── Spectral resampling to common wavelength grid ──
+            if band_filter_config.common_wavelength_grid is not None:
+                bsq_cube, bsq_validity, spectral_family_by_position = resample_to_common_grid(
+                    cube=bsq_cube,
+                    validity_cube=bsq_validity,
+                    source_wavelengths=np.array(band_cw_by_position, dtype=np.float64),
+                    target_wavelengths=band_filter_config.common_wavelength_grid,
+                    spectral_families=spectral_family_by_position,
+                )
+                band_cw_by_position = band_filter_config.common_wavelength_grid.tolist()
+                band_validity_by_position = [1] * len(band_cw_by_position)
+
+            # Recompute band-level validity scores after full pipeline
+            pixels_per_band = bsq_validity.shape[1] * bsq_validity.shape[2]
+            band_level_validity_score = [
+                float(bsq_validity[b].sum() / pixels_per_band * 100.0)
+                for b in range(bsq_validity.shape[0])
+            ]
 
         logger.info("Vendable dataset assembled. Cube shape: %s", bsq_cube.shape)
         return VendableHyperspectralDataset(

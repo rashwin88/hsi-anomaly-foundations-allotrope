@@ -2,13 +2,13 @@
 
 ## Overview
 
-Data engineering and preprocessing pipeline for **Hyperspectral Image (HSI) Anomaly Detection**, codenamed "Allotrope". The project ingests raw satellite imagery (PRISMA hyperspectral and Landsat 9 thermal), normalizes it into standardized datasets, and generates training-ready patches for downstream ML models.
+Data engineering and preprocessing pipeline for **Hyperspectral Image (HSI) Anomaly Detection**, codenamed "Allotrope". The project ingests raw satellite imagery (PRISMA hyperspectral, EnMAP hyperspectral, and Landsat 9 thermal), normalizes it into standardized datasets, and generates training-ready patches for downstream ML models.
 
-**Python 3.14** | **Branch:** `ashwin/initial-exploration` | **No pyproject.toml** — uses `requirements.txt`
+**Python 3.14** | **No pyproject.toml** — uses `requirements.txt`
 
 ## Key Dependencies
 
-h5py, pydantic, numpy, torch, matplotlib, rasterio, pystac, scikit-learn, boto3, webdataset, numexpr, requests, python-dotenv
+h5py, pydantic, numpy, torch, matplotlib, rasterio, pystac, scikit-learn, boto3, webdataset, numexpr, requests, python-dotenv, scipy
 
 ## Architecture
 
@@ -16,61 +16,116 @@ h5py, pydantic, numpy, torch, matplotlib, rasterio, pystac, scikit-learn, boto3,
 app/
 ├── abstract_classes/     # ABCs: FileHelper, DatasetBuilder, DataTransformer, IntermediateSharder, MlModel
 ├── models/               # Pydantic data models (domain types, enums, request/response objects)
-├── templates/            # Sensor-specific file structure templates (PRISMA HE5, Landsat TIF)
+├── templates/            # Sensor-specific file structure templates (PRISMA HE5, Landsat TIF, EnMAP)
 ├── utils/                # All processing logic
-│   ├── files/            # File helpers: HE5Helper, TIFHelper
+│   ├── files/            # File helpers: HE5Helper, TIFHelper, EnmapHelper
 │   ├── stac/             # STAC item creation, bounding box extraction, filename parsing
-│   ├── dataset_builder/  # PrismaDatasetBuilder, LandsatDataBuilder
-│   ├── data_transformations/  # DN-to-physical-unit converters
+│   ├── dataset_builder/  # PrismaDatasetBuilder, LandsatDataBuilder, EnmapDatasetBuilder
+│   ├── data_transformations/  # DN-to-physical-unit converters, spectral band filter,
+│   │                          # spectral interpolator, spectral resampler
 │   ├── image_transformation/  # Cube format conversion (BIL/BSQ/BIP)
 │   ├── patch_generation/      # Patch planning, intermediate sharding, final shuffling
+│   │   ├── intermediate/      # LandsatIntermediateSharder, PrismaIntermediateSharder,
+│   │   │                      # EnmapIntermediateSharder
+│   │   └── final/             # FinalPatchShuffler, HyperspectralFinalShuffler
 │   ├── band_operations/       # Band fusion (stub)
 │   ├── visualization/         # Band-level visualization helpers
 │   ├── external_apis/         # USGS M2M scene search/download client
-│   ├── general_utils/         # S3 upload, paginated listing, shard pipe expressions
-│   └── torch_helpers/         # Device selection (CUDA/MPS/CPU)
+│   └── general_utils/         # S3 upload, paginated listing, shard pipe expressions
 ├── statistical_models/   # B10AdaptiveCloudMasker (GMM-based cloud detection)
+├── detectors/            # GRX, LRX, MNF+GRX, MNF+LRX, Statistical Ensemble
 ├── dataset/              # Package marker
 └── errors/               # ImplementationIncompleteError
+scripts/                  # Orchestration scripts for patch generation (Landsat, Hyperspectral)
 tests/                    # Mirrors app/ structure, uses pytest with markers: large_files, large_benchmarks, network_access
-notebooks/                # Exploration notebooks (band experiments, patching, visual confirmation)
+notebooks/                # Exploration notebooks (band experiments, patching, visual confirmation, pipeline walkthrough)
+benchmarking/             # Benchmark notebooks for hyperspectral and thermal anomaly detection
 docs/                     # Concept docs, design decisions, architecture notes
 ```
 
 ## Data Pipeline Flow
 
+### Thermal (Landsat 9)
+
 ```
-Raw Files (HE5/TIF on S3)
+Raw TIF Files (S3)
     │
     ▼
-FileHelper (HE5Helper / TIFHelper)          ← Reads raw bands, extracts metadata
+TIFHelper                                    ← Reads B10 band + QA_PIXEL
     │
     ▼
-DatasetBuilder (Prisma / Landsat)            ← Applies transformations, builds vendable datasets
-    │  ├─ DN → Surface Reflectance (PRISMA)
-    │  └─ DN → Surface Temperature (Landsat)
+LandsatDataBuilder                           ← DN → Surface Temperature (K→C)
+    │  ├─ B10AdaptiveCloudMasker (GMM)
+    │  └─ QA_PIXEL bitwise extraction
     │
     ▼
-VendableDataset                              ← Normalized cubes + validity/cloud masks
+VendableThermalDataset                       ← Temp cube + cloud/validity/QA masks
     │
     ▼
-PatchPlanGenerator                           ← Generates patch coordinates (stride-based tiling)
+LandsatIntermediateSharder                   ← Download → Build → Patch → Filter (>50%) → Shard
     │
     ▼
-IntermediateSharder (Landsat)                ← Downloads from S3, patches, writes webdataset shards
+FinalPatchShuffler                           ← Shuffle across scenes → Final shards
+```
+
+### Hyperspectral (PRISMA / EnMAP)
+
+```
+Raw Files (S3: prisma/*.he5, enmap/*/...)
     │
     ▼
-FinalPatchShuffler                           ← Shuffles intermediate shards into final training set
+FileHelper (HE5Helper / EnmapHelper)        ← Reads raw bands, extracts metadata
+    │
+    ▼
+DatasetBuilder (Prisma / Enmap)              ← DN → Surface Reflectance
+    │
+    ▼
+VendableDataset (raw, all bands)             ← 239 bands (PRISMA) / 224 bands (EnMAP)
+    │
+    ▼  ── BandFilterConfig controls all stages below ──
+    │
+[1] Bad band flag removal
+[2] Wavelength exclusion (atmospheric windows)
+[3] Detector edge trimming (3 bands/end)
+[4] Coverage-aware band pruning (<20% valid → drop)
+    │                                        ← ~188 bands survive
+    ▼
+[5] Quality mask invalidation (EnMAP only: cloud, shadow, haze)
+[6] Spatial masking (>40% invalid voxels → full pixel invalidation)
+[7] Spectral interpolation (PCHIP/linear gap-fill)
+    │                                        ← Binary validity: fully valid OR fully invalid
+    ▼
+[8] Spectral resampling to common grid       ← 165 bands, 10nm spacing, 460-2450nm
+    │                                        ← Identical shape across all sensors
+    ▼
+VendableDataset (clean, common grid)
+    │
+    ▼
+PrismaIntermediateSharder / EnmapIntermediateSharder
+    │                                        ← Download → Build → Patch → Filter → Shard
+    ▼
+HyperspectralFinalShuffler                   ← Mix PRISMA + EnMAP → Unified shards
+    │
+    ▼
+patches/hyperspectral/{split}/final/         ← Training-ready mixed-sensor shards
 ```
 
 ## Supported Sensors
 
 ### PRISMA (Hyperspectral)
 - **File format:** HE5 (HDF-5)
-- **Bands:** 66 VNIR + 173 SWIR (63 + 171 valid)
+- **Bands:** 66 VNIR + 173 SWIR (239 total, ~234 valid)
 - **Native format:** BIL (H x C x W), e.g. 1210 x 66 x 1219
 - **Transformation:** DN → Surface Reflectance via per-band scaling factors from L2D metadata
-- **Output:** `VendableHyperspectralDataset` with normalized cube (BSQ), validity masks, spectral family order, wavelengths, FWHM
+- **After pipeline:** 165 bands on common 10nm grid (460–2450nm)
+
+### EnMAP (Hyperspectral)
+- **File format:** GeoTIFF folder (SPECTRAL_IMAGE + PIXELMASK + quality layers + METADATA.XML)
+- **Bands:** 91 VNIR + 133 SWIR (224 total)
+- **Native format:** BSQ (C x H x W)
+- **Transformation:** `SR = DN * 0.0001` (uniform gain, all bands)
+- **Quality layers:** Cloud, cirrus, haze, cloud shadow, snow (each H x W)
+- **After pipeline:** 165 bands on common 10nm grid (460–2450nm)
 
 ### Landsat 9 (Thermal)
 - **File format:** GeoTIFF (via rasterio)
@@ -79,30 +134,75 @@ FinalPatchShuffler                           ← Shuffles intermediate shards in
 - **Transformation:** `ST(K) = 0.00341802 * DN + 149.0`, then K → C/F
 - **Cloud masking:** B10AdaptiveCloudMasker (5-component GMM on temperature distribution)
 - **QA Pixel:** Provider cloud/water/snow masks via bitwise extraction
-- **Output:** `VendableThermalDataset` with normalized thermal cube, cloud mask, validity mask, provider QA layers
 
 ## Key Abstractions
 
 ### FileHelper<T> (Generic ABC)
-Wraps HE5 (h5py) and TIF (rasterio) files with consistent interface: `extract_specific_bands()`, `file_metadata`, `access_dataset()`. Templates are injected, not looked up — sensor-agnostic design.
+Wraps HE5 (h5py), TIF (rasterio), and EnMAP folder (rasterio+XML) files with consistent interface: `extract_specific_bands()`, `file_metadata`, `access_dataset()`. Templates are injected, not looked up — sensor-agnostic design.
 
 ### DatasetBuilder (ABC)
-Converts raw files → vendable datasets. Owns STAC item, file helper, band information. Core method: `vend_dataset()`.
+Converts raw files → vendable datasets. Owns STAC item, file helper, band information. Core method: `vend_dataset(band_filter_config=...)`.
+
+### BandFilterConfig (Pydantic model)
+Controls the full post-processing pipeline for hyperspectral vendables:
+- `exclusion_ranges` — atmospheric absorption windows to exclude
+- `edge_bands_to_trim` — detector edge bands to remove
+- `min_valid_pixel_pct` — band-level coverage threshold
+- `max_invalid_voxel_fraction` — pixel-level spatial masking threshold
+- `quality_masks_to_apply` — EnMAP quality layers (cloud, shadow, haze)
+- `common_wavelength_grid` — target grid for spectral resampling (default: 165 bands, 10nm, 460–2450nm excluding atmospheric windows)
+
+### Spectral Processing Pipeline
+- **SpectralBandFilter** — 4-stage band filtering (flags, wavelength, edge, coverage)
+- **SpectralInterpolator** — PCHIP/linear gap-fill for partially-valid pixels
+- **SpectralResampler** — PCHIP resampling to common wavelength grid
 
 ### Templates
-Dictionaries mapping logical file components (e.g., `SWIR_CUBE_DATA`) to physical paths in HE5/TIF files via `ReferenceDefinition` objects. Three reference types: `FILE_REFERENCE`, `ROOT_METADATA_FIELD`, `DIRECT_PROPERTY_DEFINITION`.
+Dictionaries mapping logical file components to physical paths in HE5/TIF/EnMAP files via `ReferenceDefinition` objects. Three reference types: `FILE_REFERENCE`, `ROOT_METADATA_FIELD`, `DIRECT_PROPERTY_DEFINITION`.
 
 ### Cube Representations
 - **BIL** (Band Interleaved by Line): H x C x W — PRISMA native
-- **BSQ** (Band Sequential): C x H x W — Landsat native, standard ML format
+- **BSQ** (Band Sequential): C x H x W — EnMAP/Landsat native, standard ML format
 - **BIP** (Band Interleaved by Pixel): H x W x C — visualization format
 - `ImageCubeOperations.convert_cube()` handles all conversions via torch permutation
 
-### Patch Generation
-Three-tier system:
+### Patch Generation (3-tier system)
 1. **PatchPlanGenerator** — computes patch coordinates from cube dimensions + stride
-2. **LandsatIntermediateSharder** — downloads scenes from S3, builds datasets, patches, writes intermediate webdataset shards (filters patches with <50% validity)
-3. **FinalPatchShuffler** — reads intermediate shards, shuffles across scenes, writes final training shards
+2. **IntermediateSharder** (ABC) — per-sensor: download → build dataset → patch → filter → write webdataset shards → upload to S3
+   - `LandsatIntermediateSharder` — thermal (B10 + QA_PIXEL)
+   - `PrismaIntermediateSharder` — downloads .he5, builds vendable with BandFilterConfig
+   - `EnmapIntermediateSharder` — downloads scene folder, builds vendable with BandFilterConfig
+3. **Final Shuffler** — reads intermediate shards, shuffles across scenes, writes final shards
+   - `FinalPatchShuffler` — single-sensor (Landsat)
+   - `HyperspectralFinalShuffler` — multi-sensor, mixes PRISMA + EnMAP into unified shards
+
+### Webdataset Shard Contents
+
+**Hyperspectral patches:**
+- `pixels.npy` — (165, H, W) float32 reflectance on common grid
+- `validity_cube.npy` — (165, H, W) int8, binary validity
+- `wavelengths.npy` — (165,) float64, ascending, identical across sensors
+- `meta.json` — scene_id, coords, sensor, spectral families, band count
+
+**Thermal patches:**
+- `pixels.npy` — (1, H, W) float32 temperature
+- `validity_cube.npy` — (1, H, W) int8
+- `predicted_cloud_mask.npy`, `pure_validity_mask.npy`, provider QA masks
+- `meta.json` — scene_id, coords, patch dims
+
+### S3 Storage Layout
+
+```
+s3://allotrope-raw-data-india/
+├── prisma/                                            # raw .he5 scenes
+├── enmap/                                             # raw scene folders
+├── landsat/                                           # raw Landsat scenes
+├── patches/landsat/{split}/intermediate/w{W}_h{H}_s{S}/
+├── patches/landsat/{split}/final/w{W}_h{H}_s{S}/
+├── patches/prisma/{split}/intermediate/w{W}_h{H}_s{S}/
+├── patches/enmap/{split}/intermediate/w{W}_h{H}_s{S}/
+├── patches/hyperspectral/{split}/final/w{W}_h{H}_s{S}/   # mixed PRISMA+EnMAP
+```
 
 ### B10AdaptiveCloudMasker
 GMM-based cloud detection for Landsat B10 thermal band:
