@@ -51,9 +51,9 @@ class SAMLoss(nn.Module):
         x_m = x * mask
         xh_m = x_hat * mask
 
-        dot = (xh_m * x_m).sum(dim=1, keepdim=True)           # (B, 1, H, W)
-        norm_hat = (xh_m * xh_m).sum(dim=1, keepdim=True).sqrt()  # (B, 1, H, W)
-        norm_x = (x_m * x_m).sum(dim=1, keepdim=True).sqrt()      # (B, 1, H, W)
+        dot = (xh_m * x_m).sum(dim=1, keepdim=True)                         # (B, 1, H, W)
+        norm_hat = (xh_m * xh_m).sum(dim=1, keepdim=True).add(self.eps).sqrt()  # (B, 1, H, W)
+        norm_x = (x_m * x_m).sum(dim=1, keepdim=True).add(self.eps).sqrt()      # (B, 1, H, W)
 
         # Cross product magnitude for atan2 formulation:
         # ||a × b|| = ||a|| ||b|| sin(θ)
@@ -64,7 +64,8 @@ class SAMLoss(nn.Module):
         # and is numerically stable everywhere.
         cross_norm = (norm_hat * norm_x).clamp(min=self.eps)
         cos_term = dot.clamp(-cross_norm, cross_norm)
-        sin_term = (cross_norm ** 2 - cos_term ** 2).clamp(min=0).sqrt()
+        sin_term_sq = (cross_norm ** 2 - cos_term ** 2).clamp(min=0)
+        sin_term = (sin_term_sq + self.eps).sqrt()  # eps inside sqrt prevents infinite gradient at 0
 
         angles = torch.atan2(sin_term, cos_term)  # (B, 1, H, W), always in [0, π]
 

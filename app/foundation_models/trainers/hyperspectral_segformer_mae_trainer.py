@@ -256,26 +256,17 @@ class HyperspectralSegFormerMAETrainer(FoundationTrainer):
         if valid_l1.numel() == 0:
             return torch.tensor(0.0, device=self.device, requires_grad=True), 0
 
-        # --- SAM loss (always computed for logging, only weighted into loss when λ > 0) ---
-        sam_weight = self._get_sam_weight(self._current_epoch)
-        sam_loss = self._sam_loss(x_hat, pixels, loss_mask)
-
-        # --- Combined loss with optional trimming ---
+        # --- L1 ---
         l1_loss = valid_l1.mean()
 
-        if cfg.trim_fraction > 0:
-            per_pixel_sam = self._per_pixel_sam(x_hat, pixels, loss_mask)
-            per_pixel_combined = valid_l1 + sam_weight * per_pixel_sam
-            num_keep = int(per_pixel_combined.numel() * (1 - cfg.trim_fraction))
-            if num_keep > 0:
-                trimmed, _ = per_pixel_combined.sort()
-                loss = trimmed[:num_keep].mean()
-            else:
-                loss = per_pixel_combined.mean()
-        else:
-            loss = l1_loss + sam_weight * sam_loss
+        # --- SAM ---
+        sam_loss = self._sam_loss(x_hat, pixels, loss_mask)
 
-        # Accumulate component losses for epoch-level logging
+        # --- Combined ---
+        sam_weight = self._get_sam_weight(self._current_epoch)
+        loss = l1_loss + sam_weight * sam_loss
+
+        # --- Log ---
         self._epoch_l1_sum += l1_loss.item() * num_kept
         self._epoch_sam_sum += sam_loss.item() * num_kept
         self._epoch_loss_samples += num_kept
@@ -295,7 +286,8 @@ class HyperspectralSegFormerMAETrainer(FoundationTrainer):
         norm_x = (x_m * x_m).sum(dim=1, keepdim=True).sqrt()
         cross_norm = (norm_hat * norm_x).clamp(min=eps)
         cos_term = dot.clamp(-cross_norm, cross_norm)
-        sin_term = (cross_norm ** 2 - cos_term ** 2).clamp(min=0).sqrt()
+        sin_term_sq = (cross_norm ** 2 - cos_term ** 2).clamp(min=0)
+        sin_term = (sin_term_sq + eps).sqrt()
         angles = torch.atan2(sin_term, cos_term)
         return angles[mask == 1]
 
