@@ -32,6 +32,7 @@
 ## Patch Generation
 - [Landsat Patch Pipeline](docs/patch_generation/landsat_patch_pipeline.md)
 - [Landsat Intermediate Sharder](docs/landsat_intermediate_sharder.md)
+- [Hyperspectral Patch Pipeline](docs/patch_generation/hyperspectral_patch_pipeline.md)
 
 ## File Handling
 - [File Handling Design](docs/file_handling/file_handling_design.md)

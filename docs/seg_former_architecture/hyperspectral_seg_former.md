@@ -432,10 +432,14 @@ Using the same registered buffers as the normaliser.
 
 ### Loss Computation Domain
 
-Both losses are computed in **normalised space** (before denormalisation). This ensures:
-- All 165 bands contribute equally regardless of their physical reflectance magnitude
-- VNIR bands (high reflectance, ~0.3) and SWIR bands (low reflectance, ~0.05) are weighted equally
-- The optimiser sees gradients of similar magnitude across all bands
+Both losses are computed in **raw reflectance space** (after denormalisation). The model normalises internally for stable training, but the loss compares the denormalised output `x_hat` against the raw input `x`. This means:
+
+- Loss values are in **physical reflectance units** — directly interpretable (e.g. L1=0.005 means 0.5% reflectance error per band)
+- Bands with higher natural variance (e.g. vegetation red edge) contribute more to L1, which is appropriate since they carry more information
+- Anomaly detection inference operates in raw space — training loss matches inference scores
+- No artificial equalisation of bands that would suppress diagnostically important SWIR signals
+
+Note: normalisation still happens inside the model for numerical stability, but the loss sees denormalised outputs.
 
 ### L1 Reconstruction Loss
 
@@ -550,13 +554,29 @@ $$
 
 Recommended: $\eta_{max} = 1 \times 10^{-4}$, $\eta_{min} = 1 \times 10^{-6}$, warmup = 5 epochs.
 
-### Batch Size
+### Batch Size and Gradient Accumulation
 
 Due to 165× larger input tensors, batch size must be smaller than thermal:
 - **Thermal**: 32–64 per batch
-- **Hyperspectral**: 4–8 per batch (depending on GPU memory)
+- **Hyperspectral**: 8 per mini-batch
 
-**Gradient accumulation** can simulate larger effective batch sizes: accumulate gradients over N mini-batches before updating weights. Effective batch size = mini-batch × accumulation steps.
+With only 8 samples per mini-batch, gradient noise is high and BatchNorm statistics are unstable. **Gradient accumulation** addresses this by accumulating gradients over N mini-batches before updating weights:
+
+```
+gradient_accumulation_steps = 4
+effective_batch_size = 8 × 4 = 32   (matches thermal)
+
+Mini-batch 1:  loss₁ / 4  →  backward()     gradients accumulate
+Mini-batch 2:  loss₂ / 4  →  backward()     gradients accumulate
+Mini-batch 3:  loss₃ / 4  →  backward()     gradients accumulate
+Mini-batch 4:  loss₄ / 4  →  backward()     gradients accumulate
+               optimizer.step()              NOW update weights
+               optimizer.zero_grad()         reset for next cycle
+```
+
+Loss is divided by `accumulation_steps` before `backward()` so the gradient magnitude matches what a single batch of size 32 would produce. This keeps the learning rate meaningful regardless of the accumulation setting.
+
+Configurable via `gradient_accumulation_steps` in the data config. Setting to 1 disables accumulation (falls back to base trainer behaviour).
 
 ### Dropout
 
@@ -641,14 +661,38 @@ class SegFormerHyperspectralMAEConfig(BaseModel):
     # MAE
     mask_ratio: float = 0.5
     trim_fraction: float = 0.0
+    erosion_kernel_size: int = 1            # Validity mask erosion during training (1=minimal)
     
     # Loss
     sam_weight: float = 1.0                 # λ_max for SAM loss
     sam_ramp_epochs: int = 20               # T_ramp: epochs to linearly ramp SAM weight from 0 → λ_max
-    
-    # Pixel stats
-    pixel_stats_path: str                   # Path to JSON with per-band mean/std
+
+# Data config (shared across all trainers):
+    batch_size: int = 8
+    gradient_accumulation_steps: int = 4    # Effective batch = 8 × 4 = 32
+    pixel_stats_path: str                   # Path to JSON with per-band mean/std (165 values each)
 ```
+
+### Erosion Kernel Size
+
+The validity mask is eroded at patch boundaries to exclude pixels whose OPE receptive fields overlap with invalid regions. Different settings for training vs inference:
+
+| Context | Setting | Value | Rationale |
+|---------|---------|-------|-----------|
+| **Training** | `model_config.erosion_kernel_size` | 1 | Minimal erosion — use maximum training data |
+| **Inference** | `InferenceConfig.erosion_kernel_size` | 15 | Conservative — avoid edge artifacts in anomaly maps |
+
+### Loss Value Reference
+
+Loss is computed in **raw reflectance space**. L1 is in reflectance units; SAM is in radians.
+
+| Phase | L1 | SAM | λ | Combined |
+|-------|-----|-----|---|----------|
+| Epoch 0 | ~0.08–0.10 | ~0.3–0.4 rad (20–25°) | 0.0 | ~0.08–0.10 |
+| Epoch 10 | ~0.03–0.05 | ~0.15–0.25 rad (10–15°) | 0.5 | ~0.10–0.15 |
+| Epoch 20 | ~0.02–0.03 | ~0.08–0.15 rad (5–8°) | 1.0 | ~0.10–0.15 |
+| Epoch 100 | ~0.005–0.015 | ~0.04–0.08 rad (2–5°) | 1.0 | ~0.04–0.08 |
+| Epoch 500 | ~0.003–0.008 | ~0.02–0.05 rad (1–3°) | 1.0 | ~0.02–0.05 |
 
 
 ## 13. Summary of Key Design Decisions
@@ -660,10 +704,12 @@ class SegFormerHyperspectralMAEConfig(BaseModel):
 | Input normalisation | Per-band z-score (165 means, 165 stds) | Each band contributes equally to compression and loss |
 | Mask-then-normalise | Same as thermal | Masked pixels get distinctive per-band below-range values |
 | Token masking | MAE with physical token removal at Stage 1 only | Stages 2–4 process dense features (overlapping convolutions dilute zeros) |
+| Loss domain | Raw reflectance space | Interpretable physical units; matches inference; no artificial band equalisation |
 | Loss function | L1 + λ·SAM (combined, trimmed) | L1 captures magnitude; SAM captures spectral shape; trimming rejects anomalies |
 | SAM weight λ | 1.0 max, linearly ramped over 20 epochs | Early training needs L1 stability; SAM gradients are noisy before basic structure is learned |
 | Decoder upsampling | PixelShuffle(4) | No blurring; each pixel independently predicted; critical for point anomaly detection |
-| Batch size | 4–8 (with gradient accumulation) | Memory constraint from 165-channel input |
+| Batch size | 8 mini-batch × 4 accumulation = 32 effective | Memory constraint from 165-channel input; accumulation matches thermal's batch=32 |
+| Erosion | Training=1, Inference=15 | Training: maximise data. Inference: conservative boundaries |
 | Mask ratio | 50% (configurable, may increase) | Matches two-pass inference; spectral redundancy may warrant 60–75% |
 | Multi-sensor | Common 165-band grid | PRISMA and EnMAP produce identical tensor shapes; model is sensor-agnostic |
 | Anomaly scoring | Dual: L1 residual + SAM residual | Shape anomalies (SAM) vs magnitude anomalies (L1) — complementary signals |
