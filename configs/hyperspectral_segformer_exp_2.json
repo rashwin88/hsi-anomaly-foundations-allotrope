@@ -1,0 +1,98 @@
+{
+    "_comment": "Run: python scripts/train_foundation_model.py configs/hyperspectral_segformer_exp_1.json",
+    "_description": "Hyperspectral SegFormer MAE B0 — 165-band input, D=24 spectral compression, L1+SAM loss with 20-epoch ramp. Training on mixed PRISMA+EnMAP final shards (128x128).",
+
+    "_loss_reference": {
+        "note": "Loss is computed in RAW REFLECTANCE SPACE (not normalised). L1 is in reflectance units, SAM is in radians.",
+        "L1_range": "No upper bound. Typical: 0.001–0.10. Reflectance values are ~0.02–0.30.",
+        "SAM_range": "[0, pi] radians = [0, 180] degrees. Practical max ~90 degrees.",
+        "combined": "L_total = L1 + lambda(t) * SAM. Lambda ramps 0->1.0 over 20 epochs.",
+        "expected_baselines": {
+            "epoch_0":   {"L1": "~0.08-0.10", "SAM": "~0.3-0.4 rad (20-25 deg)", "lambda": 0.0, "combined": "~0.08-0.10"},
+            "epoch_10":  {"L1": "~0.03-0.05", "SAM": "~0.15-0.25 rad (10-15 deg)", "lambda": 0.5, "combined": "~0.10-0.15"},
+            "epoch_20":  {"L1": "~0.02-0.03", "SAM": "~0.08-0.15 rad (5-8 deg)", "lambda": 1.0, "combined": "~0.10-0.15"},
+            "epoch_100": {"L1": "~0.005-0.015", "SAM": "~0.04-0.08 rad (2-5 deg)", "lambda": 1.0, "combined": "~0.04-0.08"},
+            "epoch_500": {"L1": "~0.003-0.008", "SAM": "~0.02-0.05 rad (1-3 deg)", "lambda": 1.0, "combined": "~0.02-0.05"}
+        },
+        "red_flags": {
+            "L1_not_dropping_below_0.05_by_epoch_10": "Learning rate too low or data loading issue",
+            "SAM_stuck_above_0.3_after_epoch_30": "Compressor bottleneck too narrow (try compressed_channels=32)",
+            "L1_increases_when_SAM_ramp_starts": "SAM weight too high (try sam_weight=0.5)",
+            "train_loss_drops_but_val_doesnt": "Overfitting — increase dropout or reduce model size"
+        }
+    },
+
+    "foundation_model_name": "hyperspectral_segformer_mae",
+    "version": "0.2.0",
+
+    "model_config": {
+        "model_type": "hyperspectral_segformer_mae",
+        "in_channels": 165,
+        "compressed_channels": 32,
+        "embed_dims": [32, 64, 160, 256],
+        "num_heads": [2, 2, 5, 8],
+        "reduction_ratios": [8, 4, 2, 1],
+        "num_blocks": [2, 2, 2, 2],
+        "decoder_dim": 256,
+        "expansion_ratio": 4,
+        "drop_rate": 0.4,
+        "mask_ratio": 0.65,
+        "trim_fraction": 0.0,
+        "sam_weight": 0.5,
+        "sam_ramp_epochs": 10
+    },
+
+    "data": {
+        "num_epochs": 200,
+        "data_provider": "hyperspectral",
+        "train_samples_per_epoch": { "128": 40000 },
+        "test_samples_per_epoch": { "128": 5000 },
+        "shard_key_template": "patches/{provider}/{split}/{stage}/w{size}_h{size}_s{stride}/",
+        "stage": "final",
+        "bucket_name": "allotrope-raw-data-india",
+        "region_name": "ap-south-1",
+        "batch_size": 128,
+        "gradient_accumulation_steps": 1,
+        "num_workers": 40,
+        "shardshuffle": 30,
+        "pixel_stats_path": "/home/user57/constants/hyperspectral.json"
+    },
+
+    "learning_rate": 1e-3,
+
+    "lr_schedule": {
+        "scheduler_type": "cosine",
+        "warmup_epochs": 5,
+        "min_lr": 1e-6,
+        "step_size": 10,
+        "step_gamma": 0.5
+    },
+
+    "checkpoint": {
+        "checkpoint_dir": "/home/user57/checkpoints/hyperspectral_segformer_mae_v2/",
+        "save_every_n_epochs": 1,
+        "keep_top_k": 20,
+        "save_to_s3": false,
+        "s3_checkpoint_key": null
+    },
+
+    "hot_storage": {
+        "enabled": true,
+        "local_cache_dir": "/tmp/hot_shards_hsi/",
+        "train_shards_per_size": 500,
+        "test_shards_per_size": 100,
+        "skip_sync_if_exists": true,
+        "max_parallel_downloads": 20
+    },
+
+    "wandb": {
+        "enabled": true,
+        "project": "allotrope-had",
+        "run_name": "allotrope-hsi-segformer-mae-v0.2.0",
+        "tags": ["hyperspectral_segformer_mae", "prisma", "enmap", "spectral_compression", "sam_loss"]
+    },
+
+    "device": null,
+    "resume_from": null,
+    "resume_mode": "resume"
+}
