@@ -1,0 +1,184 @@
+{
+  "metadata": {
+    "agent": "Gromo Agent Production",
+    "date_range": "2026-01-23",
+    "filter_category": "All",
+    "total_conversations": 2,
+    "total_tickets": 2
+  },
+
+  "ai_performance_metrics": {
+    "overall_deflection_rate": 68,
+    "total_deflected_tickets": 0,
+    "total_transferred_tickets": 0,
+    "avg_handle_time_seconds": 200,
+    "avg_first_response_time_seconds": 0.95,
+    "avg_llm_latency_seconds": 1.03,
+    "avg_tts_latency_seconds": 0.18,
+    "avg_asr_latency_seconds": 0.72,
+    "sentiment_distribution": {
+      "positive": 0.0,
+      "neutral": 0.50,
+      "negative": 0.50
+    }
+  },
+
+  "suggestions": {
+    "deflection_overview": {
+      "current_deflection_percent": 68,
+      "projected_final_deflection_percent": 82,
+      "transfer_reason_breakdown": [
+        { "reason": "Policy Limitation", "percent_of_transfers": 2, "tickets": "" },
+        { "reason": "API / Data Issues", "percent_of_transfers": 7, "tickets": ""},
+        { "reason": "User Requested", "percent_of_transfers": 2, "tickets": "" },
+        { "reason": "SOP Gap", "percent_of_transfers": 3, "tickets": "" }
+      ]
+    },
+    "top_improvement_suggestions": [
+      {
+        "rank": 1,
+        "issue_category": "SOP Gap",
+        "expected_improvement_percent": 15,
+        "description": "Add training video links and step-by-step onboarding guides for partner products (e.g., Kotak Mahindra account opening) to the AI knowledge base. User explicitly asked for training video and AI had no resource to share.",
+        "transfer_reason": "SOP Gap",
+        "source_conversations": ["conv_001"],
+        "tickets_affected": 1
+      },
+      {
+        "rank": 2,
+        "issue_category": "Policy Limitation",
+        "expected_improvement_percent": 10,
+        "description": "Allow AI to verify users calling from non-registered numbers via secondary authentication (OTP, GroMo ID, email). Currently AI cannot pull any account data if call is from a different number.",
+        "transfer_reason": "Policy Limitation",
+        "source_conversations": ["conv_002"],
+        "tickets_affected": 1
+      },
+      {
+        "rank": 3,
+        "issue_category": "API / Data Issues",
+        "expected_improvement_percent": 10,
+        "description": "Improve ASR accuracy for Hindi-English code-switched speech and unclear audio. User's initial input was transcribed as gibberish, requiring multiple clarification loops before AI understood the query was about Kotak wallet.",
+        "transfer_reason": "API / Data Issues",
+        "source_conversations": ["conv_002"],
+        "tickets_affected": 1
+      },
+      {
+        "rank": 4,
+        "issue_category": "SOP Gap",
+        "expected_improvement_percent": 5,
+        "description": "AI gives verbose, generic explanations about app download requirement for Kotak account opening instead of a concise, specific answer. User had opened other accounts without this step and AI failed to explain the Kotak-specific difference clearly.",
+        "transfer_reason": "User Requested",
+        "source_conversations": ["conv_001"],
+        "tickets_affected": 1
+      },
+      {
+        "rank": 5,
+        "issue_category": "User Requested",
+        "expected_improvement_percent": 5,
+        "description": "User explicitly asked if they were speaking to AI and lost trust in responses afterward. Improve upfront AI disclosure in greeting and add frustration detection to trigger proactive human handoff.",
+        "transfer_reason": "User Requested",
+        "source_conversations": ["conv_001"],
+        "tickets_affected": 1
+      },
+      {
+        "rank": 6,
+        "issue_category": "API / Data Issues",
+        "expected_improvement_percent": 5,
+        "description": "Predictive information retrieval was triggered multiple times across both conversations but returned no useful results for Kotak-related queries. Retrieval system needs better coverage for partner-specific product flows.",
+        "transfer_reason": "API / Data Issues",
+        "source_conversations": ["conv_001", "conv_002"],
+        "tickets_affected": 2
+      }
+    ]
+  },
+
+  "insights": {
+    "deflection_rate_improvement_by_sop": [
+      {
+        "sop_name": "Account Opening Issues",
+        "total_tickets": 1,
+        "current_deflection_percent": 0,
+        "current_deflected_tickets": 0,
+        "improvement_opportunity": [
+          { "reason": "SOP Gap", "percent": 20, "detail": "No training videos or Kotak-specific onboarding docs in knowledge base" },
+          { "reason": "User Requested", "percent": 10, "detail": "User lost trust in AI, asked for human/video instead" }
+        ],
+        "final_deflection_percent": 30
+      },
+      {
+        "sop_name": "Payout & Commission Queries",
+        "total_tickets": 1,
+        "current_deflection_percent": 0,
+        "current_deflected_tickets": 0,
+        "improvement_opportunity": [
+          { "reason": "Policy Limitation", "percent": 25, "detail": "AI cannot authenticate users calling from non-registered numbers" },
+          { "reason": "API / Data Issues", "percent": 15, "detail": "ASR failed to transcribe user's initial input accurately" }
+        ],
+        "final_deflection_percent": 40
+      }
+    ],
+    "deflection_rate_improvement_by_reason": {
+      "Policy Limitation": { "percent": 25, "tickets": 1, "detail": "Non-registered number authentication block" },
+      "API / Data Issues": { "percent": 30, "tickets": 2, "detail": "ASR accuracy issues and predictive retrieval returning empty results" },
+      "User Requested": { "percent": 20, "tickets": 1, "detail": "User asked for human and lost trust in AI responses" },
+      "SOP Gap": { "percent": 25, "tickets": 1, "detail": "Missing training videos and partner-specific onboarding guides" }
+    }
+  },
+
+  "details": {
+    "escalation_log": [
+      {
+        "id": "ESC-001",
+        "conversation_id": "conv_001",
+        "category": "Account Opening Issues",
+        "user_query_summary": "User tried opening Kotak Mahindra bank account via GroMo link. After filling name and mobile number, was redirected to download an app. User confused because previous account openings with other banks didn't require app download. Also asked for training video — AI had none to share.",
+        "transfer_reason": {
+          "primary": "SOP Gap",
+          "detail": "AI knowledge base lacks Kotak-specific onboarding flow documentation and training video links. AI gave generic explanation about app download being required for KYC without addressing why this flow differs from other banks."
+        },
+        "how_humans_would_resolve": "Share the specific Kotak Mahindra training video from GroMo's resource library. Explain concisely that Kotak requires in-app KYC unlike some other partner banks. Walk user through the app-based process.",
+        "next_steps": "Add partner-specific onboarding flow docs and training video URLs to AI retrieval system. Tighten response generation to give concise, bank-specific answers instead of generic explanations.",
+        "timestamp": "2026-01-23T09:15:00Z"
+      },
+      {
+        "id": "ESC-002",
+        "conversation_id": "conv_001",
+        "category": "AI Trust Issue",
+        "user_query_summary": "User explicitly asked 'Are you AI or a human?' After AI disclosed it was a digital assistant, user became more skeptical and dismissive of AI's responses, saying they have opened many accounts and this never happened before.",
+        "transfer_reason": {
+          "primary": "User Requested",
+          "detail": "User lost confidence in AI after identity disclosure. AI's verbose and repetitive responses reinforced user's perception that it wasn't providing real help."
+        },
+        "how_humans_would_resolve": "Acknowledge frustration, give a direct and specific answer about Kotak's app requirement, offer to stay on the line during the process.",
+        "next_steps": "Revise AI greeting to include transparent but confidence-building AI disclosure upfront. Implement frustration detection to trigger proactive human handoff. Reduce response verbosity.",
+        "timestamp": "2026-01-23T09:20:00Z"
+      },
+      {
+        "id": "ESC-003",
+        "conversation_id": "conv_002",
+        "category": "Payout & Commission",
+        "user_query_summary": "User called about Kotak payout status but was calling from a non-registered mobile number. AI could not pull any account data or verify identity. User mentioned the Kotak registered number is different.",
+        "transfer_reason": {
+          "primary": "Policy Limitation",
+          "detail": "AI has no mechanism to authenticate users calling from non-registered numbers. Only option given was to ask user to call back from registered number."
+        },
+        "how_humans_would_resolve": "Verify identity through alternate methods — GroMo ID, registered email, last transaction details — then provide payout status.",
+        "next_steps": "Implement OTP-based or alternate verification flow (GroMo ID, email) so users calling from different numbers can still access their account information.",
+        "timestamp": "2026-01-23T09:32:00Z"
+      },
+      {
+        "id": "ESC-004",
+        "conversation_id": "conv_002",
+        "category": "ASR Quality Issue",
+        "user_query_summary": "User's first input was unclear speech — ASR transcribed it as 'मैं वहां नींद में डाला था अपना' which made no sense. Required multiple turns of clarification before AI understood the user wanted help with Kotak wallet payout status.",
+        "transfer_reason": {
+          "primary": "API / Data Issues",
+          "detail": "ASR transcription was inaccurate for unclear or drowsy speech with Hindi-English mixing. No fallback confirmation mechanism to verify what the user actually said."
+        },
+        "how_humans_would_resolve": "Human agent used contextual cues and patient questioning to identify the user's actual need (Kotak wallet payout status).",
+        "next_steps": "Implement echo-back confirmation on low-confidence ASR transcriptions. Upgrade ASR model for varied speech clarity and Hindi-English code-switching.",
+        "timestamp": "2026-01-23T09:33:00Z"
+      }
+    ]
+  }
+}

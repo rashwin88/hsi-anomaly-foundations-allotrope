@@ -6,8 +6,8 @@ __pycache__/
 experiments/
 CONTEXT.md
 TODO.md
-benchmarking/
 .vscode/
+checkpoints/
 
 
 # C extensions
@@ -215,4 +215,8 @@ __marimo__/
 
 raw_files/
 test_payloads/
+
+# Large benchmarking binaries (keep code/notebooks, drop big TIFs)
+benchmarking/thermal/**/*.TIF
+benchmarking/thermal/**/gt.tif
 

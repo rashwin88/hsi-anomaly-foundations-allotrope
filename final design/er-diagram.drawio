@@ -1,0 +1,326 @@
+<mxfile host="65bd71144e">
+    <diagram id="allotrope_er" name="Allotrope ER">
+        <mxGraphModel dx="1411" dy="2297" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1600" pageHeight="1100" math="0" shadow="0">
+            <root>
+                <mxCell id="0"/>
+                <mxCell id="1" parent="0"/>
+                <mxCell id="title" value="Allotrope — Entity Relationships" style="text;html=1;fontSize=20;fontStyle=1;align=left;verticalAlign=middle;" parent="1" vertex="1">
+                    <mxGeometry x="40" y="20" width="700" height="32" as="geometry"/>
+                </mxCell>
+                <mxCell id="subtitle" value="Updated as entities lock in abstractions.md. Relationships drawn once both ends are locked." style="text;html=1;fontSize=12;fontStyle=2;fontColor=#666666;align=left;verticalAlign=middle;" parent="1" vertex="1">
+                    <mxGeometry x="40" y="54" width="900" height="20" as="geometry"/>
+                </mxCell>
+                <mxCell id="user_entity" value="&lt;div style=&quot;text-align:center;font-weight:bold;font-size:14px;border-bottom:1px solid #888;padding:8px 0;background:#eef3f8&quot;&gt;User&lt;/div&gt;&lt;div style=&quot;padding:10px 14px;line-height:1.6&quot;&gt;&lt;div&gt;&lt;b&gt;id&lt;/b&gt; : uuid (PK)&lt;/div&gt;&lt;div&gt;username : text (unique, ci)&lt;/div&gt;&lt;div&gt;email : text (unique, ci)&lt;/div&gt;&lt;div&gt;password_hash : text&lt;/div&gt;&lt;div&gt;display_name : text?&lt;/div&gt;&lt;div&gt;last_login_at : timestamptz?&lt;/div&gt;&lt;div&gt;created_at : timestamptz&lt;/div&gt;&lt;div&gt;updated_at : timestamptz&lt;/div&gt;&lt;/div&gt;&lt;div style=&quot;padding:6px 14px;font-size:10px;color:#888;border-top:1px dashed #ccc&quot;&gt;wire: user_&amp;lt;uuid&amp;gt;&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;align=left;verticalAlign=top;fontFamily=Helvetica;fontSize=12;fillColor=#ffffff;strokeColor=#333333;" parent="1" vertex="1">
+                    <mxGeometry x="40" y="110" width="240" height="260" as="geometry"/>
+                </mxCell>
+                <mxCell id="scene_entity" value="&lt;div style=&quot;text-align:center;font-weight:bold;font-size:14px;border-bottom:1px solid #888;padding:8px 0;background:#e8f1e6&quot;&gt;Scene&lt;/div&gt;&lt;div style=&quot;padding:10px 14px;line-height:1.6&quot;&gt;&lt;div&gt;&lt;b&gt;id&lt;/b&gt; : uuid (PK)&lt;/div&gt;&lt;div&gt;sensor_type : text (enum)&lt;/div&gt;&lt;div&gt;sensor_scene_id : text&lt;/div&gt;&lt;div&gt;name : text&lt;/div&gt;&lt;div&gt;acquisition_at : timestamptz?&lt;/div&gt;&lt;div&gt;processing_level : text?&lt;/div&gt;&lt;div&gt;product_type : text?&lt;/div&gt;&lt;div&gt;bbox_min_lon : numeric&lt;/div&gt;&lt;div&gt;bbox_min_lat : numeric&lt;/div&gt;&lt;div&gt;bbox_max_lon : numeric&lt;/div&gt;&lt;div&gt;bbox_max_lat : numeric&lt;/div&gt;&lt;div&gt;native_projection : text?&lt;/div&gt;&lt;div&gt;band_count : int&lt;/div&gt;&lt;div&gt;cloud_cover_pct : numeric?&lt;/div&gt;&lt;div&gt;valid_pixel_pct : numeric?&lt;/div&gt;&lt;div&gt;has_annotations : boolean&lt;/div&gt;&lt;div&gt;metadata : jsonb&lt;/div&gt;&lt;div&gt;raw_path : text&lt;/div&gt;&lt;div&gt;vendable_path : text&lt;/div&gt;&lt;div&gt;thumbnail_path : text?&lt;/div&gt;&lt;div&gt;created_at : timestamptz&lt;/div&gt;&lt;div&gt;&lt;b&gt;created_by_user_id&lt;/b&gt; : uuid? (FK)&lt;/div&gt;&lt;/div&gt;&lt;div style=&quot;padding:6px 14px;font-size:10px;color:#888;border-top:1px dashed #ccc&quot;&gt;wire: scene_&amp;lt;uuid&amp;gt; · UNIQUE(sensor_type, sensor_scene_id) · bbox in EPSG:4326&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;align=left;verticalAlign=top;fontFamily=Helvetica;fontSize=12;fillColor=#ffffff;strokeColor=#333333;" parent="1" vertex="1">
+                    <mxGeometry x="340" y="110" width="320" height="560" as="geometry"/>
+                </mxCell>
+                <mxCell id="annotation_entity" value="&lt;div style=&quot;text-align:center;font-weight:bold;font-size:14px;border-bottom:1px solid #888;padding:8px 0;background:#fdf2e0&quot;&gt;Annotation&lt;/div&gt;&lt;div style=&quot;padding:10px 14px;line-height:1.6&quot;&gt;&lt;div&gt;&lt;b&gt;id&lt;/b&gt; : uuid (PK)&lt;/div&gt;&lt;div&gt;&lt;b&gt;scene_id&lt;/b&gt; : uuid (FK)&lt;/div&gt;&lt;div&gt;type : text (enum: raster_mask)&lt;/div&gt;&lt;div&gt;name : text&lt;/div&gt;&lt;div&gt;description : text?&lt;/div&gt;&lt;div&gt;file_path : text&lt;/div&gt;&lt;div&gt;metadata : jsonb&lt;/div&gt;&lt;div&gt;created_at : timestamptz&lt;/div&gt;&lt;div&gt;&lt;b&gt;created_by_user_id&lt;/b&gt; : uuid? (FK)&lt;/div&gt;&lt;/div&gt;&lt;div style=&quot;padding:6px 14px;font-size:10px;color:#888;border-top:1px dashed #ccc&quot;&gt;wire: annotation_&amp;lt;uuid&amp;gt; · CASCADE on Scene-delete · path: scenes/&amp;lt;scene_id&amp;gt;/annotations/&amp;lt;id&amp;gt;/&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;align=left;verticalAlign=top;fontFamily=Helvetica;fontSize=12;fillColor=#ffffff;strokeColor=#333333;" parent="1" vertex="1">
+                    <mxGeometry x="720" y="110" width="300" height="320" as="geometry"/>
+                </mxCell>
+                <mxCell id="auth_note" value="&lt;div style=&quot;font-size:11px;line-height:1.55;color:#444&quot;&gt;&lt;b&gt;Auth model: JWT (stateless)&lt;/b&gt;&lt;br/&gt;HS256 · HttpOnly+SameSite=Strict cookie&lt;br/&gt;24h expiry · no sessions table&lt;br/&gt;claims: sub, iat, exp, username&lt;br/&gt;&lt;span style=&quot;color:#888&quot;&gt;(see &quot;Auth Flow (JWT)&quot; sheet)&lt;/span&gt;&lt;/div&gt;" style="rounded=0;whiteSpace=wrap;html=1;align=left;verticalAlign=top;fontFamily=Helvetica;fontSize=11;fillColor=#fff8e7;strokeColor=#d6b86a;dashed=1;" parent="1" vertex="1">
+                    <mxGeometry x="1080" y="110" width="440" height="110" as="geometry"/>
+                </mxCell>
+                <mxCell id="audit_note" value="&lt;div style=&quot;font-size:11px;line-height:1.55;color:#444&quot;&gt;&lt;b&gt;Audit refs (not drawn as edges)&lt;/b&gt;&lt;br/&gt;Scene.created_by_user_id → User.id   (SET NULL)&lt;br/&gt;Annotation.created_by_user_id → User.id   (SET NULL)&lt;br/&gt;&lt;span style=&quot;color:#888&quot;&gt;Library is shared; created_by is informational, not ownership.&lt;/span&gt;&lt;/div&gt;" style="rounded=0;whiteSpace=wrap;html=1;align=left;verticalAlign=top;fontFamily=Helvetica;fontSize=11;fillColor=#fafafa;strokeColor=#cccccc;" parent="1" vertex="1">
+                    <mxGeometry x="1080" y="240" width="440" height="100" as="geometry"/>
+                </mxCell>
+                <mxCell id="user_scene_audit_edge" value="created_by (audit · SET NULL)" style="endArrow=ERmany;startArrow=ERone;dashed=1;html=1;rounded=0;strokeColor=#666666;fontSize=10;labelBackgroundColor=#ffffff;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.15;entryDx=0;entryDy=0;" parent="1" source="user_entity" target="scene_entity" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="scene_annotation_edge" value="1—N · CASCADE" style="endArrow=ERmany;startArrow=ERone;html=1;rounded=0;strokeColor=#333333;fontSize=10;labelBackgroundColor=#ffffff;exitX=1;exitY=0.25;exitDx=0;exitDy=0;entryX=0;entryY=0.25;entryDx=0;entryDy=0;" parent="1" source="scene_entity" target="annotation_entity" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="project_entity" value="&lt;div style=&quot;text-align:center;font-weight:bold;font-size:14px;border-bottom:1px solid #888;padding:8px 0;background:#f0e6f8&quot;&gt;Project&lt;/div&gt;&lt;div style=&quot;padding:10px 14px;line-height:1.6&quot;&gt;&lt;div&gt;&lt;b&gt;id&lt;/b&gt; : uuid (PK)&lt;/div&gt;&lt;div&gt;&lt;b&gt;user_id&lt;/b&gt; : uuid (FK)&lt;/div&gt;&lt;div&gt;&lt;b&gt;scene_id&lt;/b&gt; : uuid (FK)&lt;/div&gt;&lt;div&gt;name : text&lt;/div&gt;&lt;div&gt;description : text?&lt;/div&gt;&lt;div&gt;created_at : timestamptz&lt;/div&gt;&lt;div&gt;updated_at : timestamptz&lt;/div&gt;&lt;/div&gt;&lt;div style=&quot;padding:6px 14px;font-size:10px;color:#888;border-top:1px dashed #ccc&quot;&gt;wire: project_&amp;lt;uuid&amp;gt; · RESTRICT on User-delete · RESTRICT on Scene-delete · cascades down to Actions / Notes / Visualizations / Result&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;align=left;verticalAlign=top;fontFamily=Helvetica;fontSize=12;fillColor=#ffffff;strokeColor=#333333;" parent="1" vertex="1">
+                    <mxGeometry x="40" y="730" width="280" height="240" as="geometry"/>
+                </mxCell>
+                <mxCell id="user_project_edge" value="owns · 1—N · RESTRICT" style="endArrow=ERmany;startArrow=ERone;html=1;rounded=0;strokeColor=#333333;fontSize=10;labelBackgroundColor=#ffffff;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.3;entryY=0;entryDx=0;entryDy=0;" parent="1" source="user_entity" target="project_entity" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="scene_project_edge" value="hosts · 1—N · RESTRICT" style="endArrow=ERmany;startArrow=ERone;html=1;rounded=0;strokeColor=#333333;fontSize=10;labelBackgroundColor=#ffffff;exitX=0;exitY=1;exitDx=0;exitDy=0;entryX=0.85;entryY=0;entryDx=0;entryDy=0;" parent="1" source="scene_entity" target="project_entity" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="legend_title" value="Legend" style="text;html=1;fontSize=12;fontStyle=1;align=left;" parent="1" vertex="1">
+                    <mxGeometry x="360" y="730" width="120" height="20" as="geometry"/>
+                </mxCell>
+                <mxCell id="legend_box" value="&lt;div style=&quot;line-height:1.7;font-size:11px&quot;&gt;&lt;div&gt;&lt;b&gt;rounded box&lt;/b&gt; — entity (table)&lt;/div&gt;&lt;div&gt;&lt;b&gt;text? &lt;/b&gt;— nullable column&lt;/div&gt;&lt;div&gt;&lt;b&gt;ci&lt;/b&gt; — case-insensitive unique&lt;/div&gt;&lt;div&gt;&lt;b&gt;solid arrow with crow&apos;s foot&lt;/b&gt; — FK 1—N (ownership / structural)&lt;/div&gt;&lt;div&gt;&lt;b&gt;dashed arrow&lt;/b&gt; — soft / audit-only ref (SET NULL)&lt;/div&gt;&lt;div style=&quot;color:#888;margin-top:6px&quot;&gt;Audit-only refs from User to multiple entities are listed in the &quot;Audit refs&quot; box above to avoid edge clutter.&lt;/div&gt;&lt;/div&gt;" style="rounded=0;whiteSpace=wrap;html=1;align=left;verticalAlign=top;fontFamily=Helvetica;fontSize=11;fillColor=#fafafa;strokeColor=#cccccc;" parent="1" vertex="1">
+                    <mxGeometry x="360" y="754" width="500" height="160" as="geometry"/>
+                </mxCell>
+            </root>
+        </mxGraphModel>
+    </diagram>
+    <diagram id="auth_flow" name="Auth Flow (JWT)">
+        <mxGraphModel dx="693" dy="762" grid="0" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1200" pageHeight="950" math="0" shadow="0">
+            <root>
+                <mxCell id="0"/>
+                <mxCell id="1" parent="0"/>
+                <mxCell id="auth_title" value="JWT Auth Flow" style="text;html=1;fontSize=20;fontStyle=1;align=left;verticalAlign=middle;" parent="1" vertex="1">
+                    <mxGeometry x="40" y="20" width="500" height="30" as="geometry"/>
+                </mxCell>
+                <mxCell id="auth_subtitle" value="Login · Authenticated request · Logout · HS256 / HttpOnly+SameSite=Strict cookie" style="text;html=1;fontSize=12;fontStyle=2;fontColor=#666666;align=left;verticalAlign=middle;" parent="1" vertex="1">
+                    <mxGeometry x="40" y="52" width="900" height="20" as="geometry"/>
+                </mxCell>
+                <mxCell id="actor_client" value="Browser (Client)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;fontStyle=1;" parent="1" vertex="1">
+                    <mxGeometry x="120" y="85" width="160" height="40" as="geometry"/>
+                </mxCell>
+                <mxCell id="actor_api" value="api (FastAPI)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=12;fontStyle=1;" parent="1" vertex="1">
+                    <mxGeometry x="520" y="85" width="160" height="40" as="geometry"/>
+                </mxCell>
+                <mxCell id="actor_db" value="postgres" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=12;fontStyle=1;" parent="1" vertex="1">
+                    <mxGeometry x="920" y="85" width="160" height="40" as="geometry"/>
+                </mxCell>
+                <mxCell id="lifeline_client" style="endArrow=none;dashed=1;html=1;rounded=0;strokeColor=#999999;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <mxPoint x="200" y="125" as="sourcePoint"/>
+                        <mxPoint x="200" y="900" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="lifeline_api" style="endArrow=none;dashed=1;html=1;rounded=0;strokeColor=#999999;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <mxPoint x="600" y="125" as="sourcePoint"/>
+                        <mxPoint x="600" y="900" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="lifeline_db" style="endArrow=none;dashed=1;html=1;rounded=0;strokeColor=#999999;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <mxPoint x="1000" y="125" as="sourcePoint"/>
+                        <mxPoint x="1000" y="900" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="phase1_band" value="① Login — POST /auth/login" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#eef3f8;strokeColor=#aac4e0;align=left;verticalAlign=middle;fontStyle=1;fontSize=12;" parent="1" vertex="1">
+                    <mxGeometry x="30" y="140" width="1100" height="26" as="geometry"/>
+                </mxCell>
+                <mxCell id="msg_login_1" value="POST /auth/login&lt;br/&gt;{ username, password }" style="endArrow=classic;html=1;edgeStyle=none;fontSize=11;align=center;verticalAlign=bottom;labelBackgroundColor=#ffffff;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <mxPoint x="200" y="190" as="sourcePoint"/>
+                        <mxPoint x="600" y="190" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="msg_login_2" value="SELECT user WHERE LOWER(username)=$1" style="endArrow=classic;html=1;edgeStyle=none;fontSize=11;align=center;verticalAlign=bottom;labelBackgroundColor=#ffffff;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <mxPoint x="600" y="225" as="sourcePoint"/>
+                        <mxPoint x="1000" y="225" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="msg_login_3" value="user row" style="endArrow=open;html=1;edgeStyle=none;dashed=1;fontSize=11;align=center;verticalAlign=bottom;labelBackgroundColor=#ffffff;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <mxPoint x="1000" y="255" as="sourcePoint"/>
+                        <mxPoint x="600" y="255" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="note_login" value="argon2id_verify(password)&lt;br/&gt;build claims { sub, iat, exp, username }&lt;br/&gt;sign with HMAC-SHA256(secret, header.payload)" style="shape=note;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11;align=left;verticalAlign=middle;" parent="1" vertex="1">
+                    <mxGeometry x="430" y="280" width="340" height="70" as="geometry"/>
+                </mxCell>
+                <mxCell id="msg_login_4" value="UPDATE users SET last_login_at = now()" style="endArrow=classic;html=1;edgeStyle=none;fontSize=11;align=center;verticalAlign=bottom;labelBackgroundColor=#ffffff;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <mxPoint x="600" y="370" as="sourcePoint"/>
+                        <mxPoint x="1000" y="370" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="msg_login_5" value="200 OK&lt;br/&gt;Set-Cookie: allotrope_jwt=…; HttpOnly; Secure; SameSite=Strict; Max-Age=86400" style="endArrow=open;html=1;edgeStyle=none;dashed=1;fontSize=11;align=center;verticalAlign=bottom;labelBackgroundColor=#ffffff;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <mxPoint x="600" y="410" as="sourcePoint"/>
+                        <mxPoint x="200" y="410" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="phase2_band" value="② Authenticated request — every other endpoint" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#e8f1e6;strokeColor=#a8c8a4;align=left;verticalAlign=middle;fontStyle=1;fontSize=12;" parent="1" vertex="1">
+                    <mxGeometry x="30" y="450" width="1100" height="26" as="geometry"/>
+                </mxCell>
+                <mxCell id="msg_auth_1" value="GET /projects&lt;br/&gt;Cookie: allotrope_jwt (auto-attached by browser)" style="endArrow=classic;html=1;edgeStyle=none;fontSize=11;align=center;verticalAlign=bottom;labelBackgroundColor=#ffffff;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <mxPoint x="200" y="500" as="sourcePoint"/>
+                        <mxPoint x="600" y="500" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="note_auth" value="middleware:&lt;br/&gt;1. read cookie&lt;br/&gt;2. recompute signature with secret&lt;br/&gt;3. constant-time compare&lt;br/&gt;4. check exp &amp;gt; now&lt;br/&gt;5. attach claims.sub to request context&lt;br/&gt;&lt;b&gt;no DB read for auth&lt;/b&gt;" style="shape=note;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11;align=left;verticalAlign=middle;" parent="1" vertex="1">
+                    <mxGeometry x="420" y="525" width="360" height="120" as="geometry"/>
+                </mxCell>
+                <mxCell id="msg_auth_2" value="SELECT projects WHERE user_id = claims.sub" style="endArrow=classic;html=1;edgeStyle=none;fontSize=11;align=center;verticalAlign=bottom;labelBackgroundColor=#ffffff;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <mxPoint x="600" y="665" as="sourcePoint"/>
+                        <mxPoint x="1000" y="665" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="msg_auth_3" value="rows" style="endArrow=open;html=1;edgeStyle=none;dashed=1;fontSize=11;align=center;verticalAlign=bottom;labelBackgroundColor=#ffffff;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <mxPoint x="1000" y="695" as="sourcePoint"/>
+                        <mxPoint x="600" y="695" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="msg_auth_4" value="200 OK [data]" style="endArrow=open;html=1;edgeStyle=none;dashed=1;fontSize=11;align=center;verticalAlign=bottom;labelBackgroundColor=#ffffff;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <mxPoint x="600" y="725" as="sourcePoint"/>
+                        <mxPoint x="200" y="725" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="phase3_band" value="③ Logout — POST /auth/logout" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f5eef8;strokeColor=#c8a4d0;align=left;verticalAlign=middle;fontStyle=1;fontSize=12;" parent="1" vertex="1">
+                    <mxGeometry x="30" y="760" width="1100" height="26" as="geometry"/>
+                </mxCell>
+                <mxCell id="msg_logout_1" value="POST /auth/logout (Cookie attached)" style="endArrow=classic;html=1;edgeStyle=none;fontSize=11;align=center;verticalAlign=bottom;labelBackgroundColor=#ffffff;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <mxPoint x="200" y="810" as="sourcePoint"/>
+                        <mxPoint x="600" y="810" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="msg_logout_2" value="204 No Content&lt;br/&gt;Set-Cookie: allotrope_jwt=; Max-Age=0" style="endArrow=open;html=1;edgeStyle=none;dashed=1;fontSize=11;align=center;verticalAlign=bottom;labelBackgroundColor=#ffffff;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <mxPoint x="600" y="845" as="sourcePoint"/>
+                        <mxPoint x="200" y="845" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="logout_note" value="No DB write on logout. Token remains technically valid until its exp, but the browser no longer holds it." style="text;html=1;fontSize=11;fontStyle=2;fontColor=#666666;align=center;verticalAlign=middle;" parent="1" vertex="1">
+                    <mxGeometry x="200" y="870" width="800" height="20" as="geometry"/>
+                </mxCell>
+                <mxCell id="legend_auth" value="&lt;div style=&quot;line-height:1.7;font-size:11px&quot;&gt;&lt;b&gt;solid arrow&lt;/b&gt; — request&lt;br/&gt;&lt;b&gt;dashed arrow&lt;/b&gt; — response&lt;br/&gt;&lt;b&gt;yellow note&lt;/b&gt; — local computation on the api (no I/O)&lt;br/&gt;&lt;b&gt;phase bands&lt;/b&gt; — login (blue), authenticated (green), logout (purple)&lt;/div&gt;" style="rounded=0;whiteSpace=wrap;html=1;align=left;verticalAlign=top;fontFamily=Helvetica;fontSize=11;fillColor=#fafafa;strokeColor=#cccccc;" parent="1" vertex="1">
+                    <mxGeometry x="40" y="910" width="600" height="80" as="geometry"/>
+                </mxCell>
+            </root>
+        </mxGraphModel>
+    </diagram>
+    <diagram id="onboarding_flow" name="Onboarding Flow">
+        <mxGraphModel dx="494" dy="419" grid="0" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1500" pageHeight="1100" math="0" shadow="0">
+            <root>
+                <mxCell id="0"/>
+                <mxCell id="1" parent="0"/>
+                <mxCell id="ob_title" value="Scene Onboarding Flow" style="text;html=1;fontSize=20;fontStyle=1;align=left;verticalAlign=middle;" parent="1" vertex="1">
+                    <mxGeometry x="40" y="20" width="600" height="30" as="geometry"/>
+                </mxCell>
+                <mxCell id="ob_subtitle" value="Submit · Worker pickup &amp; processing · Status polling — async via Postgres-backed jobs queue" style="text;html=1;fontSize=12;fontStyle=2;fontColor=#666666;align=left;verticalAlign=middle;" parent="1" vertex="1">
+                    <mxGeometry x="40" y="52" width="1100" height="20" as="geometry"/>
+                </mxCell>
+                <mxCell id="ob_actor_client" value="Browser (Client)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;fontStyle=1;" parent="1" vertex="1">
+                    <mxGeometry x="120" y="85" width="160" height="40" as="geometry"/>
+                </mxCell>
+                <mxCell id="ob_actor_api" value="api (FastAPI)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=12;fontStyle=1;" parent="1" vertex="1">
+                    <mxGeometry x="480" y="85" width="160" height="40" as="geometry"/>
+                </mxCell>
+                <mxCell id="ob_actor_db" value="postgres (jobs + scenes)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=12;fontStyle=1;" parent="1" vertex="1">
+                    <mxGeometry x="840" y="85" width="160" height="40" as="geometry"/>
+                </mxCell>
+                <mxCell id="ob_actor_worker" value="worker (GPU)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=12;fontStyle=1;" parent="1" vertex="1">
+                    <mxGeometry x="1200" y="85" width="160" height="40" as="geometry"/>
+                </mxCell>
+                <mxCell id="ob_lifeline_client" style="endArrow=none;dashed=1;html=1;rounded=0;strokeColor=#999999;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <mxPoint x="200" y="125" as="sourcePoint"/>
+                        <mxPoint x="200" y="1060" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="ob_lifeline_api" style="endArrow=none;dashed=1;html=1;rounded=0;strokeColor=#999999;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <mxPoint x="560" y="125" as="sourcePoint"/>
+                        <mxPoint x="560" y="1060" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="ob_lifeline_db" style="endArrow=none;dashed=1;html=1;rounded=0;strokeColor=#999999;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <mxPoint x="920" y="125" as="sourcePoint"/>
+                        <mxPoint x="920" y="1060" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="ob_lifeline_worker" style="endArrow=none;dashed=1;html=1;rounded=0;strokeColor=#999999;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <mxPoint x="1280" y="125" as="sourcePoint"/>
+                        <mxPoint x="1280" y="1060" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="ob_phase1_band" value="① Submit — POST /scenes/onboard" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#eef3f8;strokeColor=#aac4e0;align=left;verticalAlign=middle;fontStyle=1;fontSize=12;" parent="1" vertex="1">
+                    <mxGeometry x="30" y="140" width="1430" height="26" as="geometry"/>
+                </mxCell>
+                <mxCell id="ob_msg_1" value="POST /scenes/onboard&lt;br/&gt;multipart: scene file(s) + optional annotations + name" style="endArrow=classic;html=1;edgeStyle=none;fontSize=11;align=center;verticalAlign=bottom;labelBackgroundColor=#ffffff;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <mxPoint x="200" y="195" as="sourcePoint"/>
+                        <mxPoint x="560" y="195" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="ob_note_stage" value="validate inputs&lt;br/&gt;stage scene file(s) in a worker-accessible location" style="shape=note;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11;align=left;verticalAlign=middle;" parent="1" vertex="1">
+                    <mxGeometry x="400" y="220" width="320" height="50" as="geometry"/>
+                </mxCell>
+                <mxCell id="ob_msg_2" value="INSERT INTO jobs (type=&#39;scene_onboard&#39;, status=&#39;queued&#39;, payload)" style="endArrow=classic;html=1;edgeStyle=none;fontSize=11;align=center;verticalAlign=bottom;labelBackgroundColor=#ffffff;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <mxPoint x="560" y="295" as="sourcePoint"/>
+                        <mxPoint x="920" y="295" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="ob_msg_3" value="job row" style="endArrow=open;html=1;edgeStyle=none;dashed=1;fontSize=11;align=center;verticalAlign=bottom;labelBackgroundColor=#ffffff;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <mxPoint x="920" y="330" as="sourcePoint"/>
+                        <mxPoint x="560" y="330" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="ob_msg_4" value="202 Accepted&lt;br/&gt;{ job_id: job_&amp;lt;uuid&amp;gt; }" style="endArrow=open;html=1;edgeStyle=none;dashed=1;fontSize=11;align=center;verticalAlign=bottom;labelBackgroundColor=#ffffff;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <mxPoint x="560" y="370" as="sourcePoint"/>
+                        <mxPoint x="200" y="370" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="ob_phase2_band" value="② Worker pickup &amp; processing (async, after 202 returns)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#fff2e0;strokeColor=#e0b070;align=left;verticalAlign=middle;fontStyle=1;fontSize=12;" parent="1" vertex="1">
+                    <mxGeometry x="30" y="410" width="1430" height="26" as="geometry"/>
+                </mxCell>
+                <mxCell id="ob_msg_5" value="SELECT … FROM jobs WHERE status=&#39;queued&#39; FOR UPDATE SKIP LOCKED LIMIT 1" style="endArrow=classic;html=1;edgeStyle=none;fontSize=11;align=center;verticalAlign=bottom;labelBackgroundColor=#ffffff;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <mxPoint x="1280" y="465" as="sourcePoint"/>
+                        <mxPoint x="920" y="465" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="ob_msg_6" value="job row" style="endArrow=open;html=1;edgeStyle=none;dashed=1;fontSize=11;align=center;verticalAlign=bottom;labelBackgroundColor=#ffffff;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <mxPoint x="920" y="500" as="sourcePoint"/>
+                        <mxPoint x="1280" y="500" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="ob_msg_7" value="UPDATE jobs SET status=&#39;running&#39;, started_at=now()" style="endArrow=classic;html=1;edgeStyle=none;fontSize=11;align=center;verticalAlign=bottom;labelBackgroundColor=#ffffff;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <mxPoint x="1280" y="540" as="sourcePoint"/>
+                        <mxPoint x="920" y="540" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="ob_note_process" value="&lt;b&gt;Worker work (per-sensor dataloader)&lt;/b&gt;&lt;br/&gt;· move raw files → allotrope_data/scenes/&amp;lt;scene_id&amp;gt;/raw/&lt;br/&gt;· parse metadata (HE5 / TIF / EnMAP folder)&lt;br/&gt;· &lt;b&gt;build VendableDataset&lt;/b&gt; → allotrope_data/scenes/&amp;lt;scene_id&amp;gt;/vendable/&lt;br/&gt;· derive bbox, native_projection, band_count&lt;br/&gt;· compute cloud_cover_pct where available&lt;br/&gt;· generate thumbnail → allotrope_artifacts/thumbnails/&lt;br/&gt;· validate required fields" style="shape=note;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11;align=left;verticalAlign=middle;" parent="1" vertex="1">
+                    <mxGeometry x="939" y="559" width="400" height="170" as="geometry"/>
+                </mxCell>
+                <mxCell id="ob_msg_8" value="BEGIN; INSERT scenes; INSERT annotations[*]; UPDATE jobs SET status=&#39;complete&#39;, completed_at=now(); COMMIT" style="endArrow=classic;html=1;edgeStyle=none;fontSize=10;align=center;verticalAlign=bottom;labelBackgroundColor=#ffffff;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <mxPoint x="1280" y="755" as="sourcePoint"/>
+                        <mxPoint x="920" y="755" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="ob_msg_9" value="ok" style="endArrow=open;html=1;edgeStyle=none;dashed=1;fontSize=11;align=center;verticalAlign=bottom;labelBackgroundColor=#ffffff;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <mxPoint x="920" y="790" as="sourcePoint"/>
+                        <mxPoint x="1280" y="790" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="ob_phase3_band" value="③ Status polling (Browser, in parallel with phase ②)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#e8f1e6;strokeColor=#a8c8a4;align=left;verticalAlign=middle;fontStyle=1;fontSize=12;" parent="1" vertex="1">
+                    <mxGeometry x="30" y="830" width="1430" height="26" as="geometry"/>
+                </mxCell>
+                <mxCell id="ob_msg_10" value="GET /jobs/{job_id}    [polled ~1s while in-flight]" style="endArrow=classic;html=1;edgeStyle=none;fontSize=11;align=center;verticalAlign=bottom;labelBackgroundColor=#ffffff;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <mxPoint x="200" y="885" as="sourcePoint"/>
+                        <mxPoint x="560" y="885" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="ob_msg_11" value="SELECT status, scene_id, failure_reason FROM jobs WHERE id=$1" style="endArrow=classic;html=1;edgeStyle=none;fontSize=11;align=center;verticalAlign=bottom;labelBackgroundColor=#ffffff;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <mxPoint x="560" y="920" as="sourcePoint"/>
+                        <mxPoint x="920" y="920" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="ob_msg_12" value="row" style="endArrow=open;html=1;edgeStyle=none;dashed=1;fontSize=11;align=center;verticalAlign=bottom;labelBackgroundColor=#ffffff;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <mxPoint x="920" y="955" as="sourcePoint"/>
+                        <mxPoint x="560" y="955" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="ob_msg_13" value="{ status: queued|running|complete|failed, scene_id?, failure_reason? }" style="endArrow=open;html=1;edgeStyle=none;dashed=1;fontSize=11;align=center;verticalAlign=bottom;labelBackgroundColor=#ffffff;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <mxPoint x="560" y="990" as="sourcePoint"/>
+                        <mxPoint x="200" y="990" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="ob_footer" value="On status=complete → frontend navigates to scene_&amp;lt;uuid&amp;gt;.   On status=failed → surface failure_reason; no Scene row was created (per lifecycle option B).   Scene row only exists once onboarding succeeds; in-flight and failed live in the jobs table." style="text;html=1;fontSize=11;fontStyle=2;fontColor=#666666;align=center;verticalAlign=middle;" parent="1" vertex="1">
+                    <mxGeometry x="80" y="1020" width="1340" height="40" as="geometry"/>
+                </mxCell>
+            </root>
+        </mxGraphModel>
+    </diagram>
+</mxfile>

@@ -49,6 +49,21 @@
 - [Spatial Autoencoder](docs/model_designs/SpatialAutoencoder.md)
 - [Training System](docs/model_designs/TrainingSystem.md)
 - [Inference System](docs/model_designs/InferenceSystem.md)
+- [Checkpoint Inventory](docs/model_designs/checkpoint_inventory.md)
+
+## Model Break Down (deep walkthroughs)
+- [Index / Overview](model_break_down/README.md)
+- [01 · Spatial Autoencoder (thermal)](model_break_down/01_spatial_autoencoder.md)
+- [02 · Spatial Masked Autoencoder (thermal, MSE / L1)](model_break_down/02_spatial_masked_autoencoder.md)
+- [03 · Normalized & Unnormalized Masked Autoencoders (thermal, 3-channel)](model_break_down/03_normalized_unnormalized_masked_autoencoder.md)
+- [04 · SegFormer MAE (thermal)](model_break_down/04_segformer_mae_thermal.md)
+- [05 · Hyperspectral SegFormer MAE](model_break_down/05_hyperspectral_segformer_mae.md)
+- [06 · Thermal Global RX](model_break_down/06_thermal_global_rx.md)
+- [07 · Global RX (hyperspectral)](model_break_down/07_global_rx_hyperspectral.md)
+- [08 · Local RX (hyperspectral)](model_break_down/08_local_rx.md)
+- [09 · MNF + RX (Global / Local)](model_break_down/09_mnf_rx_compression.md)
+- [10 · Statistical Ensembler](model_break_down/10_statistical_ensembler.md)
+- [11 · B10 Adaptive Cloud Masker](model_break_down/11_b10_adaptive_cloud_masker.md)
 
 ## Paper Reads
 - [Denoising](docs/paper_reads/denoising.md)
