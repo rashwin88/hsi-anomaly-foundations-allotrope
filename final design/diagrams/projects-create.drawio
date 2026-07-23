@@ -1,0 +1,81 @@
+<mxfile host="65bd71144e">
+    <diagram id="projects_create" name="POST /projects">
+        <mxGraphModel dx="1502" dy="931" grid="0" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1400" pageHeight="900" math="0" shadow="0">
+            <root>
+                <mxCell id="0"/>
+                <mxCell id="1" parent="0"/>
+                <mxCell id="title" value="POST /projects — create a Project bound to a Scene" style="text;html=1;fontSize=20;fontStyle=1;align=left;verticalAlign=middle;" parent="1" vertex="1">
+                    <mxGeometry x="40" y="20" width="900" height="30" as="geometry"/>
+                </mxCell>
+                <mxCell id="subtitle" value="Project is the structural pivot per abstractions-spec § 5.4 — workspace bound to one Scene. Scene + user are immutable on the row. Library is shared (CC-3); any authenticated user can create. v1: no per-user ACL." style="text;html=1;fontSize=12;fontStyle=2;fontColor=#666666;align=left;verticalAlign=middle;" parent="1" vertex="1">
+                    <mxGeometry x="40" y="52" width="1300" height="40" as="geometry"/>
+                </mxCell>
+                <mxCell id="actor_browser" value="Browser (NewProjectDialog)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;fontStyle=1;" parent="1" vertex="1">
+                    <mxGeometry x="120" y="105" width="220" height="40" as="geometry"/>
+                </mxCell>
+                <mxCell id="actor_api" value="api (FastAPI)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=12;fontStyle=1;" parent="1" vertex="1">
+                    <mxGeometry x="540" y="105" width="160" height="40" as="geometry"/>
+                </mxCell>
+                <mxCell id="actor_pg" value="postgres (projects + scenes)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=11;fontStyle=1;" parent="1" vertex="1">
+                    <mxGeometry x="900" y="105" width="220" height="40" as="geometry"/>
+                </mxCell>
+                <mxCell id="ll_browser" style="endArrow=none;dashed=1;html=1;rounded=0;strokeColor=#999999;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry"><mxPoint x="230" y="145" as="sourcePoint"/><mxPoint x="230" y="850" as="targetPoint"/></mxGeometry>
+                </mxCell>
+                <mxCell id="ll_api" style="endArrow=none;dashed=1;html=1;rounded=0;strokeColor=#999999;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry"><mxPoint x="620" y="145" as="sourcePoint"/><mxPoint x="620" y="850" as="targetPoint"/></mxGeometry>
+                </mxCell>
+                <mxCell id="ll_pg" style="endArrow=none;dashed=1;html=1;rounded=0;strokeColor=#999999;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry"><mxPoint x="1010" y="145" as="sourcePoint"/><mxPoint x="1010" y="850" as="targetPoint"/></mxGeometry>
+                </mxCell>
+
+                <mxCell id="phase1_band" value="① Request" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#eef3f8;strokeColor=#aac4e0;align=left;verticalAlign=middle;fontStyle=1;fontSize=12;" parent="1" vertex="1">
+                    <mxGeometry x="30" y="170" width="1340" height="26" as="geometry"/>
+                </mxCell>
+                <mxCell id="msg1" value="POST /api/projects&lt;br/&gt;Content-Type: application/json&lt;br/&gt;{ scene_id: &quot;scene_&amp;lt;uuid&amp;gt;&quot;, name, description? }&lt;br/&gt;Cookie: allotrope_jwt" style="endArrow=classic;html=1;edgeStyle=none;fontSize=11;align=center;verticalAlign=bottom;labelBackgroundColor=#ffffff;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry"><mxPoint x="230" y="240" as="sourcePoint"/><mxPoint x="620" y="240" as="targetPoint"/></mxGeometry>
+                </mxCell>
+
+                <mxCell id="phase2_band" value="② Auth + parse + scene lookup" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#fff2e0;strokeColor=#e0b070;align=left;verticalAlign=middle;fontStyle=1;fontSize=12;" parent="1" vertex="1">
+                    <mxGeometry x="30" y="270" width="1340" height="26" as="geometry"/>
+                </mxCell>
+                <mxCell id="note2" value="current_user_claims (JWT decode, no DB).&lt;br/&gt;parse_prefixed_id(&quot;scene&quot;, scene_id) — 422 bad_id_format if malformed." style="shape=note;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11;align=left;verticalAlign=middle;" parent="1" vertex="1">
+                    <mxGeometry x="280" y="305" width="600" height="50" as="geometry"/>
+                </mxCell>
+                <mxCell id="msg2_1" value="db.get(Scene, scene_uuid)" style="endArrow=classic;html=1;edgeStyle=none;fontSize=11;align=center;verticalAlign=bottom;labelBackgroundColor=#ffffff;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry"><mxPoint x="620" y="370" as="sourcePoint"/><mxPoint x="1010" y="370" as="targetPoint"/></mxGeometry>
+                </mxCell>
+                <mxCell id="msg2_2" value="Scene row | NULL" style="endArrow=open;html=1;edgeStyle=none;dashed=1;fontSize=11;align=center;verticalAlign=bottom;labelBackgroundColor=#ffffff;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry"><mxPoint x="1010" y="400" as="sourcePoint"/><mxPoint x="620" y="400" as="targetPoint"/></mxGeometry>
+                </mxCell>
+                <mxCell id="branch2" value="If NULL → 404 { detail: &quot;scene_not_found&quot; }" style="text;html=1;fontSize=11;align=left;verticalAlign=middle;fontColor=#444;fontStyle=2;" parent="1" vertex="1">
+                    <mxGeometry x="640" y="412" width="500" height="20" as="geometry"/>
+                </mxCell>
+
+                <mxCell id="phase3_band" value="③ INSERT projects (FK: user RESTRICT, scene RESTRICT, both immutable)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#e8f1e6;strokeColor=#a8c8a4;align=left;verticalAlign=middle;fontStyle=1;fontSize=12;" parent="1" vertex="1">
+                    <mxGeometry x="30" y="445" width="1340" height="26" as="geometry"/>
+                </mxCell>
+                <mxCell id="msg3_1" value="INSERT INTO projects (id=gen, user_id=claims.sub, scene_id, name, description, created_at=now(), updated_at=now())&lt;br/&gt;COMMIT" style="endArrow=classic;html=1;edgeStyle=none;fontSize=11;align=center;verticalAlign=bottom;labelBackgroundColor=#ffffff;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry"><mxPoint x="620" y="510" as="sourcePoint"/><mxPoint x="1010" y="510" as="targetPoint"/></mxGeometry>
+                </mxCell>
+                <mxCell id="note3" value="IntegrityError on commit (Scene deleted between db.get and COMMIT — TOCTOU) → rollback + 409 scene_not_found. RESTRICT on User makes that branch impossible during a normal create.&lt;br/&gt;Refresh the row so server-default created_at / updated_at are populated for the response." style="shape=note;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11;align=left;verticalAlign=middle;" parent="1" vertex="1">
+                    <mxGeometry x="200" y="540" width="900" height="60" as="geometry"/>
+                </mxCell>
+
+                <mxCell id="phase4_band" value="④ Response — denormalised Scene fields included" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f5eef8;strokeColor=#c8a4d0;align=left;verticalAlign=middle;fontStyle=1;fontSize=12;" parent="1" vertex="1">
+                    <mxGeometry x="30" y="615" width="1340" height="26" as="geometry"/>
+                </mxCell>
+                <mxCell id="msg4_1" value="HTTP 201 ProjectPublic { id: project_&amp;lt;uuid&amp;gt;, user_id: user_&amp;lt;uuid&amp;gt;, scene_id, name, description, created_at, updated_at, scene_name, scene_sensor_type }" style="endArrow=open;html=1;edgeStyle=none;dashed=1;fontSize=10;align=center;verticalAlign=bottom;labelBackgroundColor=#ffffff;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry"><mxPoint x="620" y="680" as="sourcePoint"/><mxPoint x="230" y="680" as="targetPoint"/></mxGeometry>
+                </mxCell>
+                <mxCell id="note4" value="scene_name + scene_sensor_type are denormalised onto the response so the Projects landing-page table doesn't fan out to N+1 fetches. Same shape returned by GET /projects.&lt;br/&gt;Frontend: NewProjectDialog closes on 201, navigates to /projects/&amp;lt;id&amp;gt; (Step 11 workspace) once that page lands." style="shape=note;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11;align=left;verticalAlign=middle;" parent="1" vertex="1">
+                    <mxGeometry x="240" y="700" width="900" height="60" as="geometry"/>
+                </mxCell>
+
+                <mxCell id="footer" value="Failure modes: 401 unauth → /login; 422 bad_id_format on a malformed scene_id; 422 on name length; 404 scene_not_found pre-INSERT; 409 scene_not_found on the rare TOCTOU race. The scene_id and user_id are immutable on the row per § 5.4 — no PATCH endpoint will let them change. Rename / re-describe is a future PATCH /projects/{id}." style="text;html=1;fontSize=11;fontStyle=2;fontColor=#666666;align=center;verticalAlign=middle;" parent="1" vertex="1">
+                    <mxGeometry x="40" y="780" width="1310" height="50" as="geometry"/>
+                </mxCell>
+            </root>
+        </mxGraphModel>
+    </diagram>
+</mxfile>

@@ -1,0 +1,151 @@
+<mxfile host="app.diagrams.net" modified="2026-05-16T00:00:00.000Z" agent="claude" version="24.0.0">
+  <diagram id="ensemble-pipeline" name="Ensemble pipeline">
+    <mxGraphModel dx="1422" dy="900" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1400" pageHeight="780" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <!-- Title -->
+        <mxCell id="title" value="Ensemble Anomaly Pipeline" style="text;html=1;align=center;verticalAlign=middle;fontSize=22;fontStyle=1;fontColor=#0F172A;" vertex="1" parent="1">
+          <mxGeometry x="40" y="20" width="1320" height="34" as="geometry" />
+        </mxCell>
+
+        <!-- =================== Row 1: masking =================== -->
+        <mxCell id="row1_label" value="① Keep-mask construction" style="text;html=1;align=left;verticalAlign=middle;fontSize=13;fontStyle=1;fontColor=#5B21B6;" vertex="1" parent="1">
+          <mxGeometry x="60" y="80" width="400" height="22" as="geometry" />
+        </mxCell>
+
+        <mxCell id="cube" value="Scene cube&#10;(B × H × W)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DBEAFE;strokeColor=#1E40AF;strokeWidth=2;fontSize=12;fontStyle=1;fontColor=#1E3A8A;" vertex="1" parent="1">
+          <mxGeometry x="60" y="120" width="160" height="70" as="geometry" />
+        </mxCell>
+
+        <mxCell id="indices" value="Spectral indices&#10;NDVI · NDWI · VNIR brightness" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DCFCE7;strokeColor=#15803D;strokeWidth=1.5;fontSize=12;fontColor=#166534;" vertex="1" parent="1">
+          <mxGeometry x="280" y="120" width="220" height="70" as="geometry" />
+        </mxCell>
+
+        <mxCell id="components" value="Component masks&#10;vegetation · water · cloud · shadow" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FEF3C7;strokeColor=#B45309;strokeWidth=1.5;fontSize=12;fontColor=#92400E;" vertex="1" parent="1">
+          <mxGeometry x="560" y="120" width="240" height="70" as="geometry" />
+        </mxCell>
+
+        <mxCell id="keep" value="keep_mask&#10;validity ∧ ¬ exclusion" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#EDE9FE;strokeColor=#5B21B6;strokeWidth=1.5;fontSize=12;fontColor=#4C1D95;" vertex="1" parent="1">
+          <mxGeometry x="860" y="120" width="200" height="70" as="geometry" />
+        </mxCell>
+
+        <mxCell id="eroded" value="M_eroded&#10;binary erosion (K=5)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#7C3AED;strokeColor=#5B21B6;strokeWidth=2;fontSize=13;fontStyle=1;fontColor=#FFFFFF;" vertex="1" parent="1">
+          <mxGeometry x="1120" y="120" width="220" height="70" as="geometry" />
+        </mxCell>
+
+        <!-- arrows row 1 -->
+        <mxCell id="e1" style="endArrow=classic;html=1;strokeColor=#475569;strokeWidth=1.8;" edge="1" parent="1" source="cube" target="indices">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e2" style="endArrow=classic;html=1;strokeColor=#475569;strokeWidth=1.8;" edge="1" parent="1" source="indices" target="components">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e3" style="endArrow=classic;html=1;strokeColor=#475569;strokeWidth=1.8;" edge="1" parent="1" source="components" target="keep">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e4" style="endArrow=classic;html=1;strokeColor=#5B21B6;strokeWidth=2.2;" edge="1" parent="1" source="keep" target="eroded">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- =================== Row 2: per-model scoring (fan-out / fan-in) =================== -->
+        <mxCell id="row2_label" value="② Per-model scoring" style="text;html=1;align=left;verticalAlign=middle;fontSize=13;fontStyle=1;fontColor=#0F172A;" vertex="1" parent="1">
+          <mxGeometry x="60" y="260" width="400" height="22" as="geometry" />
+        </mxCell>
+
+        <!-- input hand-off from cube (mirrored at row2 left edge) -->
+        <mxCell id="cube_ref" value="Scene cube" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DBEAFE;strokeColor=#1E40AF;strokeWidth=2;fontSize=11;fontStyle=1;fontColor=#1E3A8A;" vertex="1" parent="1">
+          <mxGeometry x="60" y="370" width="140" height="56" as="geometry" />
+        </mxCell>
+
+        <!-- Models stack -->
+        <mxCell id="m1" value="Model 1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#334155;strokeWidth=1.6;fontSize=12;fontStyle=1;fontColor=#0F172A;" vertex="1" parent="1">
+          <mxGeometry x="280" y="300" width="160" height="46" as="geometry" />
+        </mxCell>
+        <mxCell id="m2" value="Model 2" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#334155;strokeWidth=1.6;fontSize=12;fontStyle=1;fontColor=#0F172A;" vertex="1" parent="1">
+          <mxGeometry x="280" y="360" width="160" height="46" as="geometry" />
+        </mxCell>
+        <mxCell id="mdots" value="…" style="text;html=1;align=center;verticalAlign=middle;fontSize=22;fontColor=#94A3B8;" vertex="1" parent="1">
+          <mxGeometry x="280" y="416" width="160" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="mn" value="Model N" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#334155;strokeWidth=1.6;fontSize=12;fontStyle=1;fontColor=#0F172A;" vertex="1" parent="1">
+          <mxGeometry x="280" y="450" width="160" height="46" as="geometry" />
+        </mxCell>
+
+        <!-- Score + CDF combined -->
+        <mxCell id="score" value="Per-pixel error&#10;|x − x̂|&#10;then CDF-rank to [0, 1]" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FEF3C7;strokeColor=#B45309;strokeWidth=1.6;fontSize=12;fontColor=#92400E;" vertex="1" parent="1">
+          <mxGeometry x="520" y="370" width="240" height="80" as="geometry" />
+        </mxCell>
+
+        <!-- Fusion -->
+        <mxCell id="fusion" value="Fusion&#10;Product · Mean · Max" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#EDE9FE;strokeColor=#5B21B6;strokeWidth=2;fontSize=12;fontStyle=1;fontColor=#4C1D95;" vertex="1" parent="1">
+          <mxGeometry x="820" y="370" width="220" height="80" as="geometry" />
+        </mxCell>
+
+        <!-- Threshold -->
+        <mxCell id="thresh" value="Threshold p99.5&#10;within M_eroded" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FEE2E2;strokeColor=#B91C1C;strokeWidth=1.6;fontSize=12;fontColor=#7F1D1D;" vertex="1" parent="1">
+          <mxGeometry x="1100" y="370" width="240" height="80" as="geometry" />
+        </mxCell>
+
+        <!-- Output -->
+        <mxCell id="output" value="Binary anomaly map" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#B91C1C;strokeColor=#7F1D1D;strokeWidth=2;fontSize=13;fontStyle=1;fontColor=#FFFFFF;" vertex="1" parent="1">
+          <mxGeometry x="1100" y="500" width="240" height="60" as="geometry" />
+        </mxCell>
+
+        <!-- ============ Row 2 arrows ============ -->
+        <!-- cube to models (fan-out) -->
+        <mxCell id="e_cube_m1" style="endArrow=classic;html=1;strokeColor=#334155;strokeWidth=1.4;edgeStyle=orthogonalEdgeStyle;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="1" source="cube_ref" target="m1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_cube_m2" style="endArrow=classic;html=1;strokeColor=#334155;strokeWidth=1.4;edgeStyle=orthogonalEdgeStyle;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="1" source="cube_ref" target="m2">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_cube_mn" style="endArrow=classic;html=1;strokeColor=#334155;strokeWidth=1.4;edgeStyle=orthogonalEdgeStyle;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="1" source="cube_ref" target="mn">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- models to score (fan-in) -->
+        <mxCell id="e_m1_score" style="endArrow=classic;html=1;strokeColor=#B45309;strokeWidth=1.4;edgeStyle=orthogonalEdgeStyle;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="1" source="m1" target="score">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_m2_score" style="endArrow=classic;html=1;strokeColor=#B45309;strokeWidth=1.4;edgeStyle=orthogonalEdgeStyle;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="1" source="m2" target="score">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_mn_score" style="endArrow=classic;html=1;strokeColor=#B45309;strokeWidth=1.4;edgeStyle=orthogonalEdgeStyle;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="1" source="mn" target="score">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- score → fusion → threshold → output -->
+        <mxCell id="e_score_fusion" style="endArrow=classic;html=1;strokeColor=#5B21B6;strokeWidth=2;" edge="1" parent="1" source="score" target="fusion">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_fusion_thresh" style="endArrow=classic;html=1;strokeColor=#B91C1C;strokeWidth=2;" edge="1" parent="1" source="fusion" target="thresh">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_thresh_output" style="endArrow=classic;html=1;strokeColor=#7F1D1D;strokeWidth=2;" edge="1" parent="1" source="thresh" target="output">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- M_eroded gate hand-off — single arrow into the score block -->
+        <mxCell id="e_eroded_gate" style="endArrow=classic;html=1;strokeColor=#7C3AED;strokeWidth=2;dashed=1;edgeStyle=orthogonalEdgeStyle;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="1" source="eroded" target="score">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1230" y="240" />
+              <mxPoint x="640" y="240" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="gate_label" value="masking gate" style="text;html=1;align=center;verticalAlign=middle;fontSize=10;fontStyle=2;fontColor=#5B21B6;" vertex="1" parent="1">
+          <mxGeometry x="850" y="232" width="160" height="20" as="geometry" />
+        </mxCell>
+
+        <!-- Outputs note -->
+        <mxCell id="outputs_note" value="Outputs:  anomaly_product.tif  ·  anomaly_maximum.tif  ·  anomaly_mean.tif  ·  stats.json" style="text;html=1;align=center;verticalAlign=middle;fontSize=11;fontColor=#475569;fontStyle=2;" vertex="1" parent="1">
+          <mxGeometry x="60" y="610" width="1300" height="22" as="geometry" />
+        </mxCell>
+
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

@@ -1,0 +1,90 @@
+<mxfile host="65bd71144e">
+    <diagram id="projects_delete" name="DELETE /projects/{id}">
+        <mxGraphModel dx="1502" dy="931" grid="0" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1500" pageHeight="920" math="0" shadow="0">
+            <root>
+                <mxCell id="0"/>
+                <mxCell id="1" parent="0"/>
+                <mxCell id="title" value="DELETE /projects/{project_id} — synchronous cascade + rmtree" style="text;html=1;fontSize=20;fontStyle=1;align=left;verticalAlign=middle;" parent="1" vertex="1">
+                    <mxGeometry x="40" y="20" width="1200" height="30" as="geometry"/>
+                </mxCell>
+                <mxCell id="subtitle" value="Per CC-15: Project just-exists + delete; no states. Synchronous via api. CASCADE FKs on the children clean up Actions / ActionOutputs / Visualizations / Notes / NoteReferences / Exports / project-scoped Jobs in one transaction. After the COMMIT, the handler rmtree-s `projects/&lt;pid&gt;/` under allotrope_artifacts — without that step the artifact tree lingers on disk and the Monitoring page's disk_usage doesn't drop. The rmtree is best-effort: any errors are logged but don't fail the response, since the DB row (the source of truth) is already gone." style="text;html=1;fontSize=12;fontStyle=2;fontColor=#666666;align=left;verticalAlign=middle;" parent="1" vertex="1">
+                    <mxGeometry x="40" y="52" width="1400" height="80" as="geometry"/>
+                </mxCell>
+
+                <!-- Actors -->
+                <mxCell id="actor_browser" value="Browser (ProjectsPage / Detail)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;fontStyle=1;" parent="1" vertex="1">
+                    <mxGeometry x="80" y="145" width="260" height="40" as="geometry"/>
+                </mxCell>
+                <mxCell id="actor_api" value="api (FastAPI)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=12;fontStyle=1;" parent="1" vertex="1">
+                    <mxGeometry x="480" y="145" width="160" height="40" as="geometry"/>
+                </mxCell>
+                <mxCell id="actor_pg" value="postgres (projects + cascading children)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=11;fontStyle=1;" parent="1" vertex="1">
+                    <mxGeometry x="780" y="145" width="280" height="40" as="geometry"/>
+                </mxCell>
+                <mxCell id="actor_fs" value="allotrope_artifacts (volume)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e8d5e8;strokeColor=#a874a8;fontSize=11;fontStyle=1;" parent="1" vertex="1">
+                    <mxGeometry x="1220" y="145" width="240" height="40" as="geometry"/>
+                </mxCell>
+
+                <!-- Lifelines -->
+                <mxCell id="ll_browser" style="endArrow=none;dashed=1;html=1;rounded=0;strokeColor=#999999;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry"><mxPoint x="210" y="185" as="sourcePoint"/><mxPoint x="210" y="880" as="targetPoint"/></mxGeometry>
+                </mxCell>
+                <mxCell id="ll_api" style="endArrow=none;dashed=1;html=1;rounded=0;strokeColor=#999999;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry"><mxPoint x="560" y="185" as="sourcePoint"/><mxPoint x="560" y="880" as="targetPoint"/></mxGeometry>
+                </mxCell>
+                <mxCell id="ll_pg" style="endArrow=none;dashed=1;html=1;rounded=0;strokeColor=#999999;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry"><mxPoint x="920" y="185" as="sourcePoint"/><mxPoint x="920" y="880" as="targetPoint"/></mxGeometry>
+                </mxCell>
+                <mxCell id="ll_fs" style="endArrow=none;dashed=1;html=1;rounded=0;strokeColor=#999999;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry"><mxPoint x="1340" y="185" as="sourcePoint"/><mxPoint x="1340" y="880" as="targetPoint"/></mxGeometry>
+                </mxCell>
+
+                <!-- Phase 1 -->
+                <mxCell id="phase1" value="① Request" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#eef3f8;strokeColor=#aac4e0;align=left;verticalAlign=middle;fontStyle=1;fontSize=12;" parent="1" vertex="1">
+                    <mxGeometry x="30" y="210" width="1450" height="26" as="geometry"/>
+                </mxCell>
+                <mxCell id="msg1" value="DELETE /api/projects/project_&amp;lt;uuid&amp;gt;&lt;br/&gt;Cookie: allotrope_jwt" style="endArrow=classic;html=1;edgeStyle=none;fontSize=11;align=center;verticalAlign=bottom;labelBackgroundColor=#ffffff;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry"><mxPoint x="210" y="275" as="sourcePoint"/><mxPoint x="560" y="275" as="targetPoint"/></mxGeometry>
+                </mxCell>
+
+                <!-- Phase 2 -->
+                <mxCell id="phase2" value="② Auth + parse + lookup" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#fff2e0;strokeColor=#e0b070;align=left;verticalAlign=middle;fontStyle=1;fontSize=12;" parent="1" vertex="1">
+                    <mxGeometry x="30" y="300" width="1450" height="26" as="geometry"/>
+                </mxCell>
+                <mxCell id="msg2_1" value="db.get(Project, raw_id) — 404 project_not_found if absent" style="endArrow=classic;html=1;edgeStyle=none;fontSize=11;align=center;verticalAlign=bottom;labelBackgroundColor=#ffffff;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry"><mxPoint x="560" y="360" as="sourcePoint"/><mxPoint x="920" y="360" as="targetPoint"/></mxGeometry>
+                </mxCell>
+
+                <!-- Phase 3 -->
+                <mxCell id="phase3" value="③ DELETE + COMMIT — DB-level cascade fires here" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#e8f1e6;strokeColor=#a8c8a4;align=left;verticalAlign=middle;fontStyle=1;fontSize=12;" parent="1" vertex="1">
+                    <mxGeometry x="30" y="390" width="1450" height="26" as="geometry"/>
+                </mxCell>
+                <mxCell id="msg3_1" value="DELETE FROM projects WHERE id = $1;  COMMIT" style="endArrow=classic;html=1;edgeStyle=none;fontSize=11;align=center;verticalAlign=bottom;labelBackgroundColor=#ffffff;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry"><mxPoint x="560" y="445" as="sourcePoint"/><mxPoint x="920" y="445" as="targetPoint"/></mxGeometry>
+                </mxCell>
+                <mxCell id="note3" value="Cascading children — wired by EACH child's own FK declaration:&lt;br/&gt;· actions.project_id CASCADE&lt;br/&gt;· action_outputs (transitively via actions.id CASCADE)&lt;br/&gt;· visualizations.project_id CASCADE&lt;br/&gt;· notes.project_id CASCADE&lt;br/&gt;· note_references.ref_project_id CASCADE (and via every child FK)&lt;br/&gt;· exports.project_id CASCADE&lt;br/&gt;· jobs.project_id CASCADE (project-scoped jobs only)&lt;br/&gt;User→Project and Scene→Project are RESTRICT — they protect projects from upstream deletes, not relevant on this path." style="shape=note;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11;align=left;verticalAlign=middle;" parent="1" vertex="1">
+                    <mxGeometry x="200" y="475" width="900" height="135" as="geometry"/>
+                </mxCell>
+
+                <!-- Phase 4 — NEW: rmtree -->
+                <mxCell id="phase4" value="④ rmtree projects/&lt;pid&gt;/ on allotrope_artifacts — releases action outputs / visualizations / exports on disk" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f3e6f3;strokeColor=#a874a8;align=left;verticalAlign=middle;fontStyle=1;fontSize=12;" parent="1" vertex="1">
+                    <mxGeometry x="30" y="625" width="1450" height="26" as="geometry"/>
+                </mxCell>
+                <mxCell id="msg4" value="shutil.rmtree(/artifacts/projects/&amp;lt;pid&amp;gt;/)" style="endArrow=classic;html=1;edgeStyle=none;fontSize=11;align=center;verticalAlign=bottom;labelBackgroundColor=#ffffff;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry"><mxPoint x="560" y="685" as="sourcePoint"/><mxPoint x="1340" y="685" as="targetPoint"/></mxGeometry>
+                </mxCell>
+                <mxCell id="note4" value="Best-effort: any OSError is logged at WARNING but does NOT roll back. The DB row is the source of truth and is already gone, so a stale leaf dir is recoverable manually. Doing the rmtree AFTER the commit (not in a finally on a single transaction) avoids the worst case of deleted files + DB rollback leaving the row pointing at nothing." style="shape=note;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11;align=left;verticalAlign=middle;" parent="1" vertex="1">
+                    <mxGeometry x="200" y="715" width="1080" height="70" as="geometry"/>
+                </mxCell>
+
+                <!-- Phase 5 -->
+                <mxCell id="phase5" value="⑤ 204 No Content" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#eef3f8;strokeColor=#aac4e0;align=left;verticalAlign=middle;fontStyle=1;fontSize=12;" parent="1" vertex="1">
+                    <mxGeometry x="30" y="800" width="1450" height="26" as="geometry"/>
+                </mxCell>
+                <mxCell id="msg5" value="HTTP 204 No Content (empty body)" style="endArrow=open;html=1;edgeStyle=none;dashed=1;fontSize=11;align=center;verticalAlign=bottom;labelBackgroundColor=#ffffff;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry"><mxPoint x="560" y="850" as="sourcePoint"/><mxPoint x="210" y="850" as="targetPoint"/></mxGeometry>
+                </mxCell>
+            </root>
+        </mxGraphModel>
+    </diagram>
+</mxfile>

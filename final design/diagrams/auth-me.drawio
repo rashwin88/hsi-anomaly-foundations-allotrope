@@ -1,0 +1,100 @@
+<mxfile host="65bd71144e">
+    <diagram id="auth_me" name="GET /auth/me">
+        <mxGraphModel dx="1502" dy="931" grid="0" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1300" pageHeight="950" math="0" shadow="0">
+            <root>
+                <mxCell id="0"/>
+                <mxCell id="1" parent="0"/>
+                <mxCell id="title" value="GET /auth/me — implementation sequence" style="text;html=1;fontSize=20;fontStyle=1;align=left;verticalAlign=middle;" parent="1" vertex="1">
+                    <mxGeometry x="40" y="20" width="800" height="30" as="geometry"/>
+                </mxCell>
+                <mxCell id="subtitle" value="Reads the JWT cookie, verifies it locally, and returns the full User row. The first DB-touching authenticated route — used by the frontend on app load to populate the current user." style="text;html=1;fontSize=12;fontStyle=2;fontColor=#666666;align=left;verticalAlign=middle;" parent="1" vertex="1">
+                    <mxGeometry x="40" y="52" width="1200" height="20" as="geometry"/>
+                </mxCell>
+                <mxCell id="actor_browser" value="Browser (Client)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;fontStyle=1;" parent="1" vertex="1">
+                    <mxGeometry x="120" y="85" width="160" height="40" as="geometry"/>
+                </mxCell>
+                <mxCell id="actor_api" value="api (FastAPI)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=12;fontStyle=1;" parent="1" vertex="1">
+                    <mxGeometry x="520" y="85" width="160" height="40" as="geometry"/>
+                </mxCell>
+                <mxCell id="actor_pg" value="postgres" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=12;fontStyle=1;" parent="1" vertex="1">
+                    <mxGeometry x="920" y="85" width="160" height="40" as="geometry"/>
+                </mxCell>
+                <mxCell id="ll_browser" style="endArrow=none;dashed=1;html=1;rounded=0;strokeColor=#999999;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <mxPoint x="200" y="125" as="sourcePoint"/>
+                        <mxPoint x="200" y="890" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="ll_api" style="endArrow=none;dashed=1;html=1;rounded=0;strokeColor=#999999;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <mxPoint x="600" y="125" as="sourcePoint"/>
+                        <mxPoint x="600" y="890" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="ll_pg" style="endArrow=none;dashed=1;html=1;rounded=0;strokeColor=#999999;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <mxPoint x="1000" y="125" as="sourcePoint"/>
+                        <mxPoint x="1000" y="890" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="phase1_band" value="① Request" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#eef3f8;strokeColor=#aac4e0;align=left;verticalAlign=middle;fontStyle=1;fontSize=12;" parent="1" vertex="1">
+                    <mxGeometry x="30" y="140" width="1200" height="26" as="geometry"/>
+                </mxCell>
+                <mxCell id="msg1_1" value="GET /auth/me&lt;br/&gt;Cookie: allotrope_jwt=&amp;lt;jwt&amp;gt; (auto-attached by browser)" style="endArrow=classic;html=1;edgeStyle=none;fontSize=11;align=center;verticalAlign=bottom;labelBackgroundColor=#ffffff;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <mxPoint x="200" y="200" as="sourcePoint"/>
+                        <mxPoint x="600" y="200" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="phase2_band" value="② Auth dependency: current_user_claims (deps.py) — local crypto, no I/O" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#fff2e0;strokeColor=#e0b070;align=left;verticalAlign=middle;fontStyle=1;fontSize=12;" parent="1" vertex="1">
+                    <mxGeometry x="30" y="240" width="1200" height="26" as="geometry"/>
+                </mxCell>
+                <mxCell id="note2" value="FastAPI resolves Depends(current_user_claims):&lt;br/&gt;1. Read Cookie(allotrope_jwt) — extract token string from request&lt;br/&gt;2. decode_token(token):&lt;br/&gt;     · split into header.payload.signature&lt;br/&gt;     · recompute HMAC-SHA256(secret, header.payload), constant-time compare&lt;br/&gt;     · check exp &amp;gt; now&lt;br/&gt;3. Return claims dict { sub, iat, exp, username, is_admin }&lt;br/&gt;&lt;b&gt;No DB read.&lt;/b&gt;" style="shape=note;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11;align=left;verticalAlign=middle;" parent="1" vertex="1">
+                    <mxGeometry x="320" y="280" width="640" height="130" as="geometry"/>
+                </mxCell>
+                <mxCell id="branch_a_label" value="&lt;b&gt;Failure branches (dep raises) — handler never runs:&lt;/b&gt;" style="text;html=1;fontSize=11;align=left;verticalAlign=middle;fontColor=#444;" parent="1" vertex="1">
+                    <mxGeometry x="40" y="425" width="500" height="20" as="geometry"/>
+                </mxCell>
+                <mxCell id="branch_a1" value="no cookie / malformed / bad signature → HTTP 401 { detail: &amp;quot;unauthenticated&amp;quot; }" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#fafafa;strokeColor=#cccccc;align=left;verticalAlign=middle;fontStyle=0;fontSize=11;" parent="1" vertex="1">
+                    <mxGeometry x="80" y="455" width="640" height="26" as="geometry"/>
+                </mxCell>
+                <mxCell id="branch_a2" value="exp &amp;le; now → HTTP 401 { detail: &amp;quot;session_expired&amp;quot; }   (frontend redirects to /login)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#fafafa;strokeColor=#cccccc;align=left;verticalAlign=middle;fontStyle=0;fontSize=11;" parent="1" vertex="1">
+                    <mxGeometry x="80" y="490" width="640" height="26" as="geometry"/>
+                </mxCell>
+                <mxCell id="phase3_band" value="③ Handler runs: DB lookup for full user row" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#e8f1e6;strokeColor=#a8c8a4;align=left;verticalAlign=middle;fontStyle=1;fontSize=12;" parent="1" vertex="1">
+                    <mxGeometry x="30" y="540" width="1200" height="26" as="geometry"/>
+                </mxCell>
+                <mxCell id="msg3_1" value="SELECT * FROM users WHERE id = $1   (where $1 = uuid.UUID(claims[&amp;quot;sub&amp;quot;]))" style="endArrow=classic;html=1;edgeStyle=none;fontSize=11;align=center;verticalAlign=bottom;labelBackgroundColor=#ffffff;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <mxPoint x="600" y="600" as="sourcePoint"/>
+                        <mxPoint x="1000" y="600" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="msg3_2" value="row | NULL" style="endArrow=open;html=1;edgeStyle=none;dashed=1;fontSize=11;align=center;verticalAlign=bottom;labelBackgroundColor=#ffffff;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <mxPoint x="1000" y="635" as="sourcePoint"/>
+                        <mxPoint x="600" y="635" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="branch_label_b" value="&lt;b&gt;NULL case&lt;/b&gt; — User was deleted while token still valid (rare edge):" style="text;html=1;fontSize=11;align=left;verticalAlign=middle;fontColor=#444;" parent="1" vertex="1">
+                    <mxGeometry x="40" y="660" width="600" height="20" as="geometry"/>
+                </mxCell>
+                <mxCell id="branch_b" value="HTTP 401 { detail: &amp;quot;user_not_found&amp;quot; }" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#fafafa;strokeColor=#cccccc;align=left;verticalAlign=middle;fontStyle=0;fontSize=11;" parent="1" vertex="1">
+                    <mxGeometry x="80" y="690" width="500" height="26" as="geometry"/>
+                </mxCell>
+                <mxCell id="phase4_band" value="④ Respond — full UserPublic" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f5eef8;strokeColor=#c8a4d0;align=left;verticalAlign=middle;fontStyle=1;fontSize=12;" parent="1" vertex="1">
+                    <mxGeometry x="30" y="740" width="1200" height="26" as="geometry"/>
+                </mxCell>
+                <mxCell id="msg4_1" value="HTTP 200&lt;br/&gt;{ id: user_&amp;lt;uuid&amp;gt;, username, email, display_name, is_admin }" style="endArrow=open;html=1;edgeStyle=none;dashed=1;fontSize=11;align=center;verticalAlign=bottom;labelBackgroundColor=#ffffff;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <mxPoint x="600" y="800" as="sourcePoint"/>
+                        <mxPoint x="200" y="800" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="footer" value="/me does ONE DB read because the response shape needs fields not in the JWT claims (email, display_name). Most other authenticated endpoints DON&apos;T need a DB read for auth — they use claims[&amp;quot;sub&amp;quot;] directly as the user_id for ownership filters. That&apos;s the stateless-JWT payoff: only profile-style routes pay for the user lookup." style="text;html=1;fontSize=11;fontStyle=2;fontColor=#666666;align=center;verticalAlign=middle;" parent="1" vertex="1">
+                    <mxGeometry x="80" y="840" width="1140" height="50" as="geometry"/>
+                </mxCell>
+            </root>
+        </mxGraphModel>
+    </diagram>
+</mxfile>

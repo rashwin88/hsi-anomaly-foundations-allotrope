@@ -1,0 +1,273 @@
+# Allotrope — offline-demo stack
+#
+# Services: postgres, api, worker, frontend.
+#
+# Run from the project root:
+#     docker compose -f docker/docker-compose.yml up -d
+# or from this folder:
+#     cd docker && docker compose up -d
+#
+# GPU on the prod host (Linux + NVIDIA + nvidia-container-toolkit):
+#     docker compose \
+#         -f docker/docker-compose.yml \
+#         -f docker/docker-compose.gpu.yml \
+#         up -d
+# The override file adds `device_requests` to the worker so torch sees the
+# GPU. Without it, torch falls back to CPU automatically — same image, same
+# code. Mac dev machines simply omit the override.
+#
+# Required env: see docker/.env.example. Copy it to docker/.env and set
+# POSTGRES_PASSWORD before bringing the stack up.
+#
+# Volume layout locked in final design.md § 1 and abstractions-spec.md § 4.
+# `name:` forces the literal Docker volume name (otherwise compose prefixes with
+# the project name, which would break the bundle's load.sh script that expects
+# exact names).
+
+services:
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: allotrope_postgres
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-allotrope}
+      POSTGRES_USER: ${POSTGRES_USER:-allotrope}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in docker/.env}
+      # Locale settings — UTC time zone for consistency with the api's
+      # timestamptz convention (abstractions-spec § 5.2 "Conventions").
+      TZ: UTC
+      PGTZ: UTC
+    volumes:
+      - allotrope_db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-allotrope} -d ${POSTGRES_DB:-allotrope}"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+    ports:
+      # Bound to 127.0.0.1 only — accessible to `psql` from the host during
+      # development, NOT exposed on the LAN. The api/worker connect via the
+      # internal compose network using hostname `postgres`, not via this port.
+      - "127.0.0.1:5432:5432"
+    restart: unless-stopped
+
+  # One-shot bootstrap (Step 21). Runs alembic migrations + seeds the
+  # admin user and system action templates, then exits 0. The api and
+  # worker `depends_on` this service with
+  # `condition: service_completed_successfully`, so they only start
+  # AFTER the schema is at HEAD and the seeds are in place. Replaces
+  # the manual `docker compose exec api alembic upgrade head` +
+  # `python -m allotrope.cli seed-admin` / `seed-action-templates`
+  # calls that used to be in every README onboarding flow.
+  #
+  # Re-runs on every `up`. All three actions are idempotent
+  # (alembic upgrade head is a no-op at HEAD; seed-admin refuses to
+  # clobber; seed-action-templates upserts), so this is safe to fire
+  # on a warm volume.
+  bootstrap:
+    image: docker-api
+    build:
+      # Reuse the api image — same Python + same deps + same `app/` +
+      # `allotrope/` package layout. Building it here only matters on
+      # the very first `up`; subsequent `up`s reuse the already-built
+      # image. `image: docker-api` above pins the name so api and
+      # bootstrap share one tag.
+      context: ..
+      dockerfile: backend/Dockerfile
+    container_name: allotrope_bootstrap
+    command: ["/usr/local/bin/allotrope-bootstrap"]
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-allotrope}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in docker/.env}
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+      POSTGRES_DB: ${POSTGRES_DB:-allotrope}
+      ADMIN_USERNAME: ${ADMIN_USERNAME:-}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set in docker/.env}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  api:
+    build:
+      # Repo root — the api needs both `backend/` and the legacy `app/`
+      # package available (unpickling vendables in the spectrum endpoint
+      # needs the type definitions). Same widening as the worker.
+      context: ..
+      dockerfile: backend/Dockerfile
+    container_name: allotrope_api
+    # No source volume mount and no --reload — the container always runs
+    # exactly what was COPY'd at image build time. To pick up code changes:
+    #     docker compose -f docker/docker-compose.yml up -d --build api
+    # Slightly slower iteration, but the container == image == bundle.
+    environment:
+      # Connect to postgres via the compose internal network (service name
+      # `postgres`, not 127.0.0.1). See "Compose Network" sheet in the drawio.
+      # Components are passed raw; backend/allotrope/config.py builds the
+      # SQLAlchemy URL from them and handles URL-encoding.
+      POSTGRES_USER: ${POSTGRES_USER:-allotrope}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in docker/.env}
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+      POSTGRES_DB: ${POSTGRES_DB:-allotrope}
+      # Admin seed — only used by the `seed-admin` CLI; api ignores these.
+      # Optional: api boots fine without them; seed-admin fails loudly if missing.
+      ADMIN_USERNAME: ${ADMIN_USERNAME:-}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+      # JWT signing secret — required for any auth-issuing endpoint.
+      # Rotating this invalidates every token in flight.
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set in docker/.env}
+    volumes:
+      # The api stages multipart uploads into allotrope_data/staging/<job_id>/
+      # for the worker to consume (Step 7b/7c). It also serves thumbnails and
+      # other artifacts read-back from allotrope_artifacts (Step 8+).
+      # The worker is the sole *writer* for vendable/raw/etc. — the api only
+      # writes to /data/staging.
+      #
+      # `allotrope_models` is mounted read-only — the api reads manifests
+      # (`<arch>/current.json`) to power the /models catalog. Weights are
+      # owned by the worker.
+      - allotrope_data:/data
+      - allotrope_artifacts:/artifacts
+      - allotrope_models:/models:ro
+    ports:
+      # Localhost-only; the frontend will reach this via the compose network.
+      # Host port bumped 8000 → 8010 because :8000 collides with a
+      # locally-running Node/Express dev server. Frontend nginx still
+      # proxies /api/* to the api over the compose network, so this only
+      # matters for direct curl from the host.
+      - "127.0.0.1:8010:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      bootstrap:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  worker:
+    build:
+      # Repo root — the worker image bundles both `backend/` (the new
+      # allotrope api package + worker code) and `app/` (the legacy HSI
+      # pipeline). The api keeps its narrower `backend/` context.
+      context: ..
+      dockerfile: backend/Dockerfile.worker
+    container_name: allotrope_worker
+    # No ports — worker is queue-driven, not HTTP. It connects to postgres
+    # via the compose internal network (hostname `postgres`) and writes
+    # artifacts into the shared named volumes.
+    environment:
+      # DB connection — same shape as the api. config.py builds the URL.
+      POSTGRES_USER: ${POSTGRES_USER:-allotrope}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in docker/.env}
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+      POSTGRES_DB: ${POSTGRES_DB:-allotrope}
+      # Worker tuning — defaults baked into runner.py:_Config. Override at
+      # compose level only if the demo machine needs different cadence.
+      WORKER_POLL_INTERVAL_SEC: ${WORKER_POLL_INTERVAL_SEC:-2.0}
+      WORKER_HEARTBEAT_INTERVAL_SEC: ${WORKER_HEARTBEAT_INTERVAL_SEC:-5.0}
+      WORKER_HEARTBEAT_TIMEOUT_SEC: ${WORKER_HEARTBEAT_TIMEOUT_SEC:-60.0}
+      WORKER_REAP_INTERVAL_SEC: ${WORKER_REAP_INTERVAL_SEC:-30.0}
+      WORKER_LOG_LEVEL: ${WORKER_LOG_LEVEL:-INFO}
+      # Thread caps removed 2026-05-11: the SIGTERMs that originally
+      # motivated them turned out to be Docker Desktop UI's restart
+      # button (user_agent=DockerDesktopUI in apiproxy.log), not VM
+      # monitor throttling. Letting OMP/OpenBLAS/torch use all VM cores
+      # gives 3-5× wall-clock speedup on predict_full_scene. If kill
+      # cycles return, re-cap here BEFORE rebuilding (memory rule).
+      # JWT_SECRET isn't strictly needed by the worker today, but config.py
+      # validates it at import time. Leave the same value as the api so we
+      # don't have to fork the settings model.
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set in docker/.env}
+    volumes:
+      # Worker reads raw scene files (during onboarding, Step 7c) and
+      # writes derived artifacts. Same named volumes the api can read for
+      # serving paths; ownership of writes is one-directional (worker only).
+      - allotrope_data:/data
+      - allotrope_models:/models
+      - allotrope_artifacts:/artifacts
+      # Per-sensor USGS splib07 caches consumed by the
+      # `spectral_library_match` action. Onboarding writes one cache file
+      # per band grid the first time a scene from that grid is ingested
+      # (Step 14.7); subsequent scenes share the same cache. RW because
+      # onboarding is the writer.
+      - allotrope_splib07:/splib07_cache
+    depends_on:
+      postgres:
+        condition: service_healthy
+      bootstrap:
+        condition: service_completed_successfully
+    # SIGTERM handler in runner.py shuts the loop down cleanly. Default 10s
+    # grace is plenty while handlers are placeholders; bump to ~5min when
+    # real action_run handlers are in flight (Step 12).
+    stop_grace_period: 30s
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ../frontend
+      dockerfile: Dockerfile
+    container_name: allotrope_frontend
+    # nginx serves the built React SPA on port 80 and proxies /api/* to the
+    # api service on the compose network. Single-origin from the browser's
+    # POV (http://localhost:3000), so cookies + SameSite=Strict just work.
+    # See nginx.conf and the "Compose Network" drawio sheet for the path.
+    ports:
+      # Host port bumped 3000 → 3010 because :3000 collides with a
+      # locally-running Node/Express dev server ("Karta — Agent") that
+      # binds *:3000 ahead of Docker's 127.0.0.1:3000 and wins the route
+      # on localhost. Open http://localhost:3010 in the browser.
+      - "127.0.0.1:3010:80"
+    depends_on:
+      - api
+    restart: unless-stopped
+
+volumes:
+
+  allotrope_db:
+    name: allotrope_db
+    # Postgres data directory ($PGDATA inside the postgres container).
+    # Backed up only with the postgres container stopped (WAL consistency —
+    # see final design.md "Concepts explained simply").
+
+  allotrope_data:
+    name: allotrope_data
+    # Scene-rooted source data. Layout:
+    #   scenes/<scene_id>/raw/                          raw scene file(s) (HE5 / TIF / EnMAP folder)
+    #   scenes/<scene_id>/vendable/                     VendableDataset built during onboarding
+    #   scenes/<scene_id>/annotations/<annotation_id>/  attached annotation files
+
+  allotrope_models:
+    name: allotrope_models
+    # Model checkpoints (PyTorch state dicts), shipped via the bundle on first
+    # run and consumed by the worker container at inference time.
+
+  allotrope_artifacts:
+    name: allotrope_artifacts
+    # Derived artifacts. Layout:
+    #   scenes/<scene_id>/thumbnail.png                                  scene-level (onboarding)
+    #   projects/<project_id>/actions/<action_id>/output/...             per-Action artifacts
+    #   projects/<project_id>/visualizations/<visualization_id>/...      curated visuals
+    #   projects/<project_id>/exports/<export_id>/<bundle>               Result snapshots
+    #
+    # Project deletion = `rm -rf projects/<project_id>/` — single operation,
+    # no orphans. Same property at Action / Visualization sub-levels.
+
+  allotrope_splib07:
+    name: allotrope_splib07
+    # Per-sensor USGS splib07 reflectance caches consumed by the
+    # spectral_library_match action. Layout:
+    #   splib_version.txt                          curation/version tag
+    #   splib07_<16hex-key>.npz                    refl (N,B) + valid (N,B)
+    #   splib07_<16hex-key>.json                   sidecar metadata
+    #
+    # Built once per (sensor, settings) by
+    # `scripts/build_splib_sensor_cache.py` on the host. The raw 6.7 GB
+    # splib07 distribution lives outside Docker entirely (excluded via
+    # both .gitignore and .dockerignore); only the slim per-sensor
+    # cache files (~10 MB each) live in this volume.

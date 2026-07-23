@@ -1,0 +1,91 @@
+<mxfile host="65bd71144e">
+    <diagram id="scene_detail" name="GET /scenes/{id} + thumbnail">
+        <mxGraphModel dx="1502" dy="931" grid="0" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1400" pageHeight="900" math="0" shadow="0">
+            <root>
+                <mxCell id="0"/>
+                <mxCell id="1" parent="0"/>
+                <mxCell id="title" value="GET /scenes/{id} — Scene Detail page" style="text;html=1;fontSize=20;fontStyle=1;align=left;verticalAlign=middle;" parent="1" vertex="1">
+                    <mxGeometry x="40" y="20" width="900" height="30" as="geometry"/>
+                </mxCell>
+                <mxCell id="subtitle" value="The detail click-through from the Library table. Two parallel reads: scene metadata (JSON) + thumbnail (PNG). Auth via claims (no DB read for auth)." style="text;html=1;fontSize=12;fontStyle=2;fontColor=#666666;align=left;verticalAlign=middle;" parent="1" vertex="1">
+                    <mxGeometry x="40" y="52" width="1300" height="20" as="geometry"/>
+                </mxCell>
+                <mxCell id="actor_browser" value="Browser (SPA)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;fontStyle=1;" parent="1" vertex="1">
+                    <mxGeometry x="120" y="85" width="160" height="40" as="geometry"/>
+                </mxCell>
+                <mxCell id="actor_api" value="api (FastAPI)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=12;fontStyle=1;" parent="1" vertex="1">
+                    <mxGeometry x="500" y="85" width="160" height="40" as="geometry"/>
+                </mxCell>
+                <mxCell id="actor_pg" value="postgres (scenes)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=12;fontStyle=1;" parent="1" vertex="1">
+                    <mxGeometry x="850" y="85" width="160" height="40" as="geometry"/>
+                </mxCell>
+                <mxCell id="actor_artifacts" value="allotrope_artifacts (volume)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e8d5e8;strokeColor=#a874a8;fontSize=11;fontStyle=1;" parent="1" vertex="1">
+                    <mxGeometry x="1170" y="85" width="200" height="40" as="geometry"/>
+                </mxCell>
+                <mxCell id="ll_browser" style="endArrow=none;dashed=1;html=1;rounded=0;strokeColor=#999999;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry"><mxPoint x="200" y="125" as="sourcePoint"/><mxPoint x="200" y="850" as="targetPoint"/></mxGeometry>
+                </mxCell>
+                <mxCell id="ll_api" style="endArrow=none;dashed=1;html=1;rounded=0;strokeColor=#999999;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry"><mxPoint x="580" y="125" as="sourcePoint"/><mxPoint x="580" y="850" as="targetPoint"/></mxGeometry>
+                </mxCell>
+                <mxCell id="ll_pg" style="endArrow=none;dashed=1;html=1;rounded=0;strokeColor=#999999;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry"><mxPoint x="930" y="125" as="sourcePoint"/><mxPoint x="930" y="850" as="targetPoint"/></mxGeometry>
+                </mxCell>
+                <mxCell id="ll_art" style="endArrow=none;dashed=1;html=1;rounded=0;strokeColor=#999999;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry"><mxPoint x="1270" y="125" as="sourcePoint"/><mxPoint x="1270" y="850" as="targetPoint"/></mxGeometry>
+                </mxCell>
+                <mxCell id="phase1_band" value="① Row click — SPA navigates to /scenes/&amp;lt;scene_id&amp;gt;" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#eef3f8;strokeColor=#aac4e0;align=left;verticalAlign=middle;fontStyle=1;fontSize=12;" parent="1" vertex="1">
+                    <mxGeometry x="30" y="140" width="1340" height="26" as="geometry"/>
+                </mxCell>
+                <mxCell id="note1" value="ScenesPage row onClick → useNavigate(/scenes/scene_&amp;lt;uuid&amp;gt;).&lt;br/&gt;React Router renders SceneDetailPage; useEffect kicks off TWO parallel requests:&lt;br/&gt;  ② GET /api/scenes/&amp;lt;id&amp;gt;          (metadata JSON)&lt;br/&gt;  ③ &amp;lt;img src=&quot;/api/scenes/&amp;lt;id&amp;gt;/thumbnail&quot;&amp;gt;  (PNG)&lt;br/&gt;Both auto-attach the JWT cookie via fetch(credentials:include) / browser image-load." style="shape=note;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11;align=left;verticalAlign=middle;" parent="1" vertex="1">
+                    <mxGeometry x="240" y="180" width="900" height="90" as="geometry"/>
+                </mxCell>
+                <mxCell id="phase2_band" value="② Metadata fetch — GET /scenes/{scene_id}" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#fff2e0;strokeColor=#e0b070;align=left;verticalAlign=middle;fontStyle=1;fontSize=12;" parent="1" vertex="1">
+                    <mxGeometry x="30" y="290" width="1340" height="26" as="geometry"/>
+                </mxCell>
+                <mxCell id="msg2_1" value="GET /api/scenes/scene_&amp;lt;uuid&amp;gt;&lt;br/&gt;Cookie: allotrope_jwt" style="endArrow=classic;html=1;edgeStyle=none;fontSize=11;align=center;verticalAlign=bottom;labelBackgroundColor=#ffffff;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry"><mxPoint x="200" y="350" as="sourcePoint"/><mxPoint x="580" y="350" as="targetPoint"/></mxGeometry>
+                </mxCell>
+                <mxCell id="msg2_2" value="parse_prefixed_id(&quot;scene&quot;, scene_id)&lt;br/&gt;→ 422 bad_id_format if malformed" style="endArrow=classic;html=1;edgeStyle=none;dashed=1;fontSize=11;align=center;verticalAlign=bottom;labelBackgroundColor=#ffffff;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry"><mxPoint x="580" y="385" as="sourcePoint"/><mxPoint x="580" y="415" as="targetPoint"/></mxGeometry>
+                </mxCell>
+                <mxCell id="msg2_3" value="db.get(Scene, raw_id)" style="endArrow=classic;html=1;edgeStyle=none;fontSize=11;align=center;verticalAlign=bottom;labelBackgroundColor=#ffffff;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry"><mxPoint x="580" y="425" as="sourcePoint"/><mxPoint x="930" y="425" as="targetPoint"/></mxGeometry>
+                </mxCell>
+                <mxCell id="msg2_4" value="row | NULL" style="endArrow=open;html=1;edgeStyle=none;dashed=1;fontSize=11;align=center;verticalAlign=bottom;labelBackgroundColor=#ffffff;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry"><mxPoint x="930" y="460" as="sourcePoint"/><mxPoint x="580" y="460" as="targetPoint"/></mxGeometry>
+                </mxCell>
+                <mxCell id="branch2" value="If NULL → 404 { detail: &quot;scene_not_found&quot; }" style="text;html=1;fontSize=11;align=left;verticalAlign=middle;fontColor=#444;fontStyle=2;" parent="1" vertex="1">
+                    <mxGeometry x="600" y="475" width="450" height="20" as="geometry"/>
+                </mxCell>
+                <mxCell id="msg2_5" value="HTTP 200 ScenePublic { id, sensor_type, sensor_scene_id, name, acquisition_at, processing_level, product_type, bbox_*, native_projection, band_count, cloud_cover_pct, raw_path, vendable_path, thumbnail_path, metadata, created_at, created_by_user_id }" style="endArrow=open;html=1;edgeStyle=none;dashed=1;fontSize=10;align=center;verticalAlign=bottom;labelBackgroundColor=#ffffff;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry"><mxPoint x="580" y="510" as="sourcePoint"/><mxPoint x="200" y="510" as="targetPoint"/></mxGeometry>
+                </mxCell>
+                <mxCell id="phase3_band" value="③ Thumbnail fetch — GET /scenes/{scene_id}/thumbnail (concurrent with ②)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f5eef8;strokeColor=#c8a4d0;align=left;verticalAlign=middle;fontStyle=1;fontSize=12;" parent="1" vertex="1">
+                    <mxGeometry x="30" y="540" width="1340" height="26" as="geometry"/>
+                </mxCell>
+                <mxCell id="msg3_1" value="GET /api/scenes/scene_&amp;lt;uuid&amp;gt;/thumbnail&lt;br/&gt;Cookie: allotrope_jwt (img tag inherits credentials)" style="endArrow=classic;html=1;edgeStyle=none;fontSize=11;align=center;verticalAlign=bottom;labelBackgroundColor=#ffffff;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry"><mxPoint x="200" y="600" as="sourcePoint"/><mxPoint x="580" y="600" as="targetPoint"/></mxGeometry>
+                </mxCell>
+                <mxCell id="msg3_2" value="db.get(Scene, raw_id)  → row.thumbnail_path" style="endArrow=classic;html=1;edgeStyle=none;fontSize=11;align=center;verticalAlign=bottom;labelBackgroundColor=#ffffff;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry"><mxPoint x="580" y="635" as="sourcePoint"/><mxPoint x="930" y="635" as="targetPoint"/></mxGeometry>
+                </mxCell>
+                <mxCell id="note3" value="path-traversal guard: full = (artifacts_root / row.thumbnail_path).resolve(); full.relative_to(artifacts_root) — raises if escape attempted." style="shape=note;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11;align=left;verticalAlign=middle;" parent="1" vertex="1">
+                    <mxGeometry x="200" y="665" width="700" height="40" as="geometry"/>
+                </mxCell>
+                <mxCell id="msg3_3" value="open (artifacts_root / thumbnail_path)" style="endArrow=classic;html=1;edgeStyle=none;fontSize=11;align=center;verticalAlign=bottom;labelBackgroundColor=#ffffff;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry"><mxPoint x="580" y="720" as="sourcePoint"/><mxPoint x="1270" y="720" as="targetPoint"/></mxGeometry>
+                </mxCell>
+                <mxCell id="msg3_4" value="PNG bytes" style="endArrow=open;html=1;edgeStyle=none;dashed=1;fontSize=11;align=center;verticalAlign=bottom;labelBackgroundColor=#ffffff;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry"><mxPoint x="1270" y="755" as="sourcePoint"/><mxPoint x="580" y="755" as="targetPoint"/></mxGeometry>
+                </mxCell>
+                <mxCell id="msg3_5" value="HTTP 200 image/png  (Cache-Control: public, max-age=31536000, immutable)" style="endArrow=open;html=1;edgeStyle=none;dashed=1;fontSize=11;align=center;verticalAlign=bottom;labelBackgroundColor=#ffffff;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry"><mxPoint x="580" y="785" as="sourcePoint"/><mxPoint x="200" y="785" as="targetPoint"/></mxGeometry>
+                </mxCell>
+                <mxCell id="footer" value="Failure modes: 401 unauthenticated → frontend redirects to /login. 404 scene_not_found → SceneDetailPage shows error state with ← Library link. 404 thumbnail_unavailable → img loads broken; CSS placeholder mode is reserved for known-null thumbnail_path. Cache headers mean browsers re-render the same scene without re-fetching the PNG (write-once artifact, safe to cache forever)." style="text;html=1;fontSize=11;fontStyle=2;fontColor=#666666;align=center;verticalAlign=middle;" parent="1" vertex="1">
+                    <mxGeometry x="40" y="810" width="1330" height="40" as="geometry"/>
+                </mxCell>
+            </root>
+        </mxGraphModel>
+    </diagram>
+</mxfile>

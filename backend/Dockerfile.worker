@@ -1,0 +1,71 @@
+# Allotrope worker image
+#
+# Build context is the REPO ROOT (see docker-compose.yml worker.build),
+# not backend/. That's so we can COPY both `backend/` and the legacy
+# `app/` pipeline into the same image.
+#
+# Heavier than the api image because it bundles `app/` plus its native
+# deps (h5py / HDF5, rasterio / GDAL). torch + CUDA arrive in Step 12
+# when action_run handlers go live; the FROM line below switches to a
+# CUDA base then.
+#
+# Layer order tuned for cache hits on the most-edited surface:
+#   1. base image
+#   2. python deps (changes only when requirements-worker.txt edits)
+#   3. legacy `app/` pipeline (rare changes once stabilised)
+#   4. shared `allotrope` package + worker code (every iteration)
+
+FROM python:3.14-slim
+
+ENV PYTHONUNBUFFERED=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    # Headless matplotlib — must be set before any matplotlib import.
+    # Some interactive backends (the default on Linux) crash inside a
+    # container that has no display server.
+    MPLBACKEND=Agg \
+    # Cap BLAS thread fan-out. Without this, numpy / numexpr / scipy /
+    # torch each spin up `cpu_count()` threads — they over-subscribe and
+    # the resulting cache thrash + GIL contention has been observed to
+    # SIGSEGV mid-handler on the existing PRISMA pipeline.
+    OPENBLAS_NUM_THREADS=2 \
+    OMP_NUM_THREADS=2 \
+    MKL_NUM_THREADS=2 \
+    NUMEXPR_NUM_THREADS=2
+
+WORKDIR /srv
+
+# Python 3.14 is recent enough that some scientific wheels (numpy,
+# h5py, rasterio) aren't published yet for cp314 and pip falls back to
+# building from source. Install build deps + native libs the source
+# builds need. Drop these once cp314 wheels land for the pinned
+# versions (target: late 2026).
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        build-essential \
+        libhdf5-dev \
+        libgdal-dev \
+        gdal-bin \
+        pkg-config \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY backend/requirements-worker.txt .
+RUN pip install -r requirements-worker.txt
+
+# Legacy pipeline first (rarely changes). Sits dormant on disk except
+# for the modules our handlers actually import (file helpers + STAC
+# utils + their pydantic models).
+COPY app ./app
+
+# USGS splib07 slim bundle (~18 MB, content-deterministic per splib07
+# release). Baked into the image so onboarding can build the per-sensor
+# splib07 cache automatically (Step 14.7). Re-run scripts/curate_splib07.py
+# and rebuild this image whenever the splib07 version is bumped.
+COPY data/splib07_slim /srv/splib07_slim
+
+# Shared allotrope package + worker code. Last because it changes most.
+COPY backend/allotrope ./allotrope
+COPY backend/allotrope_worker ./allotrope_worker
+
+# No EXPOSE — worker is queue-driven, not HTTP.
+CMD ["python", "-m", "allotrope_worker"]

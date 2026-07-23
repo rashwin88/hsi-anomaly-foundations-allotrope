@@ -1,0 +1,154 @@
+<mxfile host="65bd71144e">
+    <diagram id="worker_loop" name="worker tick">
+        <mxGraphModel dx="1502" dy="931" grid="0" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1400" pageHeight="1100" math="0" shadow="0">
+            <root>
+                <mxCell id="0"/>
+                <mxCell id="1" parent="0"/>
+                <mxCell id="title" value="Worker tick — claim · heartbeat · dispatch · complete · reap" style="text;html=1;fontSize=20;fontStyle=1;align=left;verticalAlign=middle;" parent="1" vertex="1">
+                    <mxGeometry x="40" y="20" width="1000" height="30" as="geometry"/>
+                </mxCell>
+                <mxCell id="subtitle" value="Single tick of allotrope_worker.runner.main(). Postgres-backed queue (jobs table). Heartbeat = daemon thread on its own session. Reaper = idempotent UPDATE." style="text;html=1;fontSize=12;fontStyle=2;fontColor=#666666;align=left;verticalAlign=middle;" parent="1" vertex="1">
+                    <mxGeometry x="40" y="52" width="1300" height="20" as="geometry"/>
+                </mxCell>
+                <mxCell id="actor_runner" value="runner (main thread)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=12;fontStyle=1;" parent="1" vertex="1">
+                    <mxGeometry x="120" y="85" width="160" height="40" as="geometry"/>
+                </mxCell>
+                <mxCell id="actor_hb" value="heartbeat (daemon thread)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;fontStyle=1;" parent="1" vertex="1">
+                    <mxGeometry x="400" y="85" width="200" height="40" as="geometry"/>
+                </mxCell>
+                <mxCell id="actor_handler" value="handler[type]" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=12;fontStyle=1;" parent="1" vertex="1">
+                    <mxGeometry x="720" y="85" width="160" height="40" as="geometry"/>
+                </mxCell>
+                <mxCell id="actor_pg" value="postgres (jobs)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=12;fontStyle=1;" parent="1" vertex="1">
+                    <mxGeometry x="1020" y="85" width="160" height="40" as="geometry"/>
+                </mxCell>
+                <mxCell id="ll_runner" style="endArrow=none;dashed=1;html=1;rounded=0;strokeColor=#999999;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <mxPoint x="200" y="125" as="sourcePoint"/>
+                        <mxPoint x="200" y="1040" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="ll_hb" style="endArrow=none;dashed=1;html=1;rounded=0;strokeColor=#999999;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <mxPoint x="500" y="125" as="sourcePoint"/>
+                        <mxPoint x="500" y="1040" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="ll_handler" style="endArrow=none;dashed=1;html=1;rounded=0;strokeColor=#999999;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <mxPoint x="800" y="125" as="sourcePoint"/>
+                        <mxPoint x="800" y="1040" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="ll_pg" style="endArrow=none;dashed=1;html=1;rounded=0;strokeColor=#999999;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <mxPoint x="1100" y="125" as="sourcePoint"/>
+                        <mxPoint x="1100" y="1040" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="phase1_band" value="① Reap (every WORKER_REAP_INTERVAL_SEC, default 30s)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#fbe5e5;strokeColor=#d09898;align=left;verticalAlign=middle;fontStyle=1;fontSize=12;" parent="1" vertex="1">
+                    <mxGeometry x="30" y="140" width="1340" height="26" as="geometry"/>
+                </mxCell>
+                <mxCell id="msg1_1" value="UPDATE jobs SET status='failed', failure_reason='worker heartbeat lost', completed_at=now(), claimed_by=NULL&lt;br/&gt;WHERE status='running' AND last_heartbeat_at &amp;lt; now() - interval '60s'" style="endArrow=classic;html=1;edgeStyle=none;fontSize=11;align=center;verticalAlign=bottom;labelBackgroundColor=#ffffff;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <mxPoint x="200" y="200" as="sourcePoint"/>
+                        <mxPoint x="1100" y="200" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="msg1_2" value="rowcount: N (usually 0)" style="endArrow=open;html=1;edgeStyle=none;dashed=1;fontSize=11;align=center;verticalAlign=bottom;labelBackgroundColor=#ffffff;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <mxPoint x="1100" y="232" as="sourcePoint"/>
+                        <mxPoint x="200" y="232" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="note1" value="Concurrency-safe across replicas: WHERE filters by status; first UPDATE flips it, others find nothing.&lt;br/&gt;No row lock held — replicas can reap in parallel." style="shape=note;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11;align=left;verticalAlign=middle;" parent="1" vertex="1">
+                    <mxGeometry x="240" y="250" width="660" height="50" as="geometry"/>
+                </mxCell>
+                <mxCell id="phase2_band" value="② Claim — SELECT … FOR UPDATE SKIP LOCKED" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#e8f1e6;strokeColor=#a8c8a4;align=left;verticalAlign=middle;fontStyle=1;fontSize=12;" parent="1" vertex="1">
+                    <mxGeometry x="30" y="320" width="1340" height="26" as="geometry"/>
+                </mxCell>
+                <mxCell id="msg2_1" value="BEGIN; SELECT * FROM jobs&lt;br/&gt;WHERE status='queued' AND type IN (:supported)&lt;br/&gt;ORDER BY created_at LIMIT 1 FOR UPDATE SKIP LOCKED" style="endArrow=classic;html=1;edgeStyle=none;fontSize=11;align=center;verticalAlign=bottom;labelBackgroundColor=#ffffff;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <mxPoint x="200" y="380" as="sourcePoint"/>
+                        <mxPoint x="1100" y="380" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="msg2_2" value="row | NULL" style="endArrow=open;html=1;edgeStyle=none;dashed=1;fontSize=11;align=center;verticalAlign=bottom;labelBackgroundColor=#ffffff;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <mxPoint x="1100" y="412" as="sourcePoint"/>
+                        <mxPoint x="200" y="412" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="branch_label" value="&lt;b&gt;If NULL (queue empty):&lt;/b&gt; COMMIT (releases snapshot) → close session → sleep WORKER_POLL_INTERVAL_SEC in 0.25s slices → next tick." style="text;html=1;fontSize=11;align=left;verticalAlign=middle;fontColor=#444;" parent="1" vertex="1">
+                    <mxGeometry x="40" y="430" width="1300" height="20" as="geometry"/>
+                </mxCell>
+                <mxCell id="msg2_3" value="UPDATE jobs SET status='running', started_at=now(), last_heartbeat_at=now(), claimed_by='&amp;lt;hostname&amp;gt;/&amp;lt;suffix&amp;gt;' WHERE id=:job_id;&lt;br/&gt;COMMIT" style="endArrow=classic;html=1;edgeStyle=none;fontSize=11;align=center;verticalAlign=bottom;labelBackgroundColor=#ffffff;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <mxPoint x="200" y="475" as="sourcePoint"/>
+                        <mxPoint x="1100" y="475" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="note2" value="COMMIT releases the row lock. From here, ownership is application-level: a fresh last_heartbeat_at means &quot;some live worker holds this&quot;.&lt;br/&gt;Why drop the lock? Held locks block the api's status reads and the reaper's UPDATE." style="shape=note;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11;align=left;verticalAlign=middle;" parent="1" vertex="1">
+                    <mxGeometry x="240" y="495" width="700" height="50" as="geometry"/>
+                </mxCell>
+                <mxCell id="phase3_band" value="③ Heartbeat — start daemon thread (its own session, every WORKER_HEARTBEAT_INTERVAL_SEC, default 5s)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#eef3f8;strokeColor=#aac4e0;align=left;verticalAlign=middle;fontStyle=1;fontSize=12;" parent="1" vertex="1">
+                    <mxGeometry x="30" y="565" width="1340" height="26" as="geometry"/>
+                </mxCell>
+                <mxCell id="msg3_1" value="hb.start()" style="endArrow=classic;html=1;edgeStyle=none;fontSize=11;align=center;verticalAlign=bottom;labelBackgroundColor=#ffffff;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <mxPoint x="200" y="615" as="sourcePoint"/>
+                        <mxPoint x="500" y="615" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="msg3_2" value="every 5s: UPDATE jobs SET last_heartbeat_at=now() WHERE id=:job_id" style="endArrow=classic;html=1;edgeStyle=none;dashed=1;fontSize=11;align=center;verticalAlign=bottom;labelBackgroundColor=#ffffff;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <mxPoint x="500" y="650" as="sourcePoint"/>
+                        <mxPoint x="1100" y="650" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="phase4_band" value="④ Dispatch — runner calls handler[job.type]" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#fff2e0;strokeColor=#e0b070;align=left;verticalAlign=middle;fontStyle=1;fontSize=12;" parent="1" vertex="1">
+                    <mxGeometry x="30" y="685" width="1340" height="26" as="geometry"/>
+                </mxCell>
+                <mxCell id="msg4_1" value="handler(job)" style="endArrow=classic;html=1;edgeStyle=none;fontSize=11;align=center;verticalAlign=bottom;labelBackgroundColor=#ffffff;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <mxPoint x="200" y="740" as="sourcePoint"/>
+                        <mxPoint x="800" y="740" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="note4" value="Handler returns (target_kind, target_id) on success.&lt;br/&gt;Any raised exception → caught by runner, marked failed.&lt;br/&gt;Handler MUST NOT commit/rollback — runner owns the txn lifecycle." style="shape=note;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11;align=left;verticalAlign=middle;" parent="1" vertex="1">
+                    <mxGeometry x="200" y="760" width="540" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="msg4_2" value="(target_kind, target_id) | raise" style="endArrow=open;html=1;edgeStyle=none;dashed=1;fontSize=11;align=center;verticalAlign=bottom;labelBackgroundColor=#ffffff;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <mxPoint x="800" y="830" as="sourcePoint"/>
+                        <mxPoint x="200" y="830" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="msg4_3" value="hb.stop() (try/finally — fires on exception too)" style="endArrow=classic;html=1;edgeStyle=none;fontSize=11;align=center;verticalAlign=bottom;labelBackgroundColor=#ffffff;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <mxPoint x="200" y="858" as="sourcePoint"/>
+                        <mxPoint x="500" y="858" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="phase5_band" value="⑤ Finalize — mark_complete OR mark_failed" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f5eef8;strokeColor=#c8a4d0;align=left;verticalAlign=middle;fontStyle=1;fontSize=12;" parent="1" vertex="1">
+                    <mxGeometry x="30" y="890" width="1340" height="26" as="geometry"/>
+                </mxCell>
+                <mxCell id="msg5_1" value="UPDATE jobs SET status='complete'|'failed', completed_at=now(), target_kind=…, target_id=…, claimed_by=NULL WHERE id=:job_id;&lt;br/&gt;COMMIT" style="endArrow=classic;html=1;edgeStyle=none;fontSize=11;align=center;verticalAlign=bottom;labelBackgroundColor=#ffffff;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <mxPoint x="200" y="945" as="sourcePoint"/>
+                        <mxPoint x="1100" y="945" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="msg5_2" value="loop: did_work=True → no sleep, immediately try next claim (drain backlog fast)" style="endArrow=classic;html=1;edgeStyle=none;fontSize=11;align=center;verticalAlign=bottom;labelBackgroundColor=#ffffff;dashPattern=1 4;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <mxPoint x="200" y="985" as="sourcePoint"/>
+                        <mxPoint x="200" y="1015" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="footer" value="SIGTERM/SIGINT flips a flag the loop reads between ticks (and between sleep slices). In-flight handlers finish; the loop then exits cleanly. SIGKILL leaves the row in 'running' — the reaper catches it within heartbeat_timeout. Replicas: same image, different worker_id; SKIP LOCKED guarantees disjoint claims." style="text;html=1;fontSize=11;fontStyle=2;fontColor=#666666;align=center;verticalAlign=middle;" parent="1" vertex="1">
+                    <mxGeometry x="60" y="1040" width="1280" height="40" as="geometry"/>
+                </mxCell>
+            </root>
+        </mxGraphModel>
+    </diagram>
+</mxfile>

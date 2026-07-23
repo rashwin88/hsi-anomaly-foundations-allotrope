@@ -1,0 +1,56 @@
+# Allotrope api — runtime dependencies
+#
+# Pinning to minor versions for reproducibility. Bump deliberately.
+
+# Web
+fastapi==0.115.0
+uvicorn[standard]==0.32.0
+# Required by FastAPI for multipart/form-data parsing (POST /scenes/onboard).
+python-multipart==0.0.20
+
+# DB
+# Note on SQLAlchemy: 2.0.36 broke under Python 3.14's stricter typing.Union
+# handling; bumped to 2.0.43+ which fixed it.
+sqlalchemy==2.0.45
+psycopg[binary]==3.2.13
+alembic==1.13.3
+
+# Config
+pydantic-settings==2.6.1
+
+# Auth + CLI
+argon2-cffi==23.1.0
+pyjwt==2.10.1
+typer==0.13.1
+
+# Host metrics (Step 20). nvidia-smi is shelled-out when present; psutil
+# covers CPU / RAM / disk / load average for the api host.
+psutil==6.1.0
+
+# Vendable unpickling (GET /scenes/{id}/spectrum, /bands/{idx}/image).
+# Pickled vendables embed numpy arrays; the api process needs the same
+# numpy major version as the worker that wrote them. Pillow is for
+# on-demand single-band PNG encoding in the bands endpoint. Keep both
+# in lockstep with requirements-worker.txt.
+numpy==2.4.1
+Pillow==12.1.0
+# matplotlib: only used for the inferno colormap LUT in the band-image
+# endpoint. Tiny percentage of the worker's matplotlib usage; lockstep
+# the version with requirements-worker.txt.
+matplotlib==3.10.8
+# rasterio: needed by the on-demand annotation overlay re-render path
+# (api reads the source GT raster when ?radius=N differs from the
+# default cached render). Lockstep with worker.
+rasterio==1.4.3
+# pyarrow: spectral_library_match at_pixel endpoint reads matches.parquet
+# to return top-K rows for one (row, col). Lockstep with worker. Step 14.7.
+pyarrow==24.0.0
+# geopandas + shapely + fiona: vector export (Shapefile/GPKG) for the
+# /actions/{id}/export endpoint (Step 14.8). Submission rules require
+# .shp with full sidecar set. geopandas pulls shapely + fiona transitively.
+geopandas==1.0.1
+shapely==2.1.2
+fiona==1.10.1
+# h5py: export endpoint reads PRISMA HE5 lat/lon arrays at submission
+# time to recover scene CRS (Step 14.8). Worker has its own h5py pin.
+h5py==3.15.1

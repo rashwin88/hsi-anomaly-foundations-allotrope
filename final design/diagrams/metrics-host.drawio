@@ -1,0 +1,78 @@
+<mxfile host="65bd71144e">
+    <diagram id="metrics_host" name="metrics host + workload (Step 20)">
+        <mxGraphModel dx="1502" dy="931" grid="0" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1500" pageHeight="900" math="0" shadow="0">
+            <root>
+                <mxCell id="0"/>
+                <mxCell id="1" parent="0"/>
+                <mxCell id="title" value="Metrics — host snapshot + workload aggregate" style="text;html=1;fontSize=20;fontStyle=1;align=left;verticalAlign=middle;" parent="1" vertex="1">
+                    <mxGeometry x="40" y="20" width="1200" height="30" as="geometry"/>
+                </mxCell>
+                <mxCell id="subtitle" value="GET /metrics/host returns a psutil + nvidia-smi snapshot. GET /metrics/workload aggregates the jobs table. TopBar polls /metrics/host at 1 Hz for sparklines (useHostMetrics replaces the Step 4c useFakeMetrics stub). MonitoringPage polls /metrics/host @ 2 s + /metrics/workload @ 5 s for the deeper view. Snapshots only — no websockets. nvidia-smi failures (Mac Docker has no passthrough) report gpu.available=false rather than raising." style="text;html=1;fontSize=12;fontStyle=2;fontColor=#666666;align=left;verticalAlign=middle;" parent="1" vertex="1">
+                    <mxGeometry x="40" y="52" width="1400" height="70" as="geometry"/>
+                </mxCell>
+
+                <!-- Actors -->
+                <mxCell id="actor_browser" value="Browser (TopBar / MonitoringPage)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;fontStyle=1;" parent="1" vertex="1">
+                    <mxGeometry x="80" y="135" width="280" height="40" as="geometry"/>
+                </mxCell>
+                <mxCell id="actor_api" value="api (FastAPI)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=12;fontStyle=1;" parent="1" vertex="1">
+                    <mxGeometry x="500" y="135" width="160" height="40" as="geometry"/>
+                </mxCell>
+                <mxCell id="actor_psutil" value="psutil / nvidia-smi (api container)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11;fontStyle=1;" parent="1" vertex="1">
+                    <mxGeometry x="800" y="135" width="240" height="40" as="geometry"/>
+                </mxCell>
+                <mxCell id="actor_pg" value="postgres" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=12;fontStyle=1;" parent="1" vertex="1">
+                    <mxGeometry x="1180" y="135" width="160" height="40" as="geometry"/>
+                </mxCell>
+
+                <!-- Lifelines -->
+                <mxCell id="ll_browser" style="endArrow=none;dashed=1;html=1;rounded=0;strokeColor=#999999;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry"><mxPoint x="220" y="175" as="sourcePoint"/><mxPoint x="220" y="860" as="targetPoint"/></mxGeometry>
+                </mxCell>
+                <mxCell id="ll_api" style="endArrow=none;dashed=1;html=1;rounded=0;strokeColor=#999999;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry"><mxPoint x="580" y="175" as="sourcePoint"/><mxPoint x="580" y="860" as="targetPoint"/></mxGeometry>
+                </mxCell>
+                <mxCell id="ll_psutil" style="endArrow=none;dashed=1;html=1;rounded=0;strokeColor=#999999;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry"><mxPoint x="920" y="175" as="sourcePoint"/><mxPoint x="920" y="860" as="targetPoint"/></mxGeometry>
+                </mxCell>
+                <mxCell id="ll_pg" style="endArrow=none;dashed=1;html=1;rounded=0;strokeColor=#999999;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry"><mxPoint x="1260" y="175" as="sourcePoint"/><mxPoint x="1260" y="860" as="targetPoint"/></mxGeometry>
+                </mxCell>
+
+                <!-- Phase 1 -->
+                <mxCell id="phase1" value="① TopBar tick — GET /metrics/host @ 1 Hz (cached psutil cpu_percent baseline)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#eef3f8;strokeColor=#aac4e0;align=left;verticalAlign=middle;fontStyle=1;fontSize=12;" parent="1" vertex="1">
+                    <mxGeometry x="30" y="200" width="1450" height="26" as="geometry"/>
+                </mxCell>
+                <mxCell id="msg1_1" value="GET /api/metrics/host&lt;br/&gt;Cookie: allotrope_jwt" style="endArrow=classic;html=1;edgeStyle=none;fontSize=11;align=center;verticalAlign=bottom;labelBackgroundColor=#ffffff;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry"><mxPoint x="220" y="260" as="sourcePoint"/><mxPoint x="580" y="260" as="targetPoint"/></mxGeometry>
+                </mxCell>
+                <mxCell id="msg1_2" value="cpu_percent(interval=None) → cpu_count → virtual_memory → disk_usage(/data,/artifacts,/models)&lt;br/&gt;shutil.which('nvidia-smi') → if present, subprocess --query-gpu CSV (2s timeout, no raise on failure)" style="endArrow=classic;html=1;edgeStyle=none;fontSize=11;align=center;verticalAlign=bottom;labelBackgroundColor=#ffffff;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry"><mxPoint x="580" y="335" as="sourcePoint"/><mxPoint x="920" y="335" as="targetPoint"/></mxGeometry>
+                </mxCell>
+                <mxCell id="msg1_3" value="200 OK&lt;br/&gt;{ cpu{percent, count_logical, load_average_1m},&lt;br/&gt;memory{used,total,percent}, disks[], gpu{available, devices[]} }" style="endArrow=classic;html=1;edgeStyle=none;fontSize=11;align=center;verticalAlign=bottom;labelBackgroundColor=#ffffff;startArrow=classic;startFill=1;dashed=1;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry"><mxPoint x="580" y="395" as="sourcePoint"/><mxPoint x="220" y="395" as="targetPoint"/></mxGeometry>
+                </mxCell>
+                <mxCell id="note1" value="useHostMetrics rolls each tick into 60-tick histories for CPU / GPU / RAM. GPU sparkline only renders when latest.gpu.available — Mac Docker keeps the simpler 'no GPU' pill that links to gpu.note in the tooltip." style="shape=note;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11;align=left;verticalAlign=middle;" parent="1" vertex="1">
+                    <mxGeometry x="80" y="420" width="1080" height="50" as="geometry"/>
+                </mxCell>
+
+                <!-- Phase 2 -->
+                <mxCell id="phase2" value="② MonitoringPage tick — GET /metrics/workload @ 5 s (aggregates the jobs table)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#fff2e0;strokeColor=#e0b070;align=left;verticalAlign=middle;fontStyle=1;fontSize=12;" parent="1" vertex="1">
+                    <mxGeometry x="30" y="490" width="1450" height="26" as="geometry"/>
+                </mxCell>
+                <mxCell id="msg2_1" value="GET /api/metrics/workload" style="endArrow=classic;html=1;edgeStyle=none;fontSize=11;align=center;verticalAlign=bottom;labelBackgroundColor=#ffffff;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry"><mxPoint x="220" y="550" as="sourcePoint"/><mxPoint x="580" y="550" as="targetPoint"/></mxGeometry>
+                </mxCell>
+                <mxCell id="msg2_2" value="SELECT status, count(*) FROM jobs GROUP BY status;&lt;br/&gt;SELECT type, count(*) FROM jobs WHERE status='running' GROUP BY type;&lt;br/&gt;SELECT type, count(*) FROM jobs WHERE status='queued'  GROUP BY type;&lt;br/&gt;SELECT count(*) FROM jobs WHERE completed_at &gt;= now() - make_interval(mins =&gt; 1|10|60);&lt;br/&gt;SELECT avg, percentile_cont(0.95) WITHIN GROUP (ORDER BY epoch(completed_at - started_at)) WHERE completed_at &gt;= now() - 1h;&lt;br/&gt;SELECT min(created_at) WHERE status='queued';" style="endArrow=classic;html=1;edgeStyle=none;fontSize=11;align=center;verticalAlign=bottom;labelBackgroundColor=#ffffff;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry"><mxPoint x="580" y="640" as="sourcePoint"/><mxPoint x="1260" y="640" as="targetPoint"/></mxGeometry>
+                </mxCell>
+                <mxCell id="msg2_3" value="200 OK { queue_depth, by_status{...}, by_type_running{...}, by_type_queued{...},&lt;br/&gt;completed_last_minute / _10_minutes / _hour,&lt;br/&gt;completed_mean_seconds, completed_p95_seconds, oldest_queued_age_seconds }" style="endArrow=classic;html=1;edgeStyle=none;fontSize=11;align=center;verticalAlign=bottom;labelBackgroundColor=#ffffff;startArrow=classic;startFill=1;dashed=1;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry"><mxPoint x="580" y="710" as="sourcePoint"/><mxPoint x="220" y="710" as="targetPoint"/></mxGeometry>
+                </mxCell>
+                <mxCell id="note2" value="Aggregate is cheap because the existing jobs_status_idx narrows the scans; percentile_cont is one row over the last-hour bucket. No materialised view in v1 — re-evaluate if the jobs table grows past ~100k rows. Throughput sparkline on MonitoringPage rolls completed_last_minute into a 60-tick history." style="shape=note;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11;align=left;verticalAlign=middle;" parent="1" vertex="1">
+                    <mxGeometry x="80" y="745" width="1180" height="70" as="geometry"/>
+                </mxCell>
+            </root>
+        </mxGraphModel>
+    </diagram>
+</mxfile>

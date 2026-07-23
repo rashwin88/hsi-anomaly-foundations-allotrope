@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Allotrope</title>
+    <script>
+      // Apply persisted theme synchronously, BEFORE React renders or CSS
+      // applies, to avoid a flash of the wrong theme on first paint.
+      (function () {
+        try {
+          var t = localStorage.getItem("allotrope-theme");
+          if (t === "dark") {
+            document.documentElement.setAttribute("data-theme", "dark");
+          }
+        } catch (e) {
+          /* localStorage disabled — fall back to default (light) */
+        }
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

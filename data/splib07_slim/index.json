@@ -1,0 +1,5219 @@
+{
+  "version": "splib07a",
+  "source_root": "/Users/ashwinravi/Desktop/Code Repos/hsi-anomaly-foundations-allotrope/data/splib/usgs_splib07",
+  "wavelengths_file": "wavelengths_asd_nm.txt",
+  "fwhm_files": {
+    "ASDFR": "fwhm/ASDFR.txt",
+    "ASDHR": "fwhm/ASDHR.txt",
+    "ASDNG": "fwhm/ASDNG.txt"
+  },
+  "wavelength_unit": "nm",
+  "fwhm_unit": "nm",
+  "n_entries": 519,
+  "n_channels": 2151,
+  "per_chapter_counts": {
+    "artificial": 59,
+    "liquids": 1,
+    "minerals": 307,
+    "organics": 69,
+    "soils": 61,
+    "vegetation": 22
+  },
+  "per_subtype_counts": {
+    "ASDFR": 424,
+    "ASDNG": 36,
+    "ASDHR": 59
+  },
+  "entries": [
+    {
+      "name": "Alizarin_crimson (dk) GDS780",
+      "material": "Alizarin_crimson_(dk)",
+      "sample": "GDS780",
+      "chapter": "artificial",
+      "asd_subtype": "ASDFR",
+      "record": 18244,
+      "value_count": 2151,
+      "path": "spectra/artificial/splib07a_Alizarin_crimson_(dk)_GDS780_ASDFRa_AREF.txt"
+    },
+    {
+      "name": "Aluminum brushed 293K",
+      "material": "Aluminum_brushed",
+      "sample": "293K",
+      "chapter": "artificial",
+      "asd_subtype": "ASDFR",
+      "record": 18253,
+      "value_count": 2151,
+      "path": "spectra/artificial/splib07a_Aluminum_brushed_293K_ASDFRa_AREF.txt"
+    },
+    {
+      "name": "Bone_black GDS808",
+      "material": "Bone_black",
+      "sample": "GDS808",
+      "chapter": "artificial",
+      "asd_subtype": "ASDFR",
+      "record": 18314,
+      "value_count": 2151,
+      "path": "spectra/artificial/splib07a_Bone_black_GDS808_ASDFRa_AREF.txt"
+    },
+    {
+      "name": "Burnt_umber GDS811",
+      "material": "Burnt_umber",
+      "sample": "GDS811",
+      "chapter": "artificial",
+      "asd_subtype": "ASDFR",
+      "record": 18404,
+      "value_count": 2151,
+      "path": "spectra/artificial/splib07a_Burnt_umber_GDS811_ASDFRa_AREF.txt"
+    },
+    {
+      "name": "Cadmium_orange_0 GDS786",
+      "material": "Cadmium_orange",
+      "sample": "0_GDS786",
+      "chapter": "artificial",
+      "asd_subtype": "ASDFR",
+      "record": 18413,
+      "value_count": 2151,
+      "path": "spectra/artificial/splib07a_Cadmium_orange_0_GDS786_ASDFRa_AREF.txt"
+    },
+    {
+      "name": "Cadmium_orange_1 (dk) GDS781",
+      "material": "Cadmium_orange_1_(dk)",
+      "sample": "GDS781",
+      "chapter": "artificial",
+      "asd_subtype": "ASDFR",
+      "record": 18422,
+      "value_count": 2151,
+      "path": "spectra/artificial/splib07a_Cadmium_orange_1_(dk)_GDS781_ASDFRa_AREF.txt"
+    },
+    {
+      "name": "Cadmium_red_2 GDS778",
+      "material": "Cadmium_red",
+      "sample": "2_GDS778",
+      "chapter": "artificial",
+      "asd_subtype": "ASDFR",
+      "record": 18431,
+      "value_count": 2151,
+      "path": "spectra/artificial/splib07a_Cadmium_red_2_GDS778_ASDFRa_AREF.txt"
+    },
+    {
+      "name": "Cadmium_yellow_6 med GDS788",
+      "material": "Cadmium_yellow_6_med",
+      "sample": "GDS788",
+      "chapter": "artificial",
+      "asd_subtype": "ASDFR",
+      "record": 18440,
+      "value_count": 2151,
+      "path": "spectra/artificial/splib07a_Cadmium_yellow_6_med_GDS788_ASDFRa_AREF.txt"
+    },
+    {
+      "name": "Cerium_Oxide 5-9s SPEX 11781",
+      "material": "Cerium_Oxide_5-9s",
+      "sample": "SPEX_11781",
+      "chapter": "artificial",
+      "asd_subtype": "ASDFR",
+      "record": 18539,
+      "value_count": 2151,
+      "path": "spectra/artificial/splib07a_Cerium_Oxide_5-9s_SPEX_11781_ASDFRa_AREF.txt"
+    },
+    {
+      "name": "Cerulean_blue GDS797",
+      "material": "Cerulean_blue",
+      "sample": "GDS797",
+      "chapter": "artificial",
+      "asd_subtype": "ASDFR",
+      "record": 18458,
+      "value_count": 2151,
+      "path": "spectra/artificial/splib07a_Cerulean_blue_GDS797_ASDFRa_AREF.txt"
+    },
+    {
+      "name": "Cobalt_blue GDS790",
+      "material": "Cobalt_blue",
+      "sample": "GDS790",
+      "chapter": "artificial",
+      "asd_subtype": "ASDFR",
+      "record": 18467,
+      "value_count": 2151,
+      "path": "spectra/artificial/splib07a_Cobalt_blue_GDS790_ASDFRa_AREF.txt"
+    },
+    {
+      "name": "Cobalt_green GDS816",
+      "material": "Cobalt_green",
+      "sample": "GDS816",
+      "chapter": "artificial",
+      "asd_subtype": "ASDFR",
+      "record": 18476,
+      "value_count": 2151,
+      "path": "spectra/artificial/splib07a_Cobalt_green_GDS816_ASDFRa_AREF.txt"
+    },
+    {
+      "name": "Cobalt_violet GDS803",
+      "material": "Cobalt_violet",
+      "sample": "GDS803",
+      "chapter": "artificial",
+      "asd_subtype": "ASDFR",
+      "record": 18485,
+      "value_count": 2151,
+      "path": "spectra/artificial/splib07a_Cobalt_violet_GDS803_ASDFRa_AREF.txt"
+    },
+    {
+      "name": "Dysprosium_Oxide JMC315",
+      "material": "Dysprosium_Oxide",
+      "sample": "JMC315",
+      "chapter": "artificial",
+      "asd_subtype": "ASDFR",
+      "record": 18660,
+      "value_count": 2151,
+      "path": "spectra/artificial/splib07a_Dysprosium_Oxide_JMC315_ASDFRa_AREF.txt"
+    },
+    {
+      "name": "Erbium_Oxide J.M. 317",
+      "material": "Erbium_Oxide",
+      "sample": "J.M._317",
+      "chapter": "artificial",
+      "asd_subtype": "ASDFR",
+      "record": 18669,
+      "value_count": 2151,
+      "path": "spectra/artificial/splib07a_Erbium_Oxide_J.M._317_ASDFRa_AREF.txt"
+    },
+    {
+      "name": "Europium_Oxide A-4 SPEX",
+      "material": "Europium_Oxide_A-4",
+      "sample": "SPEX",
+      "chapter": "artificial",
+      "asd_subtype": "ASDFR",
+      "record": 18678,
+      "value_count": 2151,
+      "path": "spectra/artificial/splib07a_Europium_Oxide_A-4_SPEX_ASDFRa_AREF.txt"
+    },
+    {
+      "name": "Europium_Oxide GDS33C",
+      "material": "Europium_Oxide",
+      "sample": "GDS33C",
+      "chapter": "artificial",
+      "asd_subtype": "ASDFR",
+      "record": 18692,
+      "value_count": 2151,
+      "path": "spectra/artificial/splib07a_Europium_Oxide_GDS33C_ASDFRc_AREF.txt"
+    },
+    {
+      "name": "Gadolinium_Oxide A-5 SPEX",
+      "material": "Gadolinium_Oxide_A-5",
+      "sample": "SPEX",
+      "chapter": "artificial",
+      "asd_subtype": "ASDFR",
+      "record": 18755,
+      "value_count": 2151,
+      "path": "spectra/artificial/splib07a_Gadolinium_Oxide_A-5_SPEX_ASDFRc_AREF.txt"
+    },
+    {
+      "name": "Gadolinium_Oxide JMC313",
+      "material": "Gadolinium_Oxide",
+      "sample": "JMC313",
+      "chapter": "artificial",
+      "asd_subtype": "ASDFR",
+      "record": 18764,
+      "value_count": 2151,
+      "path": "spectra/artificial/splib07a_Gadolinium_Oxide_JMC313_ASDFRc_AREF.txt"
+    },
+    {
+      "name": "GalvanizedSheetMetal GDS334",
+      "material": "GalvanizedSheetMetal",
+      "sample": "GDS334",
+      "chapter": "artificial",
+      "asd_subtype": "ASDFR",
+      "record": 18773,
+      "value_count": 2151,
+      "path": "spectra/artificial/splib07a_GalvanizedSheetMetal_GDS334_ASDFRa_AREF.txt"
+    },
+    {
+      "name": "Holmium_Oxide 11281",
+      "material": "Holmium_Oxide",
+      "sample": "11281",
+      "chapter": "artificial",
+      "asd_subtype": "ASDFR",
+      "record": 18789,
+      "value_count": 2151,
+      "path": "spectra/artificial/splib07a_Holmium_Oxide_11281_ASDFRa_AREF.txt"
+    },
+    {
+      "name": "Iron oxide_#4820 GDS782",
+      "material": "Iron_oxide_#4820",
+      "sample": "GDS782",
+      "chapter": "artificial",
+      "asd_subtype": "ASDFR",
+      "record": 18798,
+      "value_count": 2151,
+      "path": "spectra/artificial/splib07a_Iron_oxide_#4820_GDS782_ASDFRa_AREF.txt"
+    },
+    {
+      "name": "Italian_burnt_sienna GDS812",
+      "material": "Italian_burnt_sienna",
+      "sample": "GDS812",
+      "chapter": "artificial",
+      "asd_subtype": "ASDFR",
+      "record": 18852,
+      "value_count": 2151,
+      "path": "spectra/artificial/splib07a_Italian_burnt_sienna_GDS812_ASDFRa_AREF.txt"
+    },
+    {
+      "name": "Italian_nat_sienna GDS805",
+      "material": "Italian_nat_sienna",
+      "sample": "GDS805",
+      "chapter": "artificial",
+      "asd_subtype": "ASDFR",
+      "record": 18861,
+      "value_count": 2151,
+      "path": "spectra/artificial/splib07a_Italian_nat_sienna_GDS805_ASDFRa_AREF.txt"
+    },
+    {
+      "name": "Lanthanum_Oxide 1271 SPEX",
+      "material": "Lanthanum_Oxide",
+      "sample": "1271_SPEX",
+      "chapter": "artificial",
+      "asd_subtype": "ASDFR",
+      "record": 18877,
+      "value_count": 2151,
+      "path": "spectra/artificial/splib07a_Lanthanum_Oxide_1271_SPEX_ASDFRa_AREF.txt"
+    },
+    {
+      "name": "Lead-tin_yellow GDS793",
+      "material": "Lead-tin_yellow",
+      "sample": "GDS793",
+      "chapter": "artificial",
+      "asd_subtype": "ASDFR",
+      "record": 18895,
+      "value_count": 2151,
+      "path": "spectra/artificial/splib07a_Lead-tin_yellow_GDS793_ASDFRa_AREF.txt"
+    },
+    {
+      "name": "Lead_White GDS796",
+      "material": "Lead_White",
+      "sample": "GDS796",
+      "chapter": "artificial",
+      "asd_subtype": "ASDFR",
+      "record": 18904,
+      "value_count": 2151,
+      "path": "spectra/artificial/splib07a_Lead_White_GDS796_ASDFRa_AREF.txt"
+    },
+    {
+      "name": "Lutetium_Oxide LU60-2 SPEX",
+      "material": "Lutetium_Oxide_LU60-2",
+      "sample": "SPEX",
+      "chapter": "artificial",
+      "asd_subtype": "ASDFR",
+      "record": 18913,
+      "value_count": 2151,
+      "path": "spectra/artificial/splib07a_Lutetium_Oxide_LU60-2_SPEX_ASDFRa_AREF.txt"
+    },
+    {
+      "name": "Manganese_violet GDS804",
+      "material": "Manganese_violet",
+      "sample": "GDS804",
+      "chapter": "artificial",
+      "asd_subtype": "ASDFR",
+      "record": 18931,
+      "value_count": 2151,
+      "path": "spectra/artificial/splib07a_Manganese_violet_GDS804_ASDFRa_AREF.txt"
+    },
+    {
+      "name": "Naples_yellow GDS787",
+      "material": "Naples_yellow",
+      "sample": "GDS787",
+      "chapter": "artificial",
+      "asd_subtype": "ASDFR",
+      "record": 18981,
+      "value_count": 2151,
+      "path": "spectra/artificial/splib07a_Naples_yellow_GDS787_ASDFRa_AREF.txt"
+    },
+    {
+      "name": "Nat.Madder_Lake_Albas GDS784",
+      "material": "Nat.Madder_Lake_Albas",
+      "sample": "GDS784",
+      "chapter": "artificial",
+      "asd_subtype": "ASDFR",
+      "record": 18990,
+      "value_count": 2151,
+      "path": "spectra/artificial/splib07a_Nat.Madder_Lake_Albas_GDS784_ASDFRa_AREF.txt"
+    },
+    {
+      "name": "Neodymium_Oxide GDS34B",
+      "material": "Neodymium_Oxide",
+      "sample": "GDS34B",
+      "chapter": "artificial",
+      "asd_subtype": "ASDFR",
+      "record": 19013,
+      "value_count": 2151,
+      "path": "spectra/artificial/splib07a_Neodymium_Oxide_GDS34B_ASDFRa_AREF.txt"
+    },
+    {
+      "name": "Neodymium_Oxide ND64-1 SPEX",
+      "material": "Neodymium_Oxide_ND64-1",
+      "sample": "SPEX",
+      "chapter": "artificial",
+      "asd_subtype": "ASDFR",
+      "record": 19035,
+      "value_count": 2151,
+      "path": "spectra/artificial/splib07a_Neodymium_Oxide_ND64-1_SPEX_ASDFRa_AREF.txt"
+    },
+    {
+      "name": "Oxide_of_chromium GDS795",
+      "material": "Oxide_of_chromium",
+      "sample": "GDS795",
+      "chapter": "artificial",
+      "asd_subtype": "ASDFR",
+      "record": 19500,
+      "value_count": 2151,
+      "path": "spectra/artificial/splib07a_Oxide_of_chromium_GDS795_ASDFRa_AREF.txt"
+    },
+    {
+      "name": "PhosphoricAcid SA-466123 80K",
+      "material": "PhosphoricAcid_SA-466123",
+      "sample": "80K",
+      "chapter": "artificial",
+      "asd_subtype": "ASDFR",
+      "record": 19536,
+      "value_count": 2151,
+      "path": "spectra/artificial/splib07a_PhosphoricAcid_SA-466123_80K_ASDFRa_AREF.txt"
+    },
+    {
+      "name": "Phthalocyaninie_blue GDS799",
+      "material": "Phthalocyaninie_blue",
+      "sample": "GDS799",
+      "chapter": "artificial",
+      "asd_subtype": "ASDFR",
+      "record": 19545,
+      "value_count": 2151,
+      "path": "spectra/artificial/splib07a_Phthalocyaninie_blue_GDS799_ASDFRa_AREF.txt"
+    },
+    {
+      "name": "Praseodymium_Chloride_39386",
+      "material": "Praseodymium_Chloride",
+      "sample": "39386",
+      "chapter": "artificial",
+      "asd_subtype": "ASDFR",
+      "record": 19937,
+      "value_count": 2151,
+      "path": "spectra/artificial/splib07a_Praseodymium_Chloride_39386_ASDFRa_AREF.txt"
+    },
+    {
+      "name": "Praseodymium_Oxide GDS35",
+      "material": "Praseodymium_Oxide",
+      "sample": "GDS35",
+      "chapter": "artificial",
+      "asd_subtype": "ASDFR",
+      "record": 19961,
+      "value_count": 2151,
+      "path": "spectra/artificial/splib07a_Praseodymium_Oxide_GDS35_ASDFRc_AREF.txt"
+    },
+    {
+      "name": "Praseodymium_Oxide PR62 SPEX",
+      "material": "Praseodymium_Oxide",
+      "sample": "PR62_SPEX",
+      "chapter": "artificial",
+      "asd_subtype": "ASDFR",
+      "record": 19983,
+      "value_count": 2151,
+      "path": "spectra/artificial/splib07a_Praseodymium_Oxide_PR62_SPEX_ASDFRc_AREF.txt"
+    },
+    {
+      "name": "Prussian_blue GDS802",
+      "material": "Prussian_blue",
+      "sample": "GDS802",
+      "chapter": "artificial",
+      "asd_subtype": "ASDFR",
+      "record": 19992,
+      "value_count": 2151,
+      "path": "spectra/artificial/splib07a_Prussian_blue_GDS802_ASDFRa_AREF.txt"
+    },
+    {
+      "name": "Samarium_Oxide B-5 SPEX",
+      "material": "Samarium_Oxide_B-5",
+      "sample": "SPEX",
+      "chapter": "artificial",
+      "asd_subtype": "ASDFR",
+      "record": 20060,
+      "value_count": 2151,
+      "path": "spectra/artificial/splib07a_Samarium_Oxide_B-5_SPEX_ASDFRa_AREF.txt"
+    },
+    {
+      "name": "Samarium_Oxide GDS36",
+      "material": "Samarium_Oxide",
+      "sample": "GDS36",
+      "chapter": "artificial",
+      "asd_subtype": "ASDFR",
+      "record": 20038,
+      "value_count": 2151,
+      "path": "spectra/artificial/splib07a_Samarium_Oxide_GDS36_ASDFRa_AREF.txt"
+    },
+    {
+      "name": "Scandium_Oxide J.M. 300 S575",
+      "material": "Scandium_Oxide",
+      "sample": "J.M._300_S575",
+      "chapter": "artificial",
+      "asd_subtype": "ASDFR",
+      "record": 20069,
+      "value_count": 2151,
+      "path": "spectra/artificial/splib07a_Scandium_Oxide_J.M._300_S575_ASDFRa_AREF.txt"
+    },
+    {
+      "name": "Spectralon99WhiteRef LSPHERE",
+      "material": "Spectralon99WhiteRef",
+      "sample": "LSPHERE",
+      "chapter": "artificial",
+      "asd_subtype": "ASDFR",
+      "record": 20097,
+      "value_count": 2151,
+      "path": "spectra/artificial/splib07a_Spectralon99WhiteRef_LSPHERE_ASDFRa_AREF.txt"
+    },
+    {
+      "name": "Terbium_(III)_Chloride 35798",
+      "material": "Terbium_(III)_Chloride",
+      "sample": "35798",
+      "chapter": "artificial",
+      "asd_subtype": "ASDFR",
+      "record": 20133,
+      "value_count": 2151,
+      "path": "spectra/artificial/splib07a_Terbium_(III)_Chloride_35798_ASDFRa_AREF.txt"
+    },
+    {
+      "name": "Terbium_Oxide 10917 G17T013",
+      "material": "Terbium_Oxide",
+      "sample": "10917_G17T013",
+      "chapter": "artificial",
+      "asd_subtype": "ASDFR",
+      "record": 20142,
+      "value_count": 2151,
+      "path": "spectra/artificial/splib07a_Terbium_Oxide_10917_G17T013_ASDFRa_AREF.txt"
+    },
+    {
+      "name": "Terra_Pozzuoli GDS806",
+      "material": "Terra_Pozzuoli",
+      "sample": "GDS806",
+      "chapter": "artificial",
+      "asd_subtype": "ASDFR",
+      "record": 20151,
+      "value_count": 2151,
+      "path": "spectra/artificial/splib07a_Terra_Pozzuoli_GDS806_ASDFRa_AREF.txt"
+    },
+    {
+      "name": "Thulium_Oxide J.M. 318 S4939",
+      "material": "Thulium_Oxide",
+      "sample": "J.M._318_S4939",
+      "chapter": "artificial",
+      "asd_subtype": "ASDFR",
+      "record": 20169,
+      "value_count": 2151,
+      "path": "spectra/artificial/splib07a_Thulium_Oxide_J.M._318_S4939_ASDFRa_AREF.txt"
+    },
+    {
+      "name": "Venetian_red GDS783",
+      "material": "Venetian_red",
+      "sample": "GDS783",
+      "chapter": "artificial",
+      "asd_subtype": "ASDFR",
+      "record": 20196,
+      "value_count": 2151,
+      "path": "spectra/artificial/splib07a_Venetian_red_GDS783_ASDFRa_AREF.txt"
+    },
+    {
+      "name": "Verdigris GDS789",
+      "material": "Verdigris",
+      "sample": "GDS789",
+      "chapter": "artificial",
+      "asd_subtype": "ASDFR",
+      "record": 20205,
+      "value_count": 2151,
+      "path": "spectra/artificial/splib07a_Verdigris_GDS789_ASDFRa_AREF.txt"
+    },
+    {
+      "name": "Vermiculite+0wt%amph. GDS327",
+      "material": "Vermiculite+0wt%amph.",
+      "sample": "GDS327",
+      "chapter": "artificial",
+      "asd_subtype": "ASDFR",
+      "record": 20740,
+      "value_count": 2151,
+      "path": "spectra/artificial/splib07a_Vermiculite+0wt%amph._GDS327_ASDFRb_AREF.txt"
+    },
+    {
+      "name": "Vermiculite+1wt%amph. GDS451",
+      "material": "Vermiculite+1wt%amph.",
+      "sample": "GDS451",
+      "chapter": "artificial",
+      "asd_subtype": "ASDFR",
+      "record": 20746,
+      "value_count": 2151,
+      "path": "spectra/artificial/splib07a_Vermiculite+1wt%amph._GDS451_ASDFRb_AREF.txt"
+    },
+    {
+      "name": "Vermiculite+5wt%amph. GDS454",
+      "material": "Vermiculite+5wt%amph.",
+      "sample": "GDS454",
+      "chapter": "artificial",
+      "asd_subtype": "ASDFR",
+      "record": 20752,
+      "value_count": 2151,
+      "path": "spectra/artificial/splib07a_Vermiculite+5wt%amph._GDS454_ASDFRb_AREF.txt"
+    },
+    {
+      "name": "Vermillion_GDS779",
+      "material": "Vermillion",
+      "sample": "GDS779",
+      "chapter": "artificial",
+      "asd_subtype": "ASDFR",
+      "record": 20761,
+      "value_count": 2151,
+      "path": "spectra/artificial/splib07a_Vermillion_GDS779_ASDFRa_AREF.txt"
+    },
+    {
+      "name": "Viridian GDS800",
+      "material": "Viridian",
+      "sample": "GDS800",
+      "chapter": "artificial",
+      "asd_subtype": "ASDFR",
+      "record": 20770,
+      "value_count": 2151,
+      "path": "spectra/artificial/splib07a_Viridian_GDS800_ASDFRa_AREF.txt"
+    },
+    {
+      "name": "Wood_Beam GDS363 Nw Pine 2X4",
+      "material": "Wood_Beam_GDS363_Nw_Pine",
+      "sample": "2X4",
+      "chapter": "artificial",
+      "asd_subtype": "ASDFR",
+      "record": 20779,
+      "value_count": 2151,
+      "path": "spectra/artificial/splib07a_Wood_Beam_GDS363_Nw_Pine_2X4_ASDFRa_AREF.txt"
+    },
+    {
+      "name": "Ytterbium_Oxide J.M. 319",
+      "material": "Ytterbium_Oxide",
+      "sample": "J.M._319",
+      "chapter": "artificial",
+      "asd_subtype": "ASDFR",
+      "record": 20819,
+      "value_count": 2151,
+      "path": "spectra/artificial/splib07a_Ytterbium_Oxide_J.M._319_ASDFRa_AREF.txt"
+    },
+    {
+      "name": "Yttrium_Oxide 5-9s SPEX",
+      "material": "Yttrium_Oxide_5-9s",
+      "sample": "SPEX",
+      "chapter": "artificial",
+      "asd_subtype": "ASDFR",
+      "record": 20837,
+      "value_count": 2151,
+      "path": "spectra/artificial/splib07a_Yttrium_Oxide_5-9s_SPEX_ASDFRa_AREF.txt"
+    },
+    {
+      "name": "Yttrium_Oxide J.M. 301",
+      "material": "Yttrium_Oxide",
+      "sample": "J.M._301",
+      "chapter": "artificial",
+      "asd_subtype": "ASDFR",
+      "record": 20828,
+      "value_count": 2151,
+      "path": "spectra/artificial/splib07a_Yttrium_Oxide_J.M._301_ASDFRa_AREF.txt"
+    },
+    {
+      "name": "Red_Coated_Algea_Water RCAW1",
+      "material": "Red_Coated_Algea_Water",
+      "sample": "RCAW1",
+      "chapter": "liquids",
+      "asd_subtype": "ASDFR",
+      "record": 13621,
+      "value_count": 2151,
+      "path": "spectra/liquids/splib07a_Red_Coated_Algea_Water_RCAW1_ASDFRa_AREF.txt"
+    },
+    {
+      "name": "Actinolite HS116.1B",
+      "material": "Actinolite",
+      "sample": "HS116.1B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 108,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Actinolite_HS116.1B_ASDFRb_AREF.txt"
+    },
+    {
+      "name": "Actinolite HS116.2B",
+      "material": "Actinolite",
+      "sample": "HS116.2B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 114,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Actinolite_HS116.2B_ASDFRb_AREF.txt"
+    },
+    {
+      "name": "Actinolite HS116.3B",
+      "material": "Actinolite",
+      "sample": "HS116.3B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 124,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Actinolite_HS116.3B_ASDFRb_AREF.txt"
+    },
+    {
+      "name": "Actinolite HS116.4B",
+      "material": "Actinolite",
+      "sample": "HS116.4B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 130,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Actinolite_HS116.4B_ASDFRb_AREF.txt"
+    },
+    {
+      "name": "Actinolite HS22.1B",
+      "material": "Actinolite",
+      "sample": "HS22.1B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 142,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Actinolite_HS22.1B_ASDFRb_AREF.txt"
+    },
+    {
+      "name": "Actinolite HS22.2B",
+      "material": "Actinolite",
+      "sample": "HS22.2B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 148,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Actinolite_HS22.2B_ASDFRb_AREF.txt"
+    },
+    {
+      "name": "Actinolite HS22.3B",
+      "material": "Actinolite",
+      "sample": "HS22.3B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 158,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Actinolite_HS22.3B_ASDFRb_AREF.txt"
+    },
+    {
+      "name": "Actinolite HS22.4B",
+      "material": "Actinolite",
+      "sample": "HS22.4B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 177,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Actinolite_HS22.4B_ASDFRb_AREF.txt"
+    },
+    {
+      "name": "Actinolite HS315.1B",
+      "material": "Actinolite",
+      "sample": "HS315.1B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 189,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Actinolite_HS315.1B_ASDFRb_AREF.txt"
+    },
+    {
+      "name": "Actinolite HS315.2B",
+      "material": "Actinolite",
+      "sample": "HS315.2B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 195,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Actinolite_HS315.2B_ASDFRb_AREF.txt"
+    },
+    {
+      "name": "Actinolite HS315.4B",
+      "material": "Actinolite",
+      "sample": "HS315.4B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 205,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Actinolite_HS315.4B_ASDFRb_AREF.txt"
+    },
+    {
+      "name": "Allanite HS293.1B",
+      "material": "Allanite",
+      "sample": "HS293.1B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 441,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Allanite_HS293.1B_ASDFRb_AREF.txt"
+    },
+    {
+      "name": "Allanite HS293.2B",
+      "material": "Allanite",
+      "sample": "HS293.2B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 447,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Allanite_HS293.2B_ASDFRb_AREF.txt"
+    },
+    {
+      "name": "Allanite HS293.3B",
+      "material": "Allanite",
+      "sample": "HS293.3B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 457,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Allanite_HS293.3B_ASDFRb_AREF.txt"
+    },
+    {
+      "name": "Allanite HS293.4B",
+      "material": "Allanite",
+      "sample": "HS293.4B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 476,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Allanite_HS293.4B_ASDFRb_AREF.txt"
+    },
+    {
+      "name": "Allanite HS293.6",
+      "material": "Allanite",
+      "sample": "HS293.6",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 482,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Allanite_HS293.6_ASDFRb_AREF.txt"
+    },
+    {
+      "name": "Allanite_REE crystal WS532",
+      "material": "Allanite_REE_crystal",
+      "sample": "WS532",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 491,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Allanite_REE_crystal_WS532_ASDFRa_AREF.txt"
+    },
+    {
+      "name": "Alunite HS295.1B",
+      "material": "Alunite",
+      "sample": "HS295.1B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 821,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Alunite_HS295.1B_ASDFRa_AREF.txt"
+    },
+    {
+      "name": "Alunite HS295.3B",
+      "material": "Alunite",
+      "sample": "HS295.3B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 837,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Alunite_HS295.3B_ASDFRa_AREF.txt"
+    },
+    {
+      "name": "Alunite HS295.3B",
+      "material": "Alunite",
+      "sample": "HS295.3B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDNG",
+      "record": 843,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Alunite_HS295.3B_ASDNGa_AREF.txt"
+    },
+    {
+      "name": "Alunite HS295.4B",
+      "material": "Alunite",
+      "sample": "HS295.4B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 868,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Alunite_HS295.4B_ASDFRa_AREF.txt"
+    },
+    {
+      "name": "Alunite HS295.6",
+      "material": "Alunite",
+      "sample": "HS295.6",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 874,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Alunite_HS295.6_ASDFRb_AREF.txt"
+    },
+    {
+      "name": "Alunite HS295",
+      "material": "Alunite",
+      "sample": "HS295",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 827,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Alunite_HS295_ASDFRa_AREF.txt"
+    },
+    {
+      "name": "Ancylite_REE WS321 Darby MT",
+      "material": "Ancylite_REE_WS321_Darby",
+      "sample": "MT",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 1103,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Ancylite_REE_WS321_Darby_MT_ASDFRc_AREF.txt"
+    },
+    {
+      "name": "Andesine HS142.1B",
+      "material": "Andesine",
+      "sample": "HS142.1B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 1148,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Andesine_HS142.1B_ASDFRc_AREF.txt"
+    },
+    {
+      "name": "Andesine HS142.2B",
+      "material": "Andesine",
+      "sample": "HS142.2B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 1154,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Andesine_HS142.2B_ASDFRc_AREF.txt"
+    },
+    {
+      "name": "Andesine HS142.3B",
+      "material": "Andesine",
+      "sample": "HS142.3B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 1164,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Andesine_HS142.3B_ASDFRc_AREF.txt"
+    },
+    {
+      "name": "Andesine HS142.4B",
+      "material": "Andesine",
+      "sample": "HS142.4B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 1183,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Andesine_HS142.4B_ASDFRc_AREF.txt"
+    },
+    {
+      "name": "Anthophyllite HS286.1B",
+      "material": "Anthophyllite",
+      "sample": "HS286.1B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 1470,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Anthophyllite_HS286.1B_ASDFRc_AREF.txt"
+    },
+    {
+      "name": "Anthophyllite HS286.2B",
+      "material": "Anthophyllite",
+      "sample": "HS286.2B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 1476,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Anthophyllite_HS286.2B_ASDFRc_AREF.txt"
+    },
+    {
+      "name": "Anthophyllite HS286.3B",
+      "material": "Anthophyllite",
+      "sample": "HS286.3B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 1486,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Anthophyllite_HS286.3B_ASDFRc_AREF.txt"
+    },
+    {
+      "name": "Anthophyllite HS286.4B",
+      "material": "Anthophyllite",
+      "sample": "HS286.4B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 1505,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Anthophyllite_HS286.4B_ASDFRc_AREF.txt"
+    },
+    {
+      "name": "Aragonite GDS1073",
+      "material": "Aragonite",
+      "sample": "GDS1073",
+      "chapter": "minerals",
+      "asd_subtype": "ASDNG",
+      "record": 1642,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Aragonite_GDS1073_ASDNGc_AREF.txt"
+    },
+    {
+      "name": "Arsenopyrite HS262.1B",
+      "material": "Arsenopyrite",
+      "sample": "HS262.1B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 1658,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Arsenopyrite_HS262.1B_ASDFRc_AREF.txt"
+    },
+    {
+      "name": "Arsenopyrite HS262.2B",
+      "material": "Arsenopyrite",
+      "sample": "HS262.2B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 1664,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Arsenopyrite_HS262.2B_ASDFRc_AREF.txt"
+    },
+    {
+      "name": "Arsenopyrite HS262.3B",
+      "material": "Arsenopyrite",
+      "sample": "HS262.3B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 1674,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Arsenopyrite_HS262.3B_ASDFRc_AREF.txt"
+    },
+    {
+      "name": "Arsenopyrite HS262.4B",
+      "material": "Arsenopyrite",
+      "sample": "HS262.4B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 1693,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Arsenopyrite_HS262.4B_ASDFRc_AREF.txt"
+    },
+    {
+      "name": "Axinite HS342.1B",
+      "material": "Axinite",
+      "sample": "HS342.1B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 1754,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Axinite_HS342.1B_ASDFRb_AREF.txt"
+    },
+    {
+      "name": "Axinite HS342.2B",
+      "material": "Axinite",
+      "sample": "HS342.2B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 1760,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Axinite_HS342.2B_ASDFRb_AREF.txt"
+    },
+    {
+      "name": "Axinite HS342.3B",
+      "material": "Axinite",
+      "sample": "HS342.3B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 1770,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Axinite_HS342.3B_ASDFRb_AREF.txt"
+    },
+    {
+      "name": "Axinite HS342.4B",
+      "material": "Axinite",
+      "sample": "HS342.4B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 1789,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Axinite_HS342.4B_ASDFRb_AREF.txt"
+    },
+    {
+      "name": "Axinite HS342.6",
+      "material": "Axinite",
+      "sample": "HS342.6",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 1795,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Axinite_HS342.6_ASDFRb_AREF.txt"
+    },
+    {
+      "name": "Beidellite GDS124",
+      "material": "Beidellite",
+      "sample": "GDS124",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 1861,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Beidellite_GDS124_ASDFRb_AREF.txt"
+    },
+    {
+      "name": "Beryl HS180.1B",
+      "material": "Beryl",
+      "sample": "HS180.1B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 1905,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Beryl_HS180.1B_ASDFRa_AREF.txt"
+    },
+    {
+      "name": "Beryl HS180.2B",
+      "material": "Beryl",
+      "sample": "HS180.2B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 1911,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Beryl_HS180.2B_ASDFRa_AREF.txt"
+    },
+    {
+      "name": "Beryl HS180.3B",
+      "material": "Beryl",
+      "sample": "HS180.3B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 1921,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Beryl_HS180.3B_ASDFRa_AREF.txt"
+    },
+    {
+      "name": "Beryl HS180.4B",
+      "material": "Beryl",
+      "sample": "HS180.4B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 1940,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Beryl_HS180.4B_ASDFRa_AREF.txt"
+    },
+    {
+      "name": "Beryl HS180.6",
+      "material": "Beryl",
+      "sample": "HS180.6",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 1946,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Beryl_HS180.6_ASDFRa_AREF.txt"
+    },
+    {
+      "name": "Bronzite HS9.1B",
+      "material": "Bronzite",
+      "sample": "HS9.1B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 2021,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Bronzite_HS9.1B_ASDFRb_AREF.txt"
+    },
+    {
+      "name": "Bronzite HS9.2B",
+      "material": "Bronzite",
+      "sample": "HS9.2B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 2027,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Bronzite_HS9.2B_ASDFRc_AREF.txt"
+    },
+    {
+      "name": "Bronzite HS9.3B",
+      "material": "Bronzite",
+      "sample": "HS9.3B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 2037,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Bronzite_HS9.3B_ASDFRc_AREF.txt"
+    },
+    {
+      "name": "Bronzite HS9.4B",
+      "material": "Bronzite",
+      "sample": "HS9.4B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 2056,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Bronzite_HS9.4B_ASDFRc_AREF.txt"
+    },
+    {
+      "name": "Brookite HS443.2B",
+      "material": "Brookite",
+      "sample": "HS443.2B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 2069,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Brookite_HS443.2B_ASDFRb_AREF.txt"
+    },
+    {
+      "name": "Brookite HS443.6",
+      "material": "Brookite",
+      "sample": "HS443.6",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 2088,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Brookite_HS443.6_ASDFRb_AREF.txt"
+    },
+    {
+      "name": "Brucite HS247.1B",
+      "material": "Brucite",
+      "sample": "HS247.1B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 2099,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Brucite_HS247.1B_ASDFRc_AREF.txt"
+    },
+    {
+      "name": "Brucite HS247.2B",
+      "material": "Brucite",
+      "sample": "HS247.2B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 2105,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Brucite_HS247.2B_ASDFRc_AREF.txt"
+    },
+    {
+      "name": "Brucite HS247.3B",
+      "material": "Brucite",
+      "sample": "HS247.3B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 2115,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Brucite_HS247.3B_ASDFRc_AREF.txt"
+    },
+    {
+      "name": "Brucite HS247.4B",
+      "material": "Brucite",
+      "sample": "HS247.4B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 2134,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Brucite_HS247.4B_ASDFRc_AREF.txt"
+    },
+    {
+      "name": "Calcite WS272",
+      "material": "Calcite",
+      "sample": "WS272",
+      "chapter": "minerals",
+      "asd_subtype": "ASDNG",
+      "record": 2278,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Calcite_WS272_ASDNGa_AREF.txt"
+    },
+    {
+      "name": "Carbon_Black GDS68",
+      "material": "Carbon_Black",
+      "sample": "GDS68",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 2320,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Carbon_Black_GDS68_ASDFRa_AREF.txt"
+    },
+    {
+      "name": "Carnallite HS430.1B",
+      "material": "Carnallite",
+      "sample": "HS430.1B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 2331,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Carnallite_HS430.1B_ASDFRa_AREF.txt"
+    },
+    {
+      "name": "Carnallite HS430.2B",
+      "material": "Carnallite",
+      "sample": "HS430.2B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 2337,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Carnallite_HS430.2B_ASDFRa_AREF.txt"
+    },
+    {
+      "name": "Carnallite HS430.3B",
+      "material": "Carnallite",
+      "sample": "HS430.3B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 2343,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Carnallite_HS430.3B_ASDFRa_AREF.txt"
+    },
+    {
+      "name": "Carnallite HS430.4B",
+      "material": "Carnallite",
+      "sample": "HS430.4B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 2362,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Carnallite_HS430.4B_ASDFRa_AREF.txt"
+    },
+    {
+      "name": "Carnallite HS430.6",
+      "material": "Carnallite",
+      "sample": "HS430.6",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 2368,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Carnallite_HS430.6_ASDFRa_AREF.txt"
+    },
+    {
+      "name": "Cassiterite HS279.1B",
+      "material": "Cassiterite",
+      "sample": "HS279.1B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 2399,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Cassiterite_HS279.1B_ASDFRc_AREF.txt"
+    },
+    {
+      "name": "Cassiterite HS279.2B",
+      "material": "Cassiterite",
+      "sample": "HS279.2B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 2405,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Cassiterite_HS279.2B_ASDFRc_AREF.txt"
+    },
+    {
+      "name": "Cassiterite HS279.3B",
+      "material": "Cassiterite",
+      "sample": "HS279.3B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 2415,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Cassiterite_HS279.3B_ASDFRc_AREF.txt"
+    },
+    {
+      "name": "Cassiterite HS279.4B",
+      "material": "Cassiterite",
+      "sample": "HS279.4B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 2434,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Cassiterite_HS279.4B_ASDFRc_AREF.txt"
+    },
+    {
+      "name": "Chalcopyrite HS431.1B",
+      "material": "Chalcopyrite",
+      "sample": "HS431.1B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 2521,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Chalcopyrite_HS431.1B_ASDFRb_AREF.txt"
+    },
+    {
+      "name": "Chalcopyrite HS431.2B",
+      "material": "Chalcopyrite",
+      "sample": "HS431.2B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 2527,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Chalcopyrite_HS431.2B_ASDFRb_AREF.txt"
+    },
+    {
+      "name": "Chalcopyrite HS431.3B",
+      "material": "Chalcopyrite",
+      "sample": "HS431.3B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 2537,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Chalcopyrite_HS431.3B_ASDFRb_AREF.txt"
+    },
+    {
+      "name": "Chalcopyrite HS431.4B",
+      "material": "Chalcopyrite",
+      "sample": "HS431.4B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 2556,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Chalcopyrite_HS431.4B_ASDFRb_AREF.txt"
+    },
+    {
+      "name": "Chlorapatite WS423",
+      "material": "Chlorapatite",
+      "sample": "WS423",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 2591,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Chlorapatite_WS423_ASDFRc_AREF.txt"
+    },
+    {
+      "name": "Chlorite HS179.1B",
+      "material": "Chlorite",
+      "sample": "HS179.1B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 2614,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Chlorite_HS179.1B_ASDFRb_AREF.txt"
+    },
+    {
+      "name": "Chlorite HS179.2B",
+      "material": "Chlorite",
+      "sample": "HS179.2B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 2620,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Chlorite_HS179.2B_ASDFRb_AREF.txt"
+    },
+    {
+      "name": "Chlorite HS179.3B",
+      "material": "Chlorite",
+      "sample": "HS179.3B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 2626,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Chlorite_HS179.3B_ASDFRb_AREF.txt"
+    },
+    {
+      "name": "Chlorite HS179.4B",
+      "material": "Chlorite",
+      "sample": "HS179.4B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 2645,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Chlorite_HS179.4B_ASDFRb_AREF.txt"
+    },
+    {
+      "name": "Chlorite HS179.6",
+      "material": "Chlorite",
+      "sample": "HS179.6",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 2651,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Chlorite_HS179.6_ASDFRb_AREF.txt"
+    },
+    {
+      "name": "Chromite HS281.1B",
+      "material": "Chromite",
+      "sample": "HS281.1B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 2768,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Chromite_HS281.1B_ASDFRc_AREF.txt"
+    },
+    {
+      "name": "Chromite HS281.2B",
+      "material": "Chromite",
+      "sample": "HS281.2B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 2774,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Chromite_HS281.2B_ASDFRc_AREF.txt"
+    },
+    {
+      "name": "Chromite HS281.3B",
+      "material": "Chromite",
+      "sample": "HS281.3B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 2780,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Chromite_HS281.3B_ASDFRc_AREF.txt"
+    },
+    {
+      "name": "Chromite HS281.4B",
+      "material": "Chromite",
+      "sample": "HS281.4B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 2799,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Chromite_HS281.4B_ASDFRc_AREF.txt"
+    },
+    {
+      "name": "Chrysocolla HS297.1B",
+      "material": "Chrysocolla",
+      "sample": "HS297.1B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 2809,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Chrysocolla_HS297.1B_ASDFRb_AREF.txt"
+    },
+    {
+      "name": "Chrysocolla HS297.2B",
+      "material": "Chrysocolla",
+      "sample": "HS297.2B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 2815,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Chrysocolla_HS297.2B_ASDFRb_AREF.txt"
+    },
+    {
+      "name": "Chrysocolla HS297.3B",
+      "material": "Chrysocolla",
+      "sample": "HS297.3B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 2821,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Chrysocolla_HS297.3B_ASDFRb_AREF.txt"
+    },
+    {
+      "name": "Chrysocolla HS297.4B",
+      "material": "Chrysocolla",
+      "sample": "HS297.4B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 2840,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Chrysocolla_HS297.4B_ASDFRb_AREF.txt"
+    },
+    {
+      "name": "Chrysotile HS323.1B",
+      "material": "Chrysotile",
+      "sample": "HS323.1B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDNG",
+      "record": 2853,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Chrysotile_HS323.1B_ASDNGa_AREF.txt"
+    },
+    {
+      "name": "Corundum HS283.1B",
+      "material": "Corundum",
+      "sample": "HS283.1B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 3282,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Corundum_HS283.1B_ASDFRc_AREF.txt"
+    },
+    {
+      "name": "Corundum HS283.2B",
+      "material": "Corundum",
+      "sample": "HS283.2B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 3288,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Corundum_HS283.2B_ASDFRc_AREF.txt"
+    },
+    {
+      "name": "Corundum HS283.4B",
+      "material": "Corundum",
+      "sample": "HS283.4B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 3298,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Corundum_HS283.4B_ASDFRc_AREF.txt"
+    },
+    {
+      "name": "Cummingtonite HS294.1B",
+      "material": "Cummingtonite",
+      "sample": "HS294.1B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 3328,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Cummingtonite_HS294.1B_ASDFRc_AREF.txt"
+    },
+    {
+      "name": "Cummingtonite HS294.2B",
+      "material": "Cummingtonite",
+      "sample": "HS294.2B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 3334,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Cummingtonite_HS294.2B_ASDFRc_AREF.txt"
+    },
+    {
+      "name": "Cummingtonite HS294.3B",
+      "material": "Cummingtonite",
+      "sample": "HS294.3B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 3344,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Cummingtonite_HS294.3B_ASDFRc_AREF.txt"
+    },
+    {
+      "name": "Cummingtonite HS294.4B",
+      "material": "Cummingtonite",
+      "sample": "HS294.4B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 3363,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Cummingtonite_HS294.4B_ASDFRc_AREF.txt"
+    },
+    {
+      "name": "Cummingtonite HS294.6",
+      "material": "Cummingtonite",
+      "sample": "HS294.6",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 3369,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Cummingtonite_HS294.6_ASDFRc_AREF.txt"
+    },
+    {
+      "name": "Cuprite HS127.2B",
+      "material": "Cuprite",
+      "sample": "HS127.2B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 3379,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Cuprite_HS127.2B_ASDFRb_AREF.txt"
+    },
+    {
+      "name": "Cuprite HS127.3B",
+      "material": "Cuprite",
+      "sample": "HS127.3B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 3389,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Cuprite_HS127.3B_ASDFRb_AREF.txt"
+    },
+    {
+      "name": "Cuprite HS127.4B",
+      "material": "Cuprite",
+      "sample": "HS127.4B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 3408,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Cuprite_HS127.4B_ASDFRb_AREF.txt"
+    },
+    {
+      "name": "Datolite HS442.1B",
+      "material": "Datolite",
+      "sample": "HS442.1B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 3419,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Datolite_HS442.1B_ASDFRb_AREF.txt"
+    },
+    {
+      "name": "Datolite HS442.2B",
+      "material": "Datolite",
+      "sample": "HS442.2B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 3425,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Datolite_HS442.2B_ASDFRb_AREF.txt"
+    },
+    {
+      "name": "Datolite HS442.4B",
+      "material": "Datolite",
+      "sample": "HS442.4B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 3448,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Datolite_HS442.4B_ASDFRb_AREF.txt"
+    },
+    {
+      "name": "Diaspore HS416.1B",
+      "material": "Diaspore",
+      "sample": "HS416.1B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 3465,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Diaspore_HS416.1B_ASDFRb_AREF.txt"
+    },
+    {
+      "name": "Diaspore HS416.2B",
+      "material": "Diaspore",
+      "sample": "HS416.2B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 3471,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Diaspore_HS416.2B_ASDFRb_AREF.txt"
+    },
+    {
+      "name": "Diaspore HS416.3B",
+      "material": "Diaspore",
+      "sample": "HS416.3B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 3481,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Diaspore_HS416.3B_ASDFRb_AREF.txt"
+    },
+    {
+      "name": "Diaspore HS416.4B",
+      "material": "Diaspore",
+      "sample": "HS416.4B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 3500,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Diaspore_HS416.4B_ASDFRb_AREF.txt"
+    },
+    {
+      "name": "Diaspore HS416.6",
+      "material": "Diaspore",
+      "sample": "HS416.6",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 3506,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Diaspore_HS416.6_ASDFRb_AREF.txt"
+    },
+    {
+      "name": "Dickite NMNH106242",
+      "material": "Dickite",
+      "sample": "NMNH106242",
+      "chapter": "minerals",
+      "asd_subtype": "ASDNG",
+      "record": 3519,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Dickite_NMNH106242_ASDNGb_AREF.txt"
+    },
+    {
+      "name": "Dolomite HS102.1B",
+      "material": "Dolomite",
+      "sample": "HS102.1B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDNG",
+      "record": 3708,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Dolomite_HS102.1B_ASDNGb_AREF.txt"
+    },
+    {
+      "name": "Dolomite HS102.3B",
+      "material": "Dolomite",
+      "sample": "HS102.3B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDNG",
+      "record": 3724,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Dolomite_HS102.3B_ASDNGb_AREF.txt"
+    },
+    {
+      "name": "Dolomite HS102.4B",
+      "material": "Dolomite",
+      "sample": "HS102.4B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDNG",
+      "record": 3749,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Dolomite_HS102.4B_ASDNGb_AREF.txt"
+    },
+    {
+      "name": "Forsterite_REE AZ-01 ASU",
+      "material": "Forsterite_REE_AZ-01",
+      "sample": "ASU",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 4078,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Forsterite_REE_AZ-01_ASU_ASDFRa_AREF.txt"
+    },
+    {
+      "name": "Galena HS37.3",
+      "material": "Galena",
+      "sample": "HS37.3",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 4088,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Galena_HS37.3_ASDFRb_AREF.txt"
+    },
+    {
+      "name": "Gibbsite HS423.1B",
+      "material": "Gibbsite",
+      "sample": "HS423.1B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 4194,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Gibbsite_HS423.1B_ASDFRb_AREF.txt"
+    },
+    {
+      "name": "Gibbsite HS423.2B",
+      "material": "Gibbsite",
+      "sample": "HS423.2B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 4200,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Gibbsite_HS423.2B_ASDFRb_AREF.txt"
+    },
+    {
+      "name": "Gibbsite HS423.3B",
+      "material": "Gibbsite",
+      "sample": "HS423.3B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 4210,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Gibbsite_HS423.3B_ASDFRb_AREF.txt"
+    },
+    {
+      "name": "Gibbsite HS423.4B",
+      "material": "Gibbsite",
+      "sample": "HS423.4B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 4229,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Gibbsite_HS423.4B_ASDFRb_AREF.txt"
+    },
+    {
+      "name": "Gibbsite HS423.6",
+      "material": "Gibbsite",
+      "sample": "HS423.6",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 4235,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Gibbsite_HS423.6_ASDFRb_AREF.txt"
+    },
+    {
+      "name": "Glauconite HS313.1B",
+      "material": "Glauconite",
+      "sample": "HS313.1B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 4252,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Glauconite_HS313.1B_ASDFRc_AREF.txt"
+    },
+    {
+      "name": "Glauconite HS313.3B",
+      "material": "Glauconite",
+      "sample": "HS313.3B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 4262,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Glauconite_HS313.3B_ASDFRc_AREF.txt"
+    },
+    {
+      "name": "Glauconite HS313.4B",
+      "material": "Glauconite",
+      "sample": "HS313.4B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 4281,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Glauconite_HS313.4B_ASDFRc_AREF.txt"
+    },
+    {
+      "name": "Glauconite HS313.6",
+      "material": "Glauconite",
+      "sample": "HS313.6",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 4287,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Glauconite_HS313.6_ASDFRc_AREF.txt"
+    },
+    {
+      "name": "Glaucophane HS426.1B",
+      "material": "Glaucophane",
+      "sample": "HS426.1B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 4297,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Glaucophane_HS426.1B_ASDFRc_AREF.txt"
+    },
+    {
+      "name": "Glaucophane HS426.2B",
+      "material": "Glaucophane",
+      "sample": "HS426.2B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 4303,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Glaucophane_HS426.2B_ASDFRc_AREF.txt"
+    },
+    {
+      "name": "Glaucophane HS426.3B",
+      "material": "Glaucophane",
+      "sample": "HS426.3B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 4313,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Glaucophane_HS426.3B_ASDFRc_AREF.txt"
+    },
+    {
+      "name": "Glaucophane HS426.4B",
+      "material": "Glaucophane",
+      "sample": "HS426.4B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 4332,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Glaucophane_HS426.4B_ASDFRc_AREF.txt"
+    },
+    {
+      "name": "Glaucophane HS426.6",
+      "material": "Glaucophane",
+      "sample": "HS426.6",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 4338,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Glaucophane_HS426.6_ASDFRc_AREF.txt"
+    },
+    {
+      "name": "Goethite GDS134",
+      "material": "Goethite",
+      "sample": "GDS134",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 4347,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Goethite_GDS134_ASDFRb_AREF.txt"
+    },
+    {
+      "name": "Halite HS433.1B",
+      "material": "Halite",
+      "sample": "HS433.1B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 4623,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Halite_HS433.1B_ASDFRa_AREF.txt"
+    },
+    {
+      "name": "Halite HS433.2B",
+      "material": "Halite",
+      "sample": "HS433.2B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 4629,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Halite_HS433.2B_ASDFRa_AREF.txt"
+    },
+    {
+      "name": "Halite HS433.3B",
+      "material": "Halite",
+      "sample": "HS433.3B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 4639,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Halite_HS433.3B_ASDFRa_AREF.txt"
+    },
+    {
+      "name": "Halite HS433.4B",
+      "material": "Halite",
+      "sample": "HS433.4B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 4658,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Halite_HS433.4B_ASDFRa_AREF.txt"
+    },
+    {
+      "name": "Halite HS433.6",
+      "material": "Halite",
+      "sample": "HS433.6",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 4664,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Halite_HS433.6_ASDFRa_AREF.txt"
+    },
+    {
+      "name": "Halloysite NMNH106237",
+      "material": "Halloysite",
+      "sample": "NMNH106237",
+      "chapter": "minerals",
+      "asd_subtype": "ASDNG",
+      "record": 4713,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Halloysite_NMNH106237_ASDNGa_AREF.txt"
+    },
+    {
+      "name": "Hedenbergite HS10.1B",
+      "material": "Hedenbergite",
+      "sample": "HS10.1B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 4794,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Hedenbergite_HS10.1B_ASDFRc_AREF.txt"
+    },
+    {
+      "name": "Hedenbergite HS10.2B",
+      "material": "Hedenbergite",
+      "sample": "HS10.2B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 4800,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Hedenbergite_HS10.2B_ASDFRc_AREF.txt"
+    },
+    {
+      "name": "Hedenbergite HS10.3B",
+      "material": "Hedenbergite",
+      "sample": "HS10.3B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 4810,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Hedenbergite_HS10.3B_ASDFRc_AREF.txt"
+    },
+    {
+      "name": "Hedenbergite HS10.4B",
+      "material": "Hedenbergite",
+      "sample": "HS10.4B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 4829,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Hedenbergite_HS10.4B_ASDFRc_AREF.txt"
+    },
+    {
+      "name": "Hematite HS45.3",
+      "material": "Hematite",
+      "sample": "HS45.3",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 5001,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Hematite_HS45.3_ASDFRb_AREF.txt"
+    },
+    {
+      "name": "Hornblende HS16.2B",
+      "material": "Hornblende",
+      "sample": "HS16.2B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 5072,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Hornblende_HS16.2B_ASDFRb_AREF.txt"
+    },
+    {
+      "name": "Hornblende HS16.3B",
+      "material": "Hornblende",
+      "sample": "HS16.3B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 5082,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Hornblende_HS16.3B_ASDFRb_AREF.txt"
+    },
+    {
+      "name": "Hornblende HS16.4B",
+      "material": "Hornblende",
+      "sample": "HS16.4B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 5101,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Hornblende_HS16.4B_ASDFRb_AREF.txt"
+    },
+    {
+      "name": "Hornblende HS16.6",
+      "material": "Hornblende",
+      "sample": "HS16.6",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 5107,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Hornblende_HS16.6_ASDFRb_AREF.txt"
+    },
+    {
+      "name": "Hornblende HS177.1B",
+      "material": "Hornblende",
+      "sample": "HS177.1B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 5119,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Hornblende_HS177.1B_ASDFRc_AREF.txt"
+    },
+    {
+      "name": "Hornblende HS177.3B",
+      "material": "Hornblende",
+      "sample": "HS177.3B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 5129,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Hornblende_HS177.3B_ASDFRc_AREF.txt"
+    },
+    {
+      "name": "Hornblende HS177.4B",
+      "material": "Hornblende",
+      "sample": "HS177.4B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 5148,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Hornblende_HS177.4B_ASDFRc_AREF.txt"
+    },
+    {
+      "name": "Hornblende HS177.6",
+      "material": "Hornblende",
+      "sample": "HS177.6",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 5154,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Hornblende_HS177.6_ASDFRc_AREF.txt"
+    },
+    {
+      "name": "Ilmenite HS231.2B",
+      "material": "Ilmenite",
+      "sample": "HS231.2B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 5555,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Ilmenite_HS231.2B_ASDFRb_AREF.txt"
+    },
+    {
+      "name": "Ilmenite HS231.3B",
+      "material": "Ilmenite",
+      "sample": "HS231.3B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 5565,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Ilmenite_HS231.3B_ASDFRb_AREF.txt"
+    },
+    {
+      "name": "Ilmenite HS231.4B",
+      "material": "Ilmenite",
+      "sample": "HS231.4B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 5584,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Ilmenite_HS231.4B_ASDFRb_AREF.txt"
+    },
+    {
+      "name": "Jadeite HS343.1B",
+      "material": "Jadeite",
+      "sample": "HS343.1B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 5594,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Jadeite_HS343.1B_ASDFRb_AREF.txt"
+    },
+    {
+      "name": "Jadeite HS343.2B",
+      "material": "Jadeite",
+      "sample": "HS343.2B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 5600,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Jadeite_HS343.2B_ASDFRb_AREF.txt"
+    },
+    {
+      "name": "Jadeite HS343.3B",
+      "material": "Jadeite",
+      "sample": "HS343.3B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 5610,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Jadeite_HS343.3B_ASDFRb_AREF.txt"
+    },
+    {
+      "name": "Jadeite HS343.4B",
+      "material": "Jadeite",
+      "sample": "HS343.4B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 5629,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Jadeite_HS343.4B_ASDFRb_AREF.txt"
+    },
+    {
+      "name": "Jadeite HS343.6",
+      "material": "Jadeite",
+      "sample": "HS343.6",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 5635,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Jadeite_HS343.6_ASDFRb_AREF.txt"
+    },
+    {
+      "name": "Kaolinite CM9",
+      "material": "Kaolinite",
+      "sample": "CM9",
+      "chapter": "minerals",
+      "asd_subtype": "ASDNG",
+      "record": 5980,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Kaolinite_CM9_ASDNGb_AREF.txt"
+    },
+    {
+      "name": "Karpatite GDS978",
+      "material": "Karpatite",
+      "sample": "GDS978",
+      "chapter": "minerals",
+      "asd_subtype": "ASDHR",
+      "record": 6129,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Karpatite_GDS978_ASDHRb_AREF.txt"
+    },
+    {
+      "name": "Knebelite HS419.1B",
+      "material": "Knebelite",
+      "sample": "HS419.1B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 6194,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Knebelite_HS419.1B_ASDFRb_AREF.txt"
+    },
+    {
+      "name": "Knebelite HS419.2B",
+      "material": "Knebelite",
+      "sample": "HS419.2B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 6200,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Knebelite_HS419.2B_ASDFRb_AREF.txt"
+    },
+    {
+      "name": "Knebelite HS419.3B",
+      "material": "Knebelite",
+      "sample": "HS419.3B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 6210,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Knebelite_HS419.3B_ASDFRc_AREF.txt"
+    },
+    {
+      "name": "Knebelite HS419.4B",
+      "material": "Knebelite",
+      "sample": "HS419.4B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 6229,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Knebelite_HS419.4B_ASDFRc_AREF.txt"
+    },
+    {
+      "name": "Knebelite HS419.6",
+      "material": "Knebelite",
+      "sample": "HS419.6",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 6235,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Knebelite_HS419.6_ASDFRc_AREF.txt"
+    },
+    {
+      "name": "Labradorite HS17.1B",
+      "material": "Labradorite",
+      "sample": "HS17.1B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 6245,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Labradorite_HS17.1B_ASDFRc_AREF.txt"
+    },
+    {
+      "name": "Labradorite HS17.2B",
+      "material": "Labradorite",
+      "sample": "HS17.2B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 6251,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Labradorite_HS17.2B_ASDFRc_AREF.txt"
+    },
+    {
+      "name": "Labradorite HS17.3B",
+      "material": "Labradorite",
+      "sample": "HS17.3B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 6261,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Labradorite_HS17.3B_ASDFRc_AREF.txt"
+    },
+    {
+      "name": "Labradorite HS17.4B",
+      "material": "Labradorite",
+      "sample": "HS17.4B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 6280,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Labradorite_HS17.4B_ASDFRc_AREF.txt"
+    },
+    {
+      "name": "Lazurite HS418.1B",
+      "material": "Lazurite",
+      "sample": "HS418.1B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 6310,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Lazurite_HS418.1B_ASDFRb_AREF.txt"
+    },
+    {
+      "name": "Lazurite HS418.2B",
+      "material": "Lazurite",
+      "sample": "HS418.2B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 6316,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Lazurite_HS418.2B_ASDFRb_AREF.txt"
+    },
+    {
+      "name": "Lazurite HS418.3B",
+      "material": "Lazurite",
+      "sample": "HS418.3B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 6326,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Lazurite_HS418.3B_ASDFRb_AREF.txt"
+    },
+    {
+      "name": "Lazurite HS418.4B",
+      "material": "Lazurite",
+      "sample": "HS418.4B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 6345,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Lazurite_HS418.4B_ASDFRb_AREF.txt"
+    },
+    {
+      "name": "Lepidolite HS167.1B",
+      "material": "Lepidolite",
+      "sample": "HS167.1B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 6377,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Lepidolite_HS167.1B_ASDFRb_AREF.txt"
+    },
+    {
+      "name": "Lepidolite HS167.2B",
+      "material": "Lepidolite",
+      "sample": "HS167.2B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 6383,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Lepidolite_HS167.2B_ASDFRb_AREF.txt"
+    },
+    {
+      "name": "Lepidolite HS167.3B",
+      "material": "Lepidolite",
+      "sample": "HS167.3B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 6393,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Lepidolite_HS167.3B_ASDFRb_AREF.txt"
+    },
+    {
+      "name": "Lepidolite HS167.4B",
+      "material": "Lepidolite",
+      "sample": "HS167.4B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 6412,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Lepidolite_HS167.4B_ASDFRb_AREF.txt"
+    },
+    {
+      "name": "Lepidolite HS167.6",
+      "material": "Lepidolite",
+      "sample": "HS167.6",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 6418,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Lepidolite_HS167.6_ASDFRb_AREF.txt"
+    },
+    {
+      "name": "Magnetite HS195.1B",
+      "material": "Magnetite",
+      "sample": "HS195.1B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 6598,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Magnetite_HS195.1B_ASDFRb_AREF.txt"
+    },
+    {
+      "name": "Magnetite HS195.2B",
+      "material": "Magnetite",
+      "sample": "HS195.2B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 6604,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Magnetite_HS195.2B_ASDFRb_AREF.txt"
+    },
+    {
+      "name": "Magnetite HS195.3B",
+      "material": "Magnetite",
+      "sample": "HS195.3B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 6614,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Magnetite_HS195.3B_ASDFRb_AREF.txt"
+    },
+    {
+      "name": "Magnetite HS195.4B",
+      "material": "Magnetite",
+      "sample": "HS195.4B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 6633,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Magnetite_HS195.4B_ASDFRb_AREF.txt"
+    },
+    {
+      "name": "Magnetite HS78.1B",
+      "material": "Magnetite",
+      "sample": "HS78.1B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 6644,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Magnetite_HS78.1B_ASDFRb_AREF.txt"
+    },
+    {
+      "name": "Magnetite HS78.2B",
+      "material": "Magnetite",
+      "sample": "HS78.2B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 6650,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Magnetite_HS78.2B_ASDFRb_AREF.txt"
+    },
+    {
+      "name": "Magnetite HS78.3B",
+      "material": "Magnetite",
+      "sample": "HS78.3B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 6660,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Magnetite_HS78.3B_ASDFRb_AREF.txt"
+    },
+    {
+      "name": "Magnetite HS78.4B",
+      "material": "Magnetite",
+      "sample": "HS78.4B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 6679,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Magnetite_HS78.4B_ASDFRb_AREF.txt"
+    },
+    {
+      "name": "Malachite HS254.1B",
+      "material": "Malachite",
+      "sample": "HS254.1B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 6689,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Malachite_HS254.1B_ASDFRb_AREF.txt"
+    },
+    {
+      "name": "Malachite HS254.2B",
+      "material": "Malachite",
+      "sample": "HS254.2B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 6695,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Malachite_HS254.2B_ASDFRb_AREF.txt"
+    },
+    {
+      "name": "Malachite HS254.3B",
+      "material": "Malachite",
+      "sample": "HS254.3B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 6705,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Malachite_HS254.3B_ASDFRb_AREF.txt"
+    },
+    {
+      "name": "Malachite HS254.4B",
+      "material": "Malachite",
+      "sample": "HS254.4B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 6724,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Malachite_HS254.4B_ASDFRb_AREF.txt"
+    },
+    {
+      "name": "Monazite HS255.1B",
+      "material": "Monazite",
+      "sample": "HS255.1B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 7058,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Monazite_HS255.1B_ASDFRb_AREF.txt"
+    },
+    {
+      "name": "Monazite HS255.2B",
+      "material": "Monazite",
+      "sample": "HS255.2B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 7064,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Monazite_HS255.2B_ASDFRb_AREF.txt"
+    },
+    {
+      "name": "Monazite HS255.3B",
+      "material": "Monazite",
+      "sample": "HS255.3B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 7074,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Monazite_HS255.3B_ASDFRb_AREF.txt"
+    },
+    {
+      "name": "Monazite HS255.4B",
+      "material": "Monazite",
+      "sample": "HS255.4B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 7093,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Monazite_HS255.4B_ASDFRb_AREF.txt"
+    },
+    {
+      "name": "Monticellite HS339.1B",
+      "material": "Monticellite",
+      "sample": "HS339.1B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 7139,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Monticellite_HS339.1B_ASDFRb_AREF.txt"
+    },
+    {
+      "name": "Monticellite HS339.2B",
+      "material": "Monticellite",
+      "sample": "HS339.2B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 7145,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Monticellite_HS339.2B_ASDFRb_AREF.txt"
+    },
+    {
+      "name": "Monticellite HS339.3B",
+      "material": "Monticellite",
+      "sample": "HS339.3B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 7155,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Monticellite_HS339.3B_ASDFRc_AREF.txt"
+    },
+    {
+      "name": "Monticellite HS339.4B",
+      "material": "Monticellite",
+      "sample": "HS339.4B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 7174,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Monticellite_HS339.4B_ASDFRc_AREF.txt"
+    },
+    {
+      "name": "Muscovite HS146.1B",
+      "material": "Muscovite",
+      "sample": "HS146.1B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 7668,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Muscovite_HS146.1B_ASDFRa_AREF.txt"
+    },
+    {
+      "name": "Muscovite HS146.3B",
+      "material": "Muscovite",
+      "sample": "HS146.3B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 7678,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Muscovite_HS146.3B_ASDFRa_AREF.txt"
+    },
+    {
+      "name": "Muscovite HS146.4B",
+      "material": "Muscovite",
+      "sample": "HS146.4B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 7697,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Muscovite_HS146.4B_ASDFRa_AREF.txt"
+    },
+    {
+      "name": "Nepheline HS19.1B",
+      "material": "Nepheline",
+      "sample": "HS19.1B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 7812,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Nepheline_HS19.1B_ASDFRc_AREF.txt"
+    },
+    {
+      "name": "Nephrite HS296.1B",
+      "material": "Nephrite",
+      "sample": "HS296.1B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 7839,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Nephrite_HS296.1B_ASDFRc_AREF.txt"
+    },
+    {
+      "name": "Nephrite HS296.3B",
+      "material": "Nephrite",
+      "sample": "HS296.3B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 7849,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Nephrite_HS296.3B_ASDFRc_AREF.txt"
+    },
+    {
+      "name": "Nephrite HS296.4B",
+      "material": "Nephrite",
+      "sample": "HS296.4B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 7868,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Nephrite_HS296.4B_ASDFRc_AREF.txt"
+    },
+    {
+      "name": "Olivine HS420.1B",
+      "material": "Olivine",
+      "sample": "HS420.1B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 8192,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Olivine_HS420.1B_ASDFRc_AREF.txt"
+    },
+    {
+      "name": "Olivine HS420.2B",
+      "material": "Olivine",
+      "sample": "HS420.2B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 8198,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Olivine_HS420.2B_ASDFRc_AREF.txt"
+    },
+    {
+      "name": "Olivine HS420.3B",
+      "material": "Olivine",
+      "sample": "HS420.3B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 8208,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Olivine_HS420.3B_ASDFRc_AREF.txt"
+    },
+    {
+      "name": "Olivine HS420.4B",
+      "material": "Olivine",
+      "sample": "HS420.4B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 8227,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Olivine_HS420.4B_ASDFRc_AREF.txt"
+    },
+    {
+      "name": "Perthite HS415.1B",
+      "material": "Perthite",
+      "sample": "HS415.1B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 8539,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Perthite_HS415.1B_ASDFRc_AREF.txt"
+    },
+    {
+      "name": "Perthite HS415.2B",
+      "material": "Perthite",
+      "sample": "HS415.2B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 8545,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Perthite_HS415.2B_ASDFRc_AREF.txt"
+    },
+    {
+      "name": "Perthite HS415.3B",
+      "material": "Perthite",
+      "sample": "HS415.3B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 8555,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Perthite_HS415.3B_ASDFRc_AREF.txt"
+    },
+    {
+      "name": "Perthite HS415.4B",
+      "material": "Perthite",
+      "sample": "HS415.4B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 8574,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Perthite_HS415.4B_ASDFRc_AREF.txt"
+    },
+    {
+      "name": "Perthite HS415.6",
+      "material": "Perthite",
+      "sample": "HS415.6",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 8580,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Perthite_HS415.6_ASDFRc_AREF.txt"
+    },
+    {
+      "name": "Phlogopite HS23.1B",
+      "material": "Phlogopite",
+      "sample": "HS23.1B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 8614,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Phlogopite_HS23.1B_ASDFRa_AREF.txt"
+    },
+    {
+      "name": "Phlogopite HS23.2B",
+      "material": "Phlogopite",
+      "sample": "HS23.2B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 8620,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Phlogopite_HS23.2B_ASDFRa_AREF.txt"
+    },
+    {
+      "name": "Phlogopite HS23.3B",
+      "material": "Phlogopite",
+      "sample": "HS23.3B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 8630,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Phlogopite_HS23.3B_ASDFRa_AREF.txt"
+    },
+    {
+      "name": "Phlogopite HS23.4B",
+      "material": "Phlogopite",
+      "sample": "HS23.4B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 8649,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Phlogopite_HS23.4B_ASDFRc_AREF.txt"
+    },
+    {
+      "name": "Pigeonite HS199.1B",
+      "material": "Pigeonite",
+      "sample": "HS199.1B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 8702,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Pigeonite_HS199.1B_ASDFRb_AREF.txt"
+    },
+    {
+      "name": "Pigeonite HS199.2B",
+      "material": "Pigeonite",
+      "sample": "HS199.2B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 8708,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Pigeonite_HS199.2B_ASDFRc_AREF.txt"
+    },
+    {
+      "name": "Pigeonite HS199.3B",
+      "material": "Pigeonite",
+      "sample": "HS199.3B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 8718,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Pigeonite_HS199.3B_ASDFRc_AREF.txt"
+    },
+    {
+      "name": "Pigeonite HS199.4B",
+      "material": "Pigeonite",
+      "sample": "HS199.4B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 8737,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Pigeonite_HS199.4B_ASDFRd_AREF.txt"
+    },
+    {
+      "name": "Psilomelane HS139.1B",
+      "material": "Psilomelane",
+      "sample": "HS139.1B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 8927,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Psilomelane_HS139.1B_ASDFRb_AREF.txt"
+    },
+    {
+      "name": "Psilomelane HS139.2B",
+      "material": "Psilomelane",
+      "sample": "HS139.2B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 8933,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Psilomelane_HS139.2B_ASDFRb_AREF.txt"
+    },
+    {
+      "name": "Psilomelane HS139.3B",
+      "material": "Psilomelane",
+      "sample": "HS139.3B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 8943,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Psilomelane_HS139.3B_ASDFRb_AREF.txt"
+    },
+    {
+      "name": "Psilomelane HS139.4B",
+      "material": "Psilomelane",
+      "sample": "HS139.4B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 8962,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Psilomelane_HS139.4B_ASDFRb_AREF.txt"
+    },
+    {
+      "name": "Pyrolusite HS138.3B",
+      "material": "Pyrolusite",
+      "sample": "HS138.3B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 9056,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Pyrolusite_HS138.3B_ASDFRb_AREF.txt"
+    },
+    {
+      "name": "Pyroxene HS119.1B",
+      "material": "Pyroxene",
+      "sample": "HS119.1B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 9184,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Pyroxene_HS119.1B_ASDFRc_AREF.txt"
+    },
+    {
+      "name": "Pyroxene HS119.2B",
+      "material": "Pyroxene",
+      "sample": "HS119.2B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 9190,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Pyroxene_HS119.2B_ASDFRc_AREF.txt"
+    },
+    {
+      "name": "Pyroxene HS119.3B",
+      "material": "Pyroxene",
+      "sample": "HS119.3B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 9200,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Pyroxene_HS119.3B_ASDFRc_AREF.txt"
+    },
+    {
+      "name": "Pyroxene HS119.4B",
+      "material": "Pyroxene",
+      "sample": "HS119.4B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 9219,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Pyroxene_HS119.4B_ASDFRc_AREF.txt"
+    },
+    {
+      "name": "Pyrrhotite HS269.1B",
+      "material": "Pyrrhotite",
+      "sample": "HS269.1B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 9250,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Pyrrhotite_HS269.1B_ASDFRb_AREF.txt"
+    },
+    {
+      "name": "Pyrrhotite HS269.2B",
+      "material": "Pyrrhotite",
+      "sample": "HS269.2B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 9256,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Pyrrhotite_HS269.2B_ASDFRb_AREF.txt"
+    },
+    {
+      "name": "Pyrrhotite HS269.3B",
+      "material": "Pyrrhotite",
+      "sample": "HS269.3B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 9266,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Pyrrhotite_HS269.3B_ASDFRc_AREF.txt"
+    },
+    {
+      "name": "Pyrrhotite HS269.4B",
+      "material": "Pyrrhotite",
+      "sample": "HS269.4B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 9285,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Pyrrhotite_HS269.4B_ASDFRc_AREF.txt"
+    },
+    {
+      "name": "Quartz HS32.1B",
+      "material": "Quartz",
+      "sample": "HS32.1B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 9332,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Quartz_HS32.1B_ASDFRc_AREF.txt"
+    },
+    {
+      "name": "Quartz HS32.2B",
+      "material": "Quartz",
+      "sample": "HS32.2B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 9338,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Quartz_HS32.2B_ASDFRc_AREF.txt"
+    },
+    {
+      "name": "Quartz HS32.3B",
+      "material": "Quartz",
+      "sample": "HS32.3B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 9344,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Quartz_HS32.3B_ASDFRc_AREF.txt"
+    },
+    {
+      "name": "Rhodochrosite HS338.6",
+      "material": "Rhodochrosite",
+      "sample": "HS338.6",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 9425,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Rhodochrosite_HS338.6_ASDFRb_AREF.txt"
+    },
+    {
+      "name": "Serpentine HS318.1B",
+      "material": "Serpentine",
+      "sample": "HS318.1B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 9767,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Serpentine_HS318.1B_ASDFRc_AREF.txt"
+    },
+    {
+      "name": "Serpentine HS318.2B",
+      "material": "Serpentine",
+      "sample": "HS318.2B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 9773,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Serpentine_HS318.2B_ASDFRc_AREF.txt"
+    },
+    {
+      "name": "Serpentine HS318.3B",
+      "material": "Serpentine",
+      "sample": "HS318.3B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 9779,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Serpentine_HS318.3B_ASDFRc_AREF.txt"
+    },
+    {
+      "name": "Serpentine HS318.4B",
+      "material": "Serpentine",
+      "sample": "HS318.4B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 9789,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Serpentine_HS318.4B_ASDFRc_AREF.txt"
+    },
+    {
+      "name": "Serpentine HS318.6",
+      "material": "Serpentine",
+      "sample": "HS318.6",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 9795,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Serpentine_HS318.6_ASDFRc_AREF.txt"
+    },
+    {
+      "name": "Serpentine HS8.1B",
+      "material": "Serpentine",
+      "sample": "HS8.1B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 9805,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Serpentine_HS8.1B_ASDFRc_AREF.txt"
+    },
+    {
+      "name": "Serpentine HS8.2B",
+      "material": "Serpentine",
+      "sample": "HS8.2B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 9811,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Serpentine_HS8.2B_ASDFRc_AREF.txt"
+    },
+    {
+      "name": "Serpentine HS8.3B",
+      "material": "Serpentine",
+      "sample": "HS8.3B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 9821,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Serpentine_HS8.3B_ASDFRc_AREF.txt"
+    },
+    {
+      "name": "Serpentine HS8.4B",
+      "material": "Serpentine",
+      "sample": "HS8.4B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 9840,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Serpentine_HS8.4B_ASDFRc_AREF.txt"
+    },
+    {
+      "name": "Serpentine HS8.6",
+      "material": "Serpentine",
+      "sample": "HS8.6",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 9846,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Serpentine_HS8.6_ASDFRc_AREF.txt"
+    },
+    {
+      "name": "Siderite HS271.1B",
+      "material": "Siderite",
+      "sample": "HS271.1B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 9856,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Siderite_HS271.1B_ASDFRa_AREF.txt"
+    },
+    {
+      "name": "Siderite HS271.2B",
+      "material": "Siderite",
+      "sample": "HS271.2B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 9862,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Siderite_HS271.2B_ASDFRa_AREF.txt"
+    },
+    {
+      "name": "Siderite HS271.3B",
+      "material": "Siderite",
+      "sample": "HS271.3B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 9872,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Siderite_HS271.3B_ASDFRa_AREF.txt"
+    },
+    {
+      "name": "Siderite HS271.3B",
+      "material": "Siderite",
+      "sample": "HS271.3B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDNG",
+      "record": 9878,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Siderite_HS271.3B_ASDNGa_AREF.txt"
+    },
+    {
+      "name": "Siderite HS271.4B",
+      "material": "Siderite",
+      "sample": "HS271.4B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 9903,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Siderite_HS271.4B_ASDFRa_AREF.txt"
+    },
+    {
+      "name": "Sphalerite HS136.6",
+      "material": "Sphalerite",
+      "sample": "HS136.6",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 10107,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Sphalerite_HS136.6_ASDFRb_AREF.txt"
+    },
+    {
+      "name": "Spodumene HS210.1B",
+      "material": "Spodumene",
+      "sample": "HS210.1B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 10170,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Spodumene_HS210.1B_ASDFRc_AREF.txt"
+    },
+    {
+      "name": "Spodumene HS210.2B",
+      "material": "Spodumene",
+      "sample": "HS210.2B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 10176,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Spodumene_HS210.2B_ASDFRc_AREF.txt"
+    },
+    {
+      "name": "Spodumene HS210.3B",
+      "material": "Spodumene",
+      "sample": "HS210.3B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 10186,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Spodumene_HS210.3B_ASDFRc_AREF.txt"
+    },
+    {
+      "name": "Spodumene HS210.4B",
+      "material": "Spodumene",
+      "sample": "HS210.4B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 10205,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Spodumene_HS210.4B_ASDFRc_AREF.txt"
+    },
+    {
+      "name": "Staurolite HS188.1B",
+      "material": "Staurolite",
+      "sample": "HS188.1B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 10215,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Staurolite_HS188.1B_ASDFRb_AREF.txt"
+    },
+    {
+      "name": "Staurolite HS188.2B",
+      "material": "Staurolite",
+      "sample": "HS188.2B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 10221,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Staurolite_HS188.2B_ASDFRb_AREF.txt"
+    },
+    {
+      "name": "Staurolite HS188.3B",
+      "material": "Staurolite",
+      "sample": "HS188.3B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 10231,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Staurolite_HS188.3B_ASDFRc_AREF.txt"
+    },
+    {
+      "name": "Staurolite HS188.4B",
+      "material": "Staurolite",
+      "sample": "HS188.4B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 10250,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Staurolite_HS188.4B_ASDFRc_AREF.txt"
+    },
+    {
+      "name": "Strontianite HS272.1B",
+      "material": "Strontianite",
+      "sample": "HS272.1B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 10332,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Strontianite_HS272.1B_ASDFRb_AREF.txt"
+    },
+    {
+      "name": "Strontianite HS272.2B",
+      "material": "Strontianite",
+      "sample": "HS272.2B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 10338,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Strontianite_HS272.2B_ASDFRb_AREF.txt"
+    },
+    {
+      "name": "Strontianite HS272.3B",
+      "material": "Strontianite",
+      "sample": "HS272.3B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 10348,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Strontianite_HS272.3B_ASDFRb_AREF.txt"
+    },
+    {
+      "name": "Strontianite HS272.4B",
+      "material": "Strontianite",
+      "sample": "HS272.4B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 10367,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Strontianite_HS272.4B_ASDFRb_AREF.txt"
+    },
+    {
+      "name": "Talc GDS23",
+      "material": "Talc",
+      "sample": "GDS23",
+      "chapter": "minerals",
+      "asd_subtype": "ASDNG",
+      "record": 10417,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Talc_GDS23_ASDNGa_AREF.txt"
+    },
+    {
+      "name": "Talc HS21.1B",
+      "material": "Talc",
+      "sample": "HS21.1B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 10452,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Talc_HS21.1B_ASDFRb_AREF.txt"
+    },
+    {
+      "name": "Talc HS21.2B",
+      "material": "Talc",
+      "sample": "HS21.2B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 10458,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Talc_HS21.2B_ASDFRb_AREF.txt"
+    },
+    {
+      "name": "Talc HS21.3B",
+      "material": "Talc",
+      "sample": "HS21.3B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 10468,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Talc_HS21.3B_ASDFRb_AREF.txt"
+    },
+    {
+      "name": "Talc HS21.4B",
+      "material": "Talc",
+      "sample": "HS21.4B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 10487,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Talc_HS21.4B_ASDFRb_AREF.txt"
+    },
+    {
+      "name": "Thenardite HS450.1B",
+      "material": "Thenardite",
+      "sample": "HS450.1B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 10547,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Thenardite_HS450.1B_ASDFRc_AREF.txt"
+    },
+    {
+      "name": "Thenardite HS450.2B",
+      "material": "Thenardite",
+      "sample": "HS450.2B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 10553,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Thenardite_HS450.2B_ASDFRc_AREF.txt"
+    },
+    {
+      "name": "Thenardite HS450.3B",
+      "material": "Thenardite",
+      "sample": "HS450.3B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 10563,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Thenardite_HS450.3B_ASDFRc_AREF.txt"
+    },
+    {
+      "name": "Thenardite HS450.4B",
+      "material": "Thenardite",
+      "sample": "HS450.4B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 10569,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Thenardite_HS450.4B_ASDFRc_AREF.txt"
+    },
+    {
+      "name": "Topaz HS184.1B",
+      "material": "Topaz",
+      "sample": "HS184.1B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 10815,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Topaz_HS184.1B_ASDFRb_AREF.txt"
+    },
+    {
+      "name": "Topaz HS184.1B",
+      "material": "Topaz",
+      "sample": "HS184.1B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDNG",
+      "record": 10821,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Topaz_HS184.1B_ASDNGb_AREF.txt"
+    },
+    {
+      "name": "Topaz HS184.2B",
+      "material": "Topaz",
+      "sample": "HS184.2B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 10833,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Topaz_HS184.2B_ASDFRb_AREF.txt"
+    },
+    {
+      "name": "Topaz HS184.3B",
+      "material": "Topaz",
+      "sample": "HS184.3B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 10843,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Topaz_HS184.3B_ASDFRb_AREF.txt"
+    },
+    {
+      "name": "Topaz HS184.3B",
+      "material": "Topaz",
+      "sample": "HS184.3B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDNG",
+      "record": 10849,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Topaz_HS184.3B_ASDNGb_AREF.txt"
+    },
+    {
+      "name": "Topaz HS184.4B",
+      "material": "Topaz",
+      "sample": "HS184.4B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 10874,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Topaz_HS184.4B_ASDFRb_AREF.txt"
+    },
+    {
+      "name": "Topaz HS184.4B",
+      "material": "Topaz",
+      "sample": "HS184.4B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDNG",
+      "record": 10880,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Topaz_HS184.4B_ASDNGb_AREF.txt"
+    },
+    {
+      "name": "Tremolite HS18.1B",
+      "material": "Tremolite",
+      "sample": "HS18.1B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 11114,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Tremolite_HS18.1B_ASDFRc_AREF.txt"
+    },
+    {
+      "name": "Tremolite HS18.2B",
+      "material": "Tremolite",
+      "sample": "HS18.2B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 11120,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Tremolite_HS18.2B_ASDFRc_AREF.txt"
+    },
+    {
+      "name": "Tremolite HS18.3B",
+      "material": "Tremolite",
+      "sample": "HS18.3B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 11130,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Tremolite_HS18.3B_ASDFRc_AREF.txt"
+    },
+    {
+      "name": "Tremolite HS18.4B",
+      "material": "Tremolite",
+      "sample": "HS18.4B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 11149,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Tremolite_HS18.4B_ASDFRc_AREF.txt"
+    },
+    {
+      "name": "Ulexite HS441.1B",
+      "material": "Ulexite",
+      "sample": "HS441.1B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 11221,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Ulexite_HS441.1B_ASDFRa_AREF.txt"
+    },
+    {
+      "name": "Ulexite HS441.2B",
+      "material": "Ulexite",
+      "sample": "HS441.2B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 11227,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Ulexite_HS441.2B_ASDFRa_AREF.txt"
+    },
+    {
+      "name": "Ulexite HS441.3B",
+      "material": "Ulexite",
+      "sample": "HS441.3B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 11237,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Ulexite_HS441.3B_ASDFRa_AREF.txt"
+    },
+    {
+      "name": "Ulexite HS441.4B",
+      "material": "Ulexite",
+      "sample": "HS441.4B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 11256,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Ulexite_HS441.4B_ASDFRa_AREF.txt"
+    },
+    {
+      "name": "Uralite HS345.1B",
+      "material": "Uralite",
+      "sample": "HS345.1B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 11266,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Uralite_HS345.1B_ASDFRb_AREF.txt"
+    },
+    {
+      "name": "Uralite HS345.2B",
+      "material": "Uralite",
+      "sample": "HS345.2B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 11272,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Uralite_HS345.2B_ASDFRb_AREF.txt"
+    },
+    {
+      "name": "Uralite HS345.3B",
+      "material": "Uralite",
+      "sample": "HS345.3B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 11282,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Uralite_HS345.3B_ASDFRb_AREF.txt"
+    },
+    {
+      "name": "Uralite HS345.4B",
+      "material": "Uralite",
+      "sample": "HS345.4B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 11301,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Uralite_HS345.4B_ASDFRb_AREF.txt"
+    },
+    {
+      "name": "Uralite HS345.6",
+      "material": "Uralite",
+      "sample": "HS345.6",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 11307,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Uralite_HS345.6_ASDFRb_AREF.txt"
+    },
+    {
+      "name": "Witherite HS273.1B",
+      "material": "Witherite",
+      "sample": "HS273.1B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 11435,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Witherite_HS273.1B_ASDFRa_AREF.txt"
+    },
+    {
+      "name": "Witherite HS273.2B",
+      "material": "Witherite",
+      "sample": "HS273.2B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 11441,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Witherite_HS273.2B_ASDFRa_AREF.txt"
+    },
+    {
+      "name": "Witherite HS273.3B",
+      "material": "Witherite",
+      "sample": "HS273.3B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 11451,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Witherite_HS273.3B_ASDFRa_AREF.txt"
+    },
+    {
+      "name": "Witherite HS273.4B",
+      "material": "Witherite",
+      "sample": "HS273.4B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 11470,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Witherite_HS273.4B_ASDFRa_AREF.txt"
+    },
+    {
+      "name": "Wollastonite HS348.1B",
+      "material": "Wollastonite",
+      "sample": "HS348.1B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 11481,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Wollastonite_HS348.1B_ASDFRc_AREF.txt"
+    },
+    {
+      "name": "Wollastonite HS348.2B",
+      "material": "Wollastonite",
+      "sample": "HS348.2B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 11487,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Wollastonite_HS348.2B_ASDFRc_AREF.txt"
+    },
+    {
+      "name": "Wollastonite HS348.3B",
+      "material": "Wollastonite",
+      "sample": "HS348.3B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 11497,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Wollastonite_HS348.3B_ASDFRc_AREF.txt"
+    },
+    {
+      "name": "Wollastonite HS348.4B",
+      "material": "Wollastonite",
+      "sample": "HS348.4B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 11516,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Wollastonite_HS348.4B_ASDFRb_AREF.txt"
+    },
+    {
+      "name": "Xenotime GDS966 Iveland REE",
+      "material": "Xenotime_GDS966_Iveland",
+      "sample": "REE",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 11525,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Xenotime_GDS966_Iveland_REE_ASDFRa_AREF.txt"
+    },
+    {
+      "name": "Zoisite HS347.1B",
+      "material": "Zoisite",
+      "sample": "HS347.1B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 11542,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Zoisite_HS347.1B_ASDFRb_AREF.txt"
+    },
+    {
+      "name": "Zoisite HS347.2B",
+      "material": "Zoisite",
+      "sample": "HS347.2B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 11548,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Zoisite_HS347.2B_ASDFRb_AREF.txt"
+    },
+    {
+      "name": "Zoisite HS347.3B",
+      "material": "Zoisite",
+      "sample": "HS347.3B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 11558,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Zoisite_HS347.3B_ASDFRb_AREF.txt"
+    },
+    {
+      "name": "Zoisite HS347.4B",
+      "material": "Zoisite",
+      "sample": "HS347.4B",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 11577,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Zoisite_HS347.4B_ASDFRb_AREF.txt"
+    },
+    {
+      "name": "Zoisite HS347.6",
+      "material": "Zoisite",
+      "sample": "HS347.6",
+      "chapter": "minerals",
+      "asd_subtype": "ASDFR",
+      "record": 11583,
+      "value_count": 2151,
+      "path": "spectra/minerals/splib07a_Zoisite_HS347.6_ASDFRc_AREF.txt"
+    },
+    {
+      "name": "1-2-3-Trimethylbenzene 85K",
+      "material": "1-2-3-Trimethylbenzene",
+      "sample": "85K",
+      "chapter": "organics",
+      "asd_subtype": "ASDHR",
+      "record": 16666,
+      "value_count": 2151,
+      "path": "spectra/organics/splib07a_1-2-3-Trimethylbenzene_85K_ASDHRb_AREF.txt"
+    },
+    {
+      "name": "2-4-Diaminopyrimidine 468231",
+      "material": "2-4-Diaminopyrimidine",
+      "sample": "468231",
+      "chapter": "organics",
+      "asd_subtype": "ASDHR",
+      "record": 14617,
+      "value_count": 2151,
+      "path": "spectra/organics/splib07a_2-4-Diaminopyrimidine_468231_ASDHRa_AREF.txt"
+    },
+    {
+      "name": "2-4-Diaminopyrimidine 85K",
+      "material": "2-4-Diaminopyrimidine",
+      "sample": "85K",
+      "chapter": "organics",
+      "asd_subtype": "ASDHR",
+      "record": 14636,
+      "value_count": 2151,
+      "path": "spectra/organics/splib07a_2-4-Diaminopyrimidine_85K_ASDHRa_AREF.txt"
+    },
+    {
+      "name": "2-4Diamino6hydroxypyrim 85K",
+      "material": "2-4Diamino6hydroxypyrim",
+      "sample": "85K",
+      "chapter": "organics",
+      "asd_subtype": "ASDHR",
+      "record": 14554,
+      "value_count": 2151,
+      "path": "spectra/organics/splib07a_2-4Diamino6hydroxypyrim_85K_ASDHRa_AREF.txt"
+    },
+    {
+      "name": "2-6-Diaminopurine 247847 85K",
+      "material": "2-6-Diaminopurine",
+      "sample": "247847_85K",
+      "chapter": "organics",
+      "asd_subtype": "ASDHR",
+      "record": 14595,
+      "value_count": 2151,
+      "path": "spectra/organics/splib07a_2-6-Diaminopurine_247847_85K_ASDHRa_AREF.txt"
+    },
+    {
+      "name": "2-6-Diaminopurine 247847",
+      "material": "2-6-Diaminopurine",
+      "sample": "247847",
+      "chapter": "organics",
+      "asd_subtype": "ASDHR",
+      "record": 14576,
+      "value_count": 2151,
+      "path": "spectra/organics/splib07a_2-6-Diaminopurine_247847_ASDHRa_AREF.txt"
+    },
+    {
+      "name": "2-Aminopurine SA-A3509 85K",
+      "material": "2-Aminopurine_SA-A3509",
+      "sample": "85K",
+      "chapter": "organics",
+      "asd_subtype": "ASDHR",
+      "record": 13913,
+      "value_count": 2151,
+      "path": "spectra/organics/splib07a_2-Aminopurine_SA-A3509_85K_ASDHRa_AREF.txt"
+    },
+    {
+      "name": "2-Methylnaptha SA-442359 85K",
+      "material": "2-Methylnaptha_SA-442359",
+      "sample": "85K",
+      "chapter": "organics",
+      "asd_subtype": "ASDHR",
+      "record": 15444,
+      "value_count": 2151,
+      "path": "spectra/organics/splib07a_2-Methylnaptha_SA-442359_85K_ASDHRa_AREF.txt"
+    },
+    {
+      "name": "4-3H-Pyrimidin SA-858064 85K",
+      "material": "4-3H-Pyrimidin_SA-858064",
+      "sample": "85K",
+      "chapter": "organics",
+      "asd_subtype": "ASDHR",
+      "record": 16304,
+      "value_count": 2151,
+      "path": "spectra/organics/splib07a_4-3H-Pyrimidin_SA-858064_85K_ASDHRa_AREF.txt"
+    },
+    {
+      "name": "5-Aminoorotic SA-191213 85K",
+      "material": "5-Aminoorotic_SA-191213",
+      "sample": "85K",
+      "chapter": "organics",
+      "asd_subtype": "ASDHR",
+      "record": 13872,
+      "value_count": 2151,
+      "path": "spectra/organics/splib07a_5-Aminoorotic_SA-191213_85K_ASDHRa_AREF.txt"
+    },
+    {
+      "name": "5-Aminouracil SA-855286 85K",
+      "material": "5-Aminouracil_SA-855286",
+      "sample": "85K",
+      "chapter": "organics",
+      "asd_subtype": "ASDHR",
+      "record": 13954,
+      "value_count": 2151,
+      "path": "spectra/organics/splib07a_5-Aminouracil_SA-855286_85K_ASDHRa_AREF.txt"
+    },
+    {
+      "name": "5-Hydroxymethyluracil 85K",
+      "material": "5-Hydroxymethyluracil",
+      "sample": "85K",
+      "chapter": "organics",
+      "asd_subtype": "ASDHR",
+      "record": 15199,
+      "value_count": 2151,
+      "path": "spectra/organics/splib07a_5-Hydroxymethyluracil_85K_ASDHRa_AREF.txt"
+    },
+    {
+      "name": "5-Phenyl-1H-Tetrazole 347744",
+      "material": "5-Phenyl-1H-Tetrazole",
+      "sample": "347744",
+      "chapter": "organics",
+      "asd_subtype": "ASDHR",
+      "record": 15938,
+      "value_count": 2151,
+      "path": "spectra/organics/splib07a_5-Phenyl-1H-Tetrazole_347744_ASDHRa_AREF.txt"
+    },
+    {
+      "name": "5-Phenyl-1H-Tetrz 347744 85K",
+      "material": "5-Phenyl-1H-Tetrz",
+      "sample": "347744_85K",
+      "chapter": "organics",
+      "asd_subtype": "ASDHR",
+      "record": 15957,
+      "value_count": 2151,
+      "path": "spectra/organics/splib07a_5-Phenyl-1H-Tetrz_347744_85K_ASDHRa_AREF.txt"
+    },
+    {
+      "name": "6-Cyanopurine SA-852503 85K",
+      "material": "6-Cyanopurine_SA-852503",
+      "sample": "85K",
+      "chapter": "organics",
+      "asd_subtype": "ASDHR",
+      "record": 14415,
+      "value_count": 2151,
+      "path": "spectra/organics/splib07a_6-Cyanopurine_SA-852503_85K_ASDHRa_AREF.txt"
+    },
+    {
+      "name": "7-8-Benzoquino SA-123617 75K",
+      "material": "7-8-Benzoquino_SA-123617",
+      "sample": "75K",
+      "chapter": "organics",
+      "asd_subtype": "ASDHR",
+      "record": 14230,
+      "value_count": 2151,
+      "path": "spectra/organics/splib07a_7-8-Benzoquino_SA-123617_75K_ASDHRa_AREF.txt"
+    },
+    {
+      "name": "9Anthronitrile SA-152765 75K",
+      "material": "9Anthronitrile_SA-152765",
+      "sample": "75K",
+      "chapter": "organics",
+      "asd_subtype": "ASDHR",
+      "record": 14080,
+      "value_count": 2151,
+      "path": "spectra/organics/splib07a_9Anthronitrile_SA-152765_75K_ASDHRa_AREF.txt"
+    },
+    {
+      "name": "Acetylene MTG 80K",
+      "material": "Acetylene",
+      "sample": "MTG_80K",
+      "chapter": "organics",
+      "asd_subtype": "ASDFR",
+      "record": 13675,
+      "value_count": 2151,
+      "path": "spectra/organics/splib07a_Acetylene_MTG_80K_ASDFRb_AREF.txt"
+    },
+    {
+      "name": "Allylbenzene SA-A29402 75K",
+      "material": "Allylbenzene_SA-A29402",
+      "sample": "75K",
+      "chapter": "organics",
+      "asd_subtype": "ASDHR",
+      "record": 13831,
+      "value_count": 2151,
+      "path": "spectra/organics/splib07a_Allylbenzene_SA-A29402_75K_ASDHRa_AREF.txt"
+    },
+    {
+      "name": "Anthrone SA-A1631 75K",
+      "material": "Anthrone_SA-A1631",
+      "sample": "75K",
+      "chapter": "organics",
+      "asd_subtype": "ASDHR",
+      "record": 14039,
+      "value_count": 2151,
+      "path": "spectra/organics/splib07a_Anthrone_SA-A1631_75K_ASDHRa_AREF.txt"
+    },
+    {
+      "name": "Antipyrine SA-A5882 75K",
+      "material": "Antipyrine_SA-A5882",
+      "sample": "75K",
+      "chapter": "organics",
+      "asd_subtype": "ASDHR",
+      "record": 14122,
+      "value_count": 2151,
+      "path": "spectra/organics/splib07a_Antipyrine_SA-A5882_75K_ASDHRa_AREF.txt"
+    },
+    {
+      "name": "Benzopyrene SA-B1760 75K",
+      "material": "Benzopyrene_SA-B1760",
+      "sample": "75K",
+      "chapter": "organics",
+      "asd_subtype": "ASDHR",
+      "record": 14189,
+      "value_count": 2151,
+      "path": "spectra/organics/splib07a_Benzopyrene_SA-B1760_75K_ASDHRa_AREF.txt"
+    },
+    {
+      "name": "Biphenyl SA-B34656 75K",
+      "material": "Biphenyl_SA-B34656",
+      "sample": "75K",
+      "chapter": "organics",
+      "asd_subtype": "ASDHR",
+      "record": 14271,
+      "value_count": 2151,
+      "path": "spectra/organics/splib07a_Biphenyl_SA-B34656_75K_ASDHRa_AREF.txt"
+    },
+    {
+      "name": "Butane Camco frost 83K",
+      "material": "Butane_Camco_frost",
+      "sample": "83K",
+      "chapter": "organics",
+      "asd_subtype": "ASDFR",
+      "record": 14294,
+      "value_count": 2151,
+      "path": "spectra/organics/splib07a_Butane_Camco_frost_83K_ASDFRb_AREF.txt"
+    },
+    {
+      "name": "Coronene SA-C84801 75K",
+      "material": "Coronene_SA-C84801",
+      "sample": "75K",
+      "chapter": "organics",
+      "asd_subtype": "ASDHR",
+      "record": 14373,
+      "value_count": 2151,
+      "path": "spectra/organics/splib07a_Coronene_SA-C84801_75K_ASDHRb_AREF.txt"
+    },
+    {
+      "name": "Dibenzothiophn SA-D32202 75K",
+      "material": "Dibenzothiophn_SA-D32202",
+      "sample": "75K",
+      "chapter": "organics",
+      "asd_subtype": "ASDHR",
+      "record": 14677,
+      "value_count": 2151,
+      "path": "spectra/organics/splib07a_Dibenzothiophn_SA-D32202_75K_ASDHRa_AREF.txt"
+    },
+    {
+      "name": "Dihydrouracil SA-D7628 85K",
+      "material": "Dihydrouracil_SA-D7628",
+      "sample": "85K",
+      "chapter": "organics",
+      "asd_subtype": "ASDHR",
+      "record": 14718,
+      "value_count": 2151,
+      "path": "spectra/organics/splib07a_Dihydrouracil_SA-D7628_85K_ASDHRa_AREF.txt"
+    },
+    {
+      "name": "Ethylene MTG ice block 80K",
+      "material": "Ethylene_MTG_ice_block",
+      "sample": "80K",
+      "chapter": "organics",
+      "asd_subtype": "ASDFR",
+      "record": 14812,
+      "value_count": 2151,
+      "path": "spectra/organics/splib07a_Ethylene_MTG_ice_block_80K_ASDFRa_AREF.txt"
+    },
+    {
+      "name": "Flouranthene SA-423947 75K",
+      "material": "Flouranthene_SA-423947",
+      "sample": "75K",
+      "chapter": "organics",
+      "asd_subtype": "ASDHR",
+      "record": 14861,
+      "value_count": 2151,
+      "path": "spectra/organics/splib07a_Flouranthene_SA-423947_75K_ASDHRa_AREF.txt"
+    },
+    {
+      "name": "Fluorene SA-128333 75K",
+      "material": "Fluorene_SA-128333",
+      "sample": "75K",
+      "chapter": "organics",
+      "asd_subtype": "ASDHR",
+      "record": 14902,
+      "value_count": 2151,
+      "path": "spectra/organics/splib07a_Fluorene_SA-128333_75K_ASDHRa_AREF.txt"
+    },
+    {
+      "name": "Guanine SA-G11950 75K",
+      "material": "Guanine_SA-G11950",
+      "sample": "75K",
+      "chapter": "organics",
+      "asd_subtype": "ASDHR",
+      "record": 15043,
+      "value_count": 2151,
+      "path": "spectra/organics/splib07a_Guanine_SA-G11950_75K_ASDHRa_AREF.txt"
+    },
+    {
+      "name": "Hypoxanthine SA-H9377 93K",
+      "material": "Hypoxanthine_SA-H9377",
+      "sample": "93K",
+      "chapter": "organics",
+      "asd_subtype": "ASDHR",
+      "record": 15240,
+      "value_count": 2151,
+      "path": "spectra/organics/splib07a_Hypoxanthine_SA-H9377_93K_ASDHRa_AREF.txt"
+    },
+    {
+      "name": "Indole SA-I3408 75K",
+      "material": "Indole_SA-I3408",
+      "sample": "75K",
+      "chapter": "organics",
+      "asd_subtype": "ASDHR",
+      "record": 15281,
+      "value_count": 2151,
+      "path": "spectra/organics/splib07a_Indole_SA-I3408_75K_ASDHRa_AREF.txt"
+    },
+    {
+      "name": "Isocytosine SA-I2127 85K",
+      "material": "Isocytosine_SA-I2127",
+      "sample": "85K",
+      "chapter": "organics",
+      "asd_subtype": "ASDHR",
+      "record": 15322,
+      "value_count": 2151,
+      "path": "spectra/organics/splib07a_Isocytosine_SA-I2127_85K_ASDHRa_AREF.txt"
+    },
+    {
+      "name": "L-Cysteine SA-W326305 85K",
+      "material": "L-Cysteine_SA-W326305",
+      "sample": "85K",
+      "chapter": "organics",
+      "asd_subtype": "ASDHR",
+      "record": 14456,
+      "value_count": 2151,
+      "path": "spectra/organics/splib07a_L-Cysteine_SA-W326305_85K_ASDHRb_AREF.txt"
+    },
+    {
+      "name": "L-Glutamine NF",
+      "material": "L-Glutamine",
+      "sample": "NF",
+      "chapter": "organics",
+      "asd_subtype": "ASDHR",
+      "record": 14954,
+      "value_count": 2151,
+      "path": "spectra/organics/splib07a_L-Glutamine_NF_ASDHRb_AREF.txt"
+    },
+    {
+      "name": "L-Histidine SA-H8000 85K",
+      "material": "L-Histidine_SA-H8000",
+      "sample": "85K",
+      "chapter": "organics",
+      "asd_subtype": "ASDHR",
+      "record": 15158,
+      "value_count": 2151,
+      "path": "spectra/organics/splib07a_L-Histidine_SA-H8000_85K_ASDHRa_AREF.txt"
+    },
+    {
+      "name": "L-Lysine SA-L5501 85K",
+      "material": "L-Lysine_SA-L5501",
+      "sample": "85K",
+      "chapter": "organics",
+      "asd_subtype": "ASDHR",
+      "record": 15380,
+      "value_count": 2151,
+      "path": "spectra/organics/splib07a_L-Lysine_SA-L5501_85K_ASDHRa_AREF.txt"
+    },
+    {
+      "name": "L-Proline SA-P0380 85K",
+      "material": "L-Proline_SA-P0380",
+      "sample": "85K",
+      "chapter": "organics",
+      "asd_subtype": "ASDHR",
+      "record": 15998,
+      "value_count": 2151,
+      "path": "spectra/organics/splib07a_L-Proline_SA-P0380_85K_ASDHRa_AREF.txt"
+    },
+    {
+      "name": "L-Tyrosine NF",
+      "material": "L-Tyrosine",
+      "sample": "NF",
+      "chapter": "organics",
+      "asd_subtype": "ASDHR",
+      "record": 16723,
+      "value_count": 2151,
+      "path": "spectra/organics/splib07a_L-Tyrosine_NF_ASDHRb_AREF.txt"
+    },
+    {
+      "name": "Naphthalene ENOZ 75K",
+      "material": "Naphthalene",
+      "sample": "ENOZ_75K",
+      "chapter": "organics",
+      "asd_subtype": "ASDHR",
+      "record": 15519,
+      "value_count": 2151,
+      "path": "spectra/organics/splib07a_Naphthalene_ENOZ_75K_ASDHRa_AREF.txt"
+    },
+    {
+      "name": "Naphthalene ENOZ",
+      "material": "Naphthalene",
+      "sample": "ENOZ",
+      "chapter": "organics",
+      "asd_subtype": "ASDHR",
+      "record": 15488,
+      "value_count": 2151,
+      "path": "spectra/organics/splib07a_Naphthalene_ENOZ_ASDHRa_AREF.txt"
+    },
+    {
+      "name": "Naphthalene ENOZ cgr 89K",
+      "material": "Naphthalene_ENOZ_cgr",
+      "sample": "89K",
+      "chapter": "organics",
+      "asd_subtype": "ASDFR",
+      "record": 15507,
+      "value_count": 2151,
+      "path": "spectra/organics/splib07a_Naphthalene_ENOZ_cgr_89K_ASDFRa_AREF.txt"
+    },
+    {
+      "name": "Nonane fine frost 84K",
+      "material": "Nonane_fine_frost",
+      "sample": "84K",
+      "chapter": "organics",
+      "asd_subtype": "ASDFR",
+      "record": 15590,
+      "value_count": 2151,
+      "path": "spectra/organics/splib07a_Nonane_fine_frost_84K_ASDFRa_AREF.txt"
+    },
+    {
+      "name": "Octane SA-74822 medfrost 85K",
+      "material": "Octane_SA-74822_medfrost",
+      "sample": "85K",
+      "chapter": "organics",
+      "asd_subtype": "ASDFR",
+      "record": 15619,
+      "value_count": 2151,
+      "path": "spectra/organics/splib07a_Octane_SA-74822_medfrost_85K_ASDFRa_AREF.txt"
+    },
+    {
+      "name": "Pentacene SA-P1802 75K",
+      "material": "Pentacene_SA-P1802",
+      "sample": "75K",
+      "chapter": "organics",
+      "asd_subtype": "ASDHR",
+      "record": 15688,
+      "value_count": 2151,
+      "path": "spectra/organics/splib07a_Pentacene_SA-P1802_75K_ASDHRa_AREF.txt"
+    },
+    {
+      "name": "Pentane SA-76878 fine gr 85K",
+      "material": "Pentane_SA-76878_fine_gr",
+      "sample": "85K",
+      "chapter": "organics",
+      "asd_subtype": "ASDFR",
+      "record": 15711,
+      "value_count": 2151,
+      "path": "spectra/organics/splib07a_Pentane_SA-76878_fine_gr_85K_ASDFRa_AREF.txt"
+    },
+    {
+      "name": "Perylene SA-P11204 75K",
+      "material": "Perylene_SA-P11204",
+      "sample": "75K",
+      "chapter": "organics",
+      "asd_subtype": "ASDHR",
+      "record": 15768,
+      "value_count": 2151,
+      "path": "spectra/organics/splib07a_Perylene_SA-P11204_75K_ASDHRa_AREF.txt"
+    },
+    {
+      "name": "Phenanthraquin SA-275034 75K",
+      "material": "Phenanthraquin_SA-275034",
+      "sample": "75K",
+      "chapter": "organics",
+      "asd_subtype": "ASDHR",
+      "record": 15809,
+      "value_count": 2151,
+      "path": "spectra/organics/splib07a_Phenanthraquin_SA-275034_75K_ASDHRa_AREF.txt"
+    },
+    {
+      "name": "Phenanthrene SA-P11409 75K",
+      "material": "Phenanthrene_SA-P11409",
+      "sample": "75K",
+      "chapter": "organics",
+      "asd_subtype": "ASDHR",
+      "record": 15850,
+      "value_count": 2151,
+      "path": "spectra/organics/splib07a_Phenanthrene_SA-P11409_75K_ASDHRa_AREF.txt"
+    },
+    {
+      "name": "Propene SA-295663 ice 77K",
+      "material": "Propene_SA-295663_ice",
+      "sample": "77K",
+      "chapter": "organics",
+      "asd_subtype": "ASDFR",
+      "record": 16030,
+      "value_count": 2151,
+      "path": "spectra/organics/splib07a_Propene_SA-295663_ice_77K_ASDFRa_AREF.txt"
+    },
+    {
+      "name": "Propyne SA-295493 Frost 80K",
+      "material": "Propyne_SA-295493_Frost",
+      "sample": "80K",
+      "chapter": "organics",
+      "asd_subtype": "ASDFR",
+      "record": 16045,
+      "value_count": 2151,
+      "path": "spectra/organics/splib07a_Propyne_SA-295493_Frost_80K_ASDFRa_AREF.txt"
+    },
+    {
+      "name": "Protein soy_powder NC2",
+      "material": "Protein_soy_powder",
+      "sample": "NC2",
+      "chapter": "organics",
+      "asd_subtype": "ASDHR",
+      "record": 16062,
+      "value_count": 2151,
+      "path": "spectra/organics/splib07a_Protein_soy_powder_NC2_ASDHRa_AREF.txt"
+    },
+    {
+      "name": "Protein veg_powder NC1",
+      "material": "Protein_veg_powder",
+      "sample": "NC1",
+      "chapter": "organics",
+      "asd_subtype": "ASDHR",
+      "record": 16079,
+      "value_count": 2151,
+      "path": "spectra/organics/splib07a_Protein_veg_powder_NC1_ASDHRa_AREF.txt"
+    },
+    {
+      "name": "Purine SA-P55805 85K",
+      "material": "Purine_SA-P55805",
+      "sample": "85K",
+      "chapter": "organics",
+      "asd_subtype": "ASDHR",
+      "record": 16113,
+      "value_count": 2151,
+      "path": "spectra/organics/splib07a_Purine_SA-P55805_85K_ASDHRa_AREF.txt"
+    },
+    {
+      "name": "Pyrene AA-L08162 75K",
+      "material": "Pyrene_AA-L08162",
+      "sample": "75K",
+      "chapter": "organics",
+      "asd_subtype": "ASDHR",
+      "record": 16190,
+      "value_count": 2151,
+      "path": "spectra/organics/splib07a_Pyrene_AA-L08162_75K_ASDHRa_AREF.txt"
+    },
+    {
+      "name": "Pyrimidine SA-131695 85K",
+      "material": "Pyrimidine_SA-131695",
+      "sample": "85K",
+      "chapter": "organics",
+      "asd_subtype": "ASDHR",
+      "record": 16263,
+      "value_count": 2151,
+      "path": "spectra/organics/splib07a_Pyrimidine_SA-131695_85K_ASDHRa_AREF.txt"
+    },
+    {
+      "name": "Starch_corn_Argo GDS549",
+      "material": "Starch_corn_Argo",
+      "sample": "GDS549",
+      "chapter": "organics",
+      "asd_subtype": "ASDHR",
+      "record": 16357,
+      "value_count": 2151,
+      "path": "spectra/organics/splib07a_Starch_corn_Argo_GDS549_ASDHRa_AREF.txt"
+    },
+    {
+      "name": "Taurine NF",
+      "material": "Taurine",
+      "sample": "NF",
+      "chapter": "organics",
+      "asd_subtype": "ASDHR",
+      "record": 16441,
+      "value_count": 2151,
+      "path": "spectra/organics/splib07a_Taurine_NF_ASDHRa_AREF.txt"
+    },
+    {
+      "name": "Tetracene SA-B2403 75K",
+      "material": "Tetracene_SA-B2403",
+      "sample": "75K",
+      "chapter": "organics",
+      "asd_subtype": "ASDHR",
+      "record": 16536,
+      "value_count": 2151,
+      "path": "spectra/organics/splib07a_Tetracene_SA-B2403_75K_ASDHRa_AREF.txt"
+    },
+    {
+      "name": "Theobromine SA-T4500 85K",
+      "material": "Theobromine_SA-T4500",
+      "sample": "85K",
+      "chapter": "organics",
+      "asd_subtype": "ASDHR",
+      "record": 16593,
+      "value_count": 2151,
+      "path": "spectra/organics/splib07a_Theobromine_SA-T4500_85K_ASDHRa_AREF.txt"
+    },
+    {
+      "name": "Toluene SA-244511 frost 84K",
+      "material": "Toluene_SA-244511_frost",
+      "sample": "84K",
+      "chapter": "organics",
+      "asd_subtype": "ASDFR",
+      "record": 16651,
+      "value_count": 2151,
+      "path": "spectra/organics/splib07a_Toluene_SA-244511_frost_84K_ASDFRa_AREF.txt"
+    },
+    {
+      "name": "Uracil SA-U0750 75K",
+      "material": "Uracil_SA-U0750",
+      "sample": "75K",
+      "chapter": "organics",
+      "asd_subtype": "ASDHR",
+      "record": 16777,
+      "value_count": 2151,
+      "path": "spectra/organics/splib07a_Uracil_SA-U0750_75K_ASDHRa_AREF.txt"
+    },
+    {
+      "name": "Violanthrone79 SA-641790 75K",
+      "material": "Violanthrone79_SA-641790",
+      "sample": "75K",
+      "chapter": "organics",
+      "asd_subtype": "ASDHR",
+      "record": 16818,
+      "value_count": 2151,
+      "path": "spectra/organics/splib07a_Violanthrone79_SA-641790_75K_ASDHRa_AREF.txt"
+    },
+    {
+      "name": "Xanthine SA-X0626 85K",
+      "material": "Xanthine_SA-X0626",
+      "sample": "85K",
+      "chapter": "organics",
+      "asd_subtype": "ASDHR",
+      "record": 16860,
+      "value_count": 2151,
+      "path": "spectra/organics/splib07a_Xanthine_SA-X0626_85K_ASDHRa_AREF.txt"
+    },
+    {
+      "name": "Xylene(s) ice 77K",
+      "material": "Xylene(s)_ice",
+      "sample": "77K",
+      "chapter": "organics",
+      "asd_subtype": "ASDFR",
+      "record": 16883,
+      "value_count": 2151,
+      "path": "spectra/organics/splib07a_Xylene(s)_ice_77K_ASDFRa_AREF.txt"
+    },
+    {
+      "name": "cis-Stilbene SA-S4808 75K",
+      "material": "cis-Stilbene_SA-S4808",
+      "sample": "75K",
+      "chapter": "organics",
+      "asd_subtype": "ASDHR",
+      "record": 16388,
+      "value_count": 2151,
+      "path": "spectra/organics/splib07a_cis-Stilbene_SA-S4808_75K_ASDHRa_AREF.txt"
+    },
+    {
+      "name": "o-Terphenyl SA-T2800 75K",
+      "material": "o-Terphenyl_SA-T2800",
+      "sample": "75K",
+      "chapter": "organics",
+      "asd_subtype": "ASDHR",
+      "record": 16495,
+      "value_count": 2151,
+      "path": "spectra/organics/splib07a_o-Terphenyl_SA-T2800_75K_ASDHRa_AREF.txt"
+    },
+    {
+      "name": "trans-beta-Methylstyrene 85K",
+      "material": "trans-beta-Methylstyrene",
+      "sample": "85K",
+      "chapter": "organics",
+      "asd_subtype": "ASDHR",
+      "record": 15466,
+      "value_count": 2151,
+      "path": "spectra/organics/splib07a_trans-beta-Methylstyrene_85K_ASDHRa_AREF.txt"
+    },
+    {
+      "name": "Alun.33+Kaol.33+Musc.33 AMX2",
+      "material": "Alun.33+Kaol.33+Musc.33",
+      "sample": "AMX2",
+      "chapter": "soils",
+      "asd_subtype": "ASDNG",
+      "record": 11647,
+      "value_count": 2151,
+      "path": "spectra/soils/splib07a_Alun.33+Kaol.33+Musc.33_AMX2_ASDNGa_AREF.txt"
+    },
+    {
+      "name": "Alunite.5+MuscCU91-250A AMX4",
+      "material": "Alunite.5+MuscCU91-250A",
+      "sample": "AMX4",
+      "chapter": "soils",
+      "asd_subtype": "ASDNG",
+      "record": 11709,
+      "value_count": 2151,
+      "path": "spectra/soils/splib07a_Alunite.5+MuscCU91-250A_AMX4_ASDNGa_AREF.txt"
+    },
+    {
+      "name": "Alunite0.5+Kaol_KGa-1 AMX3",
+      "material": "Alunite0.5+Kaol_KGa-1",
+      "sample": "AMX3",
+      "chapter": "soils",
+      "asd_subtype": "ASDNG",
+      "record": 11745,
+      "value_count": 2151,
+      "path": "spectra/soils/splib07a_Alunite0.5+Kaol_KGa-1_AMX3_ASDNGb_AREF.txt"
+    },
+    {
+      "name": "Alunite_NH4+Jaro NMNH145596A",
+      "material": "Alunite_NH4+Jaro",
+      "sample": "NMNH145596A",
+      "chapter": "soils",
+      "asd_subtype": "ASDFR",
+      "record": 11825,
+      "value_count": 2151,
+      "path": "spectra/soils/splib07a_Alunite_NH4+Jaro_NMNH145596A_ASDFRb_AREF.txt"
+    },
+    {
+      "name": "Beidellite+Montmor GDS123",
+      "material": "Beidellite+Montmor",
+      "sample": "GDS123",
+      "chapter": "soils",
+      "asd_subtype": "ASDFR",
+      "record": 11863,
+      "value_count": 2151,
+      "path": "spectra/soils/splib07a_Beidellite+Montmor_GDS123_ASDFRb_AREF.txt"
+    },
+    {
+      "name": "Calc.25+Dolo.25+Ca-Mont AMX7",
+      "material": "Calc.25+Dolo.25+Ca-Mont",
+      "sample": "AMX7",
+      "chapter": "soils",
+      "asd_subtype": "ASDNG",
+      "record": 11939,
+      "value_count": 2151,
+      "path": "spectra/soils/splib07a_Calc.25+Dolo.25+Ca-Mont_AMX7_ASDNGb_AREF.txt"
+    },
+    {
+      "name": "Calc.25+Dolo.25+Na-Mon AMX18",
+      "material": "Calc.25+Dolo.25+Na-Mon",
+      "sample": "AMX18",
+      "chapter": "soils",
+      "asd_subtype": "ASDNG",
+      "record": 11950,
+      "value_count": 2151,
+      "path": "spectra/soils/splib07a_Calc.25+Dolo.25+Na-Mon_AMX18_ASDNGb_AREF.txt"
+    },
+    {
+      "name": "Calcite.33+Ca-Mont.67 AMX19",
+      "material": "Calcite.33+Ca-Mont.67",
+      "sample": "AMX19",
+      "chapter": "soils",
+      "asd_subtype": "ASDNG",
+      "record": 12006,
+      "value_count": 2151,
+      "path": "spectra/soils/splib07a_Calcite.33+Ca-Mont.67_AMX19_ASDNGb_AREF.txt"
+    },
+    {
+      "name": "Calcite.33+Epidote.67 GDS311",
+      "material": "Calcite.33+Epidote.67",
+      "sample": "GDS311",
+      "chapter": "soils",
+      "asd_subtype": "ASDFR",
+      "record": 12025,
+      "value_count": 2151,
+      "path": "spectra/soils/splib07a_Calcite.33+Epidote.67_GDS311_ASDFRa_AREF.txt"
+    },
+    {
+      "name": "Calcite.33+Na-Mont.67 AMX44",
+      "material": "Calcite.33+Na-Mont.67",
+      "sample": "AMX44",
+      "chapter": "soils",
+      "asd_subtype": "ASDNG",
+      "record": 12015,
+      "value_count": 2151,
+      "path": "spectra/soils/splib07a_Calcite.33+Na-Mont.67_AMX44_ASDNGb_AREF.txt"
+    },
+    {
+      "name": "Calcite.5+.Ca-Mont.5 AMX6",
+      "material": "Calcite.5+.Ca-Mont.5",
+      "sample": "AMX6",
+      "chapter": "soils",
+      "asd_subtype": "ASDNG",
+      "record": 11966,
+      "value_count": 2151,
+      "path": "spectra/soils/splib07a_Calcite.5+.Ca-Mont.5_AMX6_ASDNGb_AREF.txt"
+    },
+    {
+      "name": "Calcite.5+.Na-Mont.5 AMX43",
+      "material": "Calcite.5+.Na-Mont.5",
+      "sample": "AMX43",
+      "chapter": "soils",
+      "asd_subtype": "ASDNG",
+      "record": 11975,
+      "value_count": 2151,
+      "path": "spectra/soils/splib07a_Calcite.5+.Na-Mont.5_AMX43_ASDNGb_AREF.txt"
+    },
+    {
+      "name": "Calcite.5+Dolomite.5 AMX8",
+      "material": "Calcite.5+Dolomite.5",
+      "sample": "AMX8",
+      "chapter": "soils",
+      "asd_subtype": "ASDNG",
+      "record": 11986,
+      "value_count": 2151,
+      "path": "spectra/soils/splib07a_Calcite.5+Dolomite.5_AMX8_ASDNGb_AREF.txt"
+    },
+    {
+      "name": "Calcite.67+Epidote.33 GDS310",
+      "material": "Calcite.67+Epidote.33",
+      "sample": "GDS310",
+      "chapter": "soils",
+      "asd_subtype": "ASDFR",
+      "record": 12031,
+      "value_count": 2151,
+      "path": "spectra/soils/splib07a_Calcite.67+Epidote.33_GDS310_ASDFRa_AREF.txt"
+    },
+    {
+      "name": "Calcite.7+Kaolin-wxl.3 AMX9",
+      "material": "Calcite.7+Kaolin-wxl.3",
+      "sample": "AMX9",
+      "chapter": "soils",
+      "asd_subtype": "ASDNG",
+      "record": 12042,
+      "value_count": 2151,
+      "path": "spectra/soils/splib07a_Calcite.7+Kaolin-wxl.3_AMX9_ASDNGa_AREF.txt"
+    },
+    {
+      "name": "Calcite.80+Mont_Swy-1 GDS212",
+      "material": "Calcite.80+Mont_Swy-1",
+      "sample": "GDS212",
+      "chapter": "soils",
+      "asd_subtype": "ASDNG",
+      "record": 12058,
+      "value_count": 2151,
+      "path": "spectra/soils/splib07a_Calcite.80+Mont_Swy-1_GDS212_ASDNGa_AREF.txt"
+    },
+    {
+      "name": "Calcite.80wt+Kaol_CM9 GDS213",
+      "material": "Calcite.80wt+Kaol",
+      "sample": "CM9_GDS213",
+      "chapter": "soils",
+      "asd_subtype": "ASDNG",
+      "record": 12075,
+      "value_count": 2151,
+      "path": "spectra/soils/splib07a_Calcite.80wt+Kaol_CM9_GDS213_ASDNGa_AREF.txt"
+    },
+    {
+      "name": "Chabazite+Thom+Wair HS193.3B",
+      "material": "Chabazite+Thom+Wair",
+      "sample": "HS193.3B",
+      "chapter": "soils",
+      "asd_subtype": "ASDFR",
+      "record": 12095,
+      "value_count": 2151,
+      "path": "spectra/soils/splib07a_Chabazite+Thom+Wair_HS193.3B_ASDFRb_AREF.txt"
+    },
+    {
+      "name": "Chl.33+Epid.33+Cal.33 GDS319",
+      "material": "Chl.33+Epid.33+Cal.33",
+      "sample": "GDS319",
+      "chapter": "soils",
+      "asd_subtype": "ASDFR",
+      "record": 12118,
+      "value_count": 2151,
+      "path": "spectra/soils/splib07a_Chl.33+Epid.33+Cal.33_GDS319_ASDFRa_AREF.txt"
+    },
+    {
+      "name": "Chlor.2+Epid.2+Calc.6 GDS314",
+      "material": "Chlor.2+Epid.2+Calc.6",
+      "sample": "GDS314",
+      "chapter": "soils",
+      "asd_subtype": "ASDFR",
+      "record": 12133,
+      "value_count": 2151,
+      "path": "spectra/soils/splib07a_Chlor.2+Epid.2+Calc.6_GDS314_ASDFRa_AREF.txt"
+    },
+    {
+      "name": "Chlor.2+Epid.6+Calc.2 GDS312",
+      "material": "Chlor.2+Epid.6+Calc.2",
+      "sample": "GDS312",
+      "chapter": "soils",
+      "asd_subtype": "ASDFR",
+      "record": 12139,
+      "value_count": 2151,
+      "path": "spectra/soils/splib07a_Chlor.2+Epid.6+Calc.2_GDS312_ASDFRa_AREF.txt"
+    },
+    {
+      "name": "Chlor.6+Epid.2+Calc.2 GDS313",
+      "material": "Chlor.6+Epid.2+Calc.2",
+      "sample": "GDS313",
+      "chapter": "soils",
+      "asd_subtype": "ASDFR",
+      "record": 12145,
+      "value_count": 2151,
+      "path": "spectra/soils/splib07a_Chlor.6+Epid.2+Calc.2_GDS313_ASDFRa_AREF.txt"
+    },
+    {
+      "name": "Chlorit.33+Calcite.67 GDS315",
+      "material": "Chlorit.33+Calcite.67",
+      "sample": "GDS315",
+      "chapter": "soils",
+      "asd_subtype": "ASDFR",
+      "record": 12155,
+      "value_count": 2151,
+      "path": "spectra/soils/splib07a_Chlorit.33+Calcite.67_GDS315_ASDFRa_AREF.txt"
+    },
+    {
+      "name": "Chlorite.33+Epidot.67 GDS318",
+      "material": "Chlorite.33+Epidot.67",
+      "sample": "GDS318",
+      "chapter": "soils",
+      "asd_subtype": "ASDFR",
+      "record": 12182,
+      "value_count": 2151,
+      "path": "spectra/soils/splib07a_Chlorite.33+Epidot.67_GDS318_ASDFRa_AREF.txt"
+    },
+    {
+      "name": "Chlorite.67+Calcit.33 GDS316",
+      "material": "Chlorite.67+Calcit.33",
+      "sample": "GDS316",
+      "chapter": "soils",
+      "asd_subtype": "ASDFR",
+      "record": 12192,
+      "value_count": 2151,
+      "path": "spectra/soils/splib07a_Chlorite.67+Calcit.33_GDS316_ASDFRa_AREF.txt"
+    },
+    {
+      "name": "Chlorite.67+Epidot.33 GDS317",
+      "material": "Chlorite.67+Epidot.33",
+      "sample": "GDS317",
+      "chapter": "soils",
+      "asd_subtype": "ASDFR",
+      "record": 12202,
+      "value_count": 2151,
+      "path": "spectra/soils/splib07a_Chlorite.67+Epidot.33_GDS317_ASDFRa_AREF.txt"
+    },
+    {
+      "name": "ClinozoisiteEpidote HS299.1B",
+      "material": "ClinozoisiteEpidote",
+      "sample": "HS299.1B",
+      "chapter": "soils",
+      "asd_subtype": "ASDFR",
+      "record": 12224,
+      "value_count": 2151,
+      "path": "spectra/soils/splib07a_ClinozoisiteEpidote_HS299.1B_ASDFRb_AREF.txt"
+    },
+    {
+      "name": "ClinozoisiteEpidote HS299.2B",
+      "material": "ClinozoisiteEpidote",
+      "sample": "HS299.2B",
+      "chapter": "soils",
+      "asd_subtype": "ASDFR",
+      "record": 12234,
+      "value_count": 2151,
+      "path": "spectra/soils/splib07a_ClinozoisiteEpidote_HS299.2B_ASDFRb_AREF.txt"
+    },
+    {
+      "name": "ClinozoisiteEpidote HS299.4B",
+      "material": "ClinozoisiteEpidote",
+      "sample": "HS299.4B",
+      "chapter": "soils",
+      "asd_subtype": "ASDFR",
+      "record": 12253,
+      "value_count": 2151,
+      "path": "spectra/soils/splib07a_ClinozoisiteEpidote_HS299.4B_ASDFRb_AREF.txt"
+    },
+    {
+      "name": "ClinozoisiteEpidote HS299.6",
+      "material": "ClinozoisiteEpidote",
+      "sample": "HS299.6",
+      "chapter": "soils",
+      "asd_subtype": "ASDFR",
+      "record": 12259,
+      "value_count": 2151,
+      "path": "spectra/soils/splib07a_ClinozoisiteEpidote_HS299.6_ASDFRb_AREF.txt"
+    },
+    {
+      "name": "Cordierite-QtzMus HS346.1B",
+      "material": "Cordierite-QtzMus",
+      "sample": "HS346.1B",
+      "chapter": "soils",
+      "asd_subtype": "ASDFR",
+      "record": 12269,
+      "value_count": 2151,
+      "path": "spectra/soils/splib07a_Cordierite-QtzMus_HS346.1B_ASDFRc_AREF.txt"
+    },
+    {
+      "name": "Cordierite-QtzMus HS346.2B",
+      "material": "Cordierite-QtzMus",
+      "sample": "HS346.2B",
+      "chapter": "soils",
+      "asd_subtype": "ASDFR",
+      "record": 12275,
+      "value_count": 2151,
+      "path": "spectra/soils/splib07a_Cordierite-QtzMus_HS346.2B_ASDFRc_AREF.txt"
+    },
+    {
+      "name": "Cordierite-QtzMus HS346.3B",
+      "material": "Cordierite-QtzMus",
+      "sample": "HS346.3B",
+      "chapter": "soils",
+      "asd_subtype": "ASDFR",
+      "record": 12285,
+      "value_count": 2151,
+      "path": "spectra/soils/splib07a_Cordierite-QtzMus_HS346.3B_ASDFRc_AREF.txt"
+    },
+    {
+      "name": "Cordierite-QtzMus HS346.4B",
+      "material": "Cordierite-QtzMus",
+      "sample": "HS346.4B",
+      "chapter": "soils",
+      "asd_subtype": "ASDFR",
+      "record": 12304,
+      "value_count": 2151,
+      "path": "spectra/soils/splib07a_Cordierite-QtzMus_HS346.4B_ASDFRc_AREF.txt"
+    },
+    {
+      "name": "Covellite-Pyrite HS477.2B",
+      "material": "Covellite-Pyrite",
+      "sample": "HS477.2B",
+      "chapter": "soils",
+      "asd_subtype": "ASDNG",
+      "record": 12318,
+      "value_count": 2151,
+      "path": "spectra/soils/splib07a_Covellite-Pyrite_HS477.2B_ASDNGb_AREF.txt"
+    },
+    {
+      "name": "Covellite-Pyrite HS477.4B",
+      "material": "Covellite-Pyrite",
+      "sample": "HS477.4B",
+      "chapter": "soils",
+      "asd_subtype": "ASDFR",
+      "record": 12343,
+      "value_count": 2151,
+      "path": "spectra/soils/splib07a_Covellite-Pyrite_HS477.4B_ASDFRb_AREF.txt"
+    },
+    {
+      "name": "Covellite-Pyrite HS477.6",
+      "material": "Covellite-Pyrite",
+      "sample": "HS477.6",
+      "chapter": "soils",
+      "asd_subtype": "ASDFR",
+      "record": 12349,
+      "value_count": 2151,
+      "path": "spectra/soils/splib07a_Covellite-Pyrite_HS477.6_ASDFRb_AREF.txt"
+    },
+    {
+      "name": "Dolomite.5+Ca-Mont.5 AMX10",
+      "material": "Dolomite.5+Ca-Mont.5",
+      "sample": "AMX10",
+      "chapter": "soils",
+      "asd_subtype": "ASDNG",
+      "record": 12391,
+      "value_count": 2151,
+      "path": "spectra/soils/splib07a_Dolomite.5+Ca-Mont.5_AMX10_ASDNGb_AREF.txt"
+    },
+    {
+      "name": "Dolomite.5+Na-Mont.5 AMX21",
+      "material": "Dolomite.5+Na-Mont.5",
+      "sample": "AMX21",
+      "chapter": "soils",
+      "asd_subtype": "ASDNG",
+      "record": 12402,
+      "value_count": 2151,
+      "path": "spectra/soils/splib07a_Dolomite.5+Na-Mont.5_AMX21_ASDNGb_AREF.txt"
+    },
+    {
+      "name": "Kaol.5+MuscCU91-250A AMX13",
+      "material": "Kaol.5+MuscCU91-250A",
+      "sample": "AMX13",
+      "chapter": "soils",
+      "asd_subtype": "ASDNG",
+      "record": 12606,
+      "value_count": 2151,
+      "path": "spectra/soils/splib07a_Kaol.5+MuscCU91-250A_AMX13_ASDNGb_AREF.txt"
+    },
+    {
+      "name": "Kaol_Wxl+0.5Musc_Ruby AMX12",
+      "material": "Kaol_Wxl+0.5Musc_Ruby",
+      "sample": "AMX12",
+      "chapter": "soils",
+      "asd_subtype": "ASDNG",
+      "record": 12630,
+      "value_count": 2151,
+      "path": "spectra/soils/splib07a_Kaol_Wxl+0.5Musc_Ruby_AMX12_ASDNGa_AREF.txt"
+    },
+    {
+      "name": "Kaolwxl.75+Alun_HS295 AMX14",
+      "material": "Kaolwxl.75+Alun",
+      "sample": "HS295_AMX14",
+      "chapter": "soils",
+      "asd_subtype": "ASDNG",
+      "record": 12761,
+      "value_count": 2151,
+      "path": "spectra/soils/splib07a_Kaolwxl.75+Alun_HS295_AMX14_ASDNGb_AREF.txt"
+    },
+    {
+      "name": "Magnesite+Hydromag HS47.1B",
+      "material": "Magnesite+Hydromag",
+      "sample": "HS47.1B",
+      "chapter": "soils",
+      "asd_subtype": "ASDFR",
+      "record": 12781,
+      "value_count": 2151,
+      "path": "spectra/soils/splib07a_Magnesite+Hydromag_HS47.1B_ASDFRa_AREF.txt"
+    },
+    {
+      "name": "Magnesite+Hydromag HS47.2B",
+      "material": "Magnesite+Hydromag",
+      "sample": "HS47.2B",
+      "chapter": "soils",
+      "asd_subtype": "ASDFR",
+      "record": 12787,
+      "value_count": 2151,
+      "path": "spectra/soils/splib07a_Magnesite+Hydromag_HS47.2B_ASDFRa_AREF.txt"
+    },
+    {
+      "name": "Magnesite+Hydromag HS47.3B",
+      "material": "Magnesite+Hydromag",
+      "sample": "HS47.3B",
+      "chapter": "soils",
+      "asd_subtype": "ASDFR",
+      "record": 12797,
+      "value_count": 2151,
+      "path": "spectra/soils/splib07a_Magnesite+Hydromag_HS47.3B_ASDFRa_AREF.txt"
+    },
+    {
+      "name": "Magnesite+Hydromag HS47.4B",
+      "material": "Magnesite+Hydromag",
+      "sample": "HS47.4B",
+      "chapter": "soils",
+      "asd_subtype": "ASDFR",
+      "record": 12816,
+      "value_count": 2151,
+      "path": "spectra/soils/splib07a_Magnesite+Hydromag_HS47.4B_ASDFRa_AREF.txt"
+    },
+    {
+      "name": "Muscovite+Pyrophyl JH_PYRP1",
+      "material": "Muscovite+Pyrophyl",
+      "sample": "JH_PYRP1",
+      "chapter": "soils",
+      "asd_subtype": "ASDFR",
+      "record": 12951,
+      "value_count": 2151,
+      "path": "spectra/soils/splib07a_Muscovite+Pyrophyl_JH_PYRP1_ASDFRb_AREF.txt"
+    },
+    {
+      "name": "Natrolite+Zeolite HS168.1B",
+      "material": "Natrolite+Zeolite",
+      "sample": "HS168.1B",
+      "chapter": "soils",
+      "asd_subtype": "ASDFR",
+      "record": 13036,
+      "value_count": 2151,
+      "path": "spectra/soils/splib07a_Natrolite+Zeolite_HS168.1B_ASDFRb_AREF.txt"
+    },
+    {
+      "name": "Natrolite+Zeolite HS168.2B",
+      "material": "Natrolite+Zeolite",
+      "sample": "HS168.2B",
+      "chapter": "soils",
+      "asd_subtype": "ASDFR",
+      "record": 13042,
+      "value_count": 2151,
+      "path": "spectra/soils/splib07a_Natrolite+Zeolite_HS168.2B_ASDFRb_AREF.txt"
+    },
+    {
+      "name": "Natrolite+Zeolite HS168.3B",
+      "material": "Natrolite+Zeolite",
+      "sample": "HS168.3B",
+      "chapter": "soils",
+      "asd_subtype": "ASDFR",
+      "record": 13048,
+      "value_count": 2151,
+      "path": "spectra/soils/splib07a_Natrolite+Zeolite_HS168.3B_ASDFRb_AREF.txt"
+    },
+    {
+      "name": "Natrolite+Zeolite HS168.4B",
+      "material": "Natrolite+Zeolite",
+      "sample": "HS168.4B",
+      "chapter": "soils",
+      "asd_subtype": "ASDFR",
+      "record": 13067,
+      "value_count": 2151,
+      "path": "spectra/soils/splib07a_Natrolite+Zeolite_HS168.4B_ASDFRb_AREF.txt"
+    },
+    {
+      "name": "Pyrophyl+Muscovite JH_PYRM1",
+      "material": "Pyrophyl+Muscovite",
+      "sample": "JH_PYRM1",
+      "chapter": "soils",
+      "asd_subtype": "ASDFR",
+      "record": 13099,
+      "value_count": 2151,
+      "path": "spectra/soils/splib07a_Pyrophyl+Muscovite_JH_PYRM1_ASDFRb_AREF.txt"
+    },
+    {
+      "name": "Pyrophyl.25+wxlKaol.75 AMX17",
+      "material": "Pyrophyl.25+wxlKaol.75",
+      "sample": "AMX17",
+      "chapter": "soils",
+      "asd_subtype": "ASDNG",
+      "record": 13110,
+      "value_count": 2151,
+      "path": "spectra/soils/splib07a_Pyrophyl.25+wxlKaol.75_AMX17_ASDNGb_AREF.txt"
+    },
+    {
+      "name": "Pyrophyl.50+Ca-Mont.50 AMX16",
+      "material": "Pyrophyl.50+Ca-Mont.50",
+      "sample": "AMX16",
+      "chapter": "soils",
+      "asd_subtype": "ASDNG",
+      "record": 13136,
+      "value_count": 2151,
+      "path": "spectra/soils/splib07a_Pyrophyl.50+Ca-Mont.50_AMX16_ASDNGa_AREF.txt"
+    },
+    {
+      "name": "Stonewall_Playa_Dry_Mud 2001",
+      "material": "Stonewall_Playa_Dry_Mud",
+      "sample": "2001",
+      "chapter": "soils",
+      "asd_subtype": "ASDFR",
+      "record": 13304,
+      "value_count": 2151,
+      "path": "spectra/soils/splib07a_Stonewall_Playa_Dry_Mud_2001_ASDFRa_AREF.txt"
+    },
+    {
+      "name": "Talc+Clinochlore HS327.3B",
+      "material": "Talc+Clinochlore",
+      "sample": "HS327.3B",
+      "chapter": "soils",
+      "asd_subtype": "ASDFR",
+      "record": 13315,
+      "value_count": 2151,
+      "path": "spectra/soils/splib07a_Talc+Clinochlore_HS327.3B_ASDFRa_AREF.txt"
+    },
+    {
+      "name": "Xenotime+Monazite_REE WS384",
+      "material": "Xenotime+Monazite",
+      "sample": "REE_WS384",
+      "chapter": "soils",
+      "asd_subtype": "ASDFR",
+      "record": 13367,
+      "value_count": 2151,
+      "path": "spectra/soils/splib07a_Xenotime+Monazite_REE_WS384_ASDFRa_AREF.txt"
+    },
+    {
+      "name": "Zincite+Franklin HS147.1B",
+      "material": "Zincite+Franklin",
+      "sample": "HS147.1B",
+      "chapter": "soils",
+      "asd_subtype": "ASDFR",
+      "record": 13377,
+      "value_count": 2151,
+      "path": "spectra/soils/splib07a_Zincite+Franklin_HS147.1B_ASDFRb_AREF.txt"
+    },
+    {
+      "name": "Zincite+Franklin HS147.2B",
+      "material": "Zincite+Franklin",
+      "sample": "HS147.2B",
+      "chapter": "soils",
+      "asd_subtype": "ASDFR",
+      "record": 13383,
+      "value_count": 2151,
+      "path": "spectra/soils/splib07a_Zincite+Franklin_HS147.2B_ASDFRb_AREF.txt"
+    },
+    {
+      "name": "Zincite+Franklin HS147.3B",
+      "material": "Zincite+Franklin",
+      "sample": "HS147.3B",
+      "chapter": "soils",
+      "asd_subtype": "ASDFR",
+      "record": 13393,
+      "value_count": 2151,
+      "path": "spectra/soils/splib07a_Zincite+Franklin_HS147.3B_ASDFRb_AREF.txt"
+    },
+    {
+      "name": "Zincite+Franklin HS147.4B",
+      "material": "Zincite+Franklin",
+      "sample": "HS147.4B",
+      "chapter": "soils",
+      "asd_subtype": "ASDFR",
+      "record": 13412,
+      "value_count": 2151,
+      "path": "spectra/soils/splib07a_Zincite+Franklin_HS147.4B_ASDFRb_AREF.txt"
+    },
+    {
+      "name": "Antigorite+.2DryGrass AMX26",
+      "material": "Antigorite+.2DryGrass",
+      "sample": "AMX26",
+      "chapter": "vegetation",
+      "asd_subtype": "ASDFR",
+      "record": 24145,
+      "value_count": 2151,
+      "path": "spectra/vegetation/splib07a_Antigorite+.2DryGrass_AMX26_ASDFRa_AREF.txt"
+    },
+    {
+      "name": "Antigorite+.33DryGrass AMX25",
+      "material": "Antigorite+.33DryGrass",
+      "sample": "AMX25",
+      "chapter": "vegetation",
+      "asd_subtype": "ASDFR",
+      "record": 24154,
+      "value_count": 2151,
+      "path": "spectra/vegetation/splib07a_Antigorite+.33DryGrass_AMX25_ASDFRa_AREF.txt"
+    },
+    {
+      "name": "Buckbrush CA01-CECU-1 bush 1",
+      "material": "Buckbrush_CA01-CECU-1_bush",
+      "sample": "1",
+      "chapter": "vegetation",
+      "asd_subtype": "ASDFR",
+      "record": 20938,
+      "value_count": 2151,
+      "path": "spectra/vegetation/splib07a_Buckbrush_CA01-CECU-1_bush_1_ASDFRa_AREF.txt"
+    },
+    {
+      "name": "Buckbrush CA01-CECU-2 bush 2",
+      "material": "Buckbrush_CA01-CECU-2_bush",
+      "sample": "2",
+      "chapter": "vegetation",
+      "asd_subtype": "ASDFR",
+      "record": 20954,
+      "value_count": 2151,
+      "path": "spectra/vegetation/splib07a_Buckbrush_CA01-CECU-2_bush_2_ASDFRa_AREF.txt"
+    },
+    {
+      "name": "Buckbrush CA01-CECU-3 bush 3",
+      "material": "Buckbrush_CA01-CECU-3_bush",
+      "sample": "3",
+      "chapter": "vegetation",
+      "asd_subtype": "ASDFR",
+      "record": 20970,
+      "value_count": 2151,
+      "path": "spectra/vegetation/splib07a_Buckbrush_CA01-CECU-3_bush_3_ASDFRa_AREF.txt"
+    },
+    {
+      "name": "Chamise CA01-ADFA-1 bush 1",
+      "material": "Chamise_CA01-ADFA-1_bush",
+      "sample": "1",
+      "chapter": "vegetation",
+      "asd_subtype": "ASDFR",
+      "record": 20999,
+      "value_count": 2151,
+      "path": "spectra/vegetation/splib07a_Chamise_CA01-ADFA-1_bush_1_ASDFRa_AREF.txt"
+    },
+    {
+      "name": "Chamise CA01-ADFA-2 bush 2",
+      "material": "Chamise_CA01-ADFA-2_bush",
+      "sample": "2",
+      "chapter": "vegetation",
+      "asd_subtype": "ASDFR",
+      "record": 21015,
+      "value_count": 2151,
+      "path": "spectra/vegetation/splib07a_Chamise_CA01-ADFA-2_bush_2_ASDFRa_AREF.txt"
+    },
+    {
+      "name": "Grass_AETR70 CA01-AETR-2 NPV",
+      "material": "Grass_AETR70_CA01-AETR-2",
+      "sample": "NPV",
+      "chapter": "vegetation",
+      "asd_subtype": "ASDFR",
+      "record": 21182,
+      "value_count": 2151,
+      "path": "spectra/vegetation/splib07a_Grass_AETR70_CA01-AETR-2_NPV_ASDFRa_AREF.txt"
+    },
+    {
+      "name": "Grass_AETR95 CA01-AETR-1 NPV",
+      "material": "Grass_AETR95_CA01-AETR-1",
+      "sample": "NPV",
+      "chapter": "vegetation",
+      "asd_subtype": "ASDFR",
+      "record": 21166,
+      "value_count": 2151,
+      "path": "spectra/vegetation/splib07a_Grass_AETR95_CA01-AETR-1_NPV_ASDFRa_AREF.txt"
+    },
+    {
+      "name": "Grass CA01-TACA-1 meadow NPV",
+      "material": "Grass_CA01-TACA-1_meadow",
+      "sample": "NPV",
+      "chapter": "vegetation",
+      "asd_subtype": "ASDFR",
+      "record": 21198,
+      "value_count": 2151,
+      "path": "spectra/vegetation/splib07a_Grass_CA01-TACA-1_meadow_NPV_ASDFRa_AREF.txt"
+    },
+    {
+      "name": "Grass_Golden_Dry GDS480",
+      "material": "Grass_Golden_Dry",
+      "sample": "GDS480",
+      "chapter": "vegetation",
+      "asd_subtype": "ASDFR",
+      "record": 21213,
+      "value_count": 2151,
+      "path": "spectra/vegetation/splib07a_Grass_Golden_Dry_GDS480_ASDFRa_AREF.txt"
+    },
+    {
+      "name": "Manzanita CA01-ARVI-1 bush 1",
+      "material": "Manzanita_CA01-ARVI-1_bush",
+      "sample": "1",
+      "chapter": "vegetation",
+      "asd_subtype": "ASDFR",
+      "record": 21651,
+      "value_count": 2151,
+      "path": "spectra/vegetation/splib07a_Manzanita_CA01-ARVI-1_bush_1_ASDFRa_AREF.txt"
+    },
+    {
+      "name": "Manzanita CA01-ARVI-2 bush 2",
+      "material": "Manzanita_CA01-ARVI-2_bush",
+      "sample": "2",
+      "chapter": "vegetation",
+      "asd_subtype": "ASDFR",
+      "record": 21667,
+      "value_count": 2151,
+      "path": "spectra/vegetation/splib07a_Manzanita_CA01-ARVI-2_bush_2_ASDFRa_AREF.txt"
+    },
+    {
+      "name": "Manzanita CA01-ARVI-3 bush 3",
+      "material": "Manzanita_CA01-ARVI-3_bush",
+      "sample": "3",
+      "chapter": "vegetation",
+      "asd_subtype": "ASDFR",
+      "record": 21683,
+      "value_count": 2151,
+      "path": "spectra/vegetation/splib07a_Manzanita_CA01-ARVI-3_bush_3_ASDFRa_AREF.txt"
+    },
+    {
+      "name": "Manzanita CA01-ARVI-4 bush 4",
+      "material": "Manzanita_CA01-ARVI-4_bush",
+      "sample": "4",
+      "chapter": "vegetation",
+      "asd_subtype": "ASDFR",
+      "record": 21699,
+      "value_count": 2151,
+      "path": "spectra/vegetation/splib07a_Manzanita_CA01-ARVI-4_bush_4_ASDFRa_AREF.txt"
+    },
+    {
+      "name": "Manzanita CA01-ARVI-5 bush 5",
+      "material": "Manzanita_CA01-ARVI-5_bush",
+      "sample": "5",
+      "chapter": "vegetation",
+      "asd_subtype": "ASDFR",
+      "record": 21715,
+      "value_count": 2151,
+      "path": "spectra/vegetation/splib07a_Manzanita_CA01-ARVI-5_bush_5_ASDFRa_AREF.txt"
+    },
+    {
+      "name": "Manzanita CA01-ARVI-6 bush 6",
+      "material": "Manzanita_CA01-ARVI-6_bush",
+      "sample": "6",
+      "chapter": "vegetation",
+      "asd_subtype": "ASDFR",
+      "record": 21731,
+      "value_count": 2151,
+      "path": "spectra/vegetation/splib07a_Manzanita_CA01-ARVI-6_bush_6_ASDFRa_AREF.txt"
+    },
+    {
+      "name": "Oak QUDU CA01-QUDU-1 bush 1",
+      "material": "Oak_QUDU_CA01-QUDU-1_bush",
+      "sample": "1",
+      "chapter": "vegetation",
+      "asd_subtype": "ASDFR",
+      "record": 21788,
+      "value_count": 2151,
+      "path": "spectra/vegetation/splib07a_Oak_QUDU_CA01-QUDU-1_bush_1_ASDFRa_AREF.txt"
+    },
+    {
+      "name": "Oak QUDU CA01-QUDU-2 bush 2",
+      "material": "Oak_QUDU_CA01-QUDU-2_bush",
+      "sample": "2",
+      "chapter": "vegetation",
+      "asd_subtype": "ASDFR",
+      "record": 21804,
+      "value_count": 2151,
+      "path": "spectra/vegetation/splib07a_Oak_QUDU_CA01-QUDU-2_bush_2_ASDFRa_AREF.txt"
+    },
+    {
+      "name": "Oak QUDU CA01-QUDU-3 bush 3",
+      "material": "Oak_QUDU_CA01-QUDU-3_bush",
+      "sample": "3",
+      "chapter": "vegetation",
+      "asd_subtype": "ASDFR",
+      "record": 21820,
+      "value_count": 2151,
+      "path": "spectra/vegetation/splib07a_Oak_QUDU_CA01-QUDU-3_bush_3_ASDFRa_AREF.txt"
+    },
+    {
+      "name": "S.alterniflora CRMS322 NPV",
+      "material": "S.alterniflora",
+      "sample": "CRMS322_NPV",
+      "chapter": "vegetation",
+      "asd_subtype": "ASDFR",
+      "record": 21948,
+      "value_count": 2151,
+      "path": "spectra/vegetation/splib07a_S.alterniflora_CRMS322_NPV_ASDFRa_AREF.txt"
+    },
+    {
+      "name": "Willow_Dead FluvTailSite_A",
+      "material": "Willow_Dead_FluvTailSite",
+      "sample": "A",
+      "chapter": "vegetation",
+      "asd_subtype": "ASDFR",
+      "record": 24205,
+      "value_count": 2151,
+      "path": "spectra/vegetation/splib07a_Willow_Dead_FluvTailSite_A_ASDFRa_AREF.txt"
+    }
+  ]
+}

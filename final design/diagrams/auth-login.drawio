@@ -1,0 +1,118 @@
+<mxfile host="65bd71144e">
+    <diagram id="auth_login" name="POST /auth/login">
+        <mxGraphModel dx="1502" dy="931" grid="0" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1500" pageHeight="1100" math="0" shadow="0">
+            <root>
+                <mxCell id="0"/>
+                <mxCell id="1" parent="0"/>
+                <mxCell id="title" value="POST /auth/login — implementation sequence" style="text;html=1;fontSize=20;fontStyle=1;align=left;verticalAlign=middle;" parent="1" vertex="1">
+                    <mxGeometry x="40" y="20" width="800" height="30" as="geometry"/>
+                </mxCell>
+                <mxCell id="subtitle" value="What backend/allotrope/api/auth.py does on a credential submission. Constant-time-ish: verify_password runs on every request whether the user exists or not." style="text;html=1;fontSize=12;fontStyle=2;fontColor=#666666;align=left;verticalAlign=middle;" parent="1" vertex="1">
+                    <mxGeometry x="40" y="52" width="1300" height="20" as="geometry"/>
+                </mxCell>
+                <mxCell id="actor_browser" value="Browser (Client)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;fontStyle=1;" parent="1" vertex="1">
+                    <mxGeometry x="120" y="85" width="160" height="40" as="geometry"/>
+                </mxCell>
+                <mxCell id="actor_api" value="api (FastAPI)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=12;fontStyle=1;" parent="1" vertex="1">
+                    <mxGeometry x="520" y="85" width="160" height="40" as="geometry"/>
+                </mxCell>
+                <mxCell id="actor_pg" value="postgres" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=12;fontStyle=1;" parent="1" vertex="1">
+                    <mxGeometry x="920" y="85" width="160" height="40" as="geometry"/>
+                </mxCell>
+                <mxCell id="ll_browser" style="endArrow=none;dashed=1;html=1;rounded=0;strokeColor=#999999;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <mxPoint x="200" y="125" as="sourcePoint"/>
+                        <mxPoint x="200" y="1040" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="ll_api" style="endArrow=none;dashed=1;html=1;rounded=0;strokeColor=#999999;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <mxPoint x="600" y="125" as="sourcePoint"/>
+                        <mxPoint x="600" y="1040" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="ll_pg" style="endArrow=none;dashed=1;html=1;rounded=0;strokeColor=#999999;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <mxPoint x="1000" y="125" as="sourcePoint"/>
+                        <mxPoint x="1000" y="1040" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="phase1_band" value="① Submit credentials" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#eef3f8;strokeColor=#aac4e0;align=left;verticalAlign=middle;fontStyle=1;fontSize=12;" parent="1" vertex="1">
+                    <mxGeometry x="30" y="140" width="1100" height="26" as="geometry"/>
+                </mxCell>
+                <mxCell id="msg1_1" value="POST /auth/login&lt;br/&gt;Content-Type: application/json&lt;br/&gt;{ &amp;quot;username&amp;quot;: ..., &amp;quot;password&amp;quot;: ... }" style="endArrow=classic;html=1;edgeStyle=none;fontSize=11;align=center;verticalAlign=bottom;labelBackgroundColor=#ffffff;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <mxPoint x="200" y="200" as="sourcePoint"/>
+                        <mxPoint x="600" y="200" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="phase2_band" value="② User lookup (case-insensitive)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#fff2e0;strokeColor=#e0b070;align=left;verticalAlign=middle;fontStyle=1;fontSize=12;" parent="1" vertex="1">
+                    <mxGeometry x="30" y="230" width="1100" height="26" as="geometry"/>
+                </mxCell>
+                <mxCell id="msg2_1" value="SELECT * FROM users WHERE LOWER(username) = LOWER($1)&lt;br/&gt;(uses functional unique index users_username_lower_uq)" style="endArrow=classic;html=1;edgeStyle=none;fontSize=11;align=center;verticalAlign=bottom;labelBackgroundColor=#ffffff;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <mxPoint x="600" y="290" as="sourcePoint"/>
+                        <mxPoint x="1000" y="290" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="msg2_2" value="row | NULL" style="endArrow=open;html=1;edgeStyle=none;dashed=1;fontSize=11;align=center;verticalAlign=bottom;labelBackgroundColor=#ffffff;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <mxPoint x="1000" y="325" as="sourcePoint"/>
+                        <mxPoint x="600" y="325" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="phase3_band" value="③ Verify password (timing-safe)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#e8f1e6;strokeColor=#a8c8a4;align=left;verticalAlign=middle;fontStyle=1;fontSize=12;" parent="1" vertex="1">
+                    <mxGeometry x="30" y="355" width="1100" height="26" as="geometry"/>
+                </mxCell>
+                <mxCell id="note3" value="&lt;b&gt;Constant-time-ish&lt;/b&gt;&lt;br/&gt;hash_to_check = user.password_hash if user else _DUMMY_PASSWORD_HASH&lt;br/&gt;verify_password runs on every request — argon2id ~50–100ms — even when the username is unknown.&lt;br/&gt;Without this dummy verify, &amp;quot;no such user&amp;quot; would return faster than &amp;quot;wrong password&amp;quot; → username-enumeration timing oracle." style="shape=note;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11;align=left;verticalAlign=middle;" parent="1" vertex="1">
+                    <mxGeometry x="430" y="395" width="700" height="100" as="geometry"/>
+                </mxCell>
+                <mxCell id="branch_label_a" value="&lt;b&gt;A. user is None or password mismatch&lt;/b&gt;" style="text;html=1;fontSize=11;align=left;verticalAlign=middle;fontColor=#444;" parent="1" vertex="1">
+                    <mxGeometry x="40" y="510" width="400" height="20" as="geometry"/>
+                </mxCell>
+                <mxCell id="msg_a" value="HTTP 401 — { &amp;quot;detail&amp;quot;: &amp;quot;invalid_credentials&amp;quot; }" style="endArrow=open;html=1;edgeStyle=none;dashed=1;fontSize=11;align=center;verticalAlign=bottom;labelBackgroundColor=#ffffff;strokeColor=#888888;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <mxPoint x="600" y="540" as="sourcePoint"/>
+                        <mxPoint x="200" y="540" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="branch_label_b" value="&lt;b&gt;B. user found AND password matches → continue&lt;/b&gt;" style="text;html=1;fontSize=11;align=left;verticalAlign=middle;fontColor=#444;" parent="1" vertex="1">
+                    <mxGeometry x="40" y="570" width="500" height="20" as="geometry"/>
+                </mxCell>
+                <mxCell id="phase4_band" value="④ Update last_login_at" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f5eef8;strokeColor=#c8a4d0;align=left;verticalAlign=middle;fontStyle=1;fontSize=12;" parent="1" vertex="1">
+                    <mxGeometry x="30" y="605" width="1100" height="26" as="geometry"/>
+                </mxCell>
+                <mxCell id="msg4_1" value="UPDATE users SET last_login_at = now() WHERE id = $1" style="endArrow=classic;html=1;edgeStyle=none;fontSize=11;align=center;verticalAlign=bottom;labelBackgroundColor=#ffffff;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <mxPoint x="600" y="660" as="sourcePoint"/>
+                        <mxPoint x="1000" y="660" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="msg4_2" value="ok" style="endArrow=open;html=1;edgeStyle=none;dashed=1;fontSize=11;align=center;verticalAlign=bottom;labelBackgroundColor=#ffffff;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <mxPoint x="1000" y="695" as="sourcePoint"/>
+                        <mxPoint x="600" y="695" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="phase5_band" value="⑤ Issue JWT (local)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#fff2e0;strokeColor=#e0b070;align=left;verticalAlign=middle;fontStyle=1;fontSize=12;" parent="1" vertex="1">
+                    <mxGeometry x="30" y="725" width="1100" height="26" as="geometry"/>
+                </mxCell>
+                <mxCell id="note5" value="issue_token(user) — local crypto, no I/O.&lt;br/&gt;claims = { sub: str(user.id), iat: now, exp: now+24h, username, is_admin }&lt;br/&gt;jwt = base64url(header) + &amp;quot;.&amp;quot; + base64url(claims) + &amp;quot;.&amp;quot; + HMAC-SHA256(secret, header.claims)" style="shape=note;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11;align=left;verticalAlign=middle;" parent="1" vertex="1">
+                    <mxGeometry x="430" y="765" width="700" height="80" as="geometry"/>
+                </mxCell>
+                <mxCell id="phase6_band" value="⑥ Respond — Set-Cookie + body" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#e8f1e6;strokeColor=#a8c8a4;align=left;verticalAlign=middle;fontStyle=1;fontSize=12;" parent="1" vertex="1">
+                    <mxGeometry x="30" y="855" width="1100" height="26" as="geometry"/>
+                </mxCell>
+                <mxCell id="msg6_1" value="HTTP 200&lt;br/&gt;Set-Cookie: allotrope_jwt=&amp;lt;jwt&amp;gt;; HttpOnly; SameSite=Strict; Max-Age=86400; Path=/&lt;br/&gt;body: { user: { id: user_&amp;lt;uuid&amp;gt;, username, email, display_name, is_admin } }" style="endArrow=open;html=1;edgeStyle=none;dashed=1;fontSize=11;align=center;verticalAlign=bottom;labelBackgroundColor=#ffffff;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <mxPoint x="600" y="940" as="sourcePoint"/>
+                        <mxPoint x="200" y="940" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="footer" value="The token is NEVER returned in the response body — only in the cookie. JS in the browser can&apos;t read HttpOnly cookies, which mitigates token exfiltration via XSS. SameSite=Strict means the browser refuses to send the cookie on cross-origin navigations, mitigating CSRF without an explicit anti-CSRF token. Note: Secure flag is OFF in dev (HTTP localhost); flip cookie_secure=True for production HTTPS." style="text;html=1;fontSize=11;fontStyle=2;fontColor=#666666;align=center;verticalAlign=middle;" parent="1" vertex="1">
+                    <mxGeometry x="80" y="990" width="1340" height="50" as="geometry"/>
+                </mxCell>
+            </root>
+        </mxGraphModel>
+    </diagram>
+</mxfile>

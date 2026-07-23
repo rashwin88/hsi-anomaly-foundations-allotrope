@@ -1,0 +1,21 @@
+# GPU override for the deploy-only compose file.
+#
+# Layered on top of docker-compose.remote.yml on a host that has
+# nvidia-container-toolkit installed. The toolkit auto-mounts the host's
+# nvidia driver into the worker container at runtime, so torch sees the GPU.
+#
+# Usage on the remote host:
+#     sudo docker-compose \
+#         -f docker-compose.remote.yml \
+#         -f docker-compose.gpu.remote.yml \
+#         up -d
+
+services:
+  worker:
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]

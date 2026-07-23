@@ -1,0 +1,110 @@
+<mxfile host="65bd71144e">
+    <diagram id="action_submit" name="POST /projects/{id}/actions">
+        <mxGraphModel dx="1502" dy="931" grid="0" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1500" pageHeight="900" math="0" shadow="0">
+            <root>
+                <mxCell id="0"/>
+                <mxCell id="1" parent="0"/>
+
+                <mxCell id="title" value="POST /projects/{project_id}/actions — submit Action + enqueue paired action_run Job (one txn)" style="text;html=1;fontSize=20;fontStyle=1;align=left;verticalAlign=middle;" parent="1" vertex="1">
+                    <mxGeometry x="40" y="20" width="1420" height="30" as="geometry"/>
+                </mxCell>
+                <mxCell id="subtitle" value="Action lifecycle starts here. status='queued' Action row + status='queued' Job row are written together; the worker picks up the Job and keeps actions.status / jobs.status in lockstep at every transition (Step 12d)." style="text;html=1;fontSize=12;fontStyle=2;fontColor=#666666;align=left;verticalAlign=middle;" parent="1" vertex="1">
+                    <mxGeometry x="40" y="52" width="1420" height="20" as="geometry"/>
+                </mxCell>
+
+                <mxCell id="actor_browser" value="Browser (NewActionDialog)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;fontStyle=1;" parent="1" vertex="1">
+                    <mxGeometry x="80" y="85" width="220" height="40" as="geometry"/>
+                </mxCell>
+                <mxCell id="actor_api" value="api (FastAPI)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=12;fontStyle=1;" parent="1" vertex="1">
+                    <mxGeometry x="420" y="85" width="160" height="40" as="geometry"/>
+                </mxCell>
+                <mxCell id="actor_reg" value="action_types REGISTRY" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=12;fontStyle=1;" parent="1" vertex="1">
+                    <mxGeometry x="700" y="85" width="200" height="40" as="geometry"/>
+                </mxCell>
+                <mxCell id="actor_pg" value="postgres (projects · scenes · action_outputs · action_templates · actions · jobs)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=10;fontStyle=1;" parent="1" vertex="1">
+                    <mxGeometry x="1020" y="85" width="420" height="40" as="geometry"/>
+                </mxCell>
+
+                <mxCell id="ll_browser" style="endArrow=none;dashed=1;html=1;rounded=0;strokeColor=#999999;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry"><mxPoint x="190" y="125" as="sourcePoint"/><mxPoint x="190" y="840" as="targetPoint"/></mxGeometry>
+                </mxCell>
+                <mxCell id="ll_api" style="endArrow=none;dashed=1;html=1;rounded=0;strokeColor=#999999;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry"><mxPoint x="500" y="125" as="sourcePoint"/><mxPoint x="500" y="840" as="targetPoint"/></mxGeometry>
+                </mxCell>
+                <mxCell id="ll_reg" style="endArrow=none;dashed=1;html=1;rounded=0;strokeColor=#999999;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry"><mxPoint x="800" y="125" as="sourcePoint"/><mxPoint x="800" y="840" as="targetPoint"/></mxGeometry>
+                </mxCell>
+                <mxCell id="ll_pg" style="endArrow=none;dashed=1;html=1;rounded=0;strokeColor=#999999;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry"><mxPoint x="1230" y="125" as="sourcePoint"/><mxPoint x="1230" y="840" as="targetPoint"/></mxGeometry>
+                </mxCell>
+
+                <mxCell id="phase1" value="① Request" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#eef3f8;strokeColor=#aac4e0;align=left;verticalAlign=middle;fontStyle=1;fontSize=12;" parent="1" vertex="1">
+                    <mxGeometry x="30" y="150" width="1460" height="26" as="geometry"/>
+                </mxCell>
+                <mxCell id="msg1" value="POST /api/projects/project_&amp;lt;uuid&amp;gt;/actions&lt;br/&gt;{ type, configuration, action_template_id? } — Cookie: allotrope_jwt" style="endArrow=classic;html=1;edgeStyle=none;fontSize=11;align=center;verticalAlign=bottom;labelBackgroundColor=#ffffff;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry"><mxPoint x="190" y="210" as="sourcePoint"/><mxPoint x="500" y="210" as="targetPoint"/></mxGeometry>
+                </mxCell>
+
+                <mxCell id="phase2" value="② Auth + load Project &amp; Scene" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#fff2e0;strokeColor=#e0b070;align=left;verticalAlign=middle;fontStyle=1;fontSize=12;" parent="1" vertex="1">
+                    <mxGeometry x="30" y="240" width="1460" height="26" as="geometry"/>
+                </mxCell>
+                <mxCell id="msg2a" value="db.get(Project, project_uuid)  → 404 project_not_found" style="endArrow=classic;html=1;edgeStyle=none;fontSize=11;align=center;verticalAlign=bottom;labelBackgroundColor=#ffffff;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry"><mxPoint x="500" y="290" as="sourcePoint"/><mxPoint x="1230" y="290" as="targetPoint"/></mxGeometry>
+                </mxCell>
+                <mxCell id="msg2b" value="db.get(Scene, project.scene_id)  → sensor_type drives validate_config" style="endArrow=classic;html=1;edgeStyle=none;fontSize=11;align=center;verticalAlign=bottom;labelBackgroundColor=#ffffff;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry"><mxPoint x="500" y="320" as="sourcePoint"/><mxPoint x="1230" y="320" as="targetPoint"/></mxGeometry>
+                </mxCell>
+
+                <mxCell id="phase3" value="③ Resolve action type + validate configuration" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f0e0f0;strokeColor=#b070b0;align=left;verticalAlign=middle;fontStyle=1;fontSize=12;" parent="1" vertex="1">
+                    <mxGeometry x="30" y="345" width="1460" height="26" as="geometry"/>
+                </mxCell>
+                <mxCell id="msg3a" value="get_spec(payload.type)  → 404 unknown_action_type:&amp;lt;type&amp;gt;" style="endArrow=classic;html=1;edgeStyle=none;fontSize=11;align=center;verticalAlign=bottom;labelBackgroundColor=#ffffff;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry"><mxPoint x="500" y="395" as="sourcePoint"/><mxPoint x="800" y="395" as="targetPoint"/></mxGeometry>
+                </mxCell>
+                <mxCell id="msg3b" value="spec.validate_config(raw_cfg, sensor_type)  → 422 on shape error / sensor mismatch" style="endArrow=classic;html=1;edgeStyle=none;fontSize=11;align=center;verticalAlign=bottom;labelBackgroundColor=#ffffff;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry"><mxPoint x="500" y="425" as="sourcePoint"/><mxPoint x="800" y="425" as="targetPoint"/></mxGeometry>
+                </mxCell>
+                <mxCell id="msg3c" value="validated cfg dict" style="endArrow=classic;html=1;edgeStyle=none;fontSize=11;align=center;verticalAlign=bottom;labelBackgroundColor=#ffffff;dashed=1;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry"><mxPoint x="800" y="455" as="sourcePoint"/><mxPoint x="500" y="455" as="targetPoint"/></mxGeometry>
+                </mxCell>
+
+                <mxCell id="phase4" value="④ Cross-field semantic checks (api owns membership; type owns shape)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#fbe5d6;strokeColor=#d99458;align=left;verticalAlign=middle;fontStyle=1;fontSize=12;" parent="1" vertex="1">
+                    <mxGeometry x="30" y="480" width="1460" height="26" as="geometry"/>
+                </mxCell>
+                <mxCell id="msg4a" value="assert configuration.input_scene_id == project.scene_id  → 422" style="text;html=1;fontSize=11;align=left;verticalAlign=middle;fontStyle=2;fontColor=#444444;" parent="1" vertex="1">
+                    <mxGeometry x="220" y="515" width="700" height="20" as="geometry"/>
+                </mxCell>
+                <mxCell id="msg4b" value="if input_band_filter_output_id present: db.get(ActionOutput) → assert ref_action.project_id==project.id AND ref_action.status=='complete' → else 422 input_band_filter_output_id_not_usable" style="endArrow=classic;html=1;edgeStyle=none;fontSize=11;align=center;verticalAlign=bottom;labelBackgroundColor=#ffffff;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry"><mxPoint x="500" y="555" as="sourcePoint"/><mxPoint x="1230" y="555" as="targetPoint"/></mxGeometry>
+                </mxCell>
+                <mxCell id="msg4c" value="if action_template_id present: db.get(ActionTemplate) → assert template.type == payload.type → else 422" style="endArrow=classic;html=1;edgeStyle=none;fontSize=11;align=center;verticalAlign=bottom;labelBackgroundColor=#ffffff;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry"><mxPoint x="500" y="585" as="sourcePoint"/><mxPoint x="1230" y="585" as="targetPoint"/></mxGeometry>
+                </mxCell>
+
+                <mxCell id="phase5" value="⑤ INSERT Action + Job (one transaction)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;align=left;verticalAlign=middle;fontStyle=1;fontSize=12;" parent="1" vertex="1">
+                    <mxGeometry x="30" y="610" width="1460" height="26" as="geometry"/>
+                </mxCell>
+                <mxCell id="msg5a" value="INSERT actions(id, project_id, action_template_id?, type, configuration, status='queued', created_at)" style="endArrow=classic;html=1;edgeStyle=none;fontSize=11;align=center;verticalAlign=bottom;labelBackgroundColor=#ffffff;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry"><mxPoint x="500" y="660" as="sourcePoint"/><mxPoint x="1230" y="660" as="targetPoint"/></mxGeometry>
+                </mxCell>
+                <mxCell id="msg5b" value="INSERT jobs(id, type='action_run', status='queued', project_id, target_kind='action', target_id=action.id, payload={action_id, project_id, scene_id, action_type})" style="endArrow=classic;html=1;edgeStyle=none;fontSize=11;align=center;verticalAlign=bottom;labelBackgroundColor=#ffffff;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry"><mxPoint x="500" y="695" as="sourcePoint"/><mxPoint x="1230" y="695" as="targetPoint"/></mxGeometry>
+                </mxCell>
+                <mxCell id="msg5c" value="COMMIT" style="endArrow=classic;html=1;edgeStyle=none;fontSize=11;align=center;verticalAlign=bottom;labelBackgroundColor=#ffffff;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry"><mxPoint x="500" y="725" as="sourcePoint"/><mxPoint x="1230" y="725" as="targetPoint"/></mxGeometry>
+                </mxCell>
+
+                <mxCell id="phase6" value="⑥ Response" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;align=left;verticalAlign=middle;fontStyle=1;fontSize=12;" parent="1" vertex="1">
+                    <mxGeometry x="30" y="750" width="1460" height="26" as="geometry"/>
+                </mxCell>
+                <mxCell id="msg6" value="201 — ActionPublic { id=action_&amp;lt;uuid&amp;gt;, status='queued', configuration, … }" style="endArrow=classic;html=1;edgeStyle=none;fontSize=11;align=center;verticalAlign=bottom;labelBackgroundColor=#ffffff;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry"><mxPoint x="500" y="800" as="sourcePoint"/><mxPoint x="190" y="800" as="targetPoint"/></mxGeometry>
+                </mxCell>
+
+                <mxCell id="note" value="Errors: 401 (auth) · 404 project_not_found · 404 unknown_action_type:&amp;lt;type&amp;gt; · 422 (shape via Pydantic / sensor mismatch / cross-field membership) · 500 scene_missing_for_project (RESTRICT-FK guard).&lt;br/&gt;Invariants: Action insert and Job insert are atomic (single COMMIT). Job.target_kind=&apos;action&apos; + target_id=action.id is the soft polymorphic ref the worker uses to load the Action after claim." style="text;html=1;fontSize=10;align=left;verticalAlign=top;fillColor=#fafafa;strokeColor=#cccccc;fontColor=#444444;" parent="1" vertex="1">
+                    <mxGeometry x="40" y="822" width="1450" height="55" as="geometry"/>
+                </mxCell>
+            </root>
+        </mxGraphModel>
+    </diagram>
+</mxfile>

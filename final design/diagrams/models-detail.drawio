@@ -1,0 +1,77 @@
+<mxfile host="65bd71144e">
+    <diagram id="models_detail" name="GET /models/{architecture}">
+        <mxGraphModel dx="1502" dy="931" grid="0" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1400" pageHeight="650" math="0" shadow="0">
+            <root>
+                <mxCell id="0"/>
+                <mxCell id="1" parent="0"/>
+                <mxCell id="title" value="GET /models/{architecture} — full manifest for the per-model detail view" style="text;html=1;fontSize=20;fontStyle=1;align=left;verticalAlign=middle;" parent="1" vertex="1">
+                    <mxGeometry x="40" y="20" width="1300" height="30" as="geometry"/>
+                </mxCell>
+                <mxCell id="subtitle" value="Single-shot read of `${MODELS_DIR}/{architecture}/current.json`. Returns the entire manifest including the codename block, normalization, current pick, and alternatives — used by the React Flow detail page hero + rail." style="text;html=1;fontSize=12;fontStyle=2;fontColor=#666666;align=left;verticalAlign=middle;" parent="1" vertex="1">
+                    <mxGeometry x="40" y="52" width="1300" height="20" as="geometry"/>
+                </mxCell>
+
+                <mxCell id="actor_browser" value="Browser (ModelDetailPage)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;fontStyle=1;" parent="1" vertex="1">
+                    <mxGeometry x="120" y="85" width="220" height="40" as="geometry"/>
+                </mxCell>
+                <mxCell id="actor_api" value="api (FastAPI)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=12;fontStyle=1;" parent="1" vertex="1">
+                    <mxGeometry x="540" y="85" width="160" height="40" as="geometry"/>
+                </mxCell>
+                <mxCell id="actor_fs" value="filesystem (allotrope_models, ro)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11;fontStyle=1;" parent="1" vertex="1">
+                    <mxGeometry x="900" y="85" width="240" height="40" as="geometry"/>
+                </mxCell>
+
+                <mxCell id="ll_browser" style="endArrow=none;dashed=1;html=1;rounded=0;strokeColor=#999999;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry"><mxPoint x="230" y="125" as="sourcePoint"/><mxPoint x="230" y="600" as="targetPoint"/></mxGeometry>
+                </mxCell>
+                <mxCell id="ll_api" style="endArrow=none;dashed=1;html=1;rounded=0;strokeColor=#999999;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry"><mxPoint x="620" y="125" as="sourcePoint"/><mxPoint x="620" y="600" as="targetPoint"/></mxGeometry>
+                </mxCell>
+                <mxCell id="ll_fs" style="endArrow=none;dashed=1;html=1;rounded=0;strokeColor=#999999;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry"><mxPoint x="1020" y="125" as="sourcePoint"/><mxPoint x="1020" y="600" as="targetPoint"/></mxGeometry>
+                </mxCell>
+
+                <mxCell id="phase1_band" value="① Request" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#eef3f8;strokeColor=#aac4e0;align=left;verticalAlign=middle;fontStyle=1;fontSize=12;" parent="1" vertex="1">
+                    <mxGeometry x="30" y="150" width="1340" height="26" as="geometry"/>
+                </mxCell>
+                <mxCell id="msg1" value="GET /api/models/hyperspectral_segformer_mae — Cookie: allotrope_jwt" style="endArrow=classic;html=1;edgeStyle=none;fontSize=11;align=center;verticalAlign=bottom;labelBackgroundColor=#ffffff;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry"><mxPoint x="230" y="200" as="sourcePoint"/><mxPoint x="620" y="200" as="targetPoint"/></mxGeometry>
+                </mxCell>
+
+                <mxCell id="phase2_band" value="② Auth" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#fff2e0;strokeColor=#e0b070;align=left;verticalAlign=middle;fontStyle=1;fontSize=12;" parent="1" vertex="1">
+                    <mxGeometry x="30" y="225" width="1340" height="26" as="geometry"/>
+                </mxCell>
+                <mxCell id="msg2" value="decode JWT → Claims; 401 if missing/invalid" style="text;html=1;fontSize=11;align=left;verticalAlign=middle;fontStyle=2;fontColor=#444444;" parent="1" vertex="1">
+                    <mxGeometry x="450" y="260" width="400" height="20" as="geometry"/>
+                </mxCell>
+
+                <mxCell id="phase3_band" value="③ Read manifest" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f0e0f0;strokeColor=#b070b0;align=left;verticalAlign=middle;fontStyle=1;fontSize=12;" parent="1" vertex="1">
+                    <mxGeometry x="30" y="290" width="1340" height="26" as="geometry"/>
+                </mxCell>
+                <mxCell id="msg3" value="path = ${MODELS_DIR}/{architecture}/current.json; .read_text() → json.loads()" style="endArrow=classic;html=1;edgeStyle=none;fontSize=11;align=center;verticalAlign=bottom;labelBackgroundColor=#ffffff;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry"><mxPoint x="620" y="335" as="sourcePoint"/><mxPoint x="1020" y="335" as="targetPoint"/></mxGeometry>
+                </mxCell>
+                <mxCell id="msg4" value="full manifest dict" style="endArrow=classic;html=1;edgeStyle=none;fontSize=11;align=center;verticalAlign=bottom;labelBackgroundColor=#ffffff;dashed=1;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry"><mxPoint x="1020" y="375" as="sourcePoint"/><mxPoint x="620" y="375" as="targetPoint"/></mxGeometry>
+                </mxCell>
+                <mxCell id="msg4b" value="(404 if path does not exist — returned as HTTPException, no log noise)" style="text;html=1;fontSize=10;align=left;verticalAlign=middle;fontStyle=2;fontColor=#888888;" parent="1" vertex="1">
+                    <mxGeometry x="450" y="395" width="500" height="18" as="geometry"/>
+                </mxCell>
+
+                <mxCell id="phase4_band" value="④ Pydantic-validate &amp; respond" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;align=left;verticalAlign=middle;fontStyle=1;fontSize=12;" parent="1" vertex="1">
+                    <mxGeometry x="30" y="425" width="1340" height="26" as="geometry"/>
+                </mxCell>
+                <mxCell id="msg5" value="ModelDetail{ architecture, label, codename, sensor, current, alternatives, normalization, doc, inferencer, notes, … }" style="text;html=1;fontSize=11;align=left;verticalAlign=middle;fontStyle=2;fontColor=#444444;" parent="1" vertex="1">
+                    <mxGeometry x="230" y="458" width="900" height="20" as="geometry"/>
+                </mxCell>
+                <mxCell id="msg6" value="200 — ModelDetail" style="endArrow=classic;html=1;edgeStyle=none;fontSize=11;align=center;verticalAlign=bottom;labelBackgroundColor=#ffffff;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry"><mxPoint x="620" y="510" as="sourcePoint"/><mxPoint x="230" y="510" as="targetPoint"/></mxGeometry>
+                </mxCell>
+
+                <mxCell id="note" value="Errors:&lt;br/&gt;• 401 — JWT missing/invalid.&lt;br/&gt;• 404 — &lt;code&gt;{architecture}&lt;/code&gt; folder absent or no current.json under it.&lt;br/&gt;• 500 — manifest exists but fails Pydantic validation (schema drift).&lt;br/&gt;The flow chart definition itself lives in the frontend (frontend/src/data/modelFlows/&lt;arch&gt;.ts), not here — backend ships only the manifest." style="text;html=1;fontSize=10;align=left;verticalAlign=top;fillColor=#fafafa;strokeColor=#cccccc;fontColor=#444444;" parent="1" vertex="1">
+                    <mxGeometry x="40" y="540" width="900" height="60" as="geometry"/>
+                </mxCell>
+            </root>
+        </mxGraphModel>
+    </diagram>
+</mxfile>

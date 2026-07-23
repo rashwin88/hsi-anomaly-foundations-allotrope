@@ -1,0 +1,217 @@
+{
+    "type": "Feature",
+    "id": "20231020T220042000_visual_30_hotsat1",
+    "collection": "visual",
+    "stac_version": "1.0.0",
+    "stac_extensions": [
+        "https://stac-extensions.github.io/projection/v1.0.0/schema.json",
+        "https://stac-extensions.github.io/raster/v1.1.0/schema.json",
+        "https://stac-extensions.github.io/view/v1.0.0/schema.json",
+        "https://stac-extensions.github.io/eo/v1.0.0/schema.json",
+        "https://stac-extensions.github.io/processing/v1.1.0/schema.json"
+    ],
+    "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+            [
+                [
+                    48.388907801,
+                    28.721886172
+                ],
+                [
+                    48.373405372,
+                    28.758179211
+                ],
+                [
+                    48.313128087,
+                    28.741147594
+                ],
+                [
+                    48.328504724,
+                    28.705023132
+                ],
+                [
+                    48.388907801,
+                    28.721886172
+                ]
+            ]
+        ]
+    },
+    "links": [
+        {
+            "href": "https://api.qa.satellitevu.com/catalog/v1/efedcf24-3ada-4cbc-a207-a322d7cb5da4/collections/primary/20231020_220042_HS1_PRM",
+            "rel": "derived_from",
+            "type": "application/geo+json",
+            "title": "Derived from primary item"
+        },
+        {
+            "href": "http://api.satellitevu.com/catalog/v1/efedcf24-3ada-4cbc-a207-a322d7cb5da4/",
+            "rel": "root",
+            "type": "application/json"
+        },
+        {
+            "href": "http://api.satellitevu.com/catalog/v1/efedcf24-3ada-4cbc-a207-a322d7cb5da4/catalog/v1/efedcf24-3ada-4cbc-a207-a322d7cb5da4/search",
+            "rel": "self",
+            "type": "application/geo+json"
+        },
+        {
+            "href": "http://api.satellitevu.com/catalog/v1/efedcf24-3ada-4cbc-a207-a322d7cb5da4/collections/visual",
+            "rel": "parent",
+            "type": "application/json"
+        },
+        {
+            "href": "http://api.satellitevu.com/catalog/v1/efedcf24-3ada-4cbc-a207-a322d7cb5da4/collections/visual",
+            "rel": "collection",
+            "type": "application/json"
+        }
+    ],
+    "bbox": [
+        48.31265240232294,
+        28.704715150037675,
+        48.389321017578716,
+        28.758483088208738
+    ],
+    "properties": {
+        "datetime": "2023-10-20T22:00:42Z",
+        "created": "2026-01-21T15:46:24Z",
+        "created_at": "2026-01-21T15:46:24Z",
+        "eo:cloud_cover": 0.0,
+        "gsd": 4.527217864990234,
+        "platform": "hotsat-1",
+        "processing:software": {
+            "image-processing": "1.505.2"
+        },
+        "proj:bbox": [
+            237590.65716362,
+            3178226.912496567,
+            244956.4406299591,
+            3184026.2785816193
+        ],
+        "proj:epsg": 32639,
+        "proj:geometry": {
+            "type": "Polygon",
+            "coordinates": [
+                [
+                    [
+                        244954.1770210266,
+                        3179967.6277656555
+                    ],
+                    [
+                        243528.1033935547,
+                        3184024.014972687
+                    ],
+                    [
+                        237597.44799041748,
+                        3182267.4544410706
+                    ],
+                    [
+                        239009.93996429443,
+                        3178229.1761054993
+                    ],
+                    [
+                        244954.1770210266,
+                        3179967.6277656555
+                    ]
+                ]
+            ]
+        },
+        "proj:shape": [
+            1281,
+            1627
+        ],
+        "proj:transform": [
+            4.527217864990234,
+            0.0,
+            237590.65716362,
+            0.0,
+            -4.527217864990234,
+            3184026.2785816193,
+            0.0,
+            0.0,
+            1.0
+        ],
+        "view:azimuth": 80.82813457320019,
+        "view:off_nadir": 28.24738558832036,
+        "view:sun_azimuth": 53.39924997290124,
+        "view:sun_elevation": -62.27133498700093
+    },
+    "assets": {
+        "experimental_stacked": {
+            "href": "./20231020T220042000_visual_30_hotsat1_stacked.tiff",
+            "roles": [
+                "data"
+            ],
+            "type": "image/tiff; application=geotiff; profile=cloud-optimized",
+            "raster:bands": [
+                {
+                    "bits_per_sample": 14,
+                    "data_type": "uint16",
+                    "nodata": 0,
+                    "offset": 0,
+                    "sampling": "area",
+                    "scale": 1,
+                    "statistics": {
+                        "maximum": 25762,
+                        "mean": 5316.38597045091,
+                        "minimum": 4843,
+                        "stddev": 358.7346752046986,
+                        "valid_percent": 63.15684532980478
+                    }
+                }
+            ]
+        },
+        "experimental_stackedoverview": {
+            "href": "./20231020T220042000_visual_30_hotsat1_stackedoverview.png",
+            "roles": [
+                "overview"
+            ],
+            "type": "image/png"
+        },
+        "full_resolution_thumbnail": {
+            "href": "./20231020T220042000_visual_30_hotsat1_thumbnail.png",
+            "roles": [
+                "thumbnail"
+            ],
+            "type": "image/png"
+        },
+        "overview": {
+            "href": "./20231020T220042000_visual_30_hotsat1_overview.png",
+            "roles": [
+                "overview"
+            ],
+            "type": "image/png"
+        },
+        "udm": {
+            "href": "./20231020T220042000_visual_30_hotsat1_udm.tiff",
+            "roles": [
+                "udm",
+                "metadata"
+            ],
+            "type": "image/tiff; application=geotiff; profile=cloud-optimized"
+        },
+        "visual": {
+            "href": "./20231020T220042000_visual_30_hotsat1_ortho.tiff",
+            "roles": [
+                "data"
+            ],
+            "type": "image/tiff; application=geotiff; profile=cloud-optimized",
+            "raster:bands": [
+                {
+                    "bits_per_sample": 14,
+                    "data_type": "uint16",
+                    "nodata": 0,
+                    "offset": 0,
+                    "sampling": "area",
+                    "scale": 1,
+                    "statistics": {
+                        "maximum": 24419,
+                        "mean": 5317.302978245954,
+                        "minimum": 3762,
+                        "stddev": 367.9623035549901,
+                        "valid_percent": 63.2891866228894
+                    }
+                }
+            ]
+        }
+    }
+}

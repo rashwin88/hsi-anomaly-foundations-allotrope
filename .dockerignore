@@ -1,0 +1,59 @@
+# Three services in docker-compose.yml use `context: ..` (the repo
+# root), so the build context defaults to *the whole repo*. Without
+# this file, every `docker compose build` ships hundreds of MB of
+# artifacts + raw scientific bundles to the Docker daemon, dramatically
+# slowing rebuilds and bloating images.
+
+# --- Raw scientific bundles ---------------------------------------------
+# USGS splib07 lab spectra. 6.7 GB. The curated slim subset (~40 MB)
+# used by the spectral-match action lives in a separate `allotrope_splib07`
+# volume and is built once via a one-shot CLI; the raw bundle should
+# never enter a Docker build context.
+data/splib/
+
+# Local raw scene data and analyst-supplied samples. None of these
+# get baked into images — they live in named volumes at runtime.
+data/aviris_samples/
+data/hotsatsample/
+data/scenes/
+data/staging/
+data/artifacts/
+
+# --- Frontend build outputs / node_modules ------------------------------
+frontend/node_modules/
+frontend/dist/
+
+# --- Python build artifacts --------------------------------------------
+**/__pycache__/
+**/*.pyc
+**/.pytest_cache/
+**/.mypy_cache/
+**/.ruff_cache/
+
+# --- Local checkpoints / model artifacts -------------------------------
+checkpoints/
+.pt_cache/
+
+# --- Repo-level junk ---------------------------------------------------
+.git/
+.github/
+.vscode/
+.idea/
+.DS_Store
+**/.DS_Store
+*.log
+
+# --- Docs + sample/reference code that doesn't need to ship ------------
+final\ design/
+docs/
+notebooks/
+benchmarks/
+model_break_down/
+spectal_match_sample/
+README*.md
+ROADMAP.md
+
+# --- Local env files (must not leak into images) -----------------------
+.env
+.env.*
+docker/.env

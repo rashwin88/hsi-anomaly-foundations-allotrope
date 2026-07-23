@@ -1,0 +1,78 @@
+<mxfile host="65bd71144e">
+    <diagram id="jobs_list" name="jobs list (Step 19)">
+        <mxGraphModel dx="1502" dy="931" grid="0" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1500" pageHeight="800" math="0" shadow="0">
+            <root>
+                <mxCell id="0"/>
+                <mxCell id="1" parent="0"/>
+                <mxCell id="title" value="Jobs list — paginated, filterable, polling-aware" style="text;html=1;fontSize=20;fontStyle=1;align=left;verticalAlign=middle;" parent="1" vertex="1">
+                    <mxGeometry x="40" y="20" width="1100" height="30" as="geometry"/>
+                </mxCell>
+                <mxCell id="subtitle" value="GET /jobs returns a page of Job rows newest-first with optional status / type / project filters. Read-only — the worker owns lifecycle transitions. JobsPage auto-polls every 3 s while any visible row is queued or running. Unknown status filters silently return an empty page so backend renames don't break older clients." style="text;html=1;fontSize=12;fontStyle=2;fontColor=#666666;align=left;verticalAlign=middle;" parent="1" vertex="1">
+                    <mxGeometry x="40" y="52" width="1400" height="55" as="geometry"/>
+                </mxCell>
+
+                <!-- Actors -->
+                <mxCell id="actor_browser" value="Browser (JobsPage)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;fontStyle=1;" parent="1" vertex="1">
+                    <mxGeometry x="80" y="120" width="240" height="40" as="geometry"/>
+                </mxCell>
+                <mxCell id="actor_api" value="api (FastAPI)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=12;fontStyle=1;" parent="1" vertex="1">
+                    <mxGeometry x="560" y="120" width="160" height="40" as="geometry"/>
+                </mxCell>
+                <mxCell id="actor_pg" value="postgres" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=12;fontStyle=1;" parent="1" vertex="1">
+                    <mxGeometry x="1100" y="120" width="160" height="40" as="geometry"/>
+                </mxCell>
+
+                <!-- Lifelines -->
+                <mxCell id="ll_browser" style="endArrow=none;dashed=1;html=1;rounded=0;strokeColor=#999999;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry"><mxPoint x="200" y="160" as="sourcePoint"/><mxPoint x="200" y="760" as="targetPoint"/></mxGeometry>
+                </mxCell>
+                <mxCell id="ll_api" style="endArrow=none;dashed=1;html=1;rounded=0;strokeColor=#999999;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry"><mxPoint x="640" y="160" as="sourcePoint"/><mxPoint x="640" y="760" as="targetPoint"/></mxGeometry>
+                </mxCell>
+                <mxCell id="ll_pg" style="endArrow=none;dashed=1;html=1;rounded=0;strokeColor=#999999;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry"><mxPoint x="1180" y="160" as="sourcePoint"/><mxPoint x="1180" y="760" as="targetPoint"/></mxGeometry>
+                </mxCell>
+
+                <!-- Phase 1 -->
+                <mxCell id="phase1" value="① GET /jobs?status&amp;type&amp;project_id&amp;limit&amp;offset" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#eef3f8;strokeColor=#aac4e0;align=left;verticalAlign=middle;fontStyle=1;fontSize=12;" parent="1" vertex="1">
+                    <mxGeometry x="30" y="185" width="1450" height="26" as="geometry"/>
+                </mxCell>
+                <mxCell id="msg1" value="GET /api/jobs?status=running&amp;limit=100&amp;offset=0&lt;br/&gt;Cookie: allotrope_jwt" style="endArrow=classic;html=1;edgeStyle=none;fontSize=11;align=center;verticalAlign=bottom;labelBackgroundColor=#ffffff;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry"><mxPoint x="200" y="245" as="sourcePoint"/><mxPoint x="640" y="245" as="targetPoint"/></mxGeometry>
+                </mxCell>
+
+                <!-- Phase 2 -->
+                <mxCell id="phase2" value="② Validate auth + parse filters" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#fff2e0;strokeColor=#e0b070;align=left;verticalAlign=middle;fontStyle=1;fontSize=12;" parent="1" vertex="1">
+                    <mxGeometry x="30" y="275" width="1450" height="26" as="geometry"/>
+                </mxCell>
+                <mxCell id="note2" value="current_user_claims (JWT cookie, no DB).&lt;br/&gt;status ∉ known set → return empty page (forwards-compat).&lt;br/&gt;project_id → parse_prefixed_id('project', …) → 422 bad_id_format on garbage.&lt;br/&gt;type is opaque text — unknown types just return zero rows." style="shape=note;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11;align=left;verticalAlign=middle;" parent="1" vertex="1">
+                    <mxGeometry x="240" y="310" width="800" height="70" as="geometry"/>
+                </mxCell>
+
+                <!-- Phase 3 -->
+                <mxCell id="phase3" value="③ SELECT count(*) + paginated SELECT" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#e6f3e6;strokeColor=#82b366;align=left;verticalAlign=middle;fontStyle=1;fontSize=12;" parent="1" vertex="1">
+                    <mxGeometry x="30" y="395" width="1450" height="26" as="geometry"/>
+                </mxCell>
+                <mxCell id="msg3" value="SELECT count(*) FROM jobs WHERE &amp;lt;filters&amp;gt;;&lt;br/&gt;SELECT * FROM jobs WHERE &amp;lt;filters&amp;gt; ORDER BY created_at DESC LIMIT 100 OFFSET 0;&lt;br/&gt;jobs_status_idx + jobs_project_id_idx narrow before the sort." style="endArrow=classic;html=1;edgeStyle=none;fontSize=11;align=center;verticalAlign=bottom;labelBackgroundColor=#ffffff;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry"><mxPoint x="640" y="465" as="sourcePoint"/><mxPoint x="1180" y="465" as="targetPoint"/></mxGeometry>
+                </mxCell>
+
+                <!-- Phase 4 -->
+                <mxCell id="phase4" value="④ 200 OK — { items, total, limit, offset }" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#eef3f8;strokeColor=#aac4e0;align=left;verticalAlign=middle;fontStyle=1;fontSize=12;" parent="1" vertex="1">
+                    <mxGeometry x="30" y="500" width="1450" height="26" as="geometry"/>
+                </mxCell>
+                <mxCell id="msg4" value="200 OK&lt;br/&gt;{ items: [{ id: job_&amp;lt;uuid&amp;gt;, type, status, project_id?, payload, target_kind?, target_id?,&lt;br/&gt;failure_reason?, cancellation_requested, started_at?, last_heartbeat_at?, completed_at?, created_at }],&lt;br/&gt;total, limit, offset }" style="endArrow=classic;html=1;edgeStyle=none;fontSize=11;align=center;verticalAlign=bottom;labelBackgroundColor=#ffffff;startArrow=classic;startFill=1;dashed=1;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry"><mxPoint x="640" y="585" as="sourcePoint"/><mxPoint x="200" y="585" as="targetPoint"/></mxGeometry>
+                </mxCell>
+
+                <!-- Phase 5: polling -->
+                <mxCell id="phase5" value="⑤ Auto-poll every 3 s while any visible row is queued/running" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f3e6f3;strokeColor=#a874a8;align=left;verticalAlign=middle;fontStyle=1;fontSize=12;" parent="1" vertex="1">
+                    <mxGeometry x="30" y="620" width="1450" height="26" as="geometry"/>
+                </mxCell>
+                <mxCell id="note5" value="JobsPage computes inFlight = items.some(j =&amp;gt; j.status ∈ {queued, running}). While inFlight, a setInterval(3 s) bumps reloadTick, which re-fires the GET. Polling stops automatically the tick after the last row settles, so an empty / fully-settled list adds no traffic." style="shape=note;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11;align=left;verticalAlign=middle;" parent="1" vertex="1">
+                    <mxGeometry x="80" y="655" width="1100" height="75" as="geometry"/>
+                </mxCell>
+            </root>
+        </mxGraphModel>
+    </diagram>
+</mxfile>

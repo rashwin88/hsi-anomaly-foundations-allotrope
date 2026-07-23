@@ -1,0 +1,140 @@
+# Allotrope — REMOTE/DEPLOY compose file.
+#
+# Same as docker/docker-compose.yml but with all `build:` blocks removed.
+# Use this on a remote host where the images are pre-loaded via
+# `docker load` (from a snapshot bundle) and no source tree is present.
+#
+# Bring up:
+#     sudo docker-compose -f docker-compose.remote.yml up -d
+#
+# With GPU:
+#     sudo docker-compose \
+#         -f docker-compose.remote.yml \
+#         -f docker-compose.gpu.remote.yml \
+#         up -d
+#
+# Status:
+#     sudo docker-compose -f docker-compose.remote.yml ps
+#
+# Logs:
+#     sudo docker-compose -f docker-compose.remote.yml logs -f <service>
+#
+# Bring down (keep volumes):
+#     sudo docker-compose -f docker-compose.remote.yml down
+
+services:
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: allotrope_postgres
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-allotrope}
+      POSTGRES_USER: ${POSTGRES_USER:-allotrope}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}
+      TZ: UTC
+      PGTZ: UTC
+    volumes:
+      - allotrope_db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-allotrope} -d ${POSTGRES_DB:-allotrope}"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+    ports:
+      - "127.0.0.1:5432:5432"
+    restart: unless-stopped
+
+  bootstrap:
+    image: docker-api
+    container_name: allotrope_bootstrap
+    command: ["/usr/local/bin/allotrope-bootstrap"]
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-allotrope}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+      POSTGRES_DB: ${POSTGRES_DB:-allotrope}
+      ADMIN_USERNAME: ${ADMIN_USERNAME:-}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set in .env}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  api:
+    image: docker-api
+    container_name: allotrope_api
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-allotrope}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+      POSTGRES_DB: ${POSTGRES_DB:-allotrope}
+      ADMIN_USERNAME: ${ADMIN_USERNAME:-}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set in .env}
+    volumes:
+      - allotrope_data:/data
+      - allotrope_artifacts:/artifacts
+      - allotrope_models:/models:ro
+    ports:
+      - "127.0.0.1:8010:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      bootstrap:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  worker:
+    image: docker-worker
+    container_name: allotrope_worker
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-allotrope}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+      POSTGRES_DB: ${POSTGRES_DB:-allotrope}
+      WORKER_POLL_INTERVAL_SEC: ${WORKER_POLL_INTERVAL_SEC:-2.0}
+      WORKER_HEARTBEAT_INTERVAL_SEC: ${WORKER_HEARTBEAT_INTERVAL_SEC:-5.0}
+      WORKER_HEARTBEAT_TIMEOUT_SEC: ${WORKER_HEARTBEAT_TIMEOUT_SEC:-60.0}
+      WORKER_REAP_INTERVAL_SEC: ${WORKER_REAP_INTERVAL_SEC:-30.0}
+      WORKER_LOG_LEVEL: ${WORKER_LOG_LEVEL:-INFO}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set in .env}
+    volumes:
+      - allotrope_data:/data
+      - allotrope_models:/models
+      - allotrope_artifacts:/artifacts
+      - allotrope_splib07:/splib07_cache
+    depends_on:
+      postgres:
+        condition: service_healthy
+      bootstrap:
+        condition: service_completed_successfully
+    stop_grace_period: 30s
+    restart: unless-stopped
+
+  frontend:
+    image: docker-frontend
+    container_name: allotrope_frontend
+    ports:
+      - "127.0.0.1:3010:80"
+    depends_on:
+      - api
+    restart: unless-stopped
+
+volumes:
+  allotrope_db:
+    name: allotrope_db
+  allotrope_data:
+    name: allotrope_data
+  allotrope_models:
+    name: allotrope_models
+  allotrope_artifacts:
+    name: allotrope_artifacts
+  allotrope_splib07:
+    name: allotrope_splib07

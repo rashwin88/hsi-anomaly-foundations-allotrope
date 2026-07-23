@@ -1,0 +1,127 @@
+<mxfile host="65bd71144e">
+    <diagram id="scene_onboard" name="POST /scenes/onboard + worker">
+        <mxGraphModel dx="1502" dy="931" grid="0" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1500" pageHeight="1320" math="0" shadow="0">
+            <root>
+                <mxCell id="0"/>
+                <mxCell id="1" parent="0"/>
+                <mxCell id="title" value="POST /scenes/onboard — multipart upload, async onboarding via worker" style="text;html=1;fontSize=20;fontStyle=1;align=left;verticalAlign=middle;" parent="1" vertex="1">
+                    <mxGeometry x="40" y="20" width="1200" height="30" as="geometry"/>
+                </mxCell>
+                <mxCell id="subtitle" value="api stages files synchronously, enqueues a scene_onboard job, returns 202. Worker (separate container) claims the job, runs the existing app/utils/dataset_builder/* pipeline, INSERTs the Scene. Client polls GET /jobs/{job_id} for progress." style="text;html=1;fontSize=12;fontStyle=2;fontColor=#666666;align=left;verticalAlign=middle;" parent="1" vertex="1">
+                    <mxGeometry x="40" y="52" width="1400" height="20" as="geometry"/>
+                </mxCell>
+                <mxCell id="actor_browser" value="Browser (Client)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;fontStyle=1;" parent="1" vertex="1">
+                    <mxGeometry x="120" y="85" width="160" height="40" as="geometry"/>
+                </mxCell>
+                <mxCell id="actor_api" value="api (FastAPI)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=12;fontStyle=1;" parent="1" vertex="1">
+                    <mxGeometry x="380" y="85" width="160" height="40" as="geometry"/>
+                </mxCell>
+                <mxCell id="actor_data" value="allotrope_data + _artifacts (shared volumes)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e8d5e8;strokeColor=#a874a8;fontSize=11;fontStyle=1;" parent="1" vertex="1">
+                    <mxGeometry x="630" y="85" width="220" height="40" as="geometry"/>
+                </mxCell>
+                <mxCell id="actor_pg" value="postgres" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=12;fontStyle=1;" parent="1" vertex="1">
+                    <mxGeometry x="930" y="85" width="160" height="40" as="geometry"/>
+                </mxCell>
+                <mxCell id="actor_worker" value="worker (DatasetBuilder)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=12;fontStyle=1;" parent="1" vertex="1">
+                    <mxGeometry x="1200" y="85" width="200" height="40" as="geometry"/>
+                </mxCell>
+                <mxCell id="ll_browser" style="endArrow=none;dashed=1;html=1;rounded=0;strokeColor=#999999;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry"><mxPoint x="200" y="125" as="sourcePoint"/><mxPoint x="200" y="1280" as="targetPoint"/></mxGeometry>
+                </mxCell>
+                <mxCell id="ll_api" style="endArrow=none;dashed=1;html=1;rounded=0;strokeColor=#999999;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry"><mxPoint x="460" y="125" as="sourcePoint"/><mxPoint x="460" y="1280" as="targetPoint"/></mxGeometry>
+                </mxCell>
+                <mxCell id="ll_data" style="endArrow=none;dashed=1;html=1;rounded=0;strokeColor=#999999;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry"><mxPoint x="740" y="125" as="sourcePoint"/><mxPoint x="740" y="1280" as="targetPoint"/></mxGeometry>
+                </mxCell>
+                <mxCell id="ll_pg" style="endArrow=none;dashed=1;html=1;rounded=0;strokeColor=#999999;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry"><mxPoint x="1010" y="125" as="sourcePoint"/><mxPoint x="1010" y="1280" as="targetPoint"/></mxGeometry>
+                </mxCell>
+                <mxCell id="ll_worker" style="endArrow=none;dashed=1;html=1;rounded=0;strokeColor=#999999;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry"><mxPoint x="1300" y="125" as="sourcePoint"/><mxPoint x="1300" y="1280" as="targetPoint"/></mxGeometry>
+                </mxCell>
+                <mxCell id="phase1_band" value="① Multipart upload" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#eef3f8;strokeColor=#aac4e0;align=left;verticalAlign=middle;fontStyle=1;fontSize=12;" parent="1" vertex="1">
+                    <mxGeometry x="30" y="140" width="1440" height="26" as="geometry"/>
+                </mxCell>
+                <mxCell id="msg1_1" value="POST /scenes/onboard&lt;br/&gt;Content-Type: multipart/form-data&lt;br/&gt;sensor_type=&amp;lt;prisma|landsat9|enmap&amp;gt;&lt;br/&gt;files=&amp;lt;N parts; webkitdirectory preserves &quot;FOLDER/file&quot; in filename&amp;gt;&lt;br/&gt;Cookie: allotrope_jwt" style="endArrow=classic;html=1;edgeStyle=none;fontSize=11;align=center;verticalAlign=bottom;labelBackgroundColor=#ffffff;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry"><mxPoint x="200" y="220" as="sourcePoint"/><mxPoint x="460" y="220" as="targetPoint"/></mxGeometry>
+                </mxCell>
+                <mxCell id="phase2_band" value="② Auth + validation (deps.py + scenes.onboard_scene)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#fff2e0;strokeColor=#e0b070;align=left;verticalAlign=middle;fontStyle=1;fontSize=12;" parent="1" vertex="1">
+                    <mxGeometry x="30" y="240" width="1440" height="26" as="geometry"/>
+                </mxCell>
+                <mxCell id="note2" value="current_user_claims: JWT decode (no DB).&lt;br/&gt;sensor_type ∈ {prisma, landsat9, enmap} else 422 unsupported_sensor_type.&lt;br/&gt;files non-empty else 422 no_files." style="shape=note;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11;align=left;verticalAlign=middle;" parent="1" vertex="1">
+                    <mxGeometry x="280" y="280" width="500" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="phase3_band" value="③ Mint job_id + stage files synchronously" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#e8f1e6;strokeColor=#a8c8a4;align=left;verticalAlign=middle;fontStyle=1;fontSize=12;" parent="1" vertex="1">
+                    <mxGeometry x="30" y="350" width="1440" height="26" as="geometry"/>
+                </mxCell>
+                <mxCell id="msg3_1" value="mkdir -p /data/staging/&amp;lt;job_id&amp;gt;/" style="endArrow=classic;html=1;edgeStyle=none;fontSize=11;align=center;verticalAlign=bottom;labelBackgroundColor=#ffffff;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry"><mxPoint x="460" y="405" as="sourcePoint"/><mxPoint x="740" y="405" as="targetPoint"/></mxGeometry>
+                </mxCell>
+                <mxCell id="msg3_2" value="for each upload: _safe_relative_path(filename) → reject .. / absolute / NUL → write 1 MiB chunks" style="endArrow=classic;html=1;edgeStyle=none;dashed=1;fontSize=11;align=center;verticalAlign=bottom;labelBackgroundColor=#ffffff;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry"><mxPoint x="460" y="438" as="sourcePoint"/><mxPoint x="740" y="438" as="targetPoint"/></mxGeometry>
+                </mxCell>
+                <mxCell id="note3" value="Bad filenames raise inside the loop. The except HTTPException branch rmtree's the staging dir before re-raising — no orphan partial uploads.&lt;br/&gt;Other exceptions → 500 upload_failed (also rmtree).&lt;br/&gt;Streaming reads (1 MiB chunks) keep api RAM bounded for multi-GB EnMAP folders." style="shape=note;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11;align=left;verticalAlign=middle;" parent="1" vertex="1">
+                    <mxGeometry x="280" y="465" width="640" height="80" as="geometry"/>
+                </mxCell>
+                <mxCell id="phase4_band" value="④ Enqueue scene_onboard job" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#fbe5e5;strokeColor=#d09898;align=left;verticalAlign=middle;fontStyle=1;fontSize=12;" parent="1" vertex="1">
+                    <mxGeometry x="30" y="555" width="1440" height="26" as="geometry"/>
+                </mxCell>
+                <mxCell id="msg4_1" value="INSERT INTO jobs (id, type='scene_onboard', status='queued', payload={sensor_type, staging_dir, files[], uploaded_by_user_id, uploaded_at})" style="endArrow=classic;html=1;edgeStyle=none;fontSize=11;align=center;verticalAlign=bottom;labelBackgroundColor=#ffffff;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry"><mxPoint x="460" y="615" as="sourcePoint"/><mxPoint x="1010" y="615" as="targetPoint"/></mxGeometry>
+                </mxCell>
+                <mxCell id="msg4_2" value="HTTP 202 Accepted&lt;br/&gt;{ job_id: &quot;job_&amp;lt;uuid&amp;gt;&quot;, staged_count, staged_bytes }" style="endArrow=open;html=1;edgeStyle=none;dashed=1;fontSize=11;align=center;verticalAlign=bottom;labelBackgroundColor=#ffffff;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry"><mxPoint x="460" y="650" as="sourcePoint"/><mxPoint x="200" y="650" as="targetPoint"/></mxGeometry>
+                </mxCell>
+                <mxCell id="phase5_band" value="⑤ Worker claim → handle_scene_onboard (separate container) — see worker-loop.drawio for the claim path" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f5eef8;strokeColor=#c8a4d0;align=left;verticalAlign=middle;fontStyle=1;fontSize=12;" parent="1" vertex="1">
+                    <mxGeometry x="30" y="680" width="1440" height="26" as="geometry"/>
+                </mxCell>
+                <mxCell id="msg5_1" value="claim_one() → row goes queued → running" style="endArrow=classic;html=1;edgeStyle=none;fontSize=11;align=center;verticalAlign=bottom;labelBackgroundColor=#ffffff;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry"><mxPoint x="1300" y="725" as="sourcePoint"/><mxPoint x="1010" y="725" as="targetPoint"/></mxGeometry>
+                </mxCell>
+                <mxCell id="msg5_2" value="pre-flight: SELECT id FROM scenes WHERE (sensor_type, sensor_scene_id) — duplicate? raise" style="endArrow=classic;html=1;edgeStyle=none;dashed=1;fontSize=11;align=center;verticalAlign=bottom;labelBackgroundColor=#ffffff;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry"><mxPoint x="1300" y="755" as="sourcePoint"/><mxPoint x="1010" y="755" as="targetPoint"/></mxGeometry>
+                </mxCell>
+                <mxCell id="msg5_3" value="shutil.move(/data/staging/&amp;lt;job_id&amp;gt; → /data/scenes/&amp;lt;scene_id&amp;gt;/raw/)" style="endArrow=classic;html=1;edgeStyle=none;fontSize=11;align=center;verticalAlign=bottom;labelBackgroundColor=#ffffff;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry"><mxPoint x="1300" y="790" as="sourcePoint"/><mxPoint x="740" y="790" as="targetPoint"/></mxGeometry>
+                </mxCell>
+                <mxCell id="phase6_band" value="⑥ DatasetBuilder runs — metadata + vendable persistence + visualization render set" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#fff2e0;strokeColor=#e0b070;align=left;verticalAlign=middle;fontStyle=1;fontSize=12;" parent="1" vertex="1">
+                    <mxGeometry x="30" y="815" width="1440" height="26" as="geometry"/>
+                </mxCell>
+                <mxCell id="note6" value="One of: PrismaDatasetBuilder | LandsatDataBuilder | EnmapDatasetBuilder.&lt;br/&gt;Internally constructs StacCreator (bbox + datetime + properties), the file_helper (HE5/TIF/Enmap), and band_information.&lt;br/&gt;builder.vend_dataset() runs the full normalisation pipeline (DN→reflectance, validity masks, band ordering)." style="shape=note;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11;align=left;verticalAlign=middle;" parent="1" vertex="1">
+                    <mxGeometry x="540" y="855" width="640" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="msg6_1" value="open files (h5py / rasterio) — read raw cube + headers" style="endArrow=classic;html=1;edgeStyle=none;dashed=1;fontSize=11;align=center;verticalAlign=bottom;labelBackgroundColor=#ffffff;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry"><mxPoint x="1300" y="930" as="sourcePoint"/><mxPoint x="740" y="930" as="targetPoint"/></mxGeometry>
+                </mxCell>
+                <mxCell id="msg6_2" value="pickle.dump(vendable) → /data/scenes/&amp;lt;scene_id&amp;gt;/vendable/vendable.pkl  (read by Step 12 action_run handlers)" style="endArrow=classic;html=1;edgeStyle=none;fontSize=10;align=center;verticalAlign=bottom;labelBackgroundColor=#ffffff;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry"><mxPoint x="1300" y="960" as="sourcePoint"/><mxPoint x="740" y="960" as="targetPoint"/></mxGeometry>
+                </mxCell>
+                <mxCell id="msg6_3" value="render_all(vendable, sensor_type, artifacts_root, scene_id) — see scene-visualizations.drawio&lt;br/&gt;writes /artifacts/scenes/&amp;lt;scene_id&amp;gt;/visualizations/{color,nir,swir,ndvi,band_mosaic}.png + histogram.json (native res, capped 4096 px, uint8 LUT colormap)" style="endArrow=classic;html=1;edgeStyle=none;fontSize=10;align=center;verticalAlign=bottom;labelBackgroundColor=#ffffff;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry"><mxPoint x="1300" y="990" as="sourcePoint"/><mxPoint x="740" y="990" as="targetPoint"/></mxGeometry>
+                </mxCell>
+                <mxCell id="phase7_band" value="⑦ INSERT Scene + finalize Job (single transaction)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#e8f1e6;strokeColor=#a8c8a4;align=left;verticalAlign=middle;fontStyle=1;fontSize=12;" parent="1" vertex="1">
+                    <mxGeometry x="30" y="1010" width="1440" height="26" as="geometry"/>
+                </mxCell>
+                <mxCell id="msg7_1" value="INSERT INTO scenes (id, sensor_type, sensor_scene_id, name, acquisition_at, processing_level, product_type, bbox_*, native_projection, band_count, cloud_cover_pct,&lt;br/&gt;raw_path=scenes/&amp;lt;id&amp;gt;/raw, vendable_path=scenes/&amp;lt;id&amp;gt;/vendable/vendable.pkl, thumbnail_path=scenes/&amp;lt;id&amp;gt;/visualizations/color.png, ...);  session.flush()" style="endArrow=classic;html=1;edgeStyle=none;fontSize=9;align=center;verticalAlign=bottom;labelBackgroundColor=#ffffff;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry"><mxPoint x="1300" y="1070" as="sourcePoint"/><mxPoint x="1010" y="1070" as="targetPoint"/></mxGeometry>
+                </mxCell>
+                <mxCell id="msg7_2" value="mark_complete: UPDATE jobs SET status='complete', target_kind='scene', target_id=&amp;lt;scene_id&amp;gt;; COMMIT (publishes Scene insert + Job lifecycle atomically)" style="endArrow=classic;html=1;edgeStyle=none;fontSize=11;align=center;verticalAlign=bottom;labelBackgroundColor=#ffffff;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry"><mxPoint x="1300" y="1105" as="sourcePoint"/><mxPoint x="1010" y="1105" as="targetPoint"/></mxGeometry>
+                </mxCell>
+                <mxCell id="phase8_band" value="⑧ Client polling (concurrent throughout) — GET /jobs/{job_id}" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#fbe5e5;strokeColor=#d09898;align=left;verticalAlign=middle;fontStyle=1;fontSize=12;" parent="1" vertex="1">
+                    <mxGeometry x="30" y="1135" width="1440" height="26" as="geometry"/>
+                </mxCell>
+                <mxCell id="msg8_1" value="GET /jobs/job_&amp;lt;uuid&amp;gt; (every ~2s)" style="endArrow=classic;html=1;edgeStyle=none;fontSize=11;align=center;verticalAlign=bottom;labelBackgroundColor=#ffffff;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry"><mxPoint x="200" y="1190" as="sourcePoint"/><mxPoint x="460" y="1190" as="targetPoint"/></mxGeometry>
+                </mxCell>
+                <mxCell id="msg8_2" value="JobPublic { status, target_kind, target_id, started_at, completed_at, failure_reason, ... }" style="endArrow=open;html=1;edgeStyle=none;dashed=1;fontSize=11;align=center;verticalAlign=bottom;labelBackgroundColor=#ffffff;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry"><mxPoint x="460" y="1225" as="sourcePoint"/><mxPoint x="200" y="1225" as="targetPoint"/></mxGeometry>
+                </mxCell>
+                <mxCell id="footer" value="Failure modes: bad filename → 422 in phase ③ (no job created). Worker handler raise → mark_failed; Scene insert rolls back; raw files stay under scenes/&amp;lt;scene_id&amp;gt;/raw/ for diagnostics. Worker death mid-handler → reaper marks the row failed within heartbeat_timeout (see worker-loop.drawio). Re-upload of the same scene → duplicate caught at the pre-flight (phase ⑤), UNIQUE(sensor_type, sensor_scene_id) is the backstop." style="text;html=1;fontSize=11;fontStyle=2;fontColor=#666666;align=center;verticalAlign=middle;" parent="1" vertex="1">
+                    <mxGeometry x="40" y="1240" width="1420" height="40" as="geometry"/>
+                </mxCell>
+            </root>
+        </mxGraphModel>
+    </diagram>
+</mxfile>

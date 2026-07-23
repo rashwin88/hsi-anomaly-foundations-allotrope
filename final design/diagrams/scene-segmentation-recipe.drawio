@@ -1,0 +1,85 @@
+<mxfile host="65bd71144e">
+    <diagram id="scene_segmentation_recipe" name="scene_segmentation.run recipe">
+        <mxGraphModel dx="1502" dy="931" grid="0" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1400" pageHeight="780" math="0" shadow="0">
+            <root>
+                <mxCell id="0"/>
+                <mxCell id="1" parent="0"/>
+                <mxCell id="title" value="action_types.scene_segmentation.run — index math + class masking on the upstream filtered vendable" style="text;html=1;fontSize=20;fontStyle=1;align=left;verticalAlign=middle;" parent="1" vertex="1">
+                    <mxGeometry x="40" y="20" width="1320" height="30" as="geometry"/>
+                </mxCell>
+                <mxCell id="subtitle" value="Recipe lifts § 9 of segformer_mae_benchmark.ipynb. Input is the filtered vendable pickle from a prior band_filter_apply Action. Output is per-index rasters (NDVI / NDWI / brightness), per-class binary masks, and the canonical `keep_mask` consumed by every downstream HSI anomaly Action." style="text;html=1;fontSize=12;fontStyle=2;fontColor=#666666;align=left;verticalAlign=middle;" parent="1" vertex="1">
+                    <mxGeometry x="40" y="52" width="1320" height="20" as="geometry"/>
+                </mxCell>
+
+                <mxCell id="actor_handler" value="scene_segmentation.run(ctx)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=12;fontStyle=1;" parent="1" vertex="1">
+                    <mxGeometry x="60" y="85" width="240" height="40" as="geometry"/>
+                </mxCell>
+                <mxCell id="actor_indices" value="app.utils.spectral_indices.compute_scene_segmentation" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=11;fontStyle=1;" parent="1" vertex="1">
+                    <mxGeometry x="400" y="85" width="380" height="40" as="geometry"/>
+                </mxCell>
+                <mxCell id="actor_fs_in" value="filesystem (upstream band_filter_apply output)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11;fontStyle=1;" parent="1" vertex="1">
+                    <mxGeometry x="850" y="85" width="240" height="40" as="geometry"/>
+                </mxCell>
+                <mxCell id="actor_fs_out" value="filesystem (this action&apos;s output_dir)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11;fontStyle=1;" parent="1" vertex="1">
+                    <mxGeometry x="1140" y="85" width="240" height="40" as="geometry"/>
+                </mxCell>
+
+                <mxCell id="ll_handler" style="endArrow=none;dashed=1;html=1;rounded=0;strokeColor=#999999;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry"><mxPoint x="180" y="125" as="sourcePoint"/><mxPoint x="180" y="740" as="targetPoint"/></mxGeometry>
+                </mxCell>
+                <mxCell id="ll_indices" style="endArrow=none;dashed=1;html=1;rounded=0;strokeColor=#999999;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry"><mxPoint x="590" y="125" as="sourcePoint"/><mxPoint x="590" y="740" as="targetPoint"/></mxGeometry>
+                </mxCell>
+                <mxCell id="ll_fs_in" style="endArrow=none;dashed=1;html=1;rounded=0;strokeColor=#999999;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry"><mxPoint x="970" y="125" as="sourcePoint"/><mxPoint x="970" y="740" as="targetPoint"/></mxGeometry>
+                </mxCell>
+                <mxCell id="ll_fs_out" style="endArrow=none;dashed=1;html=1;rounded=0;strokeColor=#999999;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry"><mxPoint x="1260" y="125" as="sourcePoint"/><mxPoint x="1260" y="740" as="targetPoint"/></mxGeometry>
+                </mxCell>
+
+                <mxCell id="phase1" value="① Resolve upstream output via ctx.resolve_action_output (defence-in-depth project membership check)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#eef3f8;strokeColor=#aac4e0;align=left;verticalAlign=middle;fontStyle=1;fontSize=12;" parent="1" vertex="1">
+                    <mxGeometry x="30" y="150" width="1340" height="26" as="geometry"/>
+                </mxCell>
+                <mxCell id="msg1a" value="upstream_dir = ctx.resolve_action_output(cfg.input_band_filter_output_id)  ← raises if not found OR not in same project" style="text;html=1;fontSize=11;align=left;verticalAlign=middle;fontStyle=2;fontColor=#444444;" parent="1" vertex="1">
+                    <mxGeometry x="200" y="190" width="1100" height="20" as="geometry"/>
+                </mxCell>
+                <mxCell id="msg1b" value="vendable = pickle.load(upstream_dir / &apos;filtered_vendable.pkl&apos;)  → cube (C,H,W) · validity_cube · band_cw_order" style="endArrow=classic;html=1;edgeStyle=none;fontSize=11;align=center;verticalAlign=bottom;labelBackgroundColor=#ffffff;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry"><mxPoint x="180" y="225" as="sourcePoint"/><mxPoint x="970" y="225" as="targetPoint"/></mxGeometry>
+                </mxCell>
+
+                <mxCell id="phase2" value="② Compute spectral indices + class masks (single function call)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#fff2e0;strokeColor=#e0b070;align=left;verticalAlign=middle;fontStyle=1;fontSize=12;" parent="1" vertex="1">
+                    <mxGeometry x="30" y="250" width="1340" height="26" as="geometry"/>
+                </mxCell>
+                <mxCell id="msg2a" value="seg = compute_scene_segmentation(cube, validity_cube, wavelengths, bands=IndexBands(red, green, nir, vnir_brightness_end), thresholds=ClassThresholds(ndwi_water, brightness_cloud, brightness_shadow, ndvi_vegetation), classes_to_mask=[…])" style="endArrow=classic;html=1;edgeStyle=none;fontSize=11;align=center;verticalAlign=bottom;labelBackgroundColor=#ffffff;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry"><mxPoint x="180" y="300" as="sourcePoint"/><mxPoint x="590" y="300" as="targetPoint"/></mxGeometry>
+                </mxCell>
+                <mxCell id="msg2b" value="Inside compute_scene_segmentation:&lt;br/&gt; • spatial_valid = (validity.sum(axis=0) &amp;gt; 0)&lt;br/&gt; • find_band(λ, target) for red/green/nir/vnir_end&lt;br/&gt; • NDVI=(NIR−Red)/(NIR+Red+ε)·zeroed-on-invalid&lt;br/&gt; • NDWI=(Green−NIR)/(Green+NIR+ε)·zeroed-on-invalid&lt;br/&gt; • brightness=cube[:vnir_end+1].mean(axis=0)·zeroed-on-invalid&lt;br/&gt; • mask_water=NDWI&amp;gt;th_water · mask_cloud=brightness&amp;gt;th_cloud · mask_shadow=brightness&amp;lt;th_shadow · mask_veg=NDVI&amp;gt;th_veg&lt;br/&gt; • all class masks &amp;times;= spatial_valid (so invalid pixels can&apos;t leak into a class)&lt;br/&gt; • keep_mask = spatial_valid &amp; ¬(union of selected classes)" style="text;html=1;fontSize=10;align=left;verticalAlign=middle;fontStyle=2;fontColor=#555555;fillColor=#fff8e6;strokeColor=#e0b070;rounded=1;" parent="1" vertex="1">
+                    <mxGeometry x="430" y="320" width="660" height="170" as="geometry"/>
+                </mxCell>
+                <mxCell id="msg2c" value="SceneSegmentation{ndvi, ndwi, brightness, mask_water, mask_cloud, mask_shadow, mask_vegetation, keep_mask, diagnostics}" style="endArrow=classic;html=1;edgeStyle=none;fontSize=11;align=center;verticalAlign=bottom;labelBackgroundColor=#ffffff;dashed=1;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry"><mxPoint x="590" y="510" as="sourcePoint"/><mxPoint x="180" y="510" as="targetPoint"/></mxGeometry>
+                </mxCell>
+
+                <mxCell id="phase3" value="③ Write 8 GeoTIFF rasters + diagnostics.json under output_dir" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f0e0f0;strokeColor=#b070b0;align=left;verticalAlign=middle;fontStyle=1;fontSize=12;" parent="1" vertex="1">
+                    <mxGeometry x="30" y="535" width="1340" height="26" as="geometry"/>
+                </mxCell>
+                <mxCell id="msg3a" value="rasterio: ndvi.tif (float32) · ndwi.tif (float32) · brightness.tif (float32) · mask_water/cloud/shadow/vegetation.tif (uint8) · keep_mask.tif (uint8)" style="endArrow=classic;html=1;edgeStyle=none;fontSize=11;align=center;verticalAlign=bottom;labelBackgroundColor=#ffffff;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry"><mxPoint x="180" y="585" as="sourcePoint"/><mxPoint x="1260" y="585" as="targetPoint"/></mxGeometry>
+                </mxCell>
+                <mxCell id="msg3b" value="diagnostics = {upstream_band_filter_output_id, band_indices+wavelengths used, thresholds, classes_to_mask, pixel_counts: {water, cloud, shadow, vegetation, kept, spatial_valid}, kept_pct_of_valid}" style="text;html=1;fontSize=11;align=left;verticalAlign=middle;fontStyle=2;fontColor=#444444;" parent="1" vertex="1">
+                    <mxGeometry x="200" y="615" width="1100" height="20" as="geometry"/>
+                </mxCell>
+                <mxCell id="msg3c" value="write output_dir/diagnostics.json" style="endArrow=classic;html=1;edgeStyle=none;fontSize=11;align=center;verticalAlign=bottom;labelBackgroundColor=#ffffff;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry"><mxPoint x="180" y="645" as="sourcePoint"/><mxPoint x="1260" y="645" as="targetPoint"/></mxGeometry>
+                </mxCell>
+
+                <mxCell id="phase4" value="④ summarize / preview (2x2 montage: NDVI · NDWI · brightness · keep_mask, downsampled)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;align=left;verticalAlign=middle;fontStyle=1;fontSize=12;" parent="1" vertex="1">
+                    <mxGeometry x="30" y="670" width="1340" height="26" as="geometry"/>
+                </mxCell>
+                <mxCell id="msg4" value="summarize(ctx, output_dir) → diagnostics.json contents · preview(ctx, output_dir) → preview.png (matplotlib 2x2; rerenders cleanly in workspace Output viewer)" style="text;html=1;fontSize=11;align=left;verticalAlign=middle;fontStyle=2;fontColor=#444444;" parent="1" vertex="1">
+                    <mxGeometry x="200" y="705" width="1100" height="20" as="geometry"/>
+                </mxCell>
+            </root>
+        </mxGraphModel>
+    </diagram>
+</mxfile>

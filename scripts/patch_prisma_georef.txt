@@ -1,0 +1,38 @@
+# Patch the PRISMA-only export 500 (UnboundLocalError on `seen`) in the
+# running api container on a remote host. Runs the fix in-place; survives
+# until the container is recreated.
+#
+# Usage on the remote host:
+#
+#     bash scripts/patch_prisma_georef.txt
+#
+# (Yes it's a .txt — drop it through scp and pipe to bash, or just paste
+# the commands into your shell.)
+
+
+# 1. Apply the fix inside the running api container.
+sudo docker exec allotrope_api python -c "
+p = '/srv/app/georef/from_scene_file.py'
+s = open(p).read()
+old = '''    # Dedupe while preserving order (top-level matches preferred).
+    seen, h5_files = set(), [
+        p for p in h5_files if not (p in seen or seen.add(p))
+    ]'''
+new = '''    # Dedupe while preserving order (top-level matches preferred).
+    seen: set = set()
+    h5_files = [p for p in h5_files if not (p in seen or seen.add(p))]'''
+if old in s:
+    open(p, 'w').write(s.replace(old, new))
+    print('patched')
+else:
+    print('not found — already patched or different source version')
+"
+
+
+# 2. Restart the api so it re-imports the patched module.
+sudo docker restart allotrope_api
+
+
+# 3. (Optional) verify the patch is in place. Expected to print the
+# two-line replacement.
+sudo docker exec allotrope_api grep -A1 'seen: set = set()' /srv/app/georef/from_scene_file.py

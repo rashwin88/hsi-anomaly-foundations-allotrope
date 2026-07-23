@@ -1,0 +1,81 @@
+<mxfile host="65bd71144e">
+    <diagram id="projects_list" name="GET /projects">
+        <mxGraphModel dx="1502" dy="931" grid="0" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1400" pageHeight="800" math="0" shadow="0">
+            <root>
+                <mxCell id="0"/>
+                <mxCell id="1" parent="0"/>
+                <mxCell id="title" value="GET /projects — list (paginated, optional scene + user filter)" style="text;html=1;fontSize=20;fontStyle=1;align=left;verticalAlign=middle;" parent="1" vertex="1">
+                    <mxGeometry x="40" y="20" width="1100" height="30" as="geometry"/>
+                </mxCell>
+                <mxCell id="subtitle" value="Two queries: count + page. Page query JOINs scenes for the denormalised scene_name / scene_sensor_type so the Projects landing table renders in one round-trip." style="text;html=1;fontSize=12;fontStyle=2;fontColor=#666666;align=left;verticalAlign=middle;" parent="1" vertex="1">
+                    <mxGeometry x="40" y="52" width="1300" height="20" as="geometry"/>
+                </mxCell>
+                <mxCell id="actor_browser" value="Browser (ProjectsPage)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;fontStyle=1;" parent="1" vertex="1">
+                    <mxGeometry x="120" y="85" width="200" height="40" as="geometry"/>
+                </mxCell>
+                <mxCell id="actor_api" value="api (FastAPI)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=12;fontStyle=1;" parent="1" vertex="1">
+                    <mxGeometry x="540" y="85" width="160" height="40" as="geometry"/>
+                </mxCell>
+                <mxCell id="actor_pg" value="postgres (projects ⨝ scenes)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=11;fontStyle=1;" parent="1" vertex="1">
+                    <mxGeometry x="900" y="85" width="220" height="40" as="geometry"/>
+                </mxCell>
+                <mxCell id="ll_browser" style="endArrow=none;dashed=1;html=1;rounded=0;strokeColor=#999999;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry"><mxPoint x="220" y="125" as="sourcePoint"/><mxPoint x="220" y="730" as="targetPoint"/></mxGeometry>
+                </mxCell>
+                <mxCell id="ll_api" style="endArrow=none;dashed=1;html=1;rounded=0;strokeColor=#999999;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry"><mxPoint x="620" y="125" as="sourcePoint"/><mxPoint x="620" y="730" as="targetPoint"/></mxGeometry>
+                </mxCell>
+                <mxCell id="ll_pg" style="endArrow=none;dashed=1;html=1;rounded=0;strokeColor=#999999;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry"><mxPoint x="1010" y="125" as="sourcePoint"/><mxPoint x="1010" y="730" as="targetPoint"/></mxGeometry>
+                </mxCell>
+
+                <mxCell id="phase1_band" value="① Request" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#eef3f8;strokeColor=#aac4e0;align=left;verticalAlign=middle;fontStyle=1;fontSize=12;" parent="1" vertex="1">
+                    <mxGeometry x="30" y="150" width="1340" height="26" as="geometry"/>
+                </mxCell>
+                <mxCell id="msg1" value="GET /api/projects?limit=50&amp;offset=0&amp;scene_id=scene_&amp;lt;uuid&amp;gt;&amp;user_id=user_&amp;lt;uuid&amp;gt;&lt;br/&gt;Cookie: allotrope_jwt — both filters optional" style="endArrow=classic;html=1;edgeStyle=none;fontSize=11;align=center;verticalAlign=bottom;labelBackgroundColor=#ffffff;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry"><mxPoint x="220" y="220" as="sourcePoint"/><mxPoint x="620" y="220" as="targetPoint"/></mxGeometry>
+                </mxCell>
+
+                <mxCell id="phase2_band" value="② Auth + parse filter ids" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#fff2e0;strokeColor=#e0b070;align=left;verticalAlign=middle;fontStyle=1;fontSize=12;" parent="1" vertex="1">
+                    <mxGeometry x="30" y="245" width="1340" height="26" as="geometry"/>
+                </mxCell>
+                <mxCell id="note2" value="current_user_claims (JWT decode, no DB).&lt;br/&gt;parse_prefixed_id(&quot;scene&quot; / &quot;user&quot;, …) on each provided filter — 422 bad_id_format if malformed.&lt;br/&gt;Build the filter clause once; reuse across count + page queries." style="shape=note;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11;align=left;verticalAlign=middle;" parent="1" vertex="1">
+                    <mxGeometry x="280" y="280" width="640" height="60" as="geometry"/>
+                </mxCell>
+
+                <mxCell id="phase3_band" value="③ Count query" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#e8f1e6;strokeColor=#a8c8a4;align=left;verticalAlign=middle;fontStyle=1;fontSize=12;" parent="1" vertex="1">
+                    <mxGeometry x="30" y="350" width="1340" height="26" as="geometry"/>
+                </mxCell>
+                <mxCell id="msg3_1" value="SELECT count(id) FROM projects WHERE [scene_id=$1] [AND user_id=$2]" style="endArrow=classic;html=1;edgeStyle=none;fontSize=11;align=center;verticalAlign=bottom;labelBackgroundColor=#ffffff;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry"><mxPoint x="620" y="405" as="sourcePoint"/><mxPoint x="1010" y="405" as="targetPoint"/></mxGeometry>
+                </mxCell>
+                <mxCell id="msg3_2" value="total: integer" style="endArrow=open;html=1;edgeStyle=none;dashed=1;fontSize=11;align=center;verticalAlign=bottom;labelBackgroundColor=#ffffff;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry"><mxPoint x="1010" y="430" as="sourcePoint"/><mxPoint x="620" y="430" as="targetPoint"/></mxGeometry>
+                </mxCell>
+
+                <mxCell id="phase4_band" value="④ Page query (JOIN scenes for denormalised name + sensor_type)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f5eef8;strokeColor=#c8a4d0;align=left;verticalAlign=middle;fontStyle=1;fontSize=12;" parent="1" vertex="1">
+                    <mxGeometry x="30" y="455" width="1340" height="26" as="geometry"/>
+                </mxCell>
+                <mxCell id="msg4_1" value="SELECT p.*, s.name, s.sensor_type FROM projects p JOIN scenes s ON s.id = p.scene_id WHERE [...] ORDER BY p.created_at DESC LIMIT $L OFFSET $O" style="endArrow=classic;html=1;edgeStyle=none;fontSize=10;align=center;verticalAlign=bottom;labelBackgroundColor=#ffffff;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry"><mxPoint x="620" y="510" as="sourcePoint"/><mxPoint x="1010" y="510" as="targetPoint"/></mxGeometry>
+                </mxCell>
+                <mxCell id="msg4_2" value="rows[]" style="endArrow=open;html=1;edgeStyle=none;dashed=1;fontSize=11;align=center;verticalAlign=bottom;labelBackgroundColor=#ffffff;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry"><mxPoint x="1010" y="540" as="sourcePoint"/><mxPoint x="620" y="540" as="targetPoint"/></mxGeometry>
+                </mxCell>
+                <mxCell id="note4" value="Indexes earning their keep:&lt;br/&gt;· projects_user_id_idx — backs WHERE user_id filter&lt;br/&gt;· projects_scene_id_idx — backs WHERE scene_id filter&lt;br/&gt;· primary key on scenes.id — backs the JOIN" style="shape=note;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11;align=left;verticalAlign=middle;" parent="1" vertex="1">
+                    <mxGeometry x="200" y="555" width="600" height="60" as="geometry"/>
+                </mxCell>
+
+                <mxCell id="phase5_band" value="⑤ Project + respond" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#fafafa;strokeColor=#aaaaaa;align=left;verticalAlign=middle;fontStyle=1;fontSize=12;" parent="1" vertex="1">
+                    <mxGeometry x="30" y="630" width="1340" height="26" as="geometry"/>
+                </mxCell>
+                <mxCell id="msg5" value="HTTP 200 ProjectsPage { items: [ProjectPublic, …], total, limit, offset }" style="endArrow=open;html=1;edgeStyle=none;dashed=1;fontSize=11;align=center;verticalAlign=bottom;labelBackgroundColor=#ffffff;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry"><mxPoint x="620" y="690" as="sourcePoint"/><mxPoint x="220" y="690" as="targetPoint"/></mxGeometry>
+                </mxCell>
+                <mxCell id="footer" value="Two queries (count + page) is the simplest accurate pagination — gives the client a real `total` for &quot;X of Y&quot;. Will graduate to keyset pagination if Project counts grow large enough that OFFSET becomes slow. Per § 5.4 there's no natural uniqueness on Project (no name constraint) — duplicates are user-driven, not a schema concern." style="text;html=1;fontSize=11;fontStyle=2;fontColor=#666666;align=center;verticalAlign=middle;" parent="1" vertex="1">
+                    <mxGeometry x="40" y="730" width="1310" height="40" as="geometry"/>
+                </mxCell>
+            </root>
+        </mxGraphModel>
+    </diagram>
+</mxfile>

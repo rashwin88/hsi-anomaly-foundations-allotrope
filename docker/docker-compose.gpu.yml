@@ -1,0 +1,32 @@
+# GPU override — opt-in on the prod host.
+#
+# Usage:
+#     docker compose \
+#         -f docker/docker-compose.yml \
+#         -f docker/docker-compose.gpu.yml \
+#         up -d
+#
+# Requires: NVIDIA driver on the host + nvidia-container-toolkit installed
+# (so the docker daemon understands `device_requests` with `driver: nvidia`).
+# Mac dev machines do NOT have either, so they should NOT include this file
+# — the worker will boot without GPU access and torch will fall back to CPU
+# automatically.
+#
+# Why an override (and not always-on): if the base compose requested a GPU
+# unconditionally, `docker compose up` would fail on any machine without
+# nvidia-container-toolkit (including the dev Mac). Splitting the GPU
+# directive into an override means the same base file works everywhere; the
+# operator opts in by adding the override file on the prod box.
+
+services:
+  worker:
+    deploy:
+      resources:
+        reservations:
+          devices:
+            # `count: all` exposes every GPU visible to the host. If the
+            # demo machine ever has more than one GPU and we want to pin to
+            # a specific one, swap `count: all` for `device_ids: ["0"]`.
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]

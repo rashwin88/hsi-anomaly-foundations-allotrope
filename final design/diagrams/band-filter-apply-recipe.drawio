@@ -1,0 +1,103 @@
+<mxfile host="65bd71144e">
+    <diagram id="band_filter_apply_recipe" name="band_filter_apply.run recipe">
+        <mxGraphModel dx="1502" dy="931" grid="0" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1400" pageHeight="780" math="0" shadow="0">
+            <root>
+                <mxCell id="0"/>
+                <mxCell id="1" parent="0"/>
+                <mxCell id="title" value="action_types.band_filter_apply.run — re-vend the Scene with BandFilterConfig and pickle the result" style="text;html=1;fontSize=20;fontStyle=1;align=left;verticalAlign=middle;" parent="1" vertex="1">
+                    <mxGeometry x="40" y="20" width="1320" height="30" as="geometry"/>
+                </mxCell>
+                <mxCell id="subtitle" value="Recipe: read raw scene · build BandFilterConfig from validated cfg · vend_dataset · optional nearest-valid-fill · pickle the VendableHyperspectralDataset · write diagnostics.json. Reuses app/ verbatim — no preprocessing logic redeclared." style="text;html=1;fontSize=12;fontStyle=2;fontColor=#666666;align=left;verticalAlign=middle;" parent="1" vertex="1">
+                    <mxGeometry x="40" y="52" width="1320" height="20" as="geometry"/>
+                </mxCell>
+
+                <mxCell id="actor_handler" value="band_filter_apply.run(ctx)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=12;fontStyle=1;" parent="1" vertex="1">
+                    <mxGeometry x="60" y="85" width="220" height="40" as="geometry"/>
+                </mxCell>
+                <mxCell id="actor_app" value="app.utils.dataset_builder.{Prisma,Enmap}DatasetBuilder" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=11;fontStyle=1;" parent="1" vertex="1">
+                    <mxGeometry x="380" y="85" width="320" height="40" as="geometry"/>
+                </mxCell>
+                <mxCell id="actor_fill" value="app.utils.pixel_fill.nearest_valid_fill" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=11;fontStyle=1;" parent="1" vertex="1">
+                    <mxGeometry x="780" y="85" width="280" height="40" as="geometry"/>
+                </mxCell>
+                <mxCell id="actor_fs" value="filesystem (allotrope_data + allotrope_artifacts)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11;fontStyle=1;" parent="1" vertex="1">
+                    <mxGeometry x="1140" y="85" width="240" height="40" as="geometry"/>
+                </mxCell>
+
+                <mxCell id="ll_handler" style="endArrow=none;dashed=1;html=1;rounded=0;strokeColor=#999999;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry"><mxPoint x="170" y="125" as="sourcePoint"/><mxPoint x="170" y="740" as="targetPoint"/></mxGeometry>
+                </mxCell>
+                <mxCell id="ll_app" style="endArrow=none;dashed=1;html=1;rounded=0;strokeColor=#999999;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry"><mxPoint x="540" y="125" as="sourcePoint"/><mxPoint x="540" y="740" as="targetPoint"/></mxGeometry>
+                </mxCell>
+                <mxCell id="ll_fill" style="endArrow=none;dashed=1;html=1;rounded=0;strokeColor=#999999;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry"><mxPoint x="920" y="125" as="sourcePoint"/><mxPoint x="920" y="740" as="targetPoint"/></mxGeometry>
+                </mxCell>
+                <mxCell id="ll_fs" style="endArrow=none;dashed=1;html=1;rounded=0;strokeColor=#999999;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry"><mxPoint x="1260" y="125" as="sourcePoint"/><mxPoint x="1260" y="740" as="targetPoint"/></mxGeometry>
+                </mxCell>
+
+                <mxCell id="phase1" value="① Build BandFilterConfig from validated cfg" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#eef3f8;strokeColor=#aac4e0;align=left;verticalAlign=middle;fontStyle=1;fontSize=12;" parent="1" vertex="1">
+                    <mxGeometry x="30" y="150" width="1340" height="26" as="geometry"/>
+                </mxCell>
+                <mxCell id="msg1" value="bf_config = BandFilterConfig(exclusion_ranges=[(low,hi)…], edge_bands_to_trim, min_valid_pixel_pct, max_invalid_voxel_fraction, quality_masks_to_apply, common_wavelength_grid=DEFAULT_COMMON_WAVELENGTH_GRID if use_common_wavelength_grid else None)" style="text;html=1;fontSize=11;align=left;verticalAlign=middle;fontStyle=2;fontColor=#444444;" parent="1" vertex="1">
+                    <mxGeometry x="190" y="190" width="1180" height="20" as="geometry"/>
+                </mxCell>
+
+                <mxCell id="phase2" value="② Instantiate the right sensor builder" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#fff2e0;strokeColor=#e0b070;align=left;verticalAlign=middle;fontStyle=1;fontSize=12;" parent="1" vertex="1">
+                    <mxGeometry x="30" y="220" width="1340" height="26" as="geometry"/>
+                </mxCell>
+                <mxCell id="msg2a" value="raw_path = data_dir / scene.raw_path  ← read-only access" style="endArrow=classic;html=1;edgeStyle=none;fontSize=11;align=center;verticalAlign=bottom;labelBackgroundColor=#ffffff;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry"><mxPoint x="170" y="270" as="sourcePoint"/><mxPoint x="1260" y="270" as="targetPoint"/></mxGeometry>
+                </mxCell>
+                <mxCell id="msg2b" value="builder = PrismaDatasetBuilder(file_source_configuration=FileSourceConfig(source_path=raw_path))  ← or EnmapDatasetBuilder for sensor=&apos;enmap&apos;" style="endArrow=classic;html=1;edgeStyle=none;fontSize=11;align=center;verticalAlign=bottom;labelBackgroundColor=#ffffff;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry"><mxPoint x="170" y="300" as="sourcePoint"/><mxPoint x="540" y="300" as="targetPoint"/></mxGeometry>
+                </mxCell>
+
+                <mxCell id="phase3" value="③ Vend the dataset with the filter applied (the heavy step)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f0e0f0;strokeColor=#b070b0;align=left;verticalAlign=middle;fontStyle=1;fontSize=12;" parent="1" vertex="1">
+                    <mxGeometry x="30" y="325" width="1340" height="26" as="geometry"/>
+                </mxCell>
+                <mxCell id="msg3a" value="vendable = builder.vend_dataset(band_filter_config=bf_config)  ← runs DN→reflectance · validity build · band-filter stages · spectral PCHIP · max_invalid_voxel_fraction · quality masks · common-grid resample" style="endArrow=classic;html=1;edgeStyle=none;fontSize=11;align=center;verticalAlign=bottom;labelBackgroundColor=#ffffff;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry"><mxPoint x="170" y="375" as="sourcePoint"/><mxPoint x="540" y="375" as="targetPoint"/></mxGeometry>
+                </mxCell>
+                <mxCell id="msg3b" value="VendableHyperspectralDataset(normalized_hyperspectral_cube (C,H,W), validity_cube, band_cw_order)" style="endArrow=classic;html=1;edgeStyle=none;fontSize=11;align=center;verticalAlign=bottom;labelBackgroundColor=#ffffff;dashed=1;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry"><mxPoint x="540" y="405" as="sourcePoint"/><mxPoint x="170" y="405" as="targetPoint"/></mxGeometry>
+                </mxCell>
+
+                <mxCell id="phase4" value="④ Optional: nearest-valid-pixel fill (default ON for transformer-based inference)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#fbe5d6;strokeColor=#d99458;align=left;verticalAlign=middle;fontStyle=1;fontSize=12;" parent="1" vertex="1">
+                    <mxGeometry x="30" y="430" width="1340" height="26" as="geometry"/>
+                </mxCell>
+                <mxCell id="msg4a" value="spatial_mask = (validity_cube.sum(axis=0) &amp;gt; 0)[None, :, :].astype(int8)  ← collapse per-band to per-pixel" style="text;html=1;fontSize=11;align=left;verticalAlign=middle;fontStyle=2;fontColor=#444444;" parent="1" vertex="1">
+                    <mxGeometry x="190" y="465" width="900" height="20" as="geometry"/>
+                </mxCell>
+                <mxCell id="msg4b" value="filled = nearest_valid_fill(normalized_hyperspectral_cube, spatial_mask)  → vendable.normalized_hyperspectral_cube = filled" style="endArrow=classic;html=1;edgeStyle=none;fontSize=11;align=center;verticalAlign=bottom;labelBackgroundColor=#ffffff;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry"><mxPoint x="170" y="500" as="sourcePoint"/><mxPoint x="920" y="500" as="targetPoint"/></mxGeometry>
+                </mxCell>
+
+                <mxCell id="phase5" value="⑤ Persist filtered_vendable.pkl + diagnostics.json under the action&apos;s output_dir" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;align=left;verticalAlign=middle;fontStyle=1;fontSize=12;" parent="1" vertex="1">
+                    <mxGeometry x="30" y="525" width="1340" height="26" as="geometry"/>
+                </mxCell>
+                <mxCell id="msg5a" value="pickle.dump(vendable, &amp;lt;output_dir&amp;gt;/filtered_vendable.pkl, protocol=HIGHEST_PROTOCOL)" style="endArrow=classic;html=1;edgeStyle=none;fontSize=11;align=center;verticalAlign=bottom;labelBackgroundColor=#ffffff;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry"><mxPoint x="170" y="575" as="sourcePoint"/><mxPoint x="1260" y="575" as="targetPoint"/></mxGeometry>
+                </mxCell>
+                <mxCell id="msg5b" value="diagnostics = {sensor, band_count, height, width, spatial_validity_pct, wavelengths_min/max_nm, common_wavelength_grid_applied, nearest_valid_fill_applied, pickle_size_mb, exclusion_ranges_nm, edge_bands_to_trim, quality_masks_applied}" style="text;html=1;fontSize=11;align=left;verticalAlign=middle;fontStyle=2;fontColor=#444444;" parent="1" vertex="1">
+                    <mxGeometry x="190" y="600" width="1180" height="20" as="geometry"/>
+                </mxCell>
+                <mxCell id="msg5c" value="write &amp;lt;output_dir&amp;gt;/diagnostics.json" style="endArrow=classic;html=1;edgeStyle=none;fontSize=11;align=center;verticalAlign=bottom;labelBackgroundColor=#ffffff;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry"><mxPoint x="170" y="630" as="sourcePoint"/><mxPoint x="1260" y="630" as="targetPoint"/></mxGeometry>
+                </mxCell>
+
+                <mxCell id="phase6" value="⑥ summarize / preview (decorative; preview failure logged not raised)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;align=left;verticalAlign=middle;fontStyle=1;fontSize=12;" parent="1" vertex="1">
+                    <mxGeometry x="30" y="655" width="1340" height="26" as="geometry"/>
+                </mxCell>
+                <mxCell id="msg6" value="summarize(ctx, output_dir) → reads diagnostics.json into action_outputs.summary · preview(ctx, output_dir) → 1024-px-side RGB composite (650/550/450 nm), validity-masked percentile stretch, uint8 LUT → preview.png" style="text;html=1;fontSize=11;align=left;verticalAlign=middle;fontStyle=2;fontColor=#444444;" parent="1" vertex="1">
+                    <mxGeometry x="190" y="690" width="1180" height="20" as="geometry"/>
+                </mxCell>
+
+                <mxCell id="note" value="Output dir layout: projects/&amp;lt;project_id&amp;gt;/actions/&amp;lt;action_id&amp;gt;/output/{filtered_vendable.pkl, diagnostics.json, preview.png}. The pickle is the canonical handoff to scene_segmentation and any future HSI Action — same Python type as the onboarding vendable." style="text;html=1;fontSize=10;align=left;verticalAlign=top;fillColor=#fafafa;strokeColor=#cccccc;fontColor=#444444;" parent="1" vertex="1">
+                    <mxGeometry x="40" y="715" width="1320" height="40" as="geometry"/>
+                </mxCell>
+            </root>
+        </mxGraphModel>
+    </diagram>
+</mxfile>

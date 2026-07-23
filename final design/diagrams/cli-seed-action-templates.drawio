@@ -1,0 +1,89 @@
+<mxfile host="65bd71144e">
+    <diagram id="cli_seed_action_templates" name="CLI seed-action-templates">
+        <mxGraphModel dx="1502" dy="931" grid="0" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1400" pageHeight="700" math="0" shadow="0">
+            <root>
+                <mxCell id="0"/>
+                <mxCell id="1" parent="0"/>
+                <mxCell id="title" value="CLI seed-action-templates — upsert one ActionTemplate per (action type × applicable sensor)" style="text;html=1;fontSize=20;fontStyle=1;align=left;verticalAlign=middle;" parent="1" vertex="1">
+                    <mxGeometry x="40" y="20" width="1320" height="30" as="geometry"/>
+                </mxCell>
+                <mxCell id="subtitle" value="Idempotent. Reads each action_types module&apos;s META.default_config_per_sensor and materialises a row with is_system=True. User-saved templates (is_system=False) are never touched." style="text;html=1;fontSize=12;fontStyle=2;fontColor=#666666;align=left;verticalAlign=middle;" parent="1" vertex="1">
+                    <mxGeometry x="40" y="52" width="1320" height="20" as="geometry"/>
+                </mxCell>
+
+                <mxCell id="actor_op" value="Operator (shell)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;fontStyle=1;" parent="1" vertex="1">
+                    <mxGeometry x="60" y="85" width="160" height="40" as="geometry"/>
+                </mxCell>
+                <mxCell id="actor_cli" value="python -m allotrope.cli seed-action-templates" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;fontStyle=1;" parent="1" vertex="1">
+                    <mxGeometry x="280" y="85" width="320" height="40" as="geometry"/>
+                </mxCell>
+                <mxCell id="actor_reg" value="action_types REGISTRY" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=11;fontStyle=1;" parent="1" vertex="1">
+                    <mxGeometry x="660" y="85" width="200" height="40" as="geometry"/>
+                </mxCell>
+                <mxCell id="actor_pg" value="postgres (action_templates)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=11;fontStyle=1;" parent="1" vertex="1">
+                    <mxGeometry x="940" y="85" width="240" height="40" as="geometry"/>
+                </mxCell>
+
+                <mxCell id="ll_op" style="endArrow=none;dashed=1;html=1;rounded=0;strokeColor=#999999;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry"><mxPoint x="140" y="125" as="sourcePoint"/><mxPoint x="140" y="660" as="targetPoint"/></mxGeometry>
+                </mxCell>
+                <mxCell id="ll_cli" style="endArrow=none;dashed=1;html=1;rounded=0;strokeColor=#999999;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry"><mxPoint x="440" y="125" as="sourcePoint"/><mxPoint x="440" y="660" as="targetPoint"/></mxGeometry>
+                </mxCell>
+                <mxCell id="ll_reg" style="endArrow=none;dashed=1;html=1;rounded=0;strokeColor=#999999;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry"><mxPoint x="760" y="125" as="sourcePoint"/><mxPoint x="760" y="660" as="targetPoint"/></mxGeometry>
+                </mxCell>
+                <mxCell id="ll_pg" style="endArrow=none;dashed=1;html=1;rounded=0;strokeColor=#999999;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry"><mxPoint x="1060" y="125" as="sourcePoint"/><mxPoint x="1060" y="660" as="targetPoint"/></mxGeometry>
+                </mxCell>
+
+                <mxCell id="phase1" value="① Invocation" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#eef3f8;strokeColor=#aac4e0;align=left;verticalAlign=middle;fontStyle=1;fontSize=12;" parent="1" vertex="1">
+                    <mxGeometry x="30" y="150" width="1340" height="26" as="geometry"/>
+                </mxCell>
+                <mxCell id="msg1" value="docker compose run --rm api python -m allotrope.cli seed-action-templates" style="endArrow=classic;html=1;edgeStyle=none;fontSize=11;align=center;verticalAlign=bottom;labelBackgroundColor=#ffffff;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry"><mxPoint x="140" y="200" as="sourcePoint"/><mxPoint x="440" y="200" as="targetPoint"/></mxGeometry>
+                </mxCell>
+
+                <mxCell id="phase2" value="② Walk REGISTRY × default_config_per_sensor" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#fff2e0;strokeColor=#e0b070;align=left;verticalAlign=middle;fontStyle=1;fontSize=12;" parent="1" vertex="1">
+                    <mxGeometry x="30" y="225" width="1340" height="26" as="geometry"/>
+                </mxCell>
+                <mxCell id="msg2a" value="for kind, spec in sorted(REGISTRY.items()): for sensor, default_cfg in sorted(spec.META.default_config_per_sensor.items()): …" style="endArrow=classic;html=1;edgeStyle=none;fontSize=11;align=center;verticalAlign=bottom;labelBackgroundColor=#ffffff;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry"><mxPoint x="440" y="270" as="sourcePoint"/><mxPoint x="760" y="270" as="targetPoint"/></mxGeometry>
+                </mxCell>
+                <mxCell id="msg2b" value="name = f&quot;{META.label} · default · {SENSOR_LABEL}&quot; · description = f&quot;System default for {sensor} scenes. {META.short_description}&quot;" style="text;html=1;fontSize=11;align=left;verticalAlign=middle;fontStyle=2;fontColor=#444444;" parent="1" vertex="1">
+                    <mxGeometry x="200" y="295" width="1100" height="20" as="geometry"/>
+                </mxCell>
+
+                <mxCell id="phase3" value="③ Upsert: lookup by (type, name, is_system=True), insert / update / skip-unchanged" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f0e0f0;strokeColor=#b070b0;align=left;verticalAlign=middle;fontStyle=1;fontSize=12;" parent="1" vertex="1">
+                    <mxGeometry x="30" y="325" width="1340" height="26" as="geometry"/>
+                </mxCell>
+                <mxCell id="msg3a" value="SELECT * FROM action_templates WHERE type=… AND name=… AND is_system=true LIMIT 1" style="endArrow=classic;html=1;edgeStyle=none;fontSize=11;align=center;verticalAlign=bottom;labelBackgroundColor=#ffffff;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry"><mxPoint x="440" y="375" as="sourcePoint"/><mxPoint x="1060" y="375" as="targetPoint"/></mxGeometry>
+                </mxCell>
+                <mxCell id="msg3b" value="branch A · row absent → INSERT action_templates(type, name, description, configuration, is_system=true)" style="endArrow=classic;html=1;edgeStyle=none;fontSize=11;align=center;verticalAlign=bottom;labelBackgroundColor=#ffffff;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry"><mxPoint x="440" y="410" as="sourcePoint"/><mxPoint x="1060" y="410" as="targetPoint"/></mxGeometry>
+                </mxCell>
+                <mxCell id="msg3c" value="branch B · row present AND drifted → UPDATE configuration, description, updated_at=NOW()" style="endArrow=classic;html=1;edgeStyle=none;fontSize=11;align=center;verticalAlign=bottom;labelBackgroundColor=#ffffff;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry"><mxPoint x="440" y="445" as="sourcePoint"/><mxPoint x="1060" y="445" as="targetPoint"/></mxGeometry>
+                </mxCell>
+                <mxCell id="msg3d" value="branch C · row present AND identical → no-op" style="text;html=1;fontSize=11;align=left;verticalAlign=middle;fontStyle=2;fontColor=#888888;" parent="1" vertex="1">
+                    <mxGeometry x="200" y="475" width="700" height="20" as="geometry"/>
+                </mxCell>
+
+                <mxCell id="phase4" value="④ Commit + summary line" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;align=left;verticalAlign=middle;fontStyle=1;fontSize=12;" parent="1" vertex="1">
+                    <mxGeometry x="30" y="505" width="1340" height="26" as="geometry"/>
+                </mxCell>
+                <mxCell id="msg4a" value="session.commit()" style="endArrow=classic;html=1;edgeStyle=none;fontSize=11;align=center;verticalAlign=bottom;labelBackgroundColor=#ffffff;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry"><mxPoint x="440" y="555" as="sourcePoint"/><mxPoint x="1060" y="555" as="targetPoint"/></mxGeometry>
+                </mxCell>
+                <mxCell id="msg4b" value="stdout: &apos;Seeded action templates: N new · M updated · K unchanged&apos;" style="endArrow=classic;html=1;edgeStyle=none;fontSize=11;align=center;verticalAlign=bottom;labelBackgroundColor=#ffffff;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry"><mxPoint x="440" y="590" as="sourcePoint"/><mxPoint x="140" y="590" as="targetPoint"/></mxGeometry>
+                </mxCell>
+
+                <mxCell id="note" value="Idempotency: re-running picks up META drift (a code change to default_config_per_sensor propagates without manual DB cleanup). User-saved templates (is_system=false) are never touched. Pairs naturally with seed-admin in a bootstrap script — both are safe to chain." style="text;html=1;fontSize=10;align=left;verticalAlign=top;fillColor=#fafafa;strokeColor=#cccccc;fontColor=#444444;" parent="1" vertex="1">
+                    <mxGeometry x="40" y="615" width="1320" height="40" as="geometry"/>
+                </mxCell>
+            </root>
+        </mxGraphModel>
+    </diagram>
+</mxfile>

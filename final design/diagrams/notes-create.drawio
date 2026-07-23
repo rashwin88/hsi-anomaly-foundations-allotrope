@@ -1,0 +1,81 @@
+<mxfile host="65bd71144e">
+    <diagram id="notes_create" name="notes create (Step 16)">
+        <mxGraphModel dx="1502" dy="931" grid="0" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1500" pageHeight="900" math="0" shadow="0">
+            <root>
+                <mxCell id="0"/>
+                <mxCell id="1" parent="0"/>
+                <mxCell id="title" value="Notes create — synchronous, with typed references" style="text;html=1;fontSize=20;fontStyle=1;align=left;verticalAlign=middle;" parent="1" vertex="1">
+                    <mxGeometry x="40" y="20" width="1100" height="30" as="geometry"/>
+                </mxCell>
+                <mxCell id="subtitle" value="POST /projects/{id}/notes takes markdown content + an explicit references array of wire ids. The api validates each reference belongs to the Project, INSERTs the Note, INSERTs NoteReference rows in the same transaction. No worker. Mention parsing stays client-side (@[label](kind:wire_id) tokens); the array is the canonical source of truth on the wire. PATCH wipes-and-recreates references for simplicity — they have no surrogate meaning beyond the (note, target) edge." style="text;html=1;fontSize=12;fontStyle=2;fontColor=#666666;align=left;verticalAlign=middle;" parent="1" vertex="1">
+                    <mxGeometry x="40" y="52" width="1400" height="70" as="geometry"/>
+                </mxCell>
+
+                <!-- Actors -->
+                <mxCell id="actor_browser" value="Browser (NotesPane editor)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;fontStyle=1;" parent="1" vertex="1">
+                    <mxGeometry x="80" y="130" width="240" height="40" as="geometry"/>
+                </mxCell>
+                <mxCell id="actor_api" value="api (FastAPI)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=12;fontStyle=1;" parent="1" vertex="1">
+                    <mxGeometry x="560" y="130" width="160" height="40" as="geometry"/>
+                </mxCell>
+                <mxCell id="actor_pg" value="postgres" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=12;fontStyle=1;" parent="1" vertex="1">
+                    <mxGeometry x="1100" y="130" width="160" height="40" as="geometry"/>
+                </mxCell>
+
+                <!-- Lifelines -->
+                <mxCell id="ll_browser" style="endArrow=none;dashed=1;html=1;rounded=0;strokeColor=#999999;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry"><mxPoint x="200" y="170" as="sourcePoint"/><mxPoint x="200" y="860" as="targetPoint"/></mxGeometry>
+                </mxCell>
+                <mxCell id="ll_api" style="endArrow=none;dashed=1;html=1;rounded=0;strokeColor=#999999;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry"><mxPoint x="640" y="170" as="sourcePoint"/><mxPoint x="640" y="860" as="targetPoint"/></mxGeometry>
+                </mxCell>
+                <mxCell id="ll_pg" style="endArrow=none;dashed=1;html=1;rounded=0;strokeColor=#999999;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry"><mxPoint x="1180" y="170" as="sourcePoint"/><mxPoint x="1180" y="860" as="targetPoint"/></mxGeometry>
+                </mxCell>
+
+                <!-- Phase 1: Compose -->
+                <mxCell id="phase1_band" value="① Editor inserts @-mention chips; extractReferenceIds() scans the content for token wire ids" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#eef3f8;strokeColor=#aac4e0;align=left;verticalAlign=middle;fontStyle=1;fontSize=12;" parent="1" vertex="1">
+                    <mxGeometry x="30" y="195" width="1450" height="26" as="geometry"/>
+                </mxCell>
+                <mxCell id="note1" value="@[RGB scene](action:action_abc...) becomes a chip. The textarea is the canonical store; the references array is computed by regex on submit. No state divergence between rendered chips and persisted edges." style="shape=note;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11;align=left;verticalAlign=middle;" parent="1" vertex="1">
+                    <mxGeometry x="80" y="230" width="900" height="45" as="geometry"/>
+                </mxCell>
+
+                <!-- Phase 2: POST -->
+                <mxCell id="phase2_band" value="② POST /projects/{project_id}/notes" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#fff2e0;strokeColor=#e0b070;align=left;verticalAlign=middle;fontStyle=1;fontSize=12;" parent="1" vertex="1">
+                    <mxGeometry x="30" y="290" width="1450" height="26" as="geometry"/>
+                </mxCell>
+                <mxCell id="msg2_1" value="POST /api/projects/project_&amp;lt;uuid&amp;gt;/notes&lt;br/&gt;Content-Type: application/json&lt;br/&gt;{ content: '...', references: ['action_...', 'viz_...', 'scene_...'] }&lt;br/&gt;Cookie: allotrope_jwt" style="endArrow=classic;html=1;edgeStyle=none;fontSize=11;align=center;verticalAlign=bottom;labelBackgroundColor=#ffffff;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry"><mxPoint x="200" y="360" as="sourcePoint"/><mxPoint x="640" y="360" as="targetPoint"/></mxGeometry>
+                </mxCell>
+
+                <!-- Phase 3: validate -->
+                <mxCell id="phase3_band" value="③ Validate each reference belongs to this Project" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#e6f3e6;strokeColor=#82b366;align=left;verticalAlign=middle;fontStyle=1;fontSize=12;" parent="1" vertex="1">
+                    <mxGeometry x="30" y="390" width="1450" height="26" as="geometry"/>
+                </mxCell>
+                <mxCell id="note3" value="parse_prefixed_id gives (kind, uuid).&lt;br/&gt;scene → must equal project.scene_id.&lt;br/&gt;action → db.get(Action) and check action.project_id == project.id.&lt;br/&gt;output → db.get(ActionOutput), then walk to its Action, then check project_id.&lt;br/&gt;viz → db.get(Visualization) and check viz.project_id == project.id.&lt;br/&gt;Any mismatch → 422 reference_not_in_project. Duplicate (kind, uuid) pairs are de-duped." style="shape=note;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11;align=left;verticalAlign=middle;" parent="1" vertex="1">
+                    <mxGeometry x="240" y="425" width="800" height="105" as="geometry"/>
+                </mxCell>
+
+                <!-- Phase 4: insert -->
+                <mxCell id="phase4_band" value="④ INSERT note + reference rows in one transaction" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f3e6f3;strokeColor=#a874a8;align=left;verticalAlign=middle;fontStyle=1;fontSize=12;" parent="1" vertex="1">
+                    <mxGeometry x="30" y="545" width="1450" height="26" as="geometry"/>
+                </mxCell>
+                <mxCell id="msg4_1" value="INSERT INTO notes (id, project_id, content) VALUES (...) RETURNING id;&lt;br/&gt;INSERT INTO note_references (id, note_id, ref_&amp;lt;kind&amp;gt;_id) VALUES (...), (...), (...);&lt;br/&gt;COMMIT — XOR CHECK on note_references enforces exactly one ref_* column per row." style="endArrow=classic;html=1;edgeStyle=none;fontSize=11;align=center;verticalAlign=bottom;labelBackgroundColor=#ffffff;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry"><mxPoint x="640" y="620" as="sourcePoint"/><mxPoint x="1180" y="620" as="targetPoint"/></mxGeometry>
+                </mxCell>
+
+                <!-- Phase 5: response -->
+                <mxCell id="phase5_band" value="⑤ 201 Created — NotePublic with resolved references" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#eef3f8;strokeColor=#aac4e0;align=left;verticalAlign=middle;fontStyle=1;fontSize=12;" parent="1" vertex="1">
+                    <mxGeometry x="30" y="660" width="1450" height="26" as="geometry"/>
+                </mxCell>
+                <mxCell id="msg5_1" value="201 Created&lt;br/&gt;{ id: note_&amp;lt;uuid&amp;gt;, project_id, content, references: [{ id: note_ref_&amp;lt;uuid&amp;gt;, kind, target_id }...],&lt;br/&gt;created_at, updated_at }" style="endArrow=classic;html=1;edgeStyle=none;fontSize=11;align=center;verticalAlign=bottom;labelBackgroundColor=#ffffff;startArrow=classic;startFill=1;dashed=1;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry"><mxPoint x="640" y="730" as="sourcePoint"/><mxPoint x="200" y="730" as="targetPoint"/></mxGeometry>
+                </mxCell>
+                <mxCell id="note5" value="NotesPane prepends the new note to its local list; chips render via the same @-mention regex pass that built the references array on submit. Reference rows CASCADE-drop on entity delete, leaving the note text intact." style="shape=note;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11;align=left;verticalAlign=middle;" parent="1" vertex="1">
+                    <mxGeometry x="80" y="760" width="900" height="60" as="geometry"/>
+                </mxCell>
+            </root>
+        </mxGraphModel>
+    </diagram>
+</mxfile>

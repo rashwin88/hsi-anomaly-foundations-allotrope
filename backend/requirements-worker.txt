@@ -1,0 +1,78 @@
+# Allotrope worker — runtime dependencies.
+#
+# Forked from requirements.txt: shares the api's web/db/auth deps (so the
+# `allotrope` package's `db.py`, `models/`, etc. import cleanly) and adds
+# the full set of libraries the existing `app/utils/dataset_builder/`
+# pipeline needs at runtime.
+#
+# torch + sklearn + scipy + pandas come along here even though the
+# scene_onboard handler (Step 7c-extended) only needs metadata + a
+# thumbnail — the dataset builders pull them transitively via
+# ImageCubeOperations and the per-sensor transformers. Worth it: Step 12
+# (action_run handlers) needs the same set, so this is the rebuild we'd
+# have to do anyway. Doing it once.
+#
+# Image size: ~5–6 GB CPU-only torch. CUDA-enabled bundle is the
+# Step 24 packaging concern.
+
+# --- Shared with api (kept in lockstep with requirements.txt) ---------
+fastapi==0.115.0
+uvicorn[standard]==0.32.0
+python-multipart==0.0.20
+sqlalchemy==2.0.45
+psycopg[binary]==3.2.13
+alembic==1.13.3
+pydantic-settings==2.6.1
+argon2-cffi==23.1.0
+pyjwt==2.10.1
+typer==0.13.1
+
+# --- Worker-only (used by app/utils/dataset_builder/ + app/utils/files/) ---
+# numpy:    array ops in the file helpers + thumbnail path
+# h5py:     PRISMA HE5 reader (HE5Helper)
+# rasterio: Landsat 9 + EnMAP TIF reader (TIFHelper, EnmapHelper, the
+#           Landsat bbox helper's CRS reprojection)
+# pystac:   StacCreator's pystac.Item return type — used for bbox /
+#           datetime / properties extraction
+# Pillow:   thumbnail PNG encoding
+# matplotlib: colormaps for thermal, band-mosaic figure rendering (used
+#             by app/utils/visualization/hyperspectral_visualizer.py)
+numpy==2.4.1
+# h5py: 3.12.1 has no cp314 wheel and its source build fails against
+# newer HDF5 headers; bumped to a version that builds.
+h5py==3.15.1
+rasterio==1.4.3
+pystac==1.11.0
+Pillow==12.1.0
+matplotlib==3.10.8
+# pyarrow: spectral_library_match writes matches.parquet (long-table top-K
+# results), api reads it via the at_pixel endpoint. Step 14.7.
+pyarrow==24.0.0
+# geopandas + shapely + fiona: vector export for the export endpoint
+# (Step 14.8). Worker doesn't strictly need these today but we keep the
+# requirement files in lockstep so future worker-side export work doesn't
+# need a rebuild for deps alone.
+geopandas==1.0.1
+shapely==2.1.2
+fiona==1.10.1
+
+# --- ML pipeline (used by app/utils/dataset_builder/* + transitive) ---
+# torch:        ImageCubeOperations + per-sensor cube reshapers (PRISMA path)
+# scikit-learn: pulled by Landsat dataset builder
+# scipy:        spectral interpolation, resampling
+# pandas:       Landsat band manifest handling
+# numexpr:      EnMAP DN→reflectance transformer
+# boto3:        S3 file source path (FileSourceConfig validator's S3 branch)
+# tqdm/joblib:  progress reporting + caching across the pipeline
+torch==2.10.0
+scikit-learn==1.8.0
+scipy==1.17.0
+pandas==3.0.1
+numexpr==2.14.1
+boto3==1.42.53
+tqdm==4.67.1
+joblib==1.5.3
+# spectral (SPy): used by the classical anomaly detectors in
+# app/detectors/ (GlobalRX, MNFCompression, ThermalGRX). The api
+# doesn't need this; classical dispatch only runs in the worker.
+spectral==0.23.1

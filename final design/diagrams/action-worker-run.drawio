@@ -1,0 +1,120 @@
+<mxfile host="65bd71144e">
+    <diagram id="action_worker_run" name="Worker action_run handler">
+        <mxGraphModel dx="1502" dy="931" grid="0" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1500" pageHeight="980" math="0" shadow="0">
+            <root>
+                <mxCell id="0"/>
+                <mxCell id="1" parent="0"/>
+                <mxCell id="title" value="Worker action_run handler — claim job · dispatch via action_types registry · lockstep status mirroring on actions / jobs / action_outputs" style="text;html=1;fontSize=20;fontStyle=1;align=left;verticalAlign=middle;" parent="1" vertex="1">
+                    <mxGeometry x="40" y="20" width="1420" height="30" as="geometry"/>
+                </mxCell>
+                <mxCell id="subtitle" value="One ticking worker loop · one Action at a time. The handler owns the queued→running early-commit AND the action_outputs row materialisation in the runner&apos;s same-txn complete path. Per-type math (`run / summarize / preview`) is dispatched through the action_types REGISTRY." style="text;html=1;fontSize=12;fontStyle=2;fontColor=#666666;align=left;verticalAlign=middle;" parent="1" vertex="1">
+                    <mxGeometry x="40" y="52" width="1420" height="20" as="geometry"/>
+                </mxCell>
+
+                <mxCell id="actor_runner" value="worker.runner._process_one_tick" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;fontStyle=1;" parent="1" vertex="1">
+                    <mxGeometry x="60" y="85" width="220" height="40" as="geometry"/>
+                </mxCell>
+                <mxCell id="actor_handler" value="handle_action_run" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=12;fontStyle=1;" parent="1" vertex="1">
+                    <mxGeometry x="360" y="85" width="180" height="40" as="geometry"/>
+                </mxCell>
+                <mxCell id="actor_reg" value="action_types REGISTRY" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=11;fontStyle=1;" parent="1" vertex="1">
+                    <mxGeometry x="640" y="85" width="180" height="40" as="geometry"/>
+                </mxCell>
+                <mxCell id="actor_type" value="action_types.&amp;lt;kind&amp;gt;.run / summarize / preview" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=11;fontStyle=1;" parent="1" vertex="1">
+                    <mxGeometry x="880" y="85" width="280" height="40" as="geometry"/>
+                </mxCell>
+                <mxCell id="actor_pg" value="postgres (jobs · actions · action_outputs)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=11;fontStyle=1;" parent="1" vertex="1">
+                    <mxGeometry x="1220" y="85" width="260" height="40" as="geometry"/>
+                </mxCell>
+
+                <mxCell id="ll_runner" style="endArrow=none;dashed=1;html=1;rounded=0;strokeColor=#999999;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry"><mxPoint x="170" y="125" as="sourcePoint"/><mxPoint x="170" y="930" as="targetPoint"/></mxGeometry>
+                </mxCell>
+                <mxCell id="ll_handler" style="endArrow=none;dashed=1;html=1;rounded=0;strokeColor=#999999;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry"><mxPoint x="450" y="125" as="sourcePoint"/><mxPoint x="450" y="930" as="targetPoint"/></mxGeometry>
+                </mxCell>
+                <mxCell id="ll_reg" style="endArrow=none;dashed=1;html=1;rounded=0;strokeColor=#999999;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry"><mxPoint x="730" y="125" as="sourcePoint"/><mxPoint x="730" y="930" as="targetPoint"/></mxGeometry>
+                </mxCell>
+                <mxCell id="ll_type" style="endArrow=none;dashed=1;html=1;rounded=0;strokeColor=#999999;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry"><mxPoint x="1020" y="125" as="sourcePoint"/><mxPoint x="1020" y="930" as="targetPoint"/></mxGeometry>
+                </mxCell>
+                <mxCell id="ll_pg" style="endArrow=none;dashed=1;html=1;rounded=0;strokeColor=#999999;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry"><mxPoint x="1350" y="125" as="sourcePoint"/><mxPoint x="1350" y="930" as="targetPoint"/></mxGeometry>
+                </mxCell>
+
+                <mxCell id="phase1" value="① claim → mark running (early commit so UI sees the transition)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#eef3f8;strokeColor=#aac4e0;align=left;verticalAlign=middle;fontStyle=1;fontSize=12;" parent="1" vertex="1">
+                    <mxGeometry x="30" y="150" width="1460" height="26" as="geometry"/>
+                </mxCell>
+                <mxCell id="msg1a" value="claim_one() → SELECT … FOR UPDATE SKIP LOCKED → UPDATE jobs status=&apos;running&apos;, claimed_by, started_at" style="endArrow=classic;html=1;edgeStyle=none;fontSize=11;align=center;verticalAlign=bottom;labelBackgroundColor=#ffffff;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry"><mxPoint x="170" y="200" as="sourcePoint"/><mxPoint x="1350" y="200" as="targetPoint"/></mxGeometry>
+                </mxCell>
+                <mxCell id="msg1b" value="dispatch by job.type → handle_action_run(session, job)" style="endArrow=classic;html=1;edgeStyle=none;fontSize=11;align=center;verticalAlign=bottom;labelBackgroundColor=#ffffff;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry"><mxPoint x="170" y="235" as="sourcePoint"/><mxPoint x="450" y="235" as="targetPoint"/></mxGeometry>
+                </mxCell>
+                <mxCell id="msg1c" value="db.get(Action, job.target_id) · Project · Scene · spec=get_spec(action.type)" style="endArrow=classic;html=1;edgeStyle=none;fontSize=11;align=center;verticalAlign=bottom;labelBackgroundColor=#ffffff;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry"><mxPoint x="450" y="270" as="sourcePoint"/><mxPoint x="1350" y="270" as="targetPoint"/></mxGeometry>
+                </mxCell>
+                <mxCell id="msg1d" value="UPDATE actions SET status=&apos;running&apos;, started_at=NOW(); COMMIT  ← early commit; UI now sees Action running" style="endArrow=classic;html=1;edgeStyle=none;fontSize=11;align=center;verticalAlign=bottom;labelBackgroundColor=#ffffff;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry"><mxPoint x="450" y="305" as="sourcePoint"/><mxPoint x="1350" y="305" as="targetPoint"/></mxGeometry>
+                </mxCell>
+
+                <mxCell id="phase2" value="② Build ActionRunContext + create output dir on /artifacts" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#fff2e0;strokeColor=#e0b070;align=left;verticalAlign=middle;fontStyle=1;fontSize=12;" parent="1" vertex="1">
+                    <mxGeometry x="30" y="335" width="1460" height="26" as="geometry"/>
+                </mxCell>
+                <mxCell id="msg2" value="ctx = ActionRunContext(action_id, project_id, scene_id, sensor_type, configuration, data_dir, artifacts_dir, output_dir=projects/&amp;lt;p&amp;gt;/actions/&amp;lt;a&amp;gt;/output, scene_raw_path, on_step, resolve_action_output)" style="text;html=1;fontSize=11;align=left;verticalAlign=middle;fontStyle=2;fontColor=#444444;" parent="1" vertex="1">
+                    <mxGeometry x="200" y="370" width="1280" height="20" as="geometry"/>
+                </mxCell>
+                <mxCell id="msg2b" value="output_dir.mkdir(parents=True, exist_ok=True)  ← FS side-effect on allotrope_artifacts" style="text;html=1;fontSize=11;align=left;verticalAlign=middle;fontStyle=2;fontColor=#444444;" parent="1" vertex="1">
+                    <mxGeometry x="200" y="395" width="900" height="20" as="geometry"/>
+                </mxCell>
+
+                <mxCell id="phase3" value="③ Dispatch to type module: run · summarize · preview" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f0e0f0;strokeColor=#b070b0;align=left;verticalAlign=middle;fontStyle=1;fontSize=12;" parent="1" vertex="1">
+                    <mxGeometry x="30" y="425" width="1460" height="26" as="geometry"/>
+                </mxCell>
+                <mxCell id="msg3a" value="spec.run(ctx)  ← lazy-imports app/, numpy, rasterio. Calls ctx.on_step(&apos;…&apos;) between recipe boundaries (heartbeat hook)" style="endArrow=classic;html=1;edgeStyle=none;fontSize=11;align=center;verticalAlign=bottom;labelBackgroundColor=#ffffff;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry"><mxPoint x="450" y="475" as="sourcePoint"/><mxPoint x="1020" y="475" as="targetPoint"/></mxGeometry>
+                </mxCell>
+                <mxCell id="msg3b" value="… recipe FS writes (pickle / GeoTIFFs / diagnostics.json) under output_dir …" style="text;html=1;fontSize=11;align=left;verticalAlign=middle;fontStyle=2;fontColor=#888888;" parent="1" vertex="1">
+                    <mxGeometry x="850" y="500" width="600" height="20" as="geometry"/>
+                </mxCell>
+                <mxCell id="msg3c" value="spec.summarize(ctx, output_dir) → dict (reads diagnostics.json)" style="endArrow=classic;html=1;edgeStyle=none;fontSize=11;align=center;verticalAlign=bottom;labelBackgroundColor=#ffffff;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry"><mxPoint x="450" y="530" as="sourcePoint"/><mxPoint x="1020" y="530" as="targetPoint"/></mxGeometry>
+                </mxCell>
+                <mxCell id="msg3d" value="spec.preview(ctx, output_dir) → preview.png  (best-effort; failure logged but does NOT fail the Action)" style="endArrow=classic;html=1;edgeStyle=none;fontSize=11;align=center;verticalAlign=bottom;labelBackgroundColor=#ffffff;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry"><mxPoint x="450" y="565" as="sourcePoint"/><mxPoint x="1020" y="565" as="targetPoint"/></mxGeometry>
+                </mxCell>
+
+                <mxCell id="phase4_fail" value="④a Failure path: any exception during run/summarize → mark Action failed (own commit) and re-raise" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffd6d6;strokeColor=#c97070;align=left;verticalAlign=middle;fontStyle=1;fontSize=12;" parent="1" vertex="1">
+                    <mxGeometry x="30" y="595" width="1460" height="26" as="geometry"/>
+                </mxCell>
+                <mxCell id="msg4a" value="UPDATE actions SET status=&apos;failed&apos;, completed_at=NOW(), failure_reason=&amp;lt;exc class:msg, capped 1000 chars&amp;gt;; COMMIT" style="endArrow=classic;html=1;edgeStyle=none;fontSize=11;align=center;verticalAlign=bottom;labelBackgroundColor=#ffffff;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry"><mxPoint x="450" y="645" as="sourcePoint"/><mxPoint x="1350" y="645" as="targetPoint"/></mxGeometry>
+                </mxCell>
+                <mxCell id="msg4b" value="raise → runner.mark_failed(session, job, …) → UPDATE jobs SET status=&apos;failed&apos;, failure_reason; COMMIT" style="endArrow=classic;html=1;edgeStyle=none;fontSize=11;align=center;verticalAlign=bottom;labelBackgroundColor=#ffffff;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry"><mxPoint x="450" y="680" as="sourcePoint"/><mxPoint x="170" y="680" as="targetPoint"/></mxGeometry>
+                </mxCell>
+
+                <mxCell id="phase4_ok" value="④b Success path: stage ActionOutput row + Action complete; runner&apos;s mark_complete COMMITs everything" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;align=left;verticalAlign=middle;fontStyle=1;fontSize=12;" parent="1" vertex="1">
+                    <mxGeometry x="30" y="710" width="1460" height="26" as="geometry"/>
+                </mxCell>
+                <mxCell id="msg5a" value="session.add(ActionOutput(id, action_id=action.id, artifact_path=output_dir_rel, summary=…))" style="endArrow=classic;html=1;edgeStyle=none;fontSize=11;align=center;verticalAlign=bottom;labelBackgroundColor=#ffffff;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry"><mxPoint x="450" y="760" as="sourcePoint"/><mxPoint x="1350" y="760" as="targetPoint"/></mxGeometry>
+                </mxCell>
+                <mxCell id="msg5b" value="UPDATE actions SET status=&apos;complete&apos;, completed_at=NOW()" style="endArrow=classic;html=1;edgeStyle=none;fontSize=11;align=center;verticalAlign=bottom;labelBackgroundColor=#ffffff;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry"><mxPoint x="450" y="795" as="sourcePoint"/><mxPoint x="1350" y="795" as="targetPoint"/></mxGeometry>
+                </mxCell>
+                <mxCell id="msg5c" value="session.flush()  ← surfaces UNIQUE(action_id) violation now, not at commit" style="text;html=1;fontSize=11;align=left;verticalAlign=middle;fontStyle=2;fontColor=#444444;" parent="1" vertex="1">
+                    <mxGeometry x="600" y="820" width="600" height="20" as="geometry"/>
+                </mxCell>
+                <mxCell id="msg5d" value="return (target_kind=&apos;action_output&apos;, target_id=output.id) → runner.mark_complete: UPDATE jobs status=&apos;complete&apos;, target_kind, target_id, completed_at; COMMIT" style="endArrow=classic;html=1;edgeStyle=none;fontSize=11;align=center;verticalAlign=bottom;labelBackgroundColor=#ffffff;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry"><mxPoint x="450" y="855" as="sourcePoint"/><mxPoint x="1350" y="855" as="targetPoint"/></mxGeometry>
+                </mxCell>
+
+                <mxCell id="note" value="Invariants: (a) actions.status=&apos;complete&apos; ⇔ exactly one action_outputs row exists (UNIQUE(action_id) enforces it). (b) actions.status and jobs.status are aligned at every transaction boundary: queued/queued · running/running · complete/complete · failed/failed. (c) Cancellation deferred — when added, worker checks actions.cancellation_requested between ctx.on_step calls. (d) Heavy imports (numpy, rasterio, app/) live inside spec.run/preview only — dispatch module stays cheap to import." style="text;html=1;fontSize=10;align=left;verticalAlign=top;fillColor=#fafafa;strokeColor=#cccccc;fontColor=#444444;" parent="1" vertex="1">
+                    <mxGeometry x="40" y="885" width="1450" height="60" as="geometry"/>
+                </mxCell>
+            </root>
+        </mxGraphModel>
+    </diagram>
+</mxfile>

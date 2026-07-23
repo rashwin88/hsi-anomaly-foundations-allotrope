@@ -1,0 +1,73 @@
+<mxfile host="65bd71144e">
+    <diagram id="auth_logout" name="POST /auth/logout">
+        <mxGraphModel dx="1502" dy="931" grid="0" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1200" pageHeight="700" math="0" shadow="0">
+            <root>
+                <mxCell id="0"/>
+                <mxCell id="1" parent="0"/>
+                <mxCell id="title" value="POST /auth/logout — implementation sequence" style="text;html=1;fontSize=20;fontStyle=1;align=left;verticalAlign=middle;" parent="1" vertex="1">
+                    <mxGeometry x="40" y="20" width="800" height="30" as="geometry"/>
+                </mxCell>
+                <mxCell id="subtitle" value="Stateless logout: clear the cookie, no DB write. Token remains valid until exp; the browser just no longer holds it." style="text;html=1;fontSize=12;fontStyle=2;fontColor=#666666;align=left;verticalAlign=middle;" parent="1" vertex="1">
+                    <mxGeometry x="40" y="52" width="1100" height="20" as="geometry"/>
+                </mxCell>
+                <mxCell id="actor_browser" value="Browser (Client)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;fontStyle=1;" parent="1" vertex="1">
+                    <mxGeometry x="120" y="85" width="160" height="40" as="geometry"/>
+                </mxCell>
+                <mxCell id="actor_api" value="api (FastAPI)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=12;fontStyle=1;" parent="1" vertex="1">
+                    <mxGeometry x="520" y="85" width="160" height="40" as="geometry"/>
+                </mxCell>
+                <mxCell id="actor_pg" value="postgres" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=12;fontStyle=1;dashed=1;fontColor=#888888;" parent="1" vertex="1">
+                    <mxGeometry x="920" y="85" width="160" height="40" as="geometry"/>
+                </mxCell>
+                <mxCell id="ll_browser" style="endArrow=none;dashed=1;html=1;rounded=0;strokeColor=#999999;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <mxPoint x="200" y="125" as="sourcePoint"/>
+                        <mxPoint x="200" y="640" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="ll_api" style="endArrow=none;dashed=1;html=1;rounded=0;strokeColor=#999999;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <mxPoint x="600" y="125" as="sourcePoint"/>
+                        <mxPoint x="600" y="640" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="ll_pg" style="endArrow=none;dashed=1;html=1;rounded=0;strokeColor=#cccccc;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <mxPoint x="1000" y="125" as="sourcePoint"/>
+                        <mxPoint x="1000" y="640" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="phase1_band" value="① Request" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#eef3f8;strokeColor=#aac4e0;align=left;verticalAlign=middle;fontStyle=1;fontSize=12;" parent="1" vertex="1">
+                    <mxGeometry x="30" y="140" width="1100" height="26" as="geometry"/>
+                </mxCell>
+                <mxCell id="msg1_1" value="POST /auth/logout&lt;br/&gt;Cookie: allotrope_jwt=&amp;lt;jwt&amp;gt; (auto-attached by browser)" style="endArrow=classic;html=1;edgeStyle=none;fontSize=11;align=center;verticalAlign=bottom;labelBackgroundColor=#ffffff;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <mxPoint x="200" y="200" as="sourcePoint"/>
+                        <mxPoint x="600" y="200" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="phase2_band" value="② Handler — pure local action, no I/O" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#fff2e0;strokeColor=#e0b070;align=left;verticalAlign=middle;fontStyle=1;fontSize=12;" parent="1" vertex="1">
+                    <mxGeometry x="30" y="240" width="1100" height="26" as="geometry"/>
+                </mxCell>
+                <mxCell id="note2" value="response.delete_cookie(&lt;br/&gt;    key=allotrope_jwt,&lt;br/&gt;    path=/, httponly=True, samesite=&amp;quot;strict&amp;quot;, secure=settings.cookie_secure&lt;br/&gt;)&lt;br/&gt;&lt;br/&gt;Implemented as Set-Cookie with Max-Age=0 — the browser deletes the cookie on receipt." style="shape=note;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11;align=left;verticalAlign=middle;" parent="1" vertex="1">
+                    <mxGeometry x="380" y="280" width="500" height="100" as="geometry"/>
+                </mxCell>
+                <mxCell id="phase3_band" value="③ Respond — clearing cookie" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#e8f1e6;strokeColor=#a8c8a4;align=left;verticalAlign=middle;fontStyle=1;fontSize=12;" parent="1" vertex="1">
+                    <mxGeometry x="30" y="395" width="1100" height="26" as="geometry"/>
+                </mxCell>
+                <mxCell id="msg3_1" value="HTTP 204 No Content&lt;br/&gt;Set-Cookie: allotrope_jwt=; Max-Age=0; Path=/; HttpOnly; SameSite=Strict" style="endArrow=open;html=1;edgeStyle=none;dashed=1;fontSize=11;align=center;verticalAlign=bottom;labelBackgroundColor=#ffffff;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <mxPoint x="600" y="465" as="sourcePoint"/>
+                        <mxPoint x="200" y="465" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="pg_dim_label" value="postgres lifeline shown dashed-out: this route never touches the DB." style="text;html=1;fontSize=11;fontStyle=2;fontColor=#888888;align=center;verticalAlign=middle;" parent="1" vertex="1">
+                    <mxGeometry x="700" y="500" width="500" height="20" as="geometry"/>
+                </mxCell>
+                <mxCell id="footer" value="Token remains technically valid until its exp (≤24h). The browser no longer holds it; the api never knew about it (stateless). If the same token exists in another browser tab/window, that tab is unaffected — the accepted cost of stateless JWT auth, and the user explicitly opted into this trade vs. server-side sessions." style="text;html=1;fontSize=11;fontStyle=2;fontColor=#666666;align=center;verticalAlign=middle;" parent="1" vertex="1">
+                    <mxGeometry x="80" y="550" width="1040" height="60" as="geometry"/>
+                </mxCell>
+            </root>
+        </mxGraphModel>
+    </diagram>
+</mxfile>
