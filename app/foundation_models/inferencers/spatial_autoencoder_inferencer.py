@@ -30,8 +30,14 @@ class SpatialAutoencoderInferencer(FoundationInferencer):
     def build_model(self) -> nn.Module:
         cfg: SpatialAutoencoderConfig = self.config.model_config_
         pixel_mean, pixel_std = None, None
+        override = self.config.pixel_stats_override
         stats_path = self.config.pixel_stats_path
-        if stats_path is not None:
+        if override is not None:
+            # Per-scene stats replace the checkpoint's baked-in values -
+            # see PixelStatsOverride for why uncalibrated sensors need this.
+            pixel_mean, pixel_std = override.mean, override.std
+            logger.info("Pixel stats overridden per-scene (source=%s)", override.source)
+        elif stats_path is not None:
             import json
             with open(stats_path) as f:
                 stats = json.load(f)

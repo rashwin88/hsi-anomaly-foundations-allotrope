@@ -66,9 +66,8 @@ docs/       the nine docs above
 
 ## Status
 
-The core Action chain is built end to end, but **anomaly scoring currently fails on an
-import error** and the **frontend build is broken**. Both are one-file fixes and are the
-first two entries in [docs/09-known-issues.md](docs/09-known-issues.md).
+The core Action chain is built end to end. The **frontend build is currently broken** — a
+one-file fix, and the first entry in [docs/09-known-issues.md](docs/09-known-issues.md).
 
 There is no CI. Tests cover `app/` only.
 

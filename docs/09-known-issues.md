@@ -5,17 +5,7 @@ policy, so this file is the register. Fix an entry, delete the entry.
 
 ## Broken — blocks real use
 
-**1. `anomaly_scoring` cannot run at all.**
-`backend/allotrope/action_types/_anomaly_scoring_run.py:92` imports `PixelStatsOverride`
-from `app.models.training.inference_config`, which defines only `InferenceConfig`. No such
-class exists anywhere in the repo. `run()` raises `ImportError` on its first statement, so
-**every** anomaly-scoring job fails — classical and foundation paths alike. This is the
-product's core feature.
-*Fix:* either implement `PixelStatsOverride` and read it in the inferencers (they currently
-read only `pixel_stats_path`), or drop the import and the HotSat DN z-score branch that
-uses it.
-
-**2. The frontend build fails — and `.gitignore` is the root cause.**
+**1. The frontend build fails — and `.gitignore` is the root cause.**
 `frontend/src/pages/ModelDetailPage.tsx:33` imports `layoutWithElk` from `"../lib/elkLayout"`,
 but `frontend/src/lib/` does not exist. `npm run build` (`tsc -b && vite build`) fails, which
 also means **`docker compose up` cannot build the frontend image on a clean clone.**

@@ -7,12 +7,42 @@ to restore, and the patch size to infer on.
 
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from app.models.training.training_config import (
     FoundationModelName,
     ModelSpecificConfig,
 )
+
+
+class PixelStatsOverride(BaseModel):
+    """
+    Per-scene normalisation stats that replace a checkpoint's baked-in values.
+
+    Needed for uncalibrated sensors. HotSat-1 ships raw DN (~5000 +/- 400); a
+    model whose PixelNormalize buffers were fitted on Celsius (~290 +/- 10)
+    would see wildly out-of-distribution input and reconstruct noise, drowning
+    any real anomaly in the residual.
+
+    Trade-off: scores become scene-relative - comparable within one scene, but
+    not across scenes. The anomaly_scoring action records ``normalization_mode``
+    so the UI can say so.
+    """
+
+    mean: list[float] = Field(..., description="Per-band mean, one per input channel.")
+    std: list[float] = Field(..., description="Per-band std. Callers must guard zeros.")
+    source: str = Field(..., description="Provenance tag, e.g. 'per_scene_dn_zscore'.")
+
+    @model_validator(mode="after")
+    def _lengths_match(self) -> "PixelStatsOverride":
+        # A mismatch would otherwise surface as an opaque shape error deep
+        # inside PixelNormalize, long after the real mistake.
+        if len(self.mean) != len(self.std):
+            raise ValueError(
+                f"mean has {len(self.mean)} entries but std has {len(self.std)}; "
+                "both must be one per input channel."
+            )
+        return self
 
 
 class InferenceConfig(BaseModel):
@@ -57,6 +87,11 @@ class InferenceConfig(BaseModel):
         default=None,
         description="Path to pixel normalization stats JSON (mean/std). "
         "Required for normalized training.",
+    )
+    pixel_stats_override: PixelStatsOverride | None = Field(
+        default=None,
+        description="In-memory per-scene stats. When set these win over "
+        "pixel_stats_path, which callers should then pass as None.",
     )
     masking_strategy: Literal["checkerboard", "random"] = Field(
         default="checkerboard",

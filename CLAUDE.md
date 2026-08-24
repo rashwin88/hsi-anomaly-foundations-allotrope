@@ -105,12 +105,10 @@ To trace a feature: the science is in `app/`, but the thing that *runs* it is a
 
 ## Known breakage — verify before relying on either
 
-1. **`anomaly_scoring` cannot run.** `backend/allotrope/action_types/_anomaly_scoring_run.py:92`
-   imports `PixelStatsOverride` from `app.models.training.inference_config`, which does not
-   define it. `run()` raises `ImportError` immediately, on both the classical and foundation
-   paths.
-2. **The frontend build fails.** `frontend/src/pages/ModelDetailPage.tsx:33` imports
-   `../lib/elkLayout`; `frontend/src/lib/` does not exist and is not gitignored.
+1. **The frontend build fails.** `frontend/src/pages/ModelDetailPage.tsx:33` imports
+   `../lib/elkLayout`; `frontend/src/lib/` does not exist because root `.gitignore:22` is
+   `lib/` — a bare pattern that matches at any depth. Fix the ignore rule to `/lib/` first,
+   then write the file.
 
 Others: `app/models/intermediate_concepts/band_responses.py` has a chained-assignment bug that
 raises on import (module is unused); `InferenceHarness` is fully built and tested but unused in

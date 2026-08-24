@@ -109,10 +109,7 @@ docstrings. Grep `"Step "`.
 
 ## Currently broken - check before assuming
 
-1. **`anomaly_scoring` cannot run.** `_anomaly_scoring_run.py:92` imports `PixelStatsOverride`
-   from `app.models.training.inference_config`, which does not define it. `ImportError` on
-   every job, both classical and foundation paths.
-2. **The frontend build fails.** `ModelDetailPage.tsx:33` imports `../lib/elkLayout`, which
+1. **The frontend build fails.** `ModelDetailPage.tsx:33` imports `../lib/elkLayout`, which
    does not exist because root `.gitignore:22` is `lib/` - a bare pattern matching at any
    depth. Fix the ignore rule to `/lib/` first, then write the file.
 
