@@ -77,7 +77,10 @@ Declared, set in real configs, never read by any code:
 
 - **`InferenceHarness`** (`app/utils/anomaly_detection/inference_harness.py`) is fully
   built, documented and covered by 22 tests — and unused. Production calls
-  `get_detector()` → `fit()` → `detect()` directly. Either adopt it or delete it.
+  `get_detector()` → `fit()` → `detect()` directly, reaching into the detector's private
+  `_spatial_mask` in between. Deliberately left alone for now; the options and the blocker
+  are written up in
+  [`docs/proposals/inference-harness-adoption.md`](proposals/inference-harness-adoption.md).
 - `LRX` and `MNF_LRX` are in the detector registry but absent from the backend's
   capabilities table, so they are unreachable from the product. `StatisticalEnsembler` is in
   neither.
