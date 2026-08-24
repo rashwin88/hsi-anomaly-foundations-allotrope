@@ -113,9 +113,9 @@ To trace a feature: the science is in `app/`, but the thing that *runs* it is a
    modules out of the api's startup path. **After any change under `app/` or `backend/`,
    run `docker compose ps -a` and confirm the worker says `running`, not `restarting`.**
 
-Others: `app/models/intermediate_concepts/band_responses.py` has a chained-assignment bug that
-raises on import (module is unused); `InferenceHarness` is fully built and tested but unused in
-production; deploy scripts still reference ports 3000/8000 while compose binds 3010/8010.
+Others: `InferenceHarness` is fully built and tested but unused in production; deploy scripts
+still reference ports 3000/8000 while compose binds 3010/8010; bare directory patterns in
+`.gitignore` have silently eaten source twice, and the file is not fully audited.
 
 ## Running things
 

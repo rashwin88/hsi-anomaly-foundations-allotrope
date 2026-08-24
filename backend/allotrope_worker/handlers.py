@@ -18,9 +18,6 @@ Real handlers land progressively:
 
 from __future__ import annotations
 
-import logging
-import os
-import time
 import uuid
 from collections.abc import Callable
 
@@ -33,31 +30,9 @@ from .annotation_attach import handle_annotation_attach
 from .project_export import handle_project_export
 from .scene_onboard import handle_scene_onboard
 
-logger = logging.getLogger("allotrope.worker.handlers")
-
 # (target_kind, target_id) or (None, None) if there's no produced entity.
 HandlerResult = tuple[str | None, uuid.UUID | None]
 Handler = Callable[[Session, Job], HandlerResult]
-
-
-def _placeholder(kind: str) -> Handler:
-    """Build a placeholder handler tagged with its job type.
-
-    Used for the job types whose real implementation hasn't landed yet.
-    """
-
-    def run(_session: Session, job: Job) -> HandlerResult:
-        logger.info(
-            "[%s] placeholder handler running for job %s (payload keys: %s)",
-            kind,
-            job.id,
-            sorted((job.payload or {}).keys()),
-        )
-        sleep_sec = float(os.environ.get("WORKER_PLACEHOLDER_SLEEP_SEC", "0.5"))
-        time.sleep(sleep_sec)
-        return (None, None)
-
-    return run
 
 
 HANDLERS: dict[str, Handler] = {

@@ -78,10 +78,6 @@ Declared, set in real configs, never read by any code:
 - **`InferenceHarness`** (`app/utils/anomaly_detection/inference_harness.py`) is fully
   built, documented and covered by 22 tests — and unused. Production calls
   `get_detector()` → `fit()` → `detect()` directly. Either adopt it or delete it.
-- **`app/models/intermediate_concepts/band_responses.py`** raises on import:
-  `error_pixel_values = Optional[...] = Field(...)` is a chained assignment that attempts a
-  subscript assignment on `typing.Optional`. Unnoticed because nothing imports the module.
-  Delete it.
 - `LRX` and `MNF_LRX` are in the detector registry but absent from the backend's
   capabilities table, so they are unreachable from the product. `StatisticalEnsembler` is in
   neither.

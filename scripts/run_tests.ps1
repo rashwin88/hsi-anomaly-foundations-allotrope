@@ -10,10 +10,15 @@ if (-not (Test-Path "$root\docker\.env")) {
 }
 if (-not $PytestArgs) { $PytestArgs = @("-q") }
 $marks = "not large_files and not large_benchmarks and not network_access"
+# Mount the working tree over the image's baked copies, so tests exercise the
+# code you just edited rather than whatever was current at the last build.
 $dockerArgs = @(
     "compose", "-f", "$root\docker\docker-compose.yml", "run", "--rm", "--no-deps",
     "-v", "$root\tests:/srv/tests",
     "-v", "$root\pytest.ini:/srv/pytest.ini",
+    "-v", "$root\app:/srv/app",
+    "-v", "$root\backend\allotrope:/srv/allotrope",
+    "-v", "$root\backend\allotrope_worker:/srv/allotrope_worker",
     "worker", "python", "-m", "pytest", "tests", "-m", $marks
 ) + $PytestArgs
 docker @dockerArgs
