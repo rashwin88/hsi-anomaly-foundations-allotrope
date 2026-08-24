@@ -5,21 +5,46 @@ Lookup helpers shared by the Action endpoint modules.
 helpers are needed by more than one of the resulting modules, so they live here
 rather than being imported across siblings or - worse - duplicated.
 
-Deliberately narrow: only helpers with no schema dependencies belong here. The
-Pydantic response models and the helpers that build them stay with the endpoints
-that own them, so this module never becomes the next dumping ground.
+The bar for living here is being needed by more than one Action module -
+nothing else. ActionOutputPublic qualifies: actions.py embeds it in ActionDetail
+and action_files.py returns it directly. Response models used by exactly one
+module stay with that module, so this never becomes the next dumping ground.
 """
 
 from __future__ import annotations
 
 import uuid
+from datetime import datetime
+from typing import Any
 
 from fastapi import HTTPException, status
+from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..models import Action, ActionOutput
 from .wireformat import parse_prefixed_id
+
+
+class ActionOutputPublic(BaseModel):
+    """Wire shape for ActionOutput rows."""
+
+    id: str                          # output_<uuid>
+    action_id: str                   # action_<uuid>
+    artifact_path: str
+    summary: dict[str, Any]
+    created_at: datetime
+
+
+def output_to_wire(o: ActionOutput) -> ActionOutputPublic:
+    """ORM row -> wire shape, with ids given their `output_` / `action_` prefixes."""
+    return ActionOutputPublic(
+        id=f"output_{o.id}",
+        action_id=f"action_{o.action_id}",
+        artifact_path=o.artifact_path,
+        summary=o.summary,
+        created_at=o.created_at,
+    )
 
 
 def action_or_404(action_id_wire: str, db: Session) -> Action:

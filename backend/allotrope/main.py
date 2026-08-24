@@ -8,9 +8,10 @@ from fastapi import Depends, FastAPI
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+from .api.action_export import action_export_router
+from .api.action_files import action_files_router, outputs_router
 from .api.action_threshold import anomaly_threshold_router
 from .api.actions import (
-    action_outputs_router,
     action_types_router,
     actions_router,
     project_actions_router,
@@ -59,10 +60,13 @@ app.include_router(jobs_router)
 app.include_router(models_router)
 app.include_router(project_actions_router)
 app.include_router(actions_router)
-# Same /actions prefix as actions_router; the threshold flow lives in its own
-# module because its three endpoints share a cache and must not be separated.
+# All three share the /actions prefix with actions_router. actions.py was split
+# by concern once it passed 1,500 lines; no two Action routes are ambiguous, so
+# mount order carries no meaning here.
 app.include_router(anomaly_threshold_router)
-app.include_router(action_outputs_router)
+app.include_router(action_files_router)
+app.include_router(action_export_router)
+app.include_router(outputs_router)
 app.include_router(action_types_router)
 app.include_router(project_visualizations_router)
 app.include_router(project_viz_detail_router)
