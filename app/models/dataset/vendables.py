@@ -1,5 +1,28 @@
 """
-Defines vendable datasets for each dataset builder
+The VendableDataset types - the currency of the whole system.
+
+A "vendable" is a normalised cube plus its validity masks, produced by a
+DatasetBuilder from a raw scene file. Every detector, model and Action consumes
+one of these; nothing downstream touches raw sensor formats. Three variants:
+hyperspectral (PRISMA, AVIRIS-NG), EnMAP hyperspectral (adds five quality
+masks), and thermal (Landsat 9, HotSat-1, in Celsius).
+
+Also defines BandFilterConfig, which drives the 8-stage band pipeline, and
+DEFAULT_COMMON_WAVELENGTH_GRID - the 165-band, 10 nm, 460-2450 nm grid that
+every hyperspectral sensor is resampled onto. That shared grid is what lets one
+model train on shards mixing PRISMA and EnMAP.
+
+Two things that will surprise you:
+
+  1. Vendables carry NO spatial reference. Every GeoTIFF an Action writes has an
+     identity transform; CRS and affine are recovered at export time by
+     re-reading the raw file (app/georef/). Do not add a transform field here
+     expecting it to be populated.
+
+  2. These classes are PICKLED to disk - band_filter_apply writes
+     filtered_vendable.pkl and the api unpickles it. Pickle stores the class
+     path, so renaming or moving any class in this module breaks every stored
+     vendable on disk. Treat the class names and module path as a wire format.
 """
 
 from typing import List, Optional, Tuple

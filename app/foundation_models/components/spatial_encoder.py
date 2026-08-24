@@ -1,3 +1,21 @@
+"""
+The downsampling half of the convolutional model family.
+
+Used by SpatialAutoencoder (Pratibimba / Antardhana / Tirohita),
+UnNormalizedSpatialAutoencoder (Asanskrita) and
+NormalizedMaskedSpatialAutoencoder (Drashta). Paired with SpatialDecoder, which
+mirrors this progression back up.
+
+Each stage halves H and W while doubling channels, so capacity per layer stays
+roughly constant (C x H x W ~ const). The (K=4, S=2, P=1) choice is deliberate:
+it halves exactly, with no fractional sizes and no output_padding needed on the
+transpose side. See SpatialEncoderBlock for the arithmetic.
+
+Gotcha: H and W must both be divisible by 2**num_stages. The masked variants
+feed 3 channels here (pixels + validity + input mask), not 1 - they pass
+`in_channels + 2` when constructing.
+"""
+
 import torch
 import torch.nn as nn
 
@@ -53,11 +71,11 @@ class SpatialEncoder(nn.Module):
     The channel progression starts from in_channels and doubles the base
     at each stage. For base_channels=32, num_stages=3:
 
-      channels = [1, 64, 128, 256]
-                  │    │     │     └─ stage 2 output: (B, 256, H/8,  W/8)
-                  │    │     └─────── stage 1 output: (B, 128, H/4,  W/4)
-                  │    └───────────── stage 0 output: (B, 64,  H/2,  W/2)
-                  └────────────────── input:          (B, 1,   H,    W)
+      channels = [1, 32, 64, 128]
+                  │   │   │    └─ stage 2 output: (B, 128, H/8,  W/8)
+                  │   │   └────── stage 1 output: (B, 64,  H/4,  W/4)
+                  │   └────────── stage 0 output: (B, 32,  H/2,  W/2)
+                  └────────────── input:          (B, 1,   H,    W)
 
     The first stage maps from in_channels (e.g. 1 for thermal) into the
     base channel space. Subsequent stages double from there using

@@ -1,3 +1,22 @@
+"""
+The baseline reconstruction model - encoder + decoder, single-channel input.
+
+Ships under THREE codenames, all the same class with different training regimes:
+Pratibimba (plain), Antardhana (masked, L2) and Tirohita (masked, L1). The
+backend routes all three through SpatialAutoencoderInferencer.
+
+How it detects anomalies: it is trained only to rebuild ordinary imagery, so
+whatever it rebuilds badly is unlike anything it learned. The per-pixel
+reconstruction error IS the anomaly score - there are no anomaly labels anywhere
+in training. Scoring itself lives in app/utils/anomaly_detection/scoring.py.
+
+forward() returns (x_hat, z). z, the bottleneck, is returned for inspection and
+is not used by the scoring path.
+
+Gotcha: H and W must be divisible by 2**num_stages. Normalisation is optional -
+pass pixel_mean/pixel_std to enable it, omit them to work in raw units.
+"""
+
 import torch
 import torch.nn as nn
 from app.foundation_models.components.spatial_encoder import SpatialEncoder

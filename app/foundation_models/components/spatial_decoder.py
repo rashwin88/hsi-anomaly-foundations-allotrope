@@ -1,3 +1,20 @@
+"""
+The upsampling half of the convolutional model family - mirrors SpatialEncoder.
+
+Used by SpatialAutoencoder (Pratibimba / Antardhana / Tirohita),
+UnNormalizedSpatialAutoencoder (Asanskrita) and
+NormalizedMaskedSpatialAutoencoder (Drashta).
+
+ConvTranspose2d with (K=4, S=2, P=1) exactly doubles H and W, mirroring the
+encoder's exact halving. The channel list is the encoder's, reversed.
+
+The one non-obvious decision: the FINAL block deliberately omits BatchNorm,
+GELU and Dropout. Its job is to emit real values - surface temperature, or
+reflectance - and BatchNorm would force zero-mean unit-variance per channel,
+making a scene sitting at ~300 K impossible to reconstruct. GELU would clip
+negatives, but temperature anomalies can be negative. See SpatialDecoderBlock.
+"""
+
 import torch
 import torch.nn as nn
 

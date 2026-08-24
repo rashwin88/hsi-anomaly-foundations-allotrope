@@ -1,3 +1,22 @@
+"""
+Asanskrita - the mask-aware autoencoder that works in raw temperature units.
+
+The only model in the roster with no PixelNormalize at all: it trains and infers
+directly in Celsius. Its sibling Drashta
+(normalized_masked_spatial_auto_encoder.py) is the same shape with normalisation
+added, and the pair exists to test whether normalisation helps or hurts.
+
+Why 3 input channels rather than 1: the encoder is handed
+[pixels, validity_mask, input_mask]. A zeroed pixel is ambiguous on its own -
+it could be off-swath, cloud-masked, or a deliberately hidden prediction target.
+Comparing channels 1 and 2 lets the model tell "there is nothing here" from
+"something is here and I am asking you to guess it", which is the whole basis of
+masked reconstruction.
+
+forward() returns (x_hat, z); x_hat is single-channel temperature.
+Gotcha: H and W must be divisible by 2**num_stages.
+"""
+
 import torch
 import torch.nn as nn
 from app.foundation_models.components.spatial_encoder import SpatialEncoder

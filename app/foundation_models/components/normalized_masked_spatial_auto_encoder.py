@@ -1,3 +1,23 @@
+"""
+Drashta - Asanskrita's architecture plus z-score normalisation.
+
+Identical 3-channel mask design to unnormalized_spatial_auto_encoder.py
+(see that file for why the validity and input masks are separate channels),
+with PixelNormalize on the way in and PixelDenormalize on the way out.
+
+Why normalisation is expected to help detection, not just training: mapping into
+z-score space means an unusually hot pixel arrives as a large z-value, far from
+anything the model saw while learning ordinary terrain. That makes it HARDER to
+reconstruct from spatial context - which is precisely what we want, since the
+reconstruction error is the anomaly score.
+
+The normalisation stats live in the checkpoint as registered buffers, so this
+model cannot be pointed at a differently-calibrated sensor without either
+retraining or an InferenceConfig.pixel_stats_override.
+
+forward() returns (x_hat, z), x_hat denormalised back to temperature.
+"""
+
 import torch
 import torch.nn as nn
 from app.foundation_models.components.spatial_encoder import SpatialEncoder

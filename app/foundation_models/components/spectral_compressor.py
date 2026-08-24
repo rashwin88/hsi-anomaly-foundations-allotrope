@@ -1,3 +1,21 @@
+"""
+The spectral bottleneck that makes hyperspectral transformers affordable.
+
+Used only by HyperspectralSegFormerMAE (Indradhanu), which squeezes 165 bands
+down to 24-32 before the encoder and expands back afterwards.
+
+Why compress at all: attention cost scales with the token feature dimension, and
+165 bands is far more than the spatial encoder needs. A learned 1x1 convolution
+is a trainable analogue of MNF - it finds the few spectral combinations that
+actually carry signal, but optimised end-to-end for reconstruction rather than
+for signal-to-noise.
+
+The asymmetry is deliberate and easy to "tidy" by mistake: the compressor has
+BatchNorm, the decompressor has NO norm and NO activation. The compressor's job
+is to hand the encoder a stable distribution; the decompressor's output feeds
+denormalisation and must stay free to represent any value.
+"""
+
 import torch
 import torch.nn as nn
 

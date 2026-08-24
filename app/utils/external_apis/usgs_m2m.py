@@ -1,5 +1,22 @@
 """
-Simple client for USGS M2M APIs
+Client for the USGS Machine-to-Machine API - how Landsat scenes get acquired.
+
+Offline tooling, not part of the running product. Nothing in backend/ imports
+this; it is used from scripts and notebooks to search the USGS catalogue, sample
+scenes from the results, download them, and push them to S3 for the patch
+pipeline to consume.
+
+Flow: login with credentials from .env -> scene-search with a filter template
+from usgs_m2m_filtration_templates -> optionally random-sample the results ->
+request downloads -> stream each to S3.
+
+Two operational notes:
+  - Credentials come from environment variables via load_dotenv() at import.
+    Importing this module with no .env present still works; the failure surfaces
+    at login time.
+  - The download endpoint is asynchronous. Requesting a scene does not return
+    bytes, it returns a job that must be polled - hence the retry and sleep
+    logic below rather than a plain request/response.
 """
 
 import os

@@ -1,5 +1,25 @@
 """
-Concrete implementation of the Prisma Dataset Builder
+Turns a raw PRISMA L2D .he5 file into a VendableHyperspectralDataset.
+
+Entry point is vend_dataset(band_filter_config=...). Called during scene
+onboarding (allotrope_worker/scene_onboard.py) and again by the
+band_filter_apply Action when a user re-vends with different band settings.
+
+PRISMA is the most awkward of the sensors:
+
+  - Two detectors, one file. VNIR (66 bands) and SWIR (173) are stored as
+    separate HDF-EOS datasets and must be stitched into one cube.
+  - BIL layout (H, C, W), not the (C, H, W) everything else expects.
+    ImageCubeOperations does the transpose.
+  - Per-band scale factors. DN maps to reflectance through L2Scale{Min,Max}
+    attributes read from root metadata, not a single uniform gain.
+  - Bands flagged bad still occupy a slice in the cube, carrying fwhm = 0.0.
+
+After the 8-stage band pipeline (filter, interpolate, resample) the output lands
+on the shared 165-band grid, identical in shape to EnMAP and AVIRIS-NG.
+
+Georeferencing is deliberately absent here - PRISMA L2D is swath data with
+per-pixel lat/lon arrays, and that is resolved later in app/georef/.
 """
 
 import logging

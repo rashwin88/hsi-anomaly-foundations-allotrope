@@ -41,6 +41,7 @@ files are meant to be read start to finish in about an hour.
 | [7. Frontend](docs/07-frontend.md) | React SPA conventions |
 | [8. Deploy](docs/08-deploy.md) | Docker, shipping to a GPU box |
 | [9. Known issues](docs/09-known-issues.md) | what's currently broken |
+| [10. Code style](docs/10-code-style.md) | house rules for comments and module size |
 
 Also in the repo:
 

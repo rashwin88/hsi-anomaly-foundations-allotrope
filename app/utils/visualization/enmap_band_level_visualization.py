@@ -1,3 +1,18 @@
+"""
+Band mosaics for eyeballing an EnMAP scene during development.
+
+The EnMAP counterpart to basic_band_level_visualization.py - see that module for
+why these exist and why they are NOT the product's rendering path.
+
+EnMAP differs in that a scene is a folder, not a single file: the cube lives in
+*-SPECTRAL_IMAGE.TIF alongside quality-mask rasters and METADATA.XML. This reads
+the cube via EnmapHelper and pulls wavelengths from EnmapXmlParser, so band
+labels show real nanometres rather than bare indices.
+
+Requires matplotlib and writes to sample_visualization/. Keep it out of any
+import path the api touches.
+"""
+
 import math
 import random
 from typing import List

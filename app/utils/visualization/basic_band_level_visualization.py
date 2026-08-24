@@ -1,3 +1,21 @@
+"""
+Band mosaics for eyeballing a PRISMA or Landsat scene during development.
+
+Reads a raw file directly through HE5Helper / TIFHelper and writes a PNG grid of
+individual bands to sample_visualization/. Useful for answering "does this scene
+actually look like anything?" before running a pipeline over it.
+
+This is a DEVELOPER tool, not the product's rendering path. The visuals a user
+sees in the UI are produced by allotrope_worker/visualizations.py from the
+vendable, after normalisation and band filtering. This module deliberately
+bypasses all of that to show what the sensor actually delivered - which is
+exactly what you want when debugging an ingestion problem, and exactly what you
+do not want when reasoning about model inputs.
+
+Requires matplotlib and writes to disk, so keep it out of any import path the
+api touches.
+"""
+
 from matplotlib import pyplot as plt
 from typing import List, Dict
 import math

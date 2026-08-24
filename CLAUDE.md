@@ -40,8 +40,9 @@ small so I'll batch them" is exactly the failure it exists to prevent.
 
 ## Docs
 
-`docs/01-orientation.md` … `docs/09-known-issues.md` — nine files, read in order. They are
-the current, verified documentation; treat them as authoritative.
+`docs/01-orientation.md` … `docs/10-code-style.md` — read in order. They are the current,
+verified documentation; treat them as authoritative. `10-code-style.md` is the house style
+for comments, docstrings and module size — follow it when writing or refactoring code here.
 
 Low-level designs live in `docs/lld/<subsystem>.md`, created when a change adds a subsystem
 or logic whose rationale isn't obvious from reading it.
