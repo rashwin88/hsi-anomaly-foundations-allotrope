@@ -2,9 +2,11 @@
 __pycache__/
 *.py[codz]
 *$py.class
-.claude/
-CONTEXT.md
-TODO.md
+# Local Claude state stays out of git, but project skills are shared.
+# Note the `/*` — with a bare `.claude/`, git will not descend into the
+# directory and the `!` exception below could never match.
+.claude/*
+!.claude/skills/
 .vscode/
 checkpoints/
 
