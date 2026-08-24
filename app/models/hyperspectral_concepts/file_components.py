@@ -1,7 +1,7 @@
 """
 The vocabulary of things a scene file contains - the keys of every template.
 
-Three enums, one per family of container. A template maps these logical names to
+One enum per family of container. A template maps these logical names to
 physical locations (see references.py), so helper code asks for
 SWIR_CENTRAL_WAVELENGTH_LIST and stays ignorant of whether that is an HDF-EOS
 attribute, a GeoTIFF property or a file in a folder.
@@ -11,6 +11,10 @@ attribute, a GeoTIFF property or a file in a folder.
                                  L2Scale factors that drive DN -> reflectance
     EnmapFileComponents          EnMAP: the spectral image, five quality-mask
                                  rasters, the pixel mask, and METADATA.XML
+    ENVIFileComponents           AVIRIS-NG: .bin/.hdr pairs for the reflectance
+                                 and water-vapour products
+    HotSatFileComponents         HotSat-1: metadata JSON, the visual rasters,
+                                 and the provider's usable-data mask
     ThermalComponents            Landsat/HotSat: CRS, bounds, transform, width,
                                  height - georeferencing rather than spectra,
                                  because a GeoTIFF carries its own
@@ -67,6 +71,36 @@ class EnmapFileComponents(str, Enum):
     QUALITY_SNOW = "QUALITY_SNOW"
     QUALITY_CLASSES = "QUALITY_CLASSES"
     METADATA_XML = "METADATA_XML"
+
+
+class ENVIFileComponents(str, Enum):
+    """
+    Defines the components of an AVIRIS-NG ENVI scene folder.
+
+    ENVI stores each product as a raw binary cube plus a detached ASCII header,
+    so every component comes in a .bin/.hdr pair. A scene ships two products:
+    the atmospherically corrected reflectance cube (what we analyse) and the
+    water-vapour product (retained, not currently consumed).
+    """
+
+    PRIMARY_CUBE = "PRIMARY_CUBE"
+    PRIMARY_HEADER = "PRIMARY_HEADER"
+    H2O_CUBE = "H2O_CUBE"
+    H2O_HEADER = "H2O_HEADER"
+
+
+class HotSatFileComponents(str, Enum):
+    """
+    Defines the components of a HotSat-1 scene folder.
+
+    UDM is the provider's Usable Data Mask - a bit-flagged raster marking bad
+    pixels, cloud, saturation and no-data (see HotSatUDMFlags).
+    """
+
+    METADATA_JSON = "METADATA_JSON"
+    PRIMARY_VISUAL = "PRIMARY_VISUAL"
+    STACKED_VISUAL = "STACKED_VISUAL"
+    UDM = "UDM"
 
 
 class ThermalComponents(Enum):

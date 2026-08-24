@@ -1,30 +1,10 @@
 # 2. Get it running
 
-> **Read this first.** On a clean clone, `docker compose up` **fails** — the frontend image
-> can't build. See [Before you start](#before-you-start).
-
 ## Prerequisites
 
 Docker Desktop with ≥8 GB allocated. That's it — Python and Node run inside containers.
 
 Bash is needed for the `scripts/*.sh` tooling (WSL or Git Bash on Windows).
-
-## Before you start
-
-`frontend/src/lib/elkLayout.ts` is missing, so `npm run build` — and therefore the frontend
-Docker build — fails. Root cause is `.gitignore:22` (`lib/`, a bare pattern that matches at
-any depth). Fix it properly:
-
-```bash
-# 1. change .gitignore line 22 from  lib/  to  /lib/
-# 2. write frontend/src/lib/elkLayout.ts  (wraps elkjs; feeds the /models/:arch diagram)
-```
-
-Or skip the UI for now and drive the API directly:
-
-```bash
-docker compose -f docker/docker-compose.yml up -d postgres bootstrap api worker
-```
 
 ## First run
 
@@ -82,6 +62,18 @@ Note `seed-admin` keys on *"does any admin exist"*, not on username — changing
 curl http://127.0.0.1:8010/healthz         # {"status":"ok"}          liveness
 curl http://127.0.0.1:8010/healthz/db      # {"status":"ok","db":"connected"}
 ```
+
+**Then check all five containers are actually up:**
+
+```bash
+docker compose -f docker/docker-compose.yml ps -a
+```
+
+`bootstrap` should read `exited (0)`; the other four must read `running`. A worker stuck at
+`restarting` is crash-looping — that has happened twice from import errors that no test
+covers, and the api stays perfectly healthy while it does, because the lazy-import rule keeps
+worker-only modules out of the api's startup path. See
+[9. Known issues](09-known-issues.md#no-verification-behind-the-backend).
 
 The **worker has no HTTP endpoint** — it's queue-driven. Check it three ways:
 
@@ -176,7 +168,8 @@ falls back to CPU with the same image and code.
 | Symptom | Cause |
 |---|---|
 | Models page is empty | `allotrope_models` volume is empty on a clean clone — checkpoints only arrive via a snapshot bundle |
-| Anomaly scoring always fails | It's broken independently of everything else — [issue #1](09-known-issues.md) |
+| Nothing ever leaves "queued" | The worker is crash-looping. `ps -a` shows `restarting`; the api looks healthy regardless |
+| `ports are not available` on `up` | A leaked Docker Desktop WSL forwarder is squatting 3010/8010/5432 even with no containers running. Restart Docker Desktop |
 | `reset-stack.sh` hangs | It polls the wrong port (`:8000`, should be `:8010`) and needs interactive bash |
 | A job "disappeared" | Handler exceptions are caught and written to the job row. Check `GET /jobs/{id}`, not the worker exit code |
 

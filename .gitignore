@@ -21,8 +21,11 @@ dist/
 downloads/
 eggs/
 .eggs/
-lib/
-lib64/
+# Anchored to the repo root on purpose. A bare `lib/` matches at ANY depth,
+# which silently made frontend/src/lib/ uncommittable and lost elkLayout.ts.
+# These exist to ignore a root-level virtualenv, not application source.
+/lib/
+/lib64/
 parts/
 sdist/
 var/
@@ -253,3 +256,6 @@ cookies.txt
 coverage.xml
 *.zip
 
+
+# Local training module for Indradhanu — notes only, not part of the product.
+/indradhanu workings/

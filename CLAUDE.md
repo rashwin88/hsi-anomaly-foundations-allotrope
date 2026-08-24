@@ -106,10 +106,12 @@ To trace a feature: the science is in `app/`, but the thing that *runs* it is a
 
 ## Known breakage — verify before relying on either
 
-1. **The frontend build fails.** `frontend/src/pages/ModelDetailPage.tsx:33` imports
-   `../lib/elkLayout`; `frontend/src/lib/` does not exist because root `.gitignore:22` is
-   `lib/` — a bare pattern that matches at any depth. Fix the ignore rule to `/lib/` first,
-   then write the file.
+1. **Nothing verifies `backend/`.** `scripts/run_tests.*` covers `app/` only; there are no
+   backend or frontend tests and no CI. Two total outages reached `main` undetected because
+   of it — a broken `anomaly_scoring` import, and a worker that could not start at all. The
+   api stays green while the worker is dead, since the lazy-import rule keeps worker-only
+   modules out of the api's startup path. **After any change under `app/` or `backend/`,
+   run `docker compose ps -a` and confirm the worker says `running`, not `restarting`.**
 
 Others: `app/models/intermediate_concepts/band_responses.py` has a chained-assignment bug that
 raises on import (module is unused); `InferenceHarness` is fully built and tested but unused in

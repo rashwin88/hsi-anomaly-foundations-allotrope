@@ -107,11 +107,22 @@ docstrings. Grep `"Step "`.
   register in **both** factories, then add a capabilities entry in
   `backend/allotrope/foundation_models/resolver.py`. Step 5 is the one people forget.
 
-## Currently broken - check before assuming
+## Verify your change actually runs
 
-1. **The frontend build fails.** `ModelDetailPage.tsx:33` imports `../lib/elkLayout`, which
-   does not exist because root `.gitignore:22` is `lib/` - a bare pattern matching at any
-   depth. Fix the ignore rule to `/lib/` first, then write the file.
+There are **no tests for `backend/` or `frontend/`, and no CI**. `scripts/run_tests.*` covers
+`app/` only. Two total outages reached `main` because of this - a broken `anomaly_scoring`
+import, and a worker that could not start at all.
+
+The trap: **a dead worker looks like a healthy system.** The api's `/healthz/db` stays green
+because the lazy-import rule keeps worker-only modules out of its startup path, so an
+ImportError in `scene_onboard` kills every job while every health check passes.
+
+After any change under `app/` or `backend/`:
+
+```bash
+scripts/run_tests.ps1                                  # expect 67 passed, 51 deselected
+docker compose -f docker/docker-compose.yml ps -a      # worker must be 'running'
+```
 
 Full register: `docs/09-known-issues.md`.
 

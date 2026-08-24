@@ -3,23 +3,41 @@
 Found in a full-tree audit on **2026-08-24**. The repo carries no `TODO`/`FIXME` markers by
 policy, so this file is the register. Fix an entry, delete the entry.
 
-## Broken — blocks real use
+## No verification behind the backend
 
-**1. The frontend build fails — and `.gitignore` is the root cause.**
-`frontend/src/pages/ModelDetailPage.tsx:33` imports `layoutWithElk` from `"../lib/elkLayout"`,
-but `frontend/src/lib/` does not exist. `npm run build` (`tsc -b && vite build`) fails, which
-also means **`docker compose up` cannot build the frontend image on a clean clone.**
+**1. `backend/` has no tests, and that has cost real outages.**
+`scripts/run_tests.*` covers `app/` only — 67 tests. There are none for `backend/`, none for
+`frontend/`, none for `app/foundation_models/`, and there is no CI.
 
-The reason it's missing: `.gitignore:22` is `lib/` — a bare pattern inherited from the
-standard *Python* gitignore template. With no leading slash, git matches it at **any** depth,
-so `frontend/src/lib/` was silently never committable.
+This is not theoretical. Two total outages sat in `main` undetected until someone actually
+started the stack on 2026-08-24:
 
-*Fix:* change `.gitignore:22` to `/lib/` (anchoring it to the repo root), then write
-`frontend/src/lib/elkLayout.ts`. Recreating the file without fixing the ignore rule just
-reproduces the bug for the next person.
+- **`anomaly_scoring` raised `ImportError` on every job** — it imported a
+  `PixelStatsOverride` that was never defined.
+- **The worker could not start at all**, so scene onboarding, every action run and every
+  export were dead. `envi_helper.py` and `hotsat_helper.py` imported `ENVIFileComponents`
+  and `HotSatFileComponents`, neither of which existed anywhere in the repo.
 
-Note `npm run dev` skips `tsc -b`, so it appears to start fine — the failure only surfaces
-when you navigate to `/models/:architecture`.
+Both were invisible to reading. The second is the instructive one: the api stayed perfectly
+healthy — `/healthz/db` green — because the lazy-import rule keeps `scene_onboard` out of the
+api's startup path. Only the worker imports it at module level, and nothing ever imported the
+worker except the worker.
+
+**The cheapest guard is a smoke test that imports every worker entry point.** A test doing
+`import allotrope_worker.handlers` would have caught it in milliseconds. A second guard worth
+having: `docker compose up` and assert all five containers reach `running`, since `exited` and
+`restarting` both look like progress in the logs.
+
+Until that exists, after any change under `app/` or `backend/`, check the worker is genuinely
+up rather than crash-looping:
+
+```bash
+docker compose -f docker/docker-compose.yml ps -a     # worker must be 'running'
+docker compose -f docker/docker-compose.yml logs worker | tail -5
+```
+
+A healthy worker logs `worker starting (id=… types=action_run,…)`. A crash-looping one shows
+`restarting` and repeats a traceback.
 
 ## Correctness risks
 
@@ -87,9 +105,13 @@ Declared, set in real configs, never read by any code:
   boots but rejects every login (stderr warning only).
 - **`models/job.py` declares `project_id` as a plain UUID** while a migration added a real
   FK — Alembic autogenerate would try to drop it.
-
-## Test coverage
-
-118 test functions, all under `tests/`, mirroring `app/`. Coverage is `--cov=app` only.
-**Zero tests for `backend/`, `frontend/`, or `app/foundation_models/`.** There is no
-`.github/` directory — no CI at all.
+- **Bare directory patterns in `.gitignore` have silently eaten source files twice.** A bare
+  `lib/` matches at *any* depth, so `frontend/src/lib/` was uncommittable and two real
+  modules (`elkLayout.ts`, `npy.ts`) were lost — the frontend simply would not build. A bare
+  `.claude/` did the same to the project skills. Both are now anchored (`/lib/`,
+  `.claude/*` + a negation). **Audit the rest of `.gitignore` for unanchored directory
+  patterns** — this file was assembled from the standard Python template, which assumes a
+  single-language repo, and this one has three.
+- **A leaked Docker Desktop WSL forwarder can squat the published ports** (`wslrelay.exe`
+  holding 3010/8010/5432 with no containers running), so `up` fails with "ports are not
+  available". Restart Docker Desktop to clear it.
