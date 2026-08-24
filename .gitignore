@@ -1,3 +1,23 @@
+# ---------------------------------------------------------------------------
+# RULE: anchor any pattern whose name could plausibly be a SOURCE directory.
+#
+# A bare `foo/` matches at EVERY depth, not just the repo root. That has
+# silently destroyed work here twice:
+#
+#   `lib/`      swallowed frontend/src/lib/, so elkLayout.ts and npy.ts could
+#               never be committed. The frontend simply would not build, and
+#               nothing said why.
+#   `.claude/`  swallowed the project skills.
+#
+# This file came from the standard Python template, which assumes one language.
+# This repo has three, so a name that means "build artifact" in Python can mean
+# "source" in TypeScript. Patterns below are anchored with a leading slash where
+# that applies.
+#
+# Leave a pattern unanchored only when it genuinely should match anywhere -
+# __pycache__/, .pytest_cache/, .DS_Store and friends.
+# ---------------------------------------------------------------------------
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]
@@ -15,21 +35,21 @@ checkpoints/
 *.so
 # Distribution / packaging
 .Python
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
+/build/
+/develop-eggs/
+/dist/
+/downloads/
+/eggs/
 .eggs/
 # Anchored to the repo root on purpose. A bare `lib/` matches at ANY depth,
 # which silently made frontend/src/lib/ uncommittable and lost elkLayout.ts.
 # These exist to ignore a root-level virtualenv, not application source.
 /lib/
 /lib64/
-parts/
-sdist/
-var/
-wheels/
+/parts/
+/sdist/
+/var/
+/wheels/
 share/python-wheels/
 *.egg-info/
 .installed.cfg
@@ -47,7 +67,7 @@ pip-log.txt
 pip-delete-this-directory.txt
 
 # Unit test / coverage reports
-htmlcov/
+/htmlcov/
 .tox/
 .nox/
 .coverage
@@ -58,7 +78,7 @@ nosetests.xml
 *.py.cover
 .hypothesis/
 .pytest_cache/
-cover/
+/cover/
 
 # Translations
 *.mo
@@ -71,7 +91,7 @@ db.sqlite3
 db.sqlite3-journal
 
 # Flask stuff:
-instance/
+/instance/
 .webassets-cache
 
 # Scrapy stuff:
@@ -82,7 +102,7 @@ docs/_build/
 
 # PyBuilder
 .pybuilder/
-target/
+/target/
 
 # Jupyter Notebook
 .ipynb_checkpoints
@@ -147,9 +167,9 @@ celerybeat.pid
 .env
 .envrc
 .venv
-env/
+/env/
 venv/
-ENV/
+/ENV/
 env.bak/
 venv.bak/
 

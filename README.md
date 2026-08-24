@@ -43,6 +43,9 @@ files are meant to be read start to finish in about an hour.
 | [9. Known issues](docs/09-known-issues.md) | what's currently broken |
 | [10. Code style](docs/10-code-style.md) | house rules for comments and module size |
 
+Low-level designs for individual subsystems live in [docs/lld/](docs/lld/) — why a piece is
+built the way it is, and what breaks if you tidy it.
+
 Also in the repo:
 
 - **`final design/`** — the product and UX spec the frontend implements. Frontend source
