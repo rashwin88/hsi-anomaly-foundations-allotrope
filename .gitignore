@@ -276,6 +276,3 @@ cookies.txt
 coverage.xml
 *.zip
 
-
-# Local training module for Indradhanu — notes only, not part of the product.
-/indradhanu workings/
