@@ -28,6 +28,7 @@ def test_filename_parser_enmap():
     assert metadata["datetime"].day == 28
 
 
+@pytest.mark.large_files
 def test_bounding_box():
     """Verify bounding box values from XML are reasonable."""
     bbox = get_enmap_bounding_box(SCENE_FOLDER)
@@ -40,6 +41,7 @@ def test_bounding_box():
     assert 22 < min_lat < 24
 
 
+@pytest.mark.large_files
 def test_stac_item_creation():
     """Verify full STAC item builds correctly from EnMAP folder."""
     creator = StacCreator(file_path=SCENE_FOLDER)

@@ -65,7 +65,7 @@ cd /root && tar --use-compress-program=zstd -xf allotrope-bundle-*.tar.zst && ba
 Then browse `http://localhost:3010`.
 
 `snapshot_bundle.sh` cross-builds linux/amd64 images, briefly stops the stack for a
-consistent volume snapshot, and zstd-compresses everything. First build is **30–45 min**
+consistent volume snapshot, and zstd-compresses everything. First build is **~15 min**
 (see below); later builds reuse the cache and take 5–10.
 
 `bootstrap.sh` on the host = `scripts/remote_load.sh`: checks free disk, installs Docker and
@@ -79,11 +79,18 @@ volumes, starts the stack.
 - Re-running `bootstrap.sh` **destroys the remote volumes** and restores from the bundle.
   Anything created on the remote is lost. Treat the remote as a one-way destination.
 
-## Why the first build takes 45 minutes
+## Why the images are big, and what actually compiles
 
-The images are built on `python:3.14-slim`, and cp314 wheels do not yet exist for numpy,
-h5py or rasterio. Both Dockerfiles therefore install `build-essential`, `libgdal-dev`,
-`libhdf5-dev` and compile from source. Marked to be dropped once wheels land.
+The worker image is **~14 GB**. Most of that is `torch`, which on PyPI bundles the CUDA
+runtime — `nvidia_cudnn` (707 MB) and `nvidia_cublas` (594 MB) alone. The GPU host needs
+this; a CPU-only host does not, but both use the same image today. A CPU-only build would
+need `--index-url https://download.pytorch.org/whl/cpu`, which would then break GPU
+inference on the remote box, so it is a deliberate trade rather than an oversight.
+
+As of 2026-08, numpy, h5py, pandas and torch all ship cp314 wheels. Only **rasterio** and
+**fiona** still compile from source — they bind to GDAL. That is why both Dockerfiles
+install `build-essential`, `libgdal-dev` and `libhdf5-dev`; those deps are load-bearing and
+removing them breaks the build.
 
 Note the training VM runs **Python 3.12**, so the containers and the research environment
 are not the same interpreter.

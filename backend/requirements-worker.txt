@@ -76,3 +76,11 @@ joblib==1.5.3
 # app/detectors/ (GlobalRX, MNFCompression, ThermalGRX). The api
 # doesn't need this; classical dispatch only runs in the worker.
 spectral==0.23.1
+
+# --- Test tooling (dev only; the worker never imports these at runtime) ---
+# The suite under tests/ exercises app/, which is already in this image, so
+# the worker container is the cheapest place to run it. tests/ is NOT COPY'd
+# into the image — scripts/run_tests.* bind-mount it at run time so the
+# production image stays free of test code. See docs/02-setup.md.
+pytest==8.3.4
+pytest-cov==6.0.0

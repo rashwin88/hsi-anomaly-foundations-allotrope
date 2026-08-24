@@ -8,6 +8,9 @@ from pystac import Item
 from app.utils.stac.stac_utils.stac_items import StacCreator
 from app.models.file_processing.sources import FileSourceConfig
 
+# Both tests open a real scene file via the live_source_data fixture.
+pytestmark = pytest.mark.large_files
+
 
 def test_class_initialization(live_source_data):
     """

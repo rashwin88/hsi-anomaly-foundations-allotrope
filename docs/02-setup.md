@@ -48,8 +48,11 @@ docker compose -f docker/docker-compose.yml up -d
 ```
 
 Compose auto-loads `docker/.env` (it sits beside the compose file) — no `--env-file` needed.
-First build takes **30–45 minutes**: the images are Python 3.14 and cp314 wheels don't exist
-yet for numpy/h5py/rasterio, so they compile from source.
+First build takes **roughly 15 minutes** (measured 2026-08-24), most of it downloading:
+`torch` alone is 915 MB and pulls ~2.3 GB of CUDA wheels behind it. Only `rasterio` (~75 s)
+and `fiona` (~45 s) compile from source — they bind to GDAL and still have no cp314 wheel,
+which is why the images install `libgdal-dev` and `build-essential`. numpy, h5py, pandas and
+torch all resolve to cp314 wheels now, so don't remove those build deps expecting a win.
 
 Open **<http://localhost:3010>** and log in with `ADMIN_USERNAME` / `ADMIN_PASSWORD`.
 
@@ -89,6 +92,25 @@ docker compose -f docker/docker-compose.yml logs worker   # "worker starting (id
 or watch `jobs.last_heartbeat_at` in Postgres (`127.0.0.1:5432`) while a job runs, or read
 `GET /metrics/workload` — a growing `oldest_queued_age_seconds` with `queue_depth > 0` means
 the worker is dead or stuck.
+
+## Running the tests
+
+```bash
+./scripts/run_tests.sh        # macOS / Linux / WSL
+scripts\run_tests.ps1         # Windows PowerShell
+```
+
+Expect **67 passed, 51 deselected** in a few seconds. Anything else is a regression.
+
+The suite covers `app/` only — `backend/` and `frontend/` have no tests. It runs inside the
+**worker container**, which already has `app/` and every scientific dependency. `tests/` is
+deliberately *not* baked into the image; the script bind-mounts it at run time so the
+production image stays free of test code.
+
+The deselected tests need `tests/test_payloads/` — real multi-GB scene files that are
+gitignored. If you have them locally, add `-m large_files` to run that set instead.
+
+Extra arguments pass straight through, so `scripts\run_tests.ps1 -k spectral -v` works.
 
 ## Load your first Scene
 

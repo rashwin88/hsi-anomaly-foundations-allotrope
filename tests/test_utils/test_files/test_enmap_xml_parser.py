@@ -16,6 +16,10 @@ SCENE_FOLDER = "tests/test_payloads/ENMAP01-____L2A-DT0000059367_20240128T063655
 SCENE_NAME = os.path.basename(SCENE_FOLDER)
 XML_PATH = os.path.join(SCENE_FOLDER, SCENE_NAME + "-METADATA.XML")
 
+# Every test here parses a real EnMAP scene XML out of tests/test_payloads/,
+# which is gitignored. Gate the whole module rather than each test.
+pytestmark = pytest.mark.large_files
+
 
 @pytest.fixture
 def parsed_metadata() -> EnmapMetadata:

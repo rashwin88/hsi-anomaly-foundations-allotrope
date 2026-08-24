@@ -9,6 +9,9 @@ from app.utils.stac.stac_utils.get_prisma_bounding_box import get_prisma_boundin
 
 HYPERSPECTRAL = "hyperspectral_1"
 
+# Opens a real PRISMA .he5 via the live_source_data fixture; payload is gitignored.
+pytestmark = pytest.mark.large_files
+
 
 def test_prisma_bounding_box_creation(live_source_data):
     """

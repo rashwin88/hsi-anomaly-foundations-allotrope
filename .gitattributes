@@ -1,0 +1,25 @@
+# Line-ending policy. Deliberately narrow - there is no `* text=auto` here on
+# purpose: this repo carries 519 USGS splib07 spectra plus other data files, and
+# a blanket rule makes every `git add --renormalize` churn all of them.
+#
+# Why the file exists: with core.autocrlf=true and no rules, Windows checkouts
+# get CRLF on every .sh, breaking the shebang ("bad interpreter: bash\r").
+# backend/bootstrap.sh is COPY'd into the api image and runs as the bootstrap
+# entrypoint, so a Windows-built image would fail to migrate or seed at all.
+
+# Shell scripts run in Linux containers and over SSH - always LF.
+*.sh text eol=lf
+
+# PowerShell 5.1 reads .ps1 as ANSI. Keep them CRLF and pure ASCII.
+*.ps1 text eol=crlf
+
+# USGS spectral library - byte-exact, never converted.
+data/splib07_slim/** -text
+
+# Binary assets.
+*.png binary
+*.jpg binary
+*.pdf binary
+*.tif binary
+*.npz binary
+*.pt binary
