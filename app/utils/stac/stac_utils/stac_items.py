@@ -1,6 +1,22 @@
 """
-Class that unifies all the parsers and creates a
-proper stac item and corresponding assets
+Builds a STAC Item for a scene - its identity, footprint and date.
+
+STAC (SpatioTemporal Asset Catalog) is the standard vocabulary for describing
+geospatial data. Using it means scene metadata is expressed the same way whether
+it came from PRISMA, EnMAP or Landsat, and can be consumed by any STAC-aware
+tool without bespoke glue.
+
+Combines two sources: FileNameParser for what the filename encodes (platform,
+date, processing level) and a per-sensor bounding-box function for the actual
+geographic footprint. The bounding box requires opening the file, so this is the
+first point in ingestion that reads real data.
+
+Each sensor needs its own bounding-box routine because the georeferencing lives
+somewhere different in each: rasterio bounds for GeoTIFF, per-pixel lat/lon
+arrays for PRISMA swath data, the XML sidecar for EnMAP.
+
+The item produced here is stored on the vendable and travels with the scene,
+which is what later lets an export state where on Earth an anomaly was found.
 """
 
 from typing import Dict, List, Any, Tuple

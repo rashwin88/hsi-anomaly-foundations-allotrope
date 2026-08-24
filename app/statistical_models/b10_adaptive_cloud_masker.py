@@ -1,5 +1,30 @@
 """
-Adaptive Cloud masking Gaussian Mixture Model for B10
+Cloud detection for Landsat thermal, using nothing but temperature.
+
+Called by LandsatDataBuilder during vending, and by the cloud_mask Action.
+Produces a binary cloud mask plus diagnostics (AdaptiveCloudMaskerResponse).
+
+The whole idea in one line: clouds are cold. Fit a 5-component Gaussian mixture
+to the scene's own temperature distribution and any cluster whose mean sits more
+than 12 C below the scene median is cloud. No spectral bands, no thresholds
+carried over from another scene - the model is refit per scene, so it adapts to
+a Siberian winter and an Indian summer alike.
+
+Two details that are easy to break:
+
+  - Temperatures are CLIPPED at the 95th percentile before fitting. Without
+    that, genuinely hot pixels - fires, flares, the anomalies we are hunting -
+    drag the cluster means upward and shift the cloud boundary with them.
+
+  - Cluster means are ANCHORED rather than left to k-means init, so a scene with
+    no cold tail still gets components positioned where cloud would be if it
+    existed. Unanchored fits on clear scenes tend to split warm ground into five
+    clusters and label the coldest as cloud.
+
+Its output is only a mask over cold pixels, not a physical cloud model: thin
+cirrus that barely depresses temperature will be missed, and cold ground - snow,
+high-altitude terrain, water at night - can be flagged. That is why the vendable
+also keeps the provider's QA_PIXEL masks alongside this one.
 """
 
 import logging

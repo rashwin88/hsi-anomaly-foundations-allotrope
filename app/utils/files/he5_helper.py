@@ -1,6 +1,27 @@
 """
-Implementation of the FileHelper for
-HE5 files
+FileHelper for PRISMA's HDF-EOS 5 (.he5) scene files.
+
+The physical-read layer beneath PrismaDatasetBuilder. Its job is to hand back
+raw band arrays and metadata; interpreting them (DN to reflectance, band
+filtering) is the builder's job, not this one's.
+
+Where things live inside the file is NOT hardcoded here. The caller injects a
+template - a dict mapping logical components (SWIR_CUBE_DATA,
+VNIR_CENTRAL_WAVELENGTH_LIST, L2_SCALE_MIN_SWIR ...) to their physical location,
+via TEMPLATE_MAPPINGS. That indirection is what lets one FileHelper contract
+serve HDF-EOS, GeoTIFF and ENVI without any of them knowing about the others.
+
+PRISMA specifics that shape this code:
+  - Two detectors in one file. VNIR and SWIR are separate HDF-EOS datasets;
+    callers request a spectral_family to pick one.
+  - Cubes are BIL (H, C, W), not the (C, H, W) that everything downstream
+    expects.
+  - Wavelengths, FWHM and bad-band flags are ROOT ATTRIBUTES, not datasets -
+    read through ReferenceType.ROOT_METADATA_FIELD.
+  - Flagged-bad bands still occupy a slice in the cube and carry fwhm = 0.0.
+
+Note this class does not parameterise FileHelper's generic (unlike EnmapHelper,
+which is FileHelper[EnmapMetadata]), so file_metadata is untyped here.
 """
 
 import logging

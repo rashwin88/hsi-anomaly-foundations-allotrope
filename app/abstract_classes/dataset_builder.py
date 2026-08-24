@@ -1,5 +1,28 @@
 """
-Defines an abstract class for dataset builder
+The contract every sensor's ingestion path must satisfy.
+
+Implemented by PrismaDatasetBuilder, EnmapDatasetBuilder, LandsatDataBuilder,
+AvirisNGDatasetBuilder and HotSatDatasetBuilder. The payoff is that everything
+downstream - detectors, models, Actions - depends on this contract instead of on
+five different file formats.
+
+The key method is vend_dataset(), which returns a VendableDataset. A builder
+owns three things: a FileHelper (physical reads), a STAC item (identity and
+footprint) and band information (what each slice means).
+
+To add a sensor, see the checklist in docs/06-backend.md. In short: implement
+this ABC, add a template if the format needs one, and register the sensor in
+backend/allotrope/sensors/source_path.py.
+
+Two inaccuracies to be aware of rather than to trust:
+
+  - The declared return type of vend_dataset omits VendableThermalDataset, yet
+    LandsatDataBuilder and HotSatDatasetBuilder both return one. The annotation
+    is stale, not the implementations.
+
+  - HyperpectralBandInformation is misspelled (missing 's'), and the typo is
+    propagated into this signature and every concrete builder. Fixing it is a
+    package-wide rename.
 """
 
 from typing import Dict, Union

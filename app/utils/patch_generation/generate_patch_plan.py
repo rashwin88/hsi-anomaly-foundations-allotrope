@@ -1,5 +1,25 @@
 """
-Generating a patch plan for a cube
+Decides WHERE to cut a cube into patches. Coordinates only, no pixels.
+
+Given a cube shape, a patch size and a stride, returns the top-left corner of
+every patch. The per-sensor cutters (landsat_patcher, hyperspectral_patcher) do
+the actual slicing; keeping the plan separate means the geometry is testable
+without loading a scene, and the same plan can be replayed over any cube of
+matching shape.
+
+Also used at INFERENCE time, not just for training data: full-scene inference
+tiles a scene the same way, reconstructs each tile, and overlap-averages the
+results.
+
+Stride controls overlap. The convention throughout the training pipeline is
+stride = size // 2, i.e. 50% overlap, which means every interior pixel is
+covered by several patches and boundary artefacts get averaged down.
+
+Edge handling worth knowing: when the last stride step would run off the edge,
+the final corner is SNAPPED back so the patch ends flush with the boundary. That
+guarantees full coverage with no partial patches, at the cost of a final row and
+column that overlap their neighbours more than the stride implies. So the patch
+count is not simply ceil(extent / stride).
 """
 
 import logging

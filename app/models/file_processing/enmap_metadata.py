@@ -1,6 +1,28 @@
 """
-Defines Pydantic metadata models for EnMAP L2A scene data,
-parsed from the XML sidecar metadata file.
+Typed shape of everything EnMAP's METADATA.XML sidecar tells us.
+
+Produced by EnmapXmlParser, consumed by EnmapHelper and EnmapDatasetBuilder.
+The GeoTIFF holds 224 unlabelled band planes; these models carry the facts that
+make those planes interpretable.
+
+    EnmapBandCharacterisation  per band: centre wavelength, FWHM, gain, offset
+    EnmapDetectorBoundary      where VNIR ends and SWIR begins
+    EnmapQualityFlags          which mask layers this product ships
+    EnmapSpatialInfo           footprint and projection
+
+Two fields do more work than their size suggests:
+
+  fwhm      required for spectral library matching. Resampling a lab spectrum
+            onto this sensor means convolving it with each band's response
+            function, and FWHM is that function's width. It is recorded nowhere
+            else, so a scene without it cannot be material-matched.
+
+  detector  VNIR and SWIR overlap in wavelength, so ascending band order alone
+  boundary  cannot tell you which detector a band came from. Band filtering
+            trims detector EDGES, which requires knowing where the edges are.
+
+Everything here is descriptive - no conversion logic. The gain/offset values are
+carried, but applying them is the transformer's job.
 """
 
 from typing import Any, List, Dict, Optional

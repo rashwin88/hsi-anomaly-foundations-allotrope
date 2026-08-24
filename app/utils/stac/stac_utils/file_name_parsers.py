@@ -1,5 +1,21 @@
 """
-File name parsers for geo-spatial files
+Extracts scene metadata from filenames, before anything opens the file.
+
+Satellite products encode platform, acquisition date, processing level and
+scene identity in the filename itself:
+
+    PRS_L2D_STD_20231229050902_..._0001.he5      PRISMA
+    LC09_L2SP_144052_20240101_..._T1_ST_B10.TIF  Landsat 9
+    ENMAP01-____L2A-DT000..._20240128T063655Z    EnMAP
+
+Used by StacCreator to populate a STAC item, and by scene onboarding to
+duplicate-check a new upload before committing to the expensive work of vending
+it. Parsing a string is cheap; opening a 2 GB HDF5 file to learn its date is not.
+
+Dispatch is by filename PREFIX (`PRS`, `LC09`, `ENMAP01`), so a renamed file
+parses as the wrong sensor or not at all. That is deliberate - the naming
+conventions are the providers', not ours - but it does mean the pipeline expects
+files to arrive with their original names.
 """
 
 from typing import Dict, Callable

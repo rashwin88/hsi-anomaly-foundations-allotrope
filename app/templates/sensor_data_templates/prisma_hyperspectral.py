@@ -1,5 +1,26 @@
 """
-Defining a template for Prisma Data
+The map from logical PRISMA components to their physical location in the .he5.
+
+Consumed by HE5Helper via TEMPLATE_MAPPINGS. This is the file that knows the
+cube lives at "HDFEOS/SWATHS/PRS_L2D_HCO/Data Fields/SWIR_Cube" - so the helper
+does not have to, and one FileHelper contract can serve HDF-EOS, GeoTIFF and
+ENVI alike.
+
+PRISMA needs two of the three reference types, which is what makes it the
+clearest example of the mechanism:
+
+    FILE_REFERENCE        cube data and error matrices, at internal HDF-EOS
+                          dataset paths
+    ROOT_METADATA_FIELD   wavelengths (List_Cw_*), bad-band flags, FWHM and the
+                          L2Scale{Min,Max} factors - these are root ATTRIBUTES,
+                          not datasets, and need a different h5py call
+
+Note the `PRS_L2D_HCO` path segment: HCO is the co-registered product. A
+different PRISMA processing level uses a different segment, which is why the
+path is data here rather than a constant in the helper.
+
+To support a new sensor with a similar container, write a template like this and
+register it in template_mappings.py - no helper changes required.
 """
 
 from typing import Dict

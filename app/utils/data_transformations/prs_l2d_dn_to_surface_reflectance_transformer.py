@@ -1,5 +1,23 @@
 """
-Performs transformation of Prisma Data from DN to surface reflectance
+PRISMA L2D: raw digital numbers to surface reflectance.
+
+Used by PrismaDatasetBuilder while vending. The sensor stores integers, not
+physics; this is what makes a PRISMA cube comparable with EnMAP, with a lab
+spectrum, or with the same scene captured on another date.
+
+The conversion is per-band and read from file metadata, not a constant:
+
+    reflectance = DN / 65535 * (L2ScaleMax - L2ScaleMin) + L2ScaleMin
+
+Each detector (VNIR, SWIR) carries its own scale arrays in the HE5 root
+attributes, which is why this takes a spectral_family and a template rather than
+a single gain. Contrast EnMAP, where one uniform factor of 0.0001 covers every
+band.
+
+numexpr rather than plain numpy: a PRISMA cube is ~1210 x 239 x 1219 float32,
+and numexpr evaluates the expression in cache-sized blocks instead of
+materialising a full-size temporary per operation. The import is unconditional -
+there is no numpy fallback path.
 """
 
 import logging

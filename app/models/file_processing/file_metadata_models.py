@@ -1,5 +1,20 @@
 """
-Metadata components for different file types
+Typed containers for whatever a FileHelper reads out of a scene file.
+
+HE5Helper returns He5Metadata, TIFHelper returns TIFMetadata. Both are the
+`file_metadata` property on the FileHelper contract, which is how a builder
+inspects a file's structure without touching h5py or rasterio itself.
+
+He5Metadata is deliberately loose - `content` and `type` are Any, because an
+HDF-EOS file can hold arrays, scalars or nested attribute dicts under any key,
+and the shape is not known until the file is open. It is a description of what
+was found, not a schema of what must be there.
+
+Note these two are the UNTYPED corner of the file layer: HE5Helper and TIFHelper
+subclass FileHelper without a type parameter, so `file_metadata` is not narrowed
+for callers. The newer helpers (EnmapHelper, ENVIHelper, HotSatHelper) do
+parameterise the generic and get proper typing. Bringing the older two in line
+is a worthwhile change, but a breaking one for anything annotating these types.
 """
 
 from typing import Any, Optional, Tuple

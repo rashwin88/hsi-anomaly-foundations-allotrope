@@ -1,5 +1,27 @@
 """
-Defines the different hyperspectral file components
+The vocabulary of things a scene file contains - the keys of every template.
+
+Three enums, one per family of container. A template maps these logical names to
+physical locations (see references.py), so helper code asks for
+SWIR_CENTRAL_WAVELENGTH_LIST and stays ignorant of whether that is an HDF-EOS
+attribute, a GeoTIFF property or a file in a folder.
+
+    HyperspectralFileComponents  PRISMA: per-detector cubes, error matrices,
+                                 wavelength/FWHM/flag lists, and the four
+                                 L2Scale factors that drive DN -> reflectance
+    EnmapFileComponents          EnMAP: the spectral image, five quality-mask
+                                 rasters, the pixel mask, and METADATA.XML
+    ThermalComponents            Landsat/HotSat: CRS, bounds, transform, width,
+                                 height - georeferencing rather than spectra,
+                                 because a GeoTIFF carries its own
+
+Note the asymmetry: the hyperspectral enum is dominated by SPECTRAL description
+(what each band means) while the thermal one is dominated by SPATIAL description.
+That is the format difference showing through - a single-band GeoTIFF needs no
+band table, and an HDF-EOS swath carries no affine transform.
+
+Two ThermalComponents members, AREA_OR_POINT and TRANSFORM, are declared but
+absent from LANDSAT_THERMAL_TEMPLATE - they resolve to nothing today.
 """
 
 from enum import Enum

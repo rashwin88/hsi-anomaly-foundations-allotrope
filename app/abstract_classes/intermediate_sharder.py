@@ -1,5 +1,27 @@
 """
-Abstraction for intermediate sharding
+The contract for stage-1 patch generation, shared across sensors.
+
+Implemented by LandsatIntermediateSharder, PrismaIntermediateSharder and
+EnmapIntermediateSharder. Each follows the same five steps - discover scenes in
+S3, download one, build its vendable, cut patches, write and upload a shard -
+differing only in which builder and cutter they use.
+
+The value here is build_prefix(), which is the single definition of the S3
+layout:
+
+    patches/{sensor}/{split}/{stage}/w{width}_h{height}_s{stride}/
+
+Both the writer and the training-time reader derive their paths from this one
+function, so the layout cannot drift between them. Encoding patch geometry in
+the path also means several patch sizes coexist without collision, and a trainer
+asking for 128px shards physically cannot receive 256px ones.
+
+"Intermediate" distinguishes this from the final stage: shards written here hold
+patches from a single scene, and FinalPatchShuffler later mixes across scenes so
+a training batch is not 32 crops of the same field.
+
+Offline tooling. Nothing in backend/ imports this - it runs from
+scripts/generate_*_patches.py.
 """
 
 from abc import ABC, abstractmethod

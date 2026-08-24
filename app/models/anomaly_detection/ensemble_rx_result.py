@@ -1,5 +1,29 @@
 """
-Result container for the StatisticalEnsembler (GRX + LRX).
+Result container for StatisticalEnsembler, plus the fusion maths it relies on.
+
+Global RX and Local RX disagree productively. GRX compares each pixel to the
+whole scene, so it finds materials that are rare overall but misses a warm spot
+inside an already-warm field. LRX compares each pixel to its immediate
+surroundings, so it finds local contrast but ignores something anomalous for the
+region that happens to fill its whole neighbourhood. Fusing them catches both.
+
+Their raw scores cannot be combined directly - GRX and LRX produce Mahalanobis
+distances on entirely different scales. cdf_normalize() rank-transforms each map
+to [0, 1], which is scale-free and robust to the heavy tails both detectors
+produce. Only then does fuse_maps() combine them:
+
+    product   both detectors must agree - the conservative choice, and the
+              default. A high score requires being unusual globally AND locally.
+    maximum   either detector suffices - highest recall, most false positives.
+    mean      a compromise, and the least interpretable of the three.
+
+Note this is a different normalisation from the one in
+app/utils/anomaly_detection/scoring.py, which divides by the valid-pixel max.
+Rank-CDF is used here specifically because the two inputs are not commensurable;
+max-normalisation would preserve their scale mismatch.
+
+StatisticalEnsembler is not in the detector registry, so none of this is
+reachable from the product UI - it runs from notebooks and research scripts.
 """
 
 from dataclasses import dataclass, field

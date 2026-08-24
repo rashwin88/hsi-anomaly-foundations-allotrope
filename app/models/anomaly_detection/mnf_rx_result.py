@@ -1,5 +1,26 @@
 """
-Result container for the MNF Compression + Global RX anomaly detector.
+Result container for MNF + Global RX - the shipped hyperspectral detector.
+
+Returned by MNFCompressionDetector. Carries the usual RX fields plus two that
+only make sense after compression: n_components and mnf_eigenvalues.
+
+Why those two matter. Plain RX on 165 bands was dropped on 2026-05-11 because
+the band covariance is near-singular - inverting it amplifies noise until
+distances reach ~1e11 and the scores mean nothing. MNF first whitens by the NOISE
+covariance, estimated from neighbouring-pixel differences, then keeps only the
+top components by signal-to-noise. RX then runs in a well-conditioned ~10
+dimensional space.
+
+The eigenvalue spectrum is the diagnostic for whether that worked: it should
+fall away sharply, showing that a few components carry the structure. A flat
+spectrum means the compression found no dominant signal, and the resulting
+scores deserve suspicion. That is why visualize() plots it alongside the score
+map rather than hiding it.
+
+`is_valid` naming note: this class uses `rx_score_map`, as do GlobalRXResult and
+ThermalGRXResult, while the LRX variants use `lrx_score_map`. Callers handling
+both families have to branch on type - see the duplication list in
+docs/09-known-issues.md.
 """
 
 from dataclasses import dataclass

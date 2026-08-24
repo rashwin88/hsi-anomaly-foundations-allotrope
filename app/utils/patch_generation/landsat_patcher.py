@@ -1,6 +1,26 @@
 """
-Given a patching plan and a vendable from landsat,
-produces patches. Defined as a function
+Cuts a Landsat vendable into training patches, one WebDataset sample at a time.
+
+Sits between PatchPlanGenerator (which decides WHERE to cut) and
+LandsatIntermediateSharder (which writes the shards). A generator, not a list -
+a Landsat scene yields thousands of patches and materialising them all would
+blow memory for no benefit.
+
+Each yielded sample carries the pixels plus every mask, because the trainer
+needs to distinguish "no data here" from "data we are hiding from you":
+
+    pixels.npy                (1, H, W) float32, Celsius
+    validity_cube.npy         (1, H, W) int8
+    pure_validity_mask.npy    off-swath / fill pixels
+    predicted_cloud_mask.npy  from B10AdaptiveCloudMasker
+    custom_quality_mask.npy   provider QA_PIXEL derived
+    meta.json                 scene_id, patch coordinates
+
+The __key__ is scene_id + row + column, which makes it stable and unique across
+shards - WebDataset uses it to group the files belonging to one sample.
+
+Deliberately a plain function rather than a class: it holds no state between
+patches, and the sharder already owns the lifecycle.
 """
 
 from typing import Dict

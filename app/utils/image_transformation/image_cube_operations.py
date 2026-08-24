@@ -1,5 +1,26 @@
 """
-Perform transformation operations on image cubes
+Converts cubes between the three band-interleave layouts.
+
+Every sensor stores its cube differently and every consumer wants it a
+particular way, so this sits between them:
+
+    BIL  (H, C, W)   band interleaved by line   - PRISMA native
+    BSQ  (C, H, W)   band sequential            - EnMAP/Landsat native, and what
+                                                  torch and every model expect
+    BIP  (H, W, C)   band interleaved by pixel  - spectrum-per-pixel, which is
+                                                  what visualisation and
+                                                  spectral matching want
+
+The layout is not cosmetic: BIP puts a pixel's full spectrum in contiguous
+memory, so a per-pixel spectral operation is a cache-friendly walk. BSQ puts a
+whole band contiguous, so a spatial convolution is. Choosing wrongly costs
+nothing in correctness and a great deal in speed.
+
+If a cube ever looks like structured noise, check the axis order before
+suspecting the data. A BIL cube read as BSQ produces exactly that.
+
+Conversions go through torch permutation and can run on GPU, which is why the
+constructor selects a device. Masked arrays are preserved.
 """
 
 from typing import Dict, List, Literal, Union

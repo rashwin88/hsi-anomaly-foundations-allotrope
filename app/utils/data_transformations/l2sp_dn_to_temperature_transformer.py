@@ -1,6 +1,23 @@
 """
-Converts the L2SP digital number at the pixel level for
-Landsat data LC09 to a temperature scale
+Landsat 9 L2SP: band B10 digital numbers to surface temperature.
+
+Used by LandsatDataBuilder while vending. The thermal counterpart to
+prs_l2d_dn_to_surface_reflectance_transformer.py, and far simpler - USGS
+publishes two constants that apply to every pixel of every LC09 L2SP scene:
+
+    ST_kelvin = 0.00341802 * DN + 149.0
+
+then Kelvin to Celsius or Fahrenheit on request. No per-band arrays, no
+per-scene metadata lookup - the numbers come from the product specification, not
+from the file, which is why they are module constants here.
+
+That simplicity is the whole reason the thermal path has no band pipeline: with
+one band and a fixed calibration there is nothing to filter, interpolate or
+resample onto a common grid.
+
+numexpr rather than numpy for the same reason as the PRISMA transformer - it
+evaluates in cache-sized blocks instead of allocating a full-scene temporary per
+operation.
 """
 
 from typing import Union

@@ -1,5 +1,22 @@
 """
-Implements a concrete TIFHelper class
+FileHelper for single-file GeoTIFF scenes - Landsat 9 and HotSat-1 thermal.
+
+The rasterio-backed sibling of he5_helper.py, sitting beneath
+LandsatDataBuilder. Same contract: hand back raw band arrays and metadata, leave
+interpretation to the builder.
+
+Because a GeoTIFF carries its own georeferencing, the template here maps
+components to PROPERTIES of the opened rasterio dataset (crs, bounds, width,
+height) via ReferenceType.DIRECT_PROPERTY_DEFINITION - not to internal paths the
+way the HDF-EOS template does.
+
+The trap: rasterio band indices are 1-BASED. Every other array in this codebase
+is 0-based, so a caller passing band 0 gets an error and a caller passing band 1
+gets the first band. Check the indexing convention before assuming an off-by-one
+is a bug elsewhere.
+
+Note this class does not parameterise FileHelper's generic, so file_metadata is
+untyped here - same as HE5Helper, unlike the newer EnmapHelper and ENVIHelper.
 """
 
 from typing import Dict, List, Optional, Literal

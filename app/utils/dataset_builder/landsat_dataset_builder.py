@@ -1,5 +1,25 @@
 """
-Dataset builder for landsat thermal datasets
+Turns a raw Landsat 9 L2SP GeoTIFF into a VendableThermalDataset.
+
+Entry point is vend_dataset(). The thermal counterpart to
+prisma_dataset_builder.py, and much simpler: one band instead of 239, no
+spectral filtering, no common-grid resampling.
+
+What it does:
+  - Reads band B10 through TIFHelper.
+  - Converts DN to surface temperature via Lc09L2spStTransformer
+    (ST_K = 0.00341802 * DN + 149.0), then to Celsius. The unit is hard-coded to
+    Celsius here - it is not a caller-supplied option.
+  - Runs B10AdaptiveCloudMasker, a GMM over the temperature distribution, to
+    produce a predicted cloud mask.
+  - Unpacks the provider's QA_PIXEL band into separate cloud / water / snow
+    masks when a QA source is supplied.
+
+Why TWO cloud masks: the provider's QA_PIXEL is authoritative but conservative,
+and is not always present. The GMM mask is derived from this scene's own
+temperature distribution and is always available. Downstream code uses the
+modelled mask for training and keeps the provider masks for comparison, so the
+vendable carries both rather than merging them.
 """
 
 import logging

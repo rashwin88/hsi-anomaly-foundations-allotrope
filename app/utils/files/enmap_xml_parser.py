@@ -1,5 +1,25 @@
 """
-Parses EnMAP L2A METADATA.XML sidecar files into structured EnmapMetadata models.
+Reads the EnMAP L2A METADATA.XML sidecar into typed EnmapMetadata models.
+
+Called by EnmapHelper, which needs facts the raster cannot supply. The GeoTIFF
+holds 224 unlabelled band planes; this file is what says which wavelength each
+plane represents.
+
+What it extracts:
+  band characterisation   per-band centre wavelength, FWHM, gain, offset
+  detector boundary       where VNIR ends and SWIR begins (they overlap in
+                          wavelength, so band order alone cannot tell you)
+  quality flags           which mask layers this product ships
+  spatial info            footprint and projection
+
+Without the FWHM values here, spectral library matching is impossible for EnMAP:
+resampling a lab spectrum onto this sensor requires knowing how wide a slice
+each band samples, and that is recorded nowhere else.
+
+Plain ElementTree, no schema validation. A structurally unexpected file raises
+during parse rather than yielding a half-populated model - which is the intended
+behaviour, since a partially-read sidecar would produce a silently mislabelled
+cube.
 """
 
 import xml.etree.ElementTree as ET

@@ -1,6 +1,26 @@
 """
-File helper for EnMAP L2A folder-based scenes.
-Manages multiple TIF files + XML metadata within a single scene folder.
+FileHelper for EnMAP L2A scenes, which are FOLDERS rather than single files.
+
+Sits beneath EnmapDatasetBuilder. Unlike PRISMA (one .he5) or Landsat (one
+.tif), an EnMAP scene is a directory holding the cube, several quality-mask
+rasters and an XML sidecar. So FileSourceConfig.source_path points at the
+directory, and this class locates members by filename suffix.
+
+    *-SPECTRAL_IMAGE.TIF     the cube, BSQ (C, H, W), 224 bands
+    *-QL_QUALITY_CLOUD.TIF   cloud, cirrus, haze, cloud shadow, snow
+    *-METADATA.XML           wavelengths, FWHM, gains, detector boundary
+
+Wavelengths and FWHM come from the XML via EnmapXmlParser, not from the raster.
+
+Two consequences worth knowing. EnMAP is the only sensor supplying ready-made
+quality masks, which is why BandFilterConfig.quality_masks_to_apply exists and
+applies to EnMAP alone. And the template here overloads
+DIRECT_PROPERTY_DEFINITION to carry filename suffixes rather than dataset
+attributes - semantically closer to a file reference, but the validator would
+reject file_name on that reference type.
+
+This one DOES parameterise the generic (FileHelper[EnmapMetadata]), so
+file_metadata is properly typed - unlike the older HE5Helper and TIFHelper.
 """
 
 import os

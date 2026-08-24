@@ -1,5 +1,25 @@
 """
-Result container for the MNF Compression + Local RX anomaly detector.
+Result container for MNF + Local RX.
+
+Returned by MNFCompressionLRXDetector. Combines MNF compression (see
+mnf_rx_result.py for why raw hyperspectral RX is unusable) with a LOCAL
+background: instead of one covariance for the whole scene, each pixel is scored
+against an annulus of its neighbours.
+
+The pair of masks is the field that trips people up:
+
+    spatial_mask   pixels ELIGIBLE for scoring - valid, in-swath, kept
+    computed_mask  pixels that actually GOT a score
+
+They differ because a local background can fail even on a perfectly good pixel.
+Near a scene edge, or beside a large invalid region, the annulus may contain
+fewer valid neighbours than min_bg_pixels, leaving the covariance singular and
+the pixel unscored. Always reduce over computed_mask; treating an unscored pixel
+as a zero score silently biases every statistic you compute.
+
+The annulus has an inner GUARD window excluded from the background. Without it a
+target's own spectrum leaks into the statistics meant to describe what surrounds
+it, and it partially whitens itself out of detection.
 """
 
 from dataclasses import dataclass

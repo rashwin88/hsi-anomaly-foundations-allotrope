@@ -1,5 +1,25 @@
 """
-Generates intermediate patches for landsat
+Stage 1 of Landsat training-data prep: whole scenes in, patch shards out.
+
+Runs from scripts/generate_landsat_patches.py, never from the product. Models
+train on small patches, not whole scenes, so this walks every Landsat scene in
+S3 and emits WebDataset .tar shards of fixed-size crops.
+
+Per scene: download -> LandsatDataBuilder.vend_dataset() -> cut patches on a
+sliding window -> drop patches that are mostly invalid -> write a shard ->
+upload -> delete the local copy. The download/delete cycle is why this streams
+rather than materialising the corpus on disk.
+
+    patches/landsat/{split}/intermediate/w{width}_h{height}_s{stride}/
+
+Train/test is split by SCENE, not by patch, and derived deterministically from a
+seed. That matters: patches from one scene overlap heavily, so splitting at the
+patch level would leak nearly-identical crops across the boundary and flatter
+every evaluation you run.
+
+"Intermediate" because shards at this stage hold patches from a single scene.
+Stage 2 (FinalPatchShuffler) mixes across scenes, so a training batch is not 32
+crops of the same field.
 """
 
 import logging

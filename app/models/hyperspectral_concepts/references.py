@@ -1,5 +1,27 @@
 """
-Different Reference Types
+How a template says "this component lives HERE inside the file".
+
+The building block of the template system (app/templates/). A sensor template is
+a dict of {logical component -> ReferenceDefinition}, and each definition names
+one of three retrieval strategies, because the three container formats hide
+their contents in fundamentally different places:
+
+    FILE_REFERENCE              an internal hierarchical path, e.g. the HDF-EOS
+                                dataset "HDFEOS/SWATHS/.../SWIR_Cube"
+    ROOT_METADATA_FIELD         a root-level attribute, e.g. PRISMA's
+                                "List_Cw_Swir" - a different h5py call entirely
+    DIRECT_PROPERTY_DEFINITION  a property on the opened dataset object, e.g.
+                                rasterio's `crs` or `bounds`
+
+The model validator enforces that the field matching the chosen type is actually
+populated, so a malformed template fails at import rather than at read time -
+when it would surface as a confusing None deep inside a helper.
+
+One wart: the EnMAP template overloads DIRECT_PROPERTY_DEFINITION to carry
+FILENAME SUFFIXES ("-SPECTRAL_IMAGE.TIF") rather than object attributes.
+Semantically that is closer to a file reference, but the validator would reject
+file_name on that type. Worth knowing before you trust property_name to mean
+"attribute".
 """
 
 from enum import Enum
