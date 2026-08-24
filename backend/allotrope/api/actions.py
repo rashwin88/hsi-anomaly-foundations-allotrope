@@ -1,16 +1,16 @@
-"""Action endpoints (Step 12c).
+﻿"""Action endpoints (Step 12c).
 
 Routes:
-    POST   /projects/{project_id}/actions  — submit an Action + enqueue its `action_run` Job
-    GET    /projects/{project_id}/actions  — list Actions for a project (paginated)
-    GET    /actions/{action_id}            — detail (includes ActionOutput when complete)
-    GET    /action-types                   — public catalog (drives picker + Action card)
+    POST   /projects/{project_id}/actions  â€” submit an Action + enqueue its `action_run` Job
+    GET    /projects/{project_id}/actions  â€” list Actions for a project (paginated)
+    GET    /actions/{action_id}            â€” detail (includes ActionOutput when complete)
+    GET    /action-types                   â€” public catalog (drives picker + Action card)
 
 Submit flow (one DB transaction):
     1. Auth + parse project_id.
     2. Load Project + Scene (Scene needed for sensor_type).
     3. Look up the action type module from the registry (404 on unknown type).
-    4. Run module.validate_config(raw_cfg, sensor_type) — Pydantic 422 on shape errors.
+    4. Run module.validate_config(raw_cfg, sensor_type) â€” Pydantic 422 on shape errors.
     5. Cross-field semantic checks the type module can't do alone:
          - configuration.input_scene_id must equal project.scene_id
          - configuration.input_band_filter_output_id (when present) must
@@ -21,7 +21,7 @@ Submit flow (one DB transaction):
     8. Return ActionPublic.
 
 Worker keeps actions.status and jobs.status in lockstep at transaction
-boundaries (Step 12d). The api never mutates lifecycle state directly —
+boundaries (Step 12d). The api never mutates lifecycle state directly â€”
 it only writes the queued row and the paired job.
 
 Sequence diagrams:
@@ -51,12 +51,13 @@ from ..auth.jwt import Claims
 from ..config import settings
 from ..db import get_db
 from ..models import Action, ActionOutput, ActionTemplate, Job, Project, Scene
+from ._action_common import action_or_404, output_for_action
 from .deps import current_user_claims
 from .wireformat import parse_prefixed_id
 
 logger = logging.getLogger("allotrope.api.actions")
 
-# Two routers — one for project-nested (submit + list), one flat for
+# Two routers â€” one for project-nested (submit + list), one flat for
 # action_<uuid> detail and the action-types catalog. main.py mounts both.
 project_actions_router = APIRouter(
     prefix="/projects/{project_id}/actions",
@@ -75,7 +76,7 @@ class CreateActionPayload(BaseModel):
 
     type: str = Field(
         ...,
-        description="Action type slug — must be a key in the action_types registry.",
+        description="Action type slug â€” must be a key in the action_types registry.",
         min_length=1,
         max_length=100,
     )
@@ -178,21 +179,6 @@ def _project_and_scene_or_404(
     return project, scene
 
 
-def _action_or_404(action_id_wire: str, db: Session) -> Action:
-    action_uuid = parse_prefixed_id("action", action_id_wire)
-    action = db.get(Action, action_uuid)
-    if action is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="action_not_found"
-        )
-    return action
-
-
-def _output_for_action(action_id: uuid.UUID, db: Session) -> ActionOutput | None:
-    return db.scalar(
-        select(ActionOutput).where(ActionOutput.action_id == action_id)
-    )
-
 
 def _output_to_wire(o: ActionOutput) -> ActionOutputPublic:
     return ActionOutputPublic(
@@ -249,7 +235,7 @@ def create_action(
     #    with the bound Project + Scene). The type module owns shape;
     #    the api owns membership.
 
-    # 3a. input_scene_id is the project's bound Scene — always.
+    # 3a. input_scene_id is the project's bound Scene â€” always.
     #     If the type's config schema requires it (band_filter_apply),
     #     the client-provided value must match. If absent
     #     (scene_segmentation, by design), the server fills it in so
@@ -270,7 +256,7 @@ def create_action(
     #     and (when the field name implies a specific upstream type)
     #     must point at that producing type.
     _OUTPUT_REF_RULES: dict[str, str | None] = {
-        # field name → required producing action type (None = any type)
+        # field name â†’ required producing action type (None = any type)
         "input_band_filter_output_id": "band_filter_apply",
         "input_scene_segmentation_output_id": "scene_segmentation",
         "input_cloud_mask_output_id": "cloud_mask",
@@ -320,7 +306,7 @@ def create_action(
 
     # 4. Optional: action_template_id existence. SET NULL semantics on
     #    delete mean we don't enforce membership beyond "row exists at
-    #    submit time" — the configuration is the canonical record.
+    #    submit time" â€” the configuration is the canonical record.
     template_uuid: uuid.UUID | None = None
     if payload.action_template_id is not None:
         template_uuid = parse_prefixed_id("action_template", payload.action_template_id)
@@ -443,9 +429,9 @@ def get_action(
     _claims: Claims = Depends(current_user_claims),
     db: Session = Depends(get_db),
 ) -> ActionDetail:
-    action = _action_or_404(action_id, db)
+    action = action_or_404(action_id, db)
     base = ActionPublic.from_orm_action(action)
-    output = _output_for_action(action.id, db)
+    output = output_for_action(action.id, db)
     return ActionDetail(
         **base.model_dump(),
         output=_output_to_wire(output) if output is not None else None,
@@ -489,28 +475,28 @@ def get_action_file(
     - 404 `file_not_found` when the artifact dir exists but the named
       file is missing.
     - 422 `invalid_filename` for traversal attempts (`..`, slashes,
-      empty names) — basename-only access is enforced.
+      empty names) â€” basename-only access is enforced.
 
     Path-traversal defence is two-fold: filename is rejected if it
     contains `/` or `\\` or `..` segments; the resolved absolute path
     is then asserted to live inside the artifacts root.
     """
-    action = _action_or_404(action_id, db)
+    action = action_or_404(action_id, db)
 
-    # Filename must be a single basename — no traversal, no nesting.
+    # Filename must be a single basename â€” no traversal, no nesting.
     if not filename or "/" in filename or "\\" in filename or filename in ("..", "."):
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="invalid_filename",
         )
     if ".." in filename.split("."):
-        # paranoid catch — shouldn't trigger because of the slash check above
+        # paranoid catch â€” shouldn't trigger because of the slash check above
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="invalid_filename",
         )
 
-    output = _output_for_action(action.id, db)
+    output = output_for_action(action.id, db)
     if output is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -519,7 +505,7 @@ def get_action_file(
 
     artifacts_root = Path(settings.artifacts_dir).resolve()
     full = (artifacts_root / output.artifact_path / filename).resolve()
-    # Defence in depth — confine to artifacts root.
+    # Defence in depth â€” confine to artifacts root.
     try:
         full.relative_to(artifacts_root)
     except ValueError:
@@ -540,7 +526,7 @@ def get_action_file(
     return FileResponse(
         path=str(full),
         media_type=media,
-        # Action artifacts are write-once + immutable per § 5.6 — cache aggressively.
+        # Action artifacts are write-once + immutable per Â§ 5.6 â€” cache aggressively.
         headers={"Cache-Control": "public, max-age=31536000, immutable"},
     )
 
@@ -571,7 +557,7 @@ def get_action_output_file(
     `models/<codename>/anomaly_score.png` etc. without flattening the
     on-disk layout.
     """
-    action = _action_or_404(action_id, db)
+    action = action_or_404(action_id, db)
 
     if not relpath or relpath.startswith("/") or "\\" in relpath:
         raise HTTPException(
@@ -585,7 +571,7 @@ def get_action_output_file(
             detail="invalid_relpath",
         )
 
-    output = _output_for_action(action.id, db)
+    output = output_for_action(action.id, db)
     if output is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -622,7 +608,7 @@ def get_action_output_file(
 #
 # Tiny lookup endpoint so the frontend can resolve an
 # ``output_<uuid>`` to its producing ``action_<uuid>``. Used by the
-# NewActionDialog when wiring an anomaly_detection_prep — once the user
+# NewActionDialog when wiring an anomaly_detection_prep â€” once the user
 # picks an upstream anomaly_scoring Output we need to fetch that
 # Action's summary.json to discover which algorithms ran, so the
 # dialog can render one weight input per algorithm.
@@ -638,7 +624,7 @@ def get_action_output(
     _claims: Claims = Depends(current_user_claims),
     db: Session = Depends(get_db),
 ) -> ActionOutputPublic:
-    """Resolve ``output_<uuid>`` → its ActionOutput row (incl. action_id)."""
+    """Resolve ``output_<uuid>`` â†’ its ActionOutput row (incl. action_id)."""
     raw_id = parse_prefixed_id("output", output_id)
     output = db.get(ActionOutput, raw_id)
     if output is None:
@@ -647,481 +633,6 @@ def get_action_output(
             detail="output_not_found",
         )
     return _output_to_wire(output)
-
-
-# --- POST /actions/{id}/anomaly_detection_preview -------------------
-#
-# Interactive Apply endpoint for prep actions sitting in
-# ``needs_threshold``. The user moves a slider in the viewer, presses
-# Apply, and this endpoint computes the binary anomaly mask + (if GT
-# attached) precision/recall/F1 for *that specific* threshold choice.
-# The mask + metrics are ephemeral — recomputed every call. See
-# Roadmap step 14.5 for the design discussion.
-
-
-class AnomalyDetectionPreviewRequest(BaseModel):
-    """Body for the Apply round-trip."""
-
-    threshold: float = Field(
-        ...,
-        description=(
-            "Slider value. Interpreted as a percentile (0..100) when "
-            "threshold_mode='percentile', or as a raw composite value "
-            "in [0, 1] when threshold_mode='absolute'."
-        ),
-    )
-    threshold_mode: str = Field(
-        default="percentile",
-        description="'percentile' (default) or 'absolute'.",
-    )
-    dilation_kernel: int = Field(
-        default=0,
-        ge=0,
-        description=(
-            "Odd integer (or 0 to disable). Side of the square structuring "
-            "element used to dilate the binary anomaly mask before metrics."
-        ),
-    )
-
-
-class AnomalyDetectionPreviewResponse(BaseModel):
-    """Wire shape returned by the Apply endpoint.
-
-    The mask PNG itself is served via a sibling endpoint that the
-    frontend hits as an image URL — keeps JSON small and lets the
-    browser cache-bust on the threshold tuple.
-    """
-
-    threshold_absolute: float
-    threshold_percentile: float
-    dilation_kernel: int
-    n_anomalous: int
-    n_kept: int
-    metrics: dict | None
-    # Frontend constructs a deterministic URL from these params to
-    # request the rendered PNG separately.
-    mask_url: str
-
-
-@actions_router.post(
-    "/{action_id}/anomaly_detection_preview",
-    response_model=AnomalyDetectionPreviewResponse,
-    summary="Apply a threshold to the composite score and return the binary mask + metrics",
-)
-def anomaly_detection_preview(
-    action_id: str,
-    body: AnomalyDetectionPreviewRequest,
-    _claims: Claims = Depends(current_user_claims),
-    db: Session = Depends(get_db),
-) -> AnomalyDetectionPreviewResponse:
-    """Interactive threshold preview for an ``anomaly_detection_prep`` action.
-
-    The action must be in status ``needs_threshold`` and its output dir
-    must contain ``composite_score.tif`` + ``summary.json``. Everything
-    else (the mask, the metrics) is recomputed fresh on each call —
-    nothing is persisted.
-
-    Returns the rendered binary mask via a sibling URL (cached in this
-    process's memory and served by ``GET .../anomaly_detection_preview_mask``).
-    """
-    from ._anomaly_detection_preview import (
-        compute_preview,
-        load_gt_mask_for_action,
-    )
-
-    action = _action_or_404(action_id, db)
-    if action.type != "anomaly_detection_prep":
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="action_type_mismatch",
-        )
-    if action.status not in ("needs_threshold", "complete"):
-        # We tolerate `complete` so users who later committed a
-        # threshold can still re-explore alternatives in the prep
-        # viewer until the commit pathway exists.
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=f"action_not_in_needs_threshold (status={action.status!r})",
-        )
-
-    output = _output_for_action(action.id, db)
-    if output is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="output_not_ready",
-        )
-
-    artifacts_root = Path(settings.artifacts_dir).resolve()
-    output_dir = (artifacts_root / output.artifact_path).resolve()
-    composite_path = output_dir / "composite_score.tif"
-    if not composite_path.is_file():
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="composite_score_not_found",
-        )
-
-    # Optional GT — drives metrics when present.
-    gt_mask = None
-    annotation_id = (action.configuration or {}).get("input_annotation_id")
-    composite_shape = None
-    if annotation_id:
-        # Resolve scene_id via the action's project — same scene_dir
-        # convention anomaly_scoring uses for its own GT loader.
-        project = db.get(Project, action.project_id)
-        scene_id_for_gt = str(project.scene_id) if project else None
-
-        # The composite raster's shape is the GT lookup constraint.
-        # Read the composite header cheaply to get it without pulling
-        # the whole raster into RAM here (the cache in
-        # _anomaly_detection_preview handles the full read).
-        import rasterio
-        with rasterio.open(composite_path) as src:
-            composite_shape = src.shape
-        if scene_id_for_gt is not None:
-            data_root = Path(settings.data_dir).resolve()
-            gt_mask = load_gt_mask_for_action(
-                data_root=data_root,
-                scene_id=scene_id_for_gt,
-                annotation_id=annotation_id,
-                expected_shape=composite_shape,
-            )
-
-    try:
-        result = compute_preview(
-            composite_path=composite_path,
-            threshold=body.threshold,
-            threshold_mode=body.threshold_mode,
-            dilation_kernel=body.dilation_kernel,
-            gt_mask=gt_mask,
-        )
-    except ValueError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=str(exc),
-        ) from exc
-
-    # Stash the rendered PNG in the per-request cache so the sibling
-    # GET endpoint can serve it without recomputing.
-    _stash_preview_mask(
-        action_id=str(action.id),
-        params=(body.threshold, body.threshold_mode, body.dilation_kernel),
-        png_bytes=result.mask_png_bytes,
-    )
-    # Browser-relative URL — the frontend's nginx proxies /api/* to
-    # this api process, so we include the /api prefix so an <img src>
-    # in the SPA dereferences correctly.
-    mask_url = (
-        f"/api/actions/{action_id}/anomaly_detection_preview_mask"
-        f"?t={body.threshold}&mode={body.threshold_mode}"
-        f"&dk={body.dilation_kernel}"
-    )
-    return AnomalyDetectionPreviewResponse(
-        threshold_absolute=result.threshold_absolute,
-        threshold_percentile=result.threshold_percentile,
-        dilation_kernel=result.dilation_kernel,
-        n_anomalous=result.n_anomalous,
-        n_kept=result.n_kept,
-        metrics=result.metrics,
-        mask_url=mask_url,
-    )
-
-
-# Tiny per-process cache: the POST renders the PNG, the GET serves it
-# bytewise. Keyed by (action_id, threshold, mode, kernel). LRU-capped.
-_PREVIEW_MASK_CACHE_MAX = 16
-_preview_mask_cache: "dict[tuple, bytes]" = {}
-_preview_mask_lru: "list[tuple]" = []
-
-
-def _stash_preview_mask(*, action_id: str, params: tuple, png_bytes: bytes) -> None:
-    key = (action_id, *params)
-    _preview_mask_cache[key] = png_bytes
-    if key in _preview_mask_lru:
-        _preview_mask_lru.remove(key)
-    _preview_mask_lru.append(key)
-    while len(_preview_mask_lru) > _PREVIEW_MASK_CACHE_MAX:
-        oldest = _preview_mask_lru.pop(0)
-        _preview_mask_cache.pop(oldest, None)
-
-
-@actions_router.get(
-    "/{action_id}/anomaly_detection_preview_mask",
-    summary="Stream the binary anomaly mask PNG matching the last Apply call's params",
-)
-def anomaly_detection_preview_mask(
-    action_id: str,
-    t: float = Query(...),
-    mode: str = Query("percentile"),
-    dk: int = Query(0),
-    _claims: Claims = Depends(current_user_claims),
-    db: Session = Depends(get_db),
-) -> Response:
-    """Serve a previously-rendered binary anomaly mask PNG.
-
-    The POST endpoint computes the PNG and stashes it; this sibling
-    GET serves the bytes. If the cache lost the entry (process
-    restarted, or another Apply call evicted it), the client should
-    re-POST to recompute.
-    """
-    _action = _action_or_404(action_id, db)
-    key = (str(_action.id), t, mode, dk)
-    png_bytes = _preview_mask_cache.get(key)
-    if png_bytes is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="preview_mask_not_cached_repost_apply",
-        )
-    return Response(
-        content=png_bytes,
-        media_type="image/png",
-        headers={"Cache-Control": "no-store"},
-    )
-
-
-# --- POST /actions/{id}/anomaly_detection_commit --------------------
-#
-# Lock in the user's chosen threshold + dilation on a prep action.
-# Writes ``anomaly_mask.tif`` (binary geotiff) + ``metrics.json`` into
-# the action's existing output directory, merges the chosen parameters
-# into ``actions.configuration`` so they're a permanent property of
-# the action row, marks the action_output's summary with
-# ``committed: true`` so downstream pickers can filter, and flips the
-# action's status from ``needs_threshold`` (or already-``complete`` on
-# a re-commit) to ``complete``.
-#
-# Apply is unaffected — a committed prep still accepts further Apply
-# calls. Users can re-explore and re-commit at any time; re-commit
-# overwrites the canonical mask + metrics + configuration.
-
-
-class AnomalyDetectionCommitRequest(BaseModel):
-    threshold: float = Field(
-        ...,
-        description=(
-            "Slider value to lock in. Same semantics as the preview "
-            "endpoint: 'above pX' when threshold_mode='percentile', "
-            "raw composite value when threshold_mode='absolute'."
-        ),
-    )
-    threshold_mode: str = Field(default="percentile")
-    dilation_kernel: int = Field(default=0, ge=0)
-
-
-class AnomalyDetectionCommitResponse(BaseModel):
-    """Wire shape returned after a successful commit."""
-
-    threshold_absolute: float
-    threshold_percentile: float
-    dilation_kernel: int
-    n_anomalous: int
-    n_kept: int
-    metrics: dict | None
-    # Convenience pointer to the saved binary mask raster — frontend
-    # can use this to surface a download link.
-    mask_tif_path: str
-
-
-@actions_router.post(
-    "/{action_id}/anomaly_detection_commit",
-    response_model=AnomalyDetectionCommitResponse,
-    summary="Lock the chosen threshold on an anomaly_detection_prep action",
-)
-def anomaly_detection_commit(
-    action_id: str,
-    body: AnomalyDetectionCommitRequest,
-    _claims: Claims = Depends(current_user_claims),
-    db: Session = Depends(get_db),
-) -> AnomalyDetectionCommitResponse:
-    """Commit the user's chosen threshold on a prep action.
-
-    Re-runs the exact preview math (so the saved mask matches what the
-    viewer last showed) and writes:
-
-      - ``<output_dir>/anomaly_mask.tif``  — uint8 binary geotiff
-      - ``<output_dir>/metrics.json``      — threshold + dilation +
-                                             P / R / F1 + TP/FP/FN
-                                             (P/R/F1 only when GT
-                                             attached)
-
-    Then mutates the action row + its output row:
-
-      - ``action.configuration.committed_threshold|mode|dilation`` set
-      - ``action_output.summary.committed = true`` + the same params
-      - ``action.status = "complete"``
-
-    Re-commit is allowed — overwrites the prior mask + metrics + flags.
-    """
-    import json as _json
-
-    import numpy as np
-    import rasterio
-
-    from ._anomaly_detection_preview import (
-        compute_preview,
-        load_gt_mask_for_action,
-    )
-
-    action = _action_or_404(action_id, db)
-    if action.type != "anomaly_detection_prep":
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="action_type_mismatch",
-        )
-    if action.status not in ("needs_threshold", "complete"):
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=f"action_not_committable (status={action.status!r})",
-        )
-
-    output = _output_for_action(action.id, db)
-    if output is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="output_not_ready",
-        )
-
-    artifacts_root = Path(settings.artifacts_dir).resolve()
-    output_dir = (artifacts_root / output.artifact_path).resolve()
-    composite_path = output_dir / "composite_score.tif"
-    if not composite_path.is_file():
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="composite_score_not_found",
-        )
-
-    # Optional GT — drives metrics in the commit payload the same way
-    # Apply does.
-    gt_mask = None
-    annotation_id = (action.configuration or {}).get("input_annotation_id")
-    if annotation_id:
-        project = db.get(Project, action.project_id)
-        scene_id_for_gt = str(project.scene_id) if project else None
-        with rasterio.open(composite_path) as src:
-            composite_shape = src.shape
-        if scene_id_for_gt is not None:
-            data_root = Path(settings.data_dir).resolve()
-            gt_mask = load_gt_mask_for_action(
-                data_root=data_root,
-                scene_id=scene_id_for_gt,
-                annotation_id=annotation_id,
-                expected_shape=composite_shape,
-            )
-
-    try:
-        result = compute_preview(
-            composite_path=composite_path,
-            threshold=body.threshold,
-            threshold_mode=body.threshold_mode,
-            dilation_kernel=body.dilation_kernel,
-            gt_mask=gt_mask,
-        )
-    except ValueError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=str(exc),
-        ) from exc
-
-    # --- Persist the binary mask raster -------------------------------
-    # Recompute the mask at full resolution here (the preview's
-    # rendered PNG was downsampled). Cheap on this same composite.
-    with rasterio.open(composite_path) as src:
-        composite = src.read(1).astype("float32", copy=False)
-        profile = src.profile
-    finite = np.isfinite(composite)
-    if body.threshold_mode == "percentile":
-        finite_vals = np.sort(composite[finite])
-        if finite_vals.size == 0:
-            absolute_threshold = float("inf")
-        else:
-            quantile_pct = max(0.0, min(100.0, float(body.threshold)))
-            absolute_threshold = float(np.percentile(finite_vals, quantile_pct))
-    else:
-        absolute_threshold = float(body.threshold)
-
-    raw_mask = (composite >= np.float32(absolute_threshold)) & finite
-    if body.dilation_kernel and body.dilation_kernel > 1:
-        from ._anomaly_detection_preview import _square_dilate
-        raw_mask = _square_dilate(raw_mask, int(body.dilation_kernel)) & finite
-    binary_mask = raw_mask.astype("uint8")
-
-    profile.update(
-        dtype="uint8",
-        count=1,
-        nodata=None,
-        compress="deflate",
-        predictor=2,
-    )
-    mask_tif_path_abs = output_dir / "anomaly_mask.tif"
-    with rasterio.open(mask_tif_path_abs, "w", **profile) as dst:
-        dst.write(binary_mask, 1)
-
-    # --- Persist metrics.json -----------------------------------------
-    metrics_payload: dict[str, Any] = {
-        "threshold_absolute": result.threshold_absolute,
-        "threshold_percentile": result.threshold_percentile,
-        "threshold_mode": body.threshold_mode,
-        "dilation_kernel": int(body.dilation_kernel),
-        "n_anomalous": result.n_anomalous,
-        "n_kept": result.n_kept,
-        "has_gt": result.metrics is not None,
-        "committed_at": datetime.utcnow().isoformat() + "Z",
-    }
-    if result.metrics:
-        metrics_payload.update({
-            "precision": result.metrics["precision"],
-            "recall": result.metrics["recall"],
-            "f1": result.metrics["f1"],
-            "tp": result.metrics["tp"],
-            "fp": result.metrics["fp"],
-            "fn": result.metrics["fn"],
-            "tn": result.metrics["tn"],
-            "n_gt_positives": result.metrics["n_gt_positives"],
-        })
-    (output_dir / "metrics.json").write_text(_json.dumps(metrics_payload, indent=2))
-
-    # --- Stamp the action + output rows -------------------------------
-    cfg = dict(action.configuration or {})
-    cfg["committed_threshold"] = float(body.threshold)
-    cfg["committed_threshold_mode"] = body.threshold_mode
-    cfg["committed_threshold_absolute"] = float(result.threshold_absolute)
-    cfg["committed_dilation_kernel"] = int(body.dilation_kernel)
-    action.configuration = cfg
-
-    # Updating a JSONB column on a row that was loaded from another
-    # transaction requires marking it modified explicitly when the
-    # mutation is a dict-replace; SQLAlchemy's ORM picks up the
-    # assignment above just fine, but the nested merge below needs a
-    # flag_modified to make sure the change is written.
-    from sqlalchemy.orm.attributes import flag_modified
-
-    output_summary = dict(output.summary or {})
-    output_summary["committed"] = True
-    output_summary["committed_threshold"] = float(body.threshold)
-    output_summary["committed_threshold_mode"] = body.threshold_mode
-    output_summary["committed_threshold_absolute"] = float(result.threshold_absolute)
-    output_summary["committed_dilation_kernel"] = int(body.dilation_kernel)
-    if result.metrics:
-        output_summary["committed_metrics"] = {
-            "precision": result.metrics["precision"],
-            "recall": result.metrics["recall"],
-            "f1": result.metrics["f1"],
-        }
-    output.summary = output_summary
-    flag_modified(output, "summary")
-
-    action.status = "complete"
-    action.completed_at = datetime.utcnow()
-    db.commit()
-
-    return AnomalyDetectionCommitResponse(
-        threshold_absolute=float(result.threshold_absolute),
-        threshold_percentile=float(result.threshold_percentile),
-        dilation_kernel=int(body.dilation_kernel),
-        n_anomalous=int(result.n_anomalous),
-        n_kept=int(result.n_kept),
-        metrics=result.metrics,
-        mask_tif_path=f"/api/actions/{action_id}/files/anomaly_mask.tif",
-    )
 
 
 # --- DELETE /actions/{id} ------------------------------------------
@@ -1140,16 +651,16 @@ def delete_action(
 ) -> Response:
     """Synchronous Action delete.
 
-    Spec § 5.5 originally deferred individual Action delete to Project-
+    Spec Â§ 5.5 originally deferred individual Action delete to Project-
     delete-only; we lift that here. Guardrails:
 
-    - status='running' is rejected with 409 — the worker still owns the
+    - status='running' is rejected with 409 â€” the worker still owns the
       row's lifecycle. Use the cancellation flag and wait for the
       terminal transition before deleting.
     - ActionOutput CASCADEs via its FK; Visualizations sourced from the
       ActionOutput CASCADE via theirs.
     - Job rows (target_kind='action', target_id=action.id) carry a SOFT
-      ref — they stay as audit history with a dangling target_id, which
+      ref â€” they stay as audit history with a dangling target_id, which
       the Jobs UI already tolerates.
 
     After the row deletes, we rmtree the action's artifact directory so
@@ -1172,7 +683,7 @@ def delete_action(
     action_uuid = action.id
 
     # Capture the on-disk directories of Visualizations that will CASCADE
-    # via visualizations.source_action_output_id → action_outputs.id →
+    # via visualizations.source_action_output_id â†’ action_outputs.id â†’
     # actions.id. Without this the DB rows go but the per-viz dirs
     # under projects/<pid>/visualizations/<vid>/ linger forever and disk
     # usage doesn't drop.
@@ -1231,7 +742,7 @@ def delete_action(
 #
 # Lightweight probe endpoint used by the spectral_library_match viewer.
 # Returns the top-K matches at one (row, col) by filtering the action's
-# matches.parquet — keeps the frontend free of a parquet reader and
+# matches.parquet â€” keeps the frontend free of a parquet reader and
 # bounds the response to a handful of rows.
 
 
@@ -1265,13 +776,13 @@ def spectral_library_match_at_pixel(
     db: Session = Depends(get_db),
 ) -> SpectralMatchAtPixelResponse:
     """Filter ``matches.parquet`` by (row, col) and return its rows sorted by rank."""
-    action = _action_or_404(action_id, db)
+    action = action_or_404(action_id, db)
     if action.type != "spectral_library_match":
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="wrong_action_type",
         )
-    output = _output_for_action(action.id, db)
+    output = output_for_action(action.id, db)
     if output is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -1315,11 +826,11 @@ def spectral_library_match_at_pixel(
 #
 # Builds a submission-ready zip from the action's outputs and streams it
 # back. Two flavours dispatched on action.type:
-#   - spectral_library_match → hyper bundle (GeoTIFF + SHP + JSON + CSV)
-#   - anomaly_detection_prep → thermal bundle (only when committed)
+#   - spectral_library_match â†’ hyper bundle (GeoTIFF + SHP + JSON + CSV)
+#   - anomaly_detection_prep â†’ thermal bundle (only when committed)
 #
 # Submission rules (2026-05-14):
-#   * GeoTIFF must have a valid CRS → 422 if missing, no silent identity-fallback.
+#   * GeoTIFF must have a valid CRS â†’ 422 if missing, no silent identity-fallback.
 #   * Filenames/folders must literally contain `hyper` / `thermal`.
 #   * Shapefile sidecar set must be complete.
 # All handled inside the bundle builders in app/spectral_match/export.py
@@ -1355,8 +866,8 @@ def export_action(
     )
     from app.georef import GeorefUnavailable, resolve_scene_georef
 
-    action = _action_or_404(action_id, db)
-    output = _output_for_action(action.id, db)
+    action = action_or_404(action_id, db)
+    output = output_for_action(action.id, db)
     if output is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="output_not_ready",
@@ -1453,13 +964,13 @@ def export_action(
                             override_transform=spec.override_transform,
                             override_crs=spec.override_crs,
                         )
-            except Exception:    # noqa: BLE001 — best-effort manifest enrichment
+            except Exception:    # noqa: BLE001 â€” best-effort manifest enrichment
                 pass
 
             zip_bytes, zip_filename = build_hyper_bundle(spec)
 
         elif action.type == "anomaly_detection_prep":
-            # Only exportable AFTER commit — the binary anomaly_mask.tif lands
+            # Only exportable AFTER commit â€” the binary anomaly_mask.tif lands
             # at commit time. Refuse if not present.
             if not (artifact_dir / "anomaly_mask.tif").is_file():
                 raise HTTPException(
