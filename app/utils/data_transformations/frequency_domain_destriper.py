@@ -23,6 +23,7 @@ from scipy.ndimage import gaussian_filter
 
 from app.abstract_classes.data_transformer import DataTransformer
 from app.models.dataset.transformations import Transformation
+from app.utils.torch_helpers.device_selection import get_device
 
 logger = logging.getLogger(__name__)
 
@@ -34,15 +35,6 @@ ANGLE_SEARCH_STEP = 0.5
 RADIAL_SKIP = 10
 ANGLE_TOLERANCE = 3.0  # degrees — max spread for consensus across bands
 PAD_WIDTH = 128
-
-
-def _select_device() -> torch.device:
-    """Pick best available torch device: cuda > mps > cpu."""
-    if torch.cuda.is_available():
-        return torch.device("cuda")
-    if hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
-        return torch.device("mps")
-    return torch.device("cpu")
 
 
 @dataclass
@@ -603,7 +595,7 @@ class FrequencyDomainDestriper(DataTransformer):
         p = PAD_WIDTH
         pH, pW = H + 2 * p, W + 2 * p
 
-        device = _select_device()
+        device = get_device()
         logger.info(
             "FFT filter: %d bands on %s, padded shape (%d, %d)",
             B, device, pH, pW,

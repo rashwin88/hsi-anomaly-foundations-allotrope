@@ -126,7 +126,7 @@ def _load_annotation_gt(ctx: Any, annotation_wire_id: str) -> tuple[Any, dict[st
     tifs = sorted(annotation_dir.glob("*.tif"))
     if not tifs:
         raise FileNotFoundError(
-            f"no .tif under {annotation_dir} â€” supported annotation types "
+            f"no .tif under {annotation_dir} — supported annotation types "
             "must materialise a raster file."
         )
     with rasterio.open(tifs[0]) as src:
@@ -197,7 +197,7 @@ def _render_score_png(
     # Restrict the percentile to pixels that are BOTH kept AND finite.
     # `kept_ds` (NEAREST-downsampled keep mask) can mark a pixel as kept
     # even when `score_ds` (BILINEAR-downsampled score) is NaN at the
-    # same location â€” np.percentile then returns NaN and the entire PNG
+    # same location — np.percentile then returns NaN and the entire PNG
     # renders as solid black with only the alpha channel carrying signal.
     sample_mask = kept_ds & np.isfinite(stretched)
     if sample_mask.any():
@@ -272,7 +272,7 @@ def _render_thumbnail(
         score_path = models_root / _safe_dirname(codename) / "anomaly_score.tif"
         with rasterio.open(score_path) as src:
             score = src.read(1).astype(np.float32, copy=False)
-        # Strip NaNs before the percentile cap â€” classical detectors
+        # Strip NaNs before the percentile cap — classical detectors
         # write NaN outside their internal spatial_mask, which can
         # sit inside the raw keep_mask when keep_mask_erosion is on.
         # np.percentile over NaN returns NaN and the whole panel

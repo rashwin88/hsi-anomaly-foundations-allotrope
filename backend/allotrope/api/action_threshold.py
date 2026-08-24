@@ -54,7 +54,7 @@ anomaly_threshold_router = APIRouter(prefix="/actions", tags=["actions"])
 # ``needs_threshold``. The user moves a slider in the viewer, presses
 # Apply, and this endpoint computes the binary anomaly mask + (if GT
 # attached) precision/recall/F1 for *that specific* threshold choice.
-# The mask + metrics are ephemeral â€” recomputed every call. See
+# The mask + metrics are ephemeral — recomputed every call. See
 # Roadmap step 14.5 for the design discussion.
 
 
@@ -87,7 +87,7 @@ class AnomalyDetectionPreviewResponse(BaseModel):
     """Wire shape returned by the Apply endpoint.
 
     The mask PNG itself is served via a sibling endpoint that the
-    frontend hits as an image URL â€” keeps JSON small and lets the
+    frontend hits as an image URL — keeps JSON small and lets the
     browser cache-bust on the threshold tuple.
     """
 
@@ -117,7 +117,7 @@ def anomaly_detection_preview(
 
     The action must be in status ``needs_threshold`` and its output dir
     must contain ``composite_score.tif`` + ``summary.json``. Everything
-    else (the mask, the metrics) is recomputed fresh on each call â€”
+    else (the mask, the metrics) is recomputed fresh on each call —
     nothing is persisted.
 
     Returns the rendered binary mask via a sibling URL (cached in this
@@ -159,12 +159,12 @@ def anomaly_detection_preview(
             detail="composite_score_not_found",
         )
 
-    # Optional GT â€” drives metrics when present.
+    # Optional GT — drives metrics when present.
     gt_mask = None
     annotation_id = (action.configuration or {}).get("input_annotation_id")
     composite_shape = None
     if annotation_id:
-        # Resolve scene_id via the action's project â€” same scene_dir
+        # Resolve scene_id via the action's project — same scene_dir
         # convention anomaly_scoring uses for its own GT loader.
         project = db.get(Project, action.project_id)
         scene_id_for_gt = str(project.scene_id) if project else None
@@ -206,7 +206,7 @@ def anomaly_detection_preview(
         params=(body.threshold, body.threshold_mode, body.dilation_kernel),
         png_bytes=result.mask_png_bytes,
     )
-    # Browser-relative URL â€” the frontend's nginx proxies /api/* to
+    # Browser-relative URL — the frontend's nginx proxies /api/* to
     # this api process, so we include the /api prefix so an <img src>
     # in the SPA dereferences correctly.
     mask_url = (
@@ -288,7 +288,7 @@ def anomaly_detection_preview_mask(
 # action's status from ``needs_threshold`` (or already-``complete`` on
 # a re-commit) to ``complete``.
 #
-# Apply is unaffected â€” a committed prep still accepts further Apply
+# Apply is unaffected — a committed prep still accepts further Apply
 # calls. Users can re-explore and re-commit at any time; re-commit
 # overwrites the canonical mask + metrics + configuration.
 
@@ -315,7 +315,7 @@ class AnomalyDetectionCommitResponse(BaseModel):
     n_anomalous: int
     n_kept: int
     metrics: dict | None
-    # Convenience pointer to the saved binary mask raster â€” frontend
+    # Convenience pointer to the saved binary mask raster — frontend
     # can use this to surface a download link.
     mask_tif_path: str
 
@@ -336,8 +336,8 @@ def anomaly_detection_commit(
     Re-runs the exact preview math (so the saved mask matches what the
     viewer last showed) and writes:
 
-      - ``<output_dir>/anomaly_mask.tif``  â€” uint8 binary geotiff
-      - ``<output_dir>/metrics.json``      â€” threshold + dilation +
+      - ``<output_dir>/anomaly_mask.tif``  — uint8 binary geotiff
+      - ``<output_dir>/metrics.json``      — threshold + dilation +
                                              P / R / F1 + TP/FP/FN
                                              (P/R/F1 only when GT
                                              attached)
@@ -348,7 +348,7 @@ def anomaly_detection_commit(
       - ``action_output.summary.committed = true`` + the same params
       - ``action.status = "complete"``
 
-    Re-commit is allowed â€” overwrites the prior mask + metrics + flags.
+    Re-commit is allowed — overwrites the prior mask + metrics + flags.
     """
     import json as _json
 
@@ -388,7 +388,7 @@ def anomaly_detection_commit(
             detail="composite_score_not_found",
         )
 
-    # Optional GT â€” drives metrics in the commit payload the same way
+    # Optional GT — drives metrics in the commit payload the same way
     # Apply does.
     gt_mask = None
     annotation_id = (action.configuration or {}).get("input_annotation_id")

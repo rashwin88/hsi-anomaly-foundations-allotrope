@@ -1,16 +1,16 @@
 """Action endpoints (Step 12c).
 
 Routes:
-    POST   /projects/{project_id}/actions  â€” submit an Action + enqueue its `action_run` Job
-    GET    /projects/{project_id}/actions  â€” list Actions for a project (paginated)
-    GET    /actions/{action_id}            â€” detail (includes ActionOutput when complete)
-    GET    /action-types                   â€” public catalog (drives picker + Action card)
+    POST   /projects/{project_id}/actions  — submit an Action + enqueue its `action_run` Job
+    GET    /projects/{project_id}/actions  — list Actions for a project (paginated)
+    GET    /actions/{action_id}            — detail (includes ActionOutput when complete)
+    GET    /action-types                   — public catalog (drives picker + Action card)
 
 Submit flow (one DB transaction):
     1. Auth + parse project_id.
     2. Load Project + Scene (Scene needed for sensor_type).
     3. Look up the action type module from the registry (404 on unknown type).
-    4. Run module.validate_config(raw_cfg, sensor_type) â€” Pydantic 422 on shape errors.
+    4. Run module.validate_config(raw_cfg, sensor_type) — Pydantic 422 on shape errors.
     5. Cross-field semantic checks the type module can't do alone:
          - configuration.input_scene_id must equal project.scene_id
          - configuration.input_band_filter_output_id (when present) must
@@ -21,7 +21,7 @@ Submit flow (one DB transaction):
     8. Return ActionPublic.
 
 Worker keeps actions.status and jobs.status in lockstep at transaction
-boundaries (Step 12d). The api never mutates lifecycle state directly â€”
+boundaries (Step 12d). The api never mutates lifecycle state directly —
 it only writes the queued row and the paired job.
 
 Sequence diagrams:
@@ -62,7 +62,7 @@ from .wireformat import parse_prefixed_id
 
 logger = logging.getLogger("allotrope.api.actions")
 
-# Two routers â€” one for project-nested (submit + list), one flat for
+# Two routers — one for project-nested (submit + list), one flat for
 # action_<uuid> detail and the action-types catalog. main.py mounts both.
 project_actions_router = APIRouter(
     prefix="/projects/{project_id}/actions",
@@ -80,7 +80,7 @@ class CreateActionPayload(BaseModel):
 
     type: str = Field(
         ...,
-        description="Action type slug â€” must be a key in the action_types registry.",
+        description="Action type slug — must be a key in the action_types registry.",
         min_length=1,
         max_length=100,
     )
@@ -219,7 +219,7 @@ def create_action(
     #    with the bound Project + Scene). The type module owns shape;
     #    the api owns membership.
 
-    # 3a. input_scene_id is the project's bound Scene â€” always.
+    # 3a. input_scene_id is the project's bound Scene — always.
     #     If the type's config schema requires it (band_filter_apply),
     #     the client-provided value must match. If absent
     #     (scene_segmentation, by design), the server fills it in so
@@ -240,7 +240,7 @@ def create_action(
     #     and (when the field name implies a specific upstream type)
     #     must point at that producing type.
     _OUTPUT_REF_RULES: dict[str, str | None] = {
-        # field name â†’ required producing action type (None = any type)
+        # field name → required producing action type (None = any type)
         "input_band_filter_output_id": "band_filter_apply",
         "input_scene_segmentation_output_id": "scene_segmentation",
         "input_cloud_mask_output_id": "cloud_mask",
@@ -290,7 +290,7 @@ def create_action(
 
     # 4. Optional: action_template_id existence. SET NULL semantics on
     #    delete mean we don't enforce membership beyond "row exists at
-    #    submit time" â€” the configuration is the canonical record.
+    #    submit time" — the configuration is the canonical record.
     template_uuid: uuid.UUID | None = None
     if payload.action_template_id is not None:
         template_uuid = parse_prefixed_id("action_template", payload.action_template_id)
@@ -441,13 +441,13 @@ def delete_action(
     Spec Â§ 5.5 originally deferred individual Action delete to Project-
     delete-only; we lift that here. Guardrails:
 
-    - status='running' is rejected with 409 â€” the worker still owns the
+    - status='running' is rejected with 409 — the worker still owns the
       row's lifecycle. Use the cancellation flag and wait for the
       terminal transition before deleting.
     - ActionOutput CASCADEs via its FK; Visualizations sourced from the
       ActionOutput CASCADE via theirs.
     - Job rows (target_kind='action', target_id=action.id) carry a SOFT
-      ref â€” they stay as audit history with a dangling target_id, which
+      ref — they stay as audit history with a dangling target_id, which
       the Jobs UI already tolerates.
 
     After the row deletes, we rmtree the action's artifact directory so
@@ -470,7 +470,7 @@ def delete_action(
     action_uuid = action.id
 
     # Capture the on-disk directories of Visualizations that will CASCADE
-    # via visualizations.source_action_output_id â†’ action_outputs.id â†’
+    # via visualizations.source_action_output_id → action_outputs.id →
     # actions.id. Without this the DB rows go but the per-viz dirs
     # under projects/<pid>/visualizations/<vid>/ linger forever and disk
     # usage doesn't drop.

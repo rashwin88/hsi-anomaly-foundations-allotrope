@@ -86,7 +86,7 @@ def get_action_file(
     - 404 `file_not_found` when the artifact dir exists but the named
       file is missing.
     - 422 `invalid_filename` for traversal attempts (`..`, slashes,
-      empty names) â€” basename-only access is enforced.
+      empty names) — basename-only access is enforced.
 
     Path-traversal defence is two-fold: filename is rejected if it
     contains `/` or `\\` or `..` segments; the resolved absolute path
@@ -94,14 +94,14 @@ def get_action_file(
     """
     action = action_or_404(action_id, db)
 
-    # Filename must be a single basename â€” no traversal, no nesting.
+    # Filename must be a single basename — no traversal, no nesting.
     if not filename or "/" in filename or "\\" in filename or filename in ("..", "."):
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="invalid_filename",
         )
     if ".." in filename.split("."):
-        # paranoid catch â€” shouldn't trigger because of the slash check above
+        # paranoid catch — shouldn't trigger because of the slash check above
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="invalid_filename",
@@ -116,7 +116,7 @@ def get_action_file(
 
     artifacts_root = Path(settings.artifacts_dir).resolve()
     full = (artifacts_root / output.artifact_path / filename).resolve()
-    # Defence in depth â€” confine to artifacts root.
+    # Defence in depth — confine to artifacts root.
     try:
         full.relative_to(artifacts_root)
     except ValueError:
@@ -137,7 +137,7 @@ def get_action_file(
     return FileResponse(
         path=str(full),
         media_type=media,
-        # Action artifacts are write-once + immutable per Â§ 5.6 â€” cache aggressively.
+        # Action artifacts are write-once + immutable per § 5.6 — cache aggressively.
         headers={"Cache-Control": "public, max-age=31536000, immutable"},
     )
 
@@ -219,7 +219,7 @@ def get_action_output_file(
 #
 # Tiny lookup endpoint so the frontend can resolve an
 # ``output_<uuid>`` to its producing ``action_<uuid>``. Used by the
-# NewActionDialog when wiring an anomaly_detection_prep â€” once the user
+# NewActionDialog when wiring an anomaly_detection_prep — once the user
 # picks an upstream anomaly_scoring Output we need to fetch that
 # Action's summary.json to discover which algorithms ran, so the
 # dialog can render one weight input per algorithm.
@@ -235,7 +235,7 @@ def get_action_output(
     _claims: Claims = Depends(current_user_claims),
     db: Session = Depends(get_db),
 ) -> ActionOutputPublic:
-    """Resolve ``output_<uuid>`` â†’ its ActionOutput row (incl. action_id)."""
+    """Resolve ``output_<uuid>`` → its ActionOutput row (incl. action_id)."""
     raw_id = parse_prefixed_id("output", output_id)
     output = db.get(ActionOutput, raw_id)
     if output is None:

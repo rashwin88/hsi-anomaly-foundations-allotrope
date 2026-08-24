@@ -6,8 +6,8 @@ Algorithm
 For each valid pixel (r, c):
   1. Extract background pixels from the annulus between outer_window and
      inner_window (guard region). Only spatially valid pixels are used.
-  2. Compute the local mean Î¼ and covariance Î£ from those background pixels.
-  3. Score = (x - Î¼)áµ€ (Î£ + Î»I)â»Â¹ (x - Î¼)   [Mahalanobis distance]
+  2. Compute the local mean μ and covariance Σ from those background pixels.
+  3. Score = (x - μ)ᵀ (Σ + λI)⁻¹ (x - μ)   [Mahalanobis distance]
 
 If fewer than min_bg_pixels background pixels are available (e.g., near
 swath edges), the pixel is left as NaN.
@@ -26,8 +26,8 @@ Performance
 -----------
 A `stride` parameter subsamples the spatial grid (default 1 = full
 resolution). With stride > 1 the score map is bilinearly interpolated
-back to full resolution. For PRISMA scenes (â‰ˆ1200Ã—1250, 177 bands) a
-stride of 2 reduces computation â‰ˆ4Ã—.
+back to full resolution. For PRISMA scenes (≈1200×1250, 177 bands) a
+stride of 2 reduces computation ≈4×.
 
 Covariance and Mahalanobis distance computations are batched via
 torch.linalg.solve, automatically selecting the best available device
@@ -212,7 +212,7 @@ class LocalRXDetector(AnomalyDetector):
             gpu_mem = torch.cuda.get_device_properties(device).total_memory / (1024 ** 3)
             logger.info("LRX: GPU=%s (%.1f GB)", gpu_name, gpu_mem)
 
-        # Sub-cube: (B_good, H, W) float64 â€” copy so we can fill in place
+        # Sub-cube: (B_good, H, W) float64 — copy so we can fill in place
         t_prep = time.time()
         sub = cube[good].astype(np.float64)
 

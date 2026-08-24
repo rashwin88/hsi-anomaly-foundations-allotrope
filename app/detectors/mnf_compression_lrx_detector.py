@@ -11,9 +11,9 @@ The noise covariance is estimated from spatial first-differences
 (shift-difference method), following Green et al. 1988.
 
 Pipeline:
-    fit()   â†’ band filtering + spatial mask + estimate noise covariance
+    fit()   → band filtering + spatial mask + estimate noise covariance
               + compute MNF transform matrix
-    detect()â†’ project good-band cube into MNF space (n_components)
+    detect()→ project good-band cube into MNF space (n_components)
               + run Local RX (annulus-based Mahalanobis) on the compressed cube
 """
 
@@ -134,12 +134,12 @@ class MNFCompressionLRXDetector(AnomalyDetector):
 
         n_valid = int(self._spatial_mask.sum())
         logger.info(
-            "MNF-LRX: spatial mask â€” %d valid pixels, %d bands", n_valid, n_good,
+            "MNF-LRX: spatial mask — %d valid pixels, %d bands", n_valid, n_good,
         )
 
         if n_valid < n_good + 1:
             logger.warning(
-                "Too few valid pixels (%d) for %d bands â€” MNF will fail.",
+                "Too few valid pixels (%d) for %d bands — MNF will fail.",
                 n_valid, n_good,
             )
             return
@@ -167,7 +167,7 @@ class MNFCompressionLRXDetector(AnomalyDetector):
         # ---- MNF transform ----
         self._compute_mnf_transform(pixels, noise_cov)
         logger.info(
-            "MNF-LRX: transform computed in %.2fs â€” retaining %d / %d components",
+            "MNF-LRX: transform computed in %.2fs — retaining %d / %d components",
             time.time() - t_mnf, self._n_components, n_good,
         )
 
@@ -200,7 +200,7 @@ class MNFCompressionLRXDetector(AnomalyDetector):
         if self._good_indices is None or self._spatial_mask is None:
             raise RuntimeError("Call fit() before detect().")
         if self._mnf_components is None:
-            raise RuntimeError("MNF transform not computed â€” check fit() logs.")
+            raise RuntimeError("MNF transform not computed — check fit() logs.")
 
         validity = (
             validity_mask if validity_mask is not None

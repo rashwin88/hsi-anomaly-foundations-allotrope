@@ -50,7 +50,7 @@ action_export_router = APIRouter(prefix="/actions", tags=["actions"])
 #
 # Lightweight probe endpoint used by the spectral_library_match viewer.
 # Returns the top-K matches at one (row, col) by filtering the action's
-# matches.parquet â€” keeps the frontend free of a parquet reader and
+# matches.parquet — keeps the frontend free of a parquet reader and
 # bounds the response to a handful of rows.
 
 
@@ -134,11 +134,11 @@ def spectral_library_match_at_pixel(
 #
 # Builds a submission-ready zip from the action's outputs and streams it
 # back. Two flavours dispatched on action.type:
-#   - spectral_library_match â†’ hyper bundle (GeoTIFF + SHP + JSON + CSV)
-#   - anomaly_detection_prep â†’ thermal bundle (only when committed)
+#   - spectral_library_match → hyper bundle (GeoTIFF + SHP + JSON + CSV)
+#   - anomaly_detection_prep → thermal bundle (only when committed)
 #
 # Submission rules (2026-05-14):
-#   * GeoTIFF must have a valid CRS â†’ 422 if missing, no silent identity-fallback.
+#   * GeoTIFF must have a valid CRS → 422 if missing, no silent identity-fallback.
 #   * Filenames/folders must literally contain `hyper` / `thermal`.
 #   * Shapefile sidecar set must be complete.
 # All handled inside the bundle builders in app/spectral_match/export.py
@@ -272,13 +272,13 @@ def export_action(
                             override_transform=spec.override_transform,
                             override_crs=spec.override_crs,
                         )
-            except Exception:    # noqa: BLE001 â€” best-effort manifest enrichment
+            except Exception:    # noqa: BLE001 — best-effort manifest enrichment
                 pass
 
             zip_bytes, zip_filename = build_hyper_bundle(spec)
 
         elif action.type == "anomaly_detection_prep":
-            # Only exportable AFTER commit â€” the binary anomaly_mask.tif lands
+            # Only exportable AFTER commit — the binary anomaly_mask.tif lands
             # at commit time. Refuse if not present.
             if not (artifact_dir / "anomaly_mask.tif").is_file():
                 raise HTTPException(

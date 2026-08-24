@@ -12,6 +12,10 @@ covariance matrix, one inverse and one quadratic form PER PIXEL. A megapixel
 scene means a million small linear solves, which is hopeless one at a time in
 numpy. Batching them into a single (N, B, B) tensor turns it into one call that
 a GPU can saturate.
+
+Device selection is NOT here. app/utils/torch_helpers/device_selection.get_device
+is the one canonical implementation and predates all of these; re-exported below
+so the detectors have a single import.
 """
 
 from __future__ import annotations
@@ -19,14 +23,7 @@ from __future__ import annotations
 import numpy as np
 import torch
 
-
-def select_device() -> torch.device:
-    """Pick the best available torch device: cuda > mps > cpu."""
-    if torch.cuda.is_available():
-        return torch.device("cuda")
-    if hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
-        return torch.device("mps")
-    return torch.device("cpu")
+from app.utils.torch_helpers.device_selection import get_device as select_device
 
 
 def batch_mahalanobis(
