@@ -6,7 +6,6 @@ Uses checkerboard-masked reconstruction with the 3-channel architecture
 every pixel is reconstructed from context, never from itself.
 """
 
-import json
 import logging
 
 import torch
@@ -20,6 +19,8 @@ from app.models.patches.patching_request import PatchRequest
 from app.models.training.training_config import NormalizedMaskedAutoEncoderConfig
 from app.utils.patch_generation.generate_patch_plan import PatchPlanGenerator
 
+from app.foundation_models.pixel_stats import resolve_pixel_stats
+
 logger = logging.getLogger("NormalizedMaskedAutoencoderInferencer")
 
 
@@ -27,20 +28,9 @@ class NormalizedMaskedAutoencoderInferencer(FoundationInferencer):
 
     def build_model(self) -> nn.Module:
         cfg: NormalizedMaskedAutoEncoderConfig = self.config.model_config_
-        pixel_mean, pixel_std = None, None
-        override = self.config.pixel_stats_override
-        stats_path = self.config.pixel_stats_path
-        if override is not None:
-            # Per-scene stats replace the checkpoint's baked-in values -
-            # see PixelStatsOverride for why uncalibrated sensors need this.
-            pixel_mean, pixel_std = override.mean, override.std
-            logger.info("Pixel stats overridden per-scene (source=%s)", override.source)
-        elif stats_path is not None:
-            with open(stats_path) as f:
-                stats = json.load(f)
-            pixel_mean = stats["mean"]
-            pixel_std = stats["std"]
-            logger.info(f"Pixel normalization stats loaded: mean={pixel_mean}, std={pixel_std}")
+        pixel_mean, pixel_std = resolve_pixel_stats(
+            self.config.pixel_stats_path, self.config.pixel_stats_override
+        )
         return NormalizedMaskedSpatialAutoencoder(
             in_channels=cfg.in_channels,
             base_channels=cfg.base_channels,

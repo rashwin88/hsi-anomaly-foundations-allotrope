@@ -1,4 +1,4 @@
-"""
+﻿"""
 MNF Compression + Local RX anomaly detector.
 
 Applies Minimum Noise Fraction (MNF) dimensionality reduction before
@@ -11,9 +11,9 @@ The noise covariance is estimated from spatial first-differences
 (shift-difference method), following Green et al. 1988.
 
 Pipeline:
-    fit()   → band filtering + spatial mask + estimate noise covariance
+    fit()   â†’ band filtering + spatial mask + estimate noise covariance
               + compute MNF transform matrix
-    detect()→ project good-band cube into MNF space (n_components)
+    detect()â†’ project good-band cube into MNF space (n_components)
               + run Local RX (annulus-based Mahalanobis) on the compressed cube
 """
 
@@ -26,6 +26,7 @@ import torch
 from scipy.ndimage import zoom
 
 from app.abstract_classes.anomaly_detector import AnomalyDetector, VendableDataset
+from app.detectors._local_background import batch_mahalanobis, select_device
 from app.models.anomaly_detection.mnf_lrx_result import MNFCompressionLRXResult
 from app.utils.data_transformations.spectral_band_filter import SpectralBandFilter
 
@@ -38,59 +39,6 @@ DEFAULT_INNER_WINDOW = 5
 DEFAULT_REGULARIZATION = 1e-4
 DEFAULT_BATCH_SIZE = 256
 
-
-# ------------------------------------------------------------------
-# device selection
-# ------------------------------------------------------------------
-
-def _select_device() -> torch.device:
-    """Pick best available torch device: cuda > mps > cpu."""
-    if torch.cuda.is_available():
-        return torch.device("cuda")
-    if hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
-        return torch.device("mps")
-    return torch.device("cpu")
-
-
-# ------------------------------------------------------------------
-# batched Mahalanobis on device
-# ------------------------------------------------------------------
-
-def _batch_mahalanobis(
-    X_bg_padded: np.ndarray,   # (N, max_bg, B) float64
-    n_bg_arr: np.ndarray,      # (N,) int64 — actual bg count per pixel
-    x_test: np.ndarray,        # (N, B) float64 — test pixel spectra
-    count: int,                # how many entries in this batch are valid
-    B: int,
-    reg: float,
-    device: torch.device,
-) -> np.ndarray:
-    """Batched covariance + solve + Mahalanobis on device. Returns (count,) scores."""
-    dtype = torch.float32 if device.type != "cpu" else torch.float64
-
-    X = torch.from_numpy(X_bg_padded[:count]).to(device=device, dtype=dtype)
-    n = torch.from_numpy(n_bg_arr[:count]).to(device=device)
-    xt = torch.from_numpy(x_test[:count]).to(device=device, dtype=dtype)
-
-    max_bg = X.shape[1]
-    indices = torch.arange(max_bg, device=device).unsqueeze(0)
-    mask = indices < n.unsqueeze(1)
-
-    X_masked = X * mask.unsqueeze(-1)
-    counts_f = mask.sum(dim=1, keepdim=True).to(dtype)
-    mu = X_masked.sum(dim=1) / counts_f
-
-    dX = (X - mu.unsqueeze(1)) * mask.unsqueeze(-1)
-
-    cov = dX.transpose(-1, -2) @ dX
-    cov = cov / (counts_f.unsqueeze(-1) - 1)
-    cov += reg * torch.eye(B, device=device, dtype=dtype)
-
-    x = xt - mu
-    sol = torch.linalg.solve(cov, x)
-    scores = (x * sol).sum(dim=1)
-
-    return scores.cpu().to(torch.float64).numpy()
 
 
 class MNFCompressionLRXDetector(AnomalyDetector):
@@ -186,12 +134,12 @@ class MNFCompressionLRXDetector(AnomalyDetector):
 
         n_valid = int(self._spatial_mask.sum())
         logger.info(
-            "MNF-LRX: spatial mask — %d valid pixels, %d bands", n_valid, n_good,
+            "MNF-LRX: spatial mask â€” %d valid pixels, %d bands", n_valid, n_good,
         )
 
         if n_valid < n_good + 1:
             logger.warning(
-                "Too few valid pixels (%d) for %d bands — MNF will fail.",
+                "Too few valid pixels (%d) for %d bands â€” MNF will fail.",
                 n_valid, n_good,
             )
             return
@@ -219,7 +167,7 @@ class MNFCompressionLRXDetector(AnomalyDetector):
         # ---- MNF transform ----
         self._compute_mnf_transform(pixels, noise_cov)
         logger.info(
-            "MNF-LRX: transform computed in %.2fs — retaining %d / %d components",
+            "MNF-LRX: transform computed in %.2fs â€” retaining %d / %d components",
             time.time() - t_mnf, self._n_components, n_good,
         )
 
@@ -252,7 +200,7 @@ class MNFCompressionLRXDetector(AnomalyDetector):
         if self._good_indices is None or self._spatial_mask is None:
             raise RuntimeError("Call fit() before detect().")
         if self._mnf_components is None:
-            raise RuntimeError("MNF transform not computed — check fit() logs.")
+            raise RuntimeError("MNF transform not computed â€” check fit() logs.")
 
         validity = (
             validity_mask if validity_mask is not None
@@ -298,7 +246,7 @@ class MNFCompressionLRXDetector(AnomalyDetector):
         )
 
         # ---- Device selection + batch size ----
-        device = _select_device()
+        device = select_device()
         compute_dtype = "float32" if device.type != "cpu" else "float64"
 
         if "batch_size" in kwargs:
@@ -357,7 +305,7 @@ class MNFCompressionLRXDetector(AnomalyDetector):
             if batch_idx == 0:
                 return
             t0 = time.time()
-            scores = _batch_mahalanobis(
+            scores = batch_mahalanobis(
                 batch_X_bg, batch_n_bg, batch_x_test,
                 batch_idx, B, reg, device,
             )

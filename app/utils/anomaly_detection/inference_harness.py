@@ -7,13 +7,14 @@ reassembly. Framework-agnostic — operates entirely in numpy.
 """
 
 import logging
-from typing import Union
 
 import numpy as np
 
-from app.abstract_classes.anomaly_detector import AnomalyDetector
+from app.abstract_classes.anomaly_detector import AnomalyDetector, VendableDataset
 from app.models.anomaly_detection.harness_config import InferenceHarnessConfig
 from app.models.anomaly_detection.detection_result import AnomalyDetectionResult
+# The concrete types are still needed for the isinstance dispatch in
+# _extract_cube_and_validity; VendableDataset above is only the union alias.
 from app.models.dataset.vendables import (
     VendableHyperspectralDataset,
     VendableEnmapHyperspectralDataset,
@@ -24,10 +25,6 @@ from app.models.patches.patching_response import PatchingPlan
 from app.utils.patch_generation.generate_patch_plan import PatchPlanGenerator
 
 logger = logging.getLogger(__name__)
-
-VendableDataset = Union[
-    VendableHyperspectralDataset, VendableEnmapHyperspectralDataset, VendableThermalDataset
-]
 
 
 class InferenceHarness:

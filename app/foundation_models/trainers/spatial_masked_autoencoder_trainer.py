@@ -17,6 +17,7 @@ from app.abstract_classes.foundation_trainer import FoundationTrainer
 
 logger = logging.getLogger("SpatialAutoencoderTrainer")
 from app.foundation_models.components.spatial_auto_encoder import SpatialAutoencoder
+from app.foundation_models.pixel_stats import resolve_pixel_stats
 from app.models.training.training_config import (
     TrainingConfig,
     SpatialAutoencoderConfig,
@@ -29,15 +30,7 @@ class SpatialMaskedAutoencoderTrainer(FoundationTrainer):
 
     def build_model(self) -> nn.Module:
         cfg: SpatialAutoencoderConfig = self.config.model_config_
-        pixel_mean, pixel_std = None, None
-        stats_path = self.config.data.pixel_stats_path
-        if stats_path is not None:
-            import json
-            with open(stats_path) as f:
-                stats = json.load(f)
-            pixel_mean = stats["mean"]
-            pixel_std = stats["std"]
-            logger.info(f"Pixel normalization stats loaded: mean={pixel_mean}, std={pixel_std}")
+        pixel_mean, pixel_std = resolve_pixel_stats(self.config.data.pixel_stats_path)
         return SpatialAutoencoder(
             in_channels=cfg.in_channels,
             base_channels=cfg.base_channels,

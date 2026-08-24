@@ -9,7 +9,6 @@ reconstruct hidden pixels from spatial context in normalized space.
 Patches with less than 40% valid pixels are discarded from the batch.
 """
 
-import json
 import logging
 
 import torch
@@ -21,6 +20,8 @@ from app.foundation_models.components.normalized_masked_spatial_auto_encoder imp
 )
 from app.models.training.training_config import NormalizedMaskedAutoEncoderConfig
 
+from app.foundation_models.pixel_stats import resolve_pixel_stats
+
 logger = logging.getLogger("NormalizedMaskedAutoencoderTrainer")
 
 MIN_VALID_PIXEL_FRACTION = 0.4
@@ -30,14 +31,7 @@ class NormalizedMaskedAutoencoderTrainer(FoundationTrainer):
 
     def build_model(self) -> nn.Module:
         cfg: NormalizedMaskedAutoEncoderConfig = self.config.model_config_
-        pixel_mean, pixel_std = None, None
-        stats_path = self.config.data.pixel_stats_path
-        if stats_path is not None:
-            with open(stats_path) as f:
-                stats = json.load(f)
-            pixel_mean = stats["mean"]
-            pixel_std = stats["std"]
-            logger.info(f"Pixel normalization stats loaded: mean={pixel_mean}, std={pixel_std}")
+        pixel_mean, pixel_std = resolve_pixel_stats(self.config.data.pixel_stats_path)
         return NormalizedMaskedSpatialAutoencoder(
             in_channels=cfg.in_channels,
             base_channels=cfg.base_channels,

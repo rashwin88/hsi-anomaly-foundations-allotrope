@@ -11,7 +11,6 @@ The masking, token removal, and validation strategies are identical
 to the thermal trainer — reused via the same TokenMasking utilities.
 """
 
-import json
 import logging
 import warnings
 
@@ -28,6 +27,7 @@ from app.foundation_models.components.hyperspectral_seg_former_mae import (
 )
 from app.foundation_models.components.token_masking import TokenMasking
 from app.foundation_models.components.sam_loss import SAMLoss
+from app.foundation_models.pixel_stats import resolve_pixel_stats
 
 logger = logging.getLogger("HyperspectralSegFormerMAETrainer")
 
@@ -78,17 +78,8 @@ class HyperspectralSegFormerMAETrainer(FoundationTrainer):
 
     def build_model(self) -> nn.Module:
         cfg = self.config.model_config_
-        pixel_mean, pixel_std = None, None
-        stats_path = self.config.data.pixel_stats_path
-        if stats_path is not None:
-            with open(stats_path) as f:
-                stats = json.load(f)
-            pixel_mean = stats["mean"]  # list of 165 floats
-            pixel_std = stats["std"]    # list of 165 floats
-            logger.info(
-                "Per-band pixel stats loaded: %d means, %d stds",
-                len(pixel_mean), len(pixel_std),
-            )
+        # 165 floats each on the common grid.
+        pixel_mean, pixel_std = resolve_pixel_stats(self.config.data.pixel_stats_path)
         model = HyperspectralSegFormerMAE(
             in_channels=cfg.in_channels,
             compressed_channels=cfg.compressed_channels,

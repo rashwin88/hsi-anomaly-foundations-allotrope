@@ -16,7 +16,6 @@ reconstructs the full image. Loss is computed only where tokens were masked.
 Patches with less than 40% valid pixels are discarded from the batch.
 """
 
-import json
 import logging
 
 import torch
@@ -25,6 +24,7 @@ import torch.nn as nn
 from app.abstract_classes.foundation_trainer import FoundationTrainer
 from app.foundation_models.components.seg_former_mae import SegFormerMAE
 from app.foundation_models.components.token_masking import TokenMasking
+from app.foundation_models.pixel_stats import resolve_pixel_stats
 from app.models.training.training_config import SegFormerMAEConfig
 
 logger = logging.getLogger("SegFormerMAETrainer")
@@ -41,14 +41,7 @@ class SegFormerMAETrainer(FoundationTrainer):
 
     def build_model(self) -> nn.Module:
         cfg: SegFormerMAEConfig = self.config.model_config_
-        pixel_mean, pixel_std = None, None
-        stats_path = self.config.data.pixel_stats_path
-        if stats_path is not None:
-            with open(stats_path) as f:
-                stats = json.load(f)
-            pixel_mean = stats["mean"]
-            pixel_std = stats["std"]
-            logger.info(f"Pixel normalization stats loaded: mean={pixel_mean}, std={pixel_std}")
+        pixel_mean, pixel_std = resolve_pixel_stats(self.config.data.pixel_stats_path)
         return SegFormerMAE(
             in_channels=cfg.in_channels,
             embed_dims=cfg.embed_dims,

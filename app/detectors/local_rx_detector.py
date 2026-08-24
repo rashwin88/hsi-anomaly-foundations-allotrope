@@ -1,4 +1,4 @@
-"""
+﻿"""
 Local RX (LRX) anomaly detector for hyperspectral data (lrx-had-v1).
 
 Algorithm
@@ -6,8 +6,8 @@ Algorithm
 For each valid pixel (r, c):
   1. Extract background pixels from the annulus between outer_window and
      inner_window (guard region). Only spatially valid pixels are used.
-  2. Compute the local mean μ and covariance Σ from those background pixels.
-  3. Score = (x - μ)ᵀ (Σ + λI)⁻¹ (x - μ)   [Mahalanobis distance]
+  2. Compute the local mean Î¼ and covariance Î£ from those background pixels.
+  3. Score = (x - Î¼)áµ€ (Î£ + Î»I)â»Â¹ (x - Î¼)   [Mahalanobis distance]
 
 If fewer than min_bg_pixels background pixels are available (e.g., near
 swath edges), the pixel is left as NaN.
@@ -26,8 +26,8 @@ Performance
 -----------
 A `stride` parameter subsamples the spatial grid (default 1 = full
 resolution). With stride > 1 the score map is bilinearly interpolated
-back to full resolution. For PRISMA scenes (≈1200×1250, 177 bands) a
-stride of 2 reduces computation ≈4×.
+back to full resolution. For PRISMA scenes (â‰ˆ1200Ã—1250, 177 bands) a
+stride of 2 reduces computation â‰ˆ4Ã—.
 
 Covariance and Mahalanobis distance computations are batched via
 torch.linalg.solve, automatically selecting the best available device
@@ -43,6 +43,7 @@ import torch
 from scipy.ndimage import zoom
 
 from app.abstract_classes.anomaly_detector import AnomalyDetector, VendableDataset
+from app.detectors._local_background import batch_mahalanobis, select_device
 from app.models.anomaly_detection.lrx_result import LocalRXResult
 from app.utils.data_transformations.spectral_band_filter import SpectralBandFilter
 
@@ -54,67 +55,6 @@ DEFAULT_INNER_WINDOW = 5
 DEFAULT_REGULARIZATION = 1e-4
 DEFAULT_BATCH_SIZE = 256
 
-
-# ------------------------------------------------------------------
-# device selection
-# ------------------------------------------------------------------
-
-def _select_device() -> torch.device:
-    """Pick best available torch device: cuda > mps > cpu."""
-    if torch.cuda.is_available():
-        return torch.device("cuda")
-    if hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
-        return torch.device("mps")
-    return torch.device("cpu")
-
-
-# ------------------------------------------------------------------
-# batched Mahalanobis on device
-# ------------------------------------------------------------------
-
-def _batch_mahalanobis(
-    X_bg_padded: np.ndarray,   # (N, max_bg, B) float64
-    n_bg_arr: np.ndarray,      # (N,) int64 — actual bg count per pixel
-    x_test: np.ndarray,        # (N, B) float64 — test pixel spectra
-    count: int,                # how many entries in this batch are valid
-    B: int,
-    reg: float,
-    device: torch.device,
-) -> np.ndarray:
-    """Batched covariance + solve + Mahalanobis on device. Returns (count,) scores."""
-    # Use float32 on GPU for speed; float64 on CPU for precision
-    dtype = torch.float32 if device.type != "cpu" else torch.float64
-
-    X = torch.from_numpy(X_bg_padded[:count]).to(device=device, dtype=dtype)
-    n = torch.from_numpy(n_bg_arr[:count]).to(device=device)
-    xt = torch.from_numpy(x_test[:count]).to(device=device, dtype=dtype)
-
-    max_bg = X.shape[1]
-    # Validity mask: (count, max_bg) — True for real background entries
-    indices = torch.arange(max_bg, device=device).unsqueeze(0)
-    mask = indices < n.unsqueeze(1)
-
-    # Masked mean: zero out padding, sum, divide by count
-    X_masked = X * mask.unsqueeze(-1)
-    counts_f = mask.sum(dim=1, keepdim=True).to(dtype)       # (count, 1)
-    mu = X_masked.sum(dim=1) / counts_f                       # (count, B)
-
-    # Centered data (padding stays zero)
-    dX = (X - mu.unsqueeze(1)) * mask.unsqueeze(-1)           # (count, max_bg, B)
-
-    # Batched covariance: (count, B, B)
-    cov = dX.transpose(-1, -2) @ dX
-    cov = cov / (counts_f.unsqueeze(-1) - 1)
-    cov += reg * torch.eye(B, device=device, dtype=dtype)
-
-    # Test vector relative to local mean
-    x = xt - mu                                                # (count, B)
-
-    # Batched solve: cov @ sol = x  →  sol = cov⁻¹ x
-    sol = torch.linalg.solve(cov, x)                           # (count, B)
-    scores = (x * sol).sum(dim=1)                              # (count,)
-
-    return scores.cpu().to(torch.float64).numpy()
 
 
 class LocalRXDetector(AnomalyDetector):
@@ -214,7 +154,7 @@ class LocalRXDetector(AnomalyDetector):
                             the vendable used at construction.
             outer_window:   Background window half-size in pixels. Default 25.
             inner_window:   Guard window half-size in pixels. Default 5.
-            regularization: Ridge term added to Σ diagonal. Default 1e-4.
+            regularization: Ridge term added to Î£ diagonal. Default 1e-4.
             min_bg_pixels:  Minimum background pixels required to score a pixel.
                             Default: n_good_bands + 1.
             stride:         Spatial subsampling factor. 1 = full resolution.
@@ -247,7 +187,7 @@ class LocalRXDetector(AnomalyDetector):
         min_bg = int(kwargs.get("min_bg_pixels", B + 1))
 
         # Device selection + auto batch size
-        device = _select_device()
+        device = select_device()
         compute_dtype = "float32" if device.type != "cpu" else "float64"
 
         if "batch_size" in kwargs:
@@ -272,7 +212,7 @@ class LocalRXDetector(AnomalyDetector):
             gpu_mem = torch.cuda.get_device_properties(device).total_memory / (1024 ** 3)
             logger.info("LRX: GPU=%s (%.1f GB)", gpu_name, gpu_mem)
 
-        # Sub-cube: (B_good, H, W) float64 — copy so we can fill in place
+        # Sub-cube: (B_good, H, W) float64 â€” copy so we can fill in place
         t_prep = time.time()
         sub = cube[good].astype(np.float64)
 
@@ -332,7 +272,7 @@ class LocalRXDetector(AnomalyDetector):
             if batch_idx == 0:
                 return
             t0 = time.time()
-            scores = _batch_mahalanobis(
+            scores = batch_mahalanobis(
                 batch_X_bg, batch_n_bg, batch_x_test,
                 batch_idx, B, reg, device,
             )

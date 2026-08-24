@@ -10,7 +10,6 @@ The two-pass masking, full-scene sliding window, overlap-averaging,
 and mask erosion logic are inherited from SegFormerMAEInferencer.
 """
 
-import json
 import logging
 
 import torch
@@ -25,6 +24,8 @@ from app.foundation_models.components.hyperspectral_seg_former_mae import (
 )
 from app.models.training.training_config import HyperspectralSegFormerMAEConfig
 
+from app.foundation_models.pixel_stats import resolve_pixel_stats
+
 logger = logging.getLogger("HyperspectralSegFormerMAEInferencer")
 
 
@@ -38,23 +39,9 @@ class HyperspectralSegFormerMAEInferencer(SegFormerMAEInferencer):
 
     def build_model(self) -> nn.Module:
         cfg: HyperspectralSegFormerMAEConfig = self.config.model_config_
-        pixel_mean, pixel_std = None, None
-        override = self.config.pixel_stats_override
-        stats_path = self.config.pixel_stats_path
-        if override is not None:
-            # Per-scene stats replace the checkpoint's baked-in values -
-            # see PixelStatsOverride for why uncalibrated sensors need this.
-            pixel_mean, pixel_std = override.mean, override.std
-            logger.info("Pixel stats overridden per-scene (source=%s)", override.source)
-        elif stats_path is not None:
-            with open(stats_path) as f:
-                stats = json.load(f)
-            pixel_mean = stats["mean"]
-            pixel_std = stats["std"]
-            logger.info(
-                "Per-band pixel stats loaded: %d means, %d stds",
-                len(pixel_mean), len(pixel_std),
-            )
+        pixel_mean, pixel_std = resolve_pixel_stats(
+            self.config.pixel_stats_path, self.config.pixel_stats_override
+        )
         return HyperspectralSegFormerMAE(
             in_channels=cfg.in_channels,
             compressed_channels=cfg.compressed_channels,
