@@ -35,6 +35,124 @@ ANGLE_SEARCH_STEP = 0.5
 RADIAL_SKIP = 10
 ANGLE_TOLERANCE = 3.0  # degrees — max spread for consensus across bands
 PAD_WIDTH = 128
+# Half-width of the window excluded around a candidate angle when measuring the
+# background it is scored against. Wide enough to exclude the peak's own
+# shoulders, narrow enough to leave most of the 180-degree curve as background.
+BACKGROUND_EXCLUSION_DEG = 10.0
+
+
+def _background_stats(
+    sums: np.ndarray, angles_grid: np.ndarray, angle: float
+) -> tuple[float, float]:
+    """
+    Mean and standard deviation of the power-vs-angle curve, ignoring the
+    neighbourhood of `angle`.
+
+    A stripe shows up as a narrow peak in that curve, so "is this peak real?"
+    means "does it stand out from the rest of the curve". The +/- window is
+    excluded so the peak does not inflate the background it is measured
+    against.
+
+    Note the std can legitimately be zero: a perfectly clean synthetic scene
+    has a flat curve away from the peak. Callers must guard, or every stripe in
+    a noiseless image is silently rejected - see the destriper's entry in
+    docs/09-known-issues.md.
+    """
+    diff = np.abs(angles_grid - angle)
+    diff = np.minimum(diff, 180 - diff)
+    bg = sums[diff > BACKGROUND_EXCLUSION_DEG]
+    return bg.mean(), bg.std()
+
+
+def _band_means(cube: np.ndarray, validity_bool: np.ndarray) -> np.ndarray:
+    """
+    Mean of the valid pixels in each band, as float32 (B,).
+
+    Used as the fill value for invalid pixels and as the pad value around the
+    frame. Filling with the band's own mean rather than zero matters: a zero
+    against a reflectance scene is a huge step edge, and a step edge is
+    broadband in the frequency domain, so it would smear energy across every
+    angle and swamp the stripe peak the notch is trying to find.
+    """
+    return np.array(
+        [
+            cube[b][validity_bool[b]].mean() if validity_bool[b].any() else 0.0
+            for b in range(cube.shape[0])
+        ],
+        dtype=np.float32,
+    )
+
+
+def _choose_batch_size(
+    n_bands: int, padded_h: int, padded_w: int, device: torch.device
+) -> int:
+    """
+    How many bands can go through the FFT at once without exhausting memory.
+
+    Each in-flight band costs a padded float32 input, a complex64 spectrum, a
+    complex64 filtered copy and a float32 result - 24 bytes per padded pixel.
+    A padded PRISMA band is ~1450x1500, so ~52 MB each; 239 of them at once
+    would be 12 GB.
+    """
+    bytes_per_band = padded_h * padded_w * (4 + 8 + 8 + 4)
+    mem_budget = 2e9 if device.type == "cuda" else 500e6
+    batch_size = min(n_bands, max(1, int(mem_budget / bytes_per_band)))
+    logger.info(
+        "FFT filter: batch_size=%d (%.0f MB per band)",
+        batch_size, bytes_per_band / 1e6,
+    )
+    return batch_size
+
+
+def _fill_and_pad(
+    cube_chunk: np.ndarray,
+    validity_chunk: np.ndarray,
+    means: np.ndarray,
+    pad: int,
+    device: torch.device,
+) -> torch.Tensor:
+    """
+    Move a batch to the device, fill invalid pixels, and pad the frame.
+
+    Both fill and pad use the band mean, for the reason given in _band_means.
+    Padding at all is what stops the FFT treating opposite edges of the scene
+    as adjacent, which would inject a spurious edge at every wrap point.
+    """
+    chunk = torch.from_numpy(cube_chunk.astype(np.float32)).to(device)
+    valid = torch.from_numpy(validity_chunk).to(device)
+    mean_t = torch.from_numpy(means).to(device)
+
+    chunk = torch.where(valid, chunk, mean_t[:, None, None].expand_as(chunk))
+
+    padded = torch.nn.functional.pad(
+        chunk, (pad, pad, pad, pad), mode="constant", value=0
+    )
+    # F.pad cannot take a per-band constant, so the border is overwritten
+    # afterwards. Rows first, then columns - the corners end up as columns.
+    padded[:, :pad, :] = mean_t[:, None, None]
+    padded[:, -pad:, :] = mean_t[:, None, None]
+    padded[:, :, :pad] = mean_t[:, None, None]
+    padded[:, :, -pad:] = mean_t[:, None, None]
+    return padded
+
+
+def _notch_batch(
+    padded: torch.Tensor, notch_t: torch.Tensor
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """
+    FFT -> multiply by the notch -> inverse FFT.
+
+    Returns (spatial_result, filtered_spectrum). The spectrum comes back only
+    so the caller can capture it for diagnostics; it is otherwise dead weight.
+
+    fftshift moves the zero frequency to the centre, which is what makes the
+    notch a simple angular wedge through the middle rather than something that
+    has to wrap around four corners.
+    """
+    spectrum = torch.fft.fftshift(torch.fft.fft2(padded), dim=(-2, -1))
+    filtered = spectrum * notch_t
+    result = torch.fft.ifft2(torch.fft.ifftshift(filtered, dim=(-2, -1))).real
+    return result, filtered
 
 
 @dataclass
@@ -202,11 +320,7 @@ class FrequencyDomainDestriper(DataTransformer):
 
             peak_idx = np.argmax(sums)
             peak_angle = angles_grid[peak_idx]
-
-            angle_diff = np.abs(angles_grid - peak_angle)
-            angle_diff = np.minimum(angle_diff, 180 - angle_diff)
-            bg = sums[angle_diff > 10.0]
-            bg_mean, bg_std = bg.mean(), bg.std()
+            bg_mean, bg_std = _background_stats(sums, angles_grid, peak_angle)
 
             if bg_std > 0 and sums[peak_idx] > bg_mean + PEAK_SIGMA * bg_std:
                 candidate_angles.append(peak_angle)
@@ -241,11 +355,7 @@ class FrequencyDomainDestriper(DataTransformer):
             angle_idx = min(angle_idx, len(rep_sums) - 1)
             peak_sum = rep_sums[angle_idx]
 
-            # Background excluding ±10° around this angle
-            angle_diff = np.abs(angles_grid - angle)
-            angle_diff = np.minimum(angle_diff, 180 - angle_diff)
-            bg = rep_sums[angle_diff > 10.0]
-            bg_mean, bg_std = bg.mean(), bg.std()
+            bg_mean, bg_std = _background_stats(rep_sums, angles_grid, angle)
             strength = (peak_sum - bg_mean) / bg_std if bg_std > 0 else 0.0
 
             n_agree = sum(
@@ -587,11 +697,15 @@ class FrequencyDomainDestriper(DataTransformer):
         notch: np.ndarray,
         diag: FrequencyDestripeDiagnostics | None,
     ) -> np.ndarray:
-        """Apply notch filter to every band. Fill, pad, FFT, crop, and
-        validity-restore are all done on-device per batch — no large
-        intermediate CPU arrays."""
+        """
+        Apply the notch filter to every band, in device-sized batches.
+
+        Each batch is prepare -> filter -> write back. Everything except the
+        output array stays on-device, so a 239-band cube never materialises a
+        second full-size float array on the host.
+        """
         B, H, W = cube.shape
-        output = cube.copy()               # only large CPU allocation
+        output = cube.copy()               # the only large CPU allocation
         p = PAD_WIDTH
         pH, pW = H + 2 * p, W + 2 * p
 
@@ -601,28 +715,12 @@ class FrequencyDomainDestriper(DataTransformer):
             B, device, pH, pW,
         )
 
-        # Compute per-band means on CPU (cheap — one scalar per band)
         validity_bool = validity.astype(bool)             # (B, H, W)
-        band_means = np.array([
-            cube[b][validity_bool[b]].mean() if validity_bool[b].any() else 0.0
-            for b in range(B)
-        ], dtype=np.float32)                              # (B,)
+        band_means = _band_means(cube, validity_bool)     # (B,)
 
-        # Notch filter on device (lives for the whole loop, ~18 MB)
+        # Lives on-device for the whole loop (~18 MB).
         notch_t = torch.from_numpy(notch).to(device=device, dtype=torch.complex64)
-
-        # Batch size: budget per-band covers padded input + FFT intermediates
-        bytes_per_band = pH * pW * (4 + 8 + 8 + 4)
-        if device.type == "cuda":
-            mem_budget = 2e9
-        else:
-            mem_budget = 500e6
-        max_batch = max(1, int(mem_budget / bytes_per_band))
-        batch_size = min(B, max_batch)
-        logger.info(
-            "FFT filter: batch_size=%d (%.0f MB per band)",
-            batch_size, bytes_per_band / 1e6,
-        )
+        batch_size = _choose_batch_size(B, pH, pW, device)
 
         diag_rep = diag.representative_band_index if diag is not None else None
         t_prep = 0.0
@@ -633,63 +731,31 @@ class FrequencyDomainDestriper(DataTransformer):
             end = min(start + batch_size, B)
             n = end - start
             t0 = time.time()
-
-            # --- fill + pad on device (no large CPU intermediates) ---
-            # Move raw bands to device
-            chunk = torch.from_numpy(
-                cube[start:end].astype(np.float32)
-            ).to(device)                                   # (n, H, W)
-            val_chunk = torch.from_numpy(
-                validity_bool[start:end]
-            ).to(device)                                   # (n, H, W) bool
-            means = torch.from_numpy(
-                band_means[start:end]
-            ).to(device)                                   # (n,)
-
-            # Fill invalid pixels with band mean on device
-            means_expanded = means[:, None, None].expand_as(chunk)
-            chunk = torch.where(val_chunk, chunk, means_expanded)
-
-            # Pad with band mean on device
-            # F.pad order: (left, right, top, bottom) for last 2 dims
-            padded = torch.nn.functional.pad(chunk, (p, p, p, p), mode="constant", value=0)
-            # Fix per-band pad values (broadcasting)
-            padded[:, :p, :] = means[:, None, None]
-            padded[:, -p:, :] = means[:, None, None]
-            padded[:, :, :p] = means[:, None, None]
-            padded[:, :, -p:] = means[:, None, None]
-
-            del chunk, val_chunk, means_expanded
+            padded = _fill_and_pad(
+                cube[start:end], validity_bool[start:end],
+                band_means[start:end], p, device,
+            )
             t_prep += time.time() - t0
 
-            # --- FFT → notch → IFFT on device ---
             t0 = time.time()
-            fft_shifted = torch.fft.fftshift(torch.fft.fft2(padded), dim=(-2, -1))
-            filtered = fft_shifted * notch_t
-            corrected = torch.fft.ifft2(
-                torch.fft.ifftshift(filtered, dim=(-2, -1))
-            ).real                                         # (n, pH, pW)
+            corrected, filtered = _notch_batch(padded, notch_t)
             t_fft += time.time() - t0
 
-            # --- crop + validity write-back on device ---
+            # Crop back to the original frame and restore only the valid
+            # pixels; invalid ones keep their original values from the copy.
             t0 = time.time()
-            cropped = corrected[:, p:p + H, p:p + W]      # (n, H, W) view
-
-            # Move result + validity to CPU and write into output
-            cropped_np = cropped.cpu().numpy()
+            cropped_np = corrected[:, p:p + H, p:p + W].cpu().numpy()
             val_np = validity_bool[start:end]
             for i in range(n):
                 output[start + i][val_np[i]] = cropped_np[i][val_np[i]]
             t_write += time.time() - t0
 
-            # Capture diagnostics for the representative band
             if diag_rep is not None and start <= diag_rep < end:
-                local_idx = diag_rep - start
                 diag.log_power_after = np.log(
-                    np.abs(filtered[local_idx].cpu().numpy()) ** 2 + 1e-10
+                    np.abs(filtered[diag_rep - start].cpu().numpy()) ** 2 + 1e-10
                 )
 
-            del padded, fft_shifted, filtered, corrected, cropped_np
+            del padded, filtered, corrected, cropped_np
 
             if start == 0:
                 logger.info("FFT filter: first batch done (%d bands)", n)
