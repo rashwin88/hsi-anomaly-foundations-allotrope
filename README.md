@@ -49,6 +49,9 @@ Also in the repo:
 - **`spectal_match_sample/WALKTHROUGH.md`** — the algorithmic spec for spectral library
   matching, cited from `_spectral_library_match_run.py`.
 - **`CLAUDE.md`** — orientation for AI coding agents.
+- **`.claude/skills/`** — two skills that load automatically for coding agents:
+  `allotrope-orientation` (domain + codebase briefing) and `iterative-nano-chunking`
+  (design first, then ≤20-line chunks executed one at a time with review between each).
 
 ## Layout
 

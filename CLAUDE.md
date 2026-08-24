@@ -24,10 +24,27 @@ band_filter_apply    → filtered_vendable.pkl (+ nearest-valid pixel fill)
          → POST /actions/{id}/export → submission bundle zip
 ```
 
+## Skills
+
+Two project skills in `.claude/skills/` load automatically — you should not need to be told
+to use them:
+
+- **`allotrope-orientation`** — domain and codebase briefing. Load before answering
+  questions about this repo, tracing a feature, or planning a change.
+- **`iterative-nano-chunking`** — the default coding workflow here. Propose a design and stop
+  for agreement; break the work into chunks of ≤20 changed lines; execute **one chunk per
+  message** and stop for feedback; finish by updating docs and LLDs.
+
+The nano-chunking loop is not optional for non-trivial changes, and "these next few are
+small so I'll batch them" is exactly the failure it exists to prevent.
+
 ## Docs
 
 `docs/01-orientation.md` … `docs/09-known-issues.md` — nine files, read in order. They are
 the current, verified documentation; treat them as authoritative.
+
+Low-level designs live in `docs/lld/<subsystem>.md`, created when a change adds a subsystem
+or logic whose rationale isn't obvious from reading it.
 
 Also authoritative:
 - **`final design/`** — the product/UX spec the frontend implements. Frontend source cites
