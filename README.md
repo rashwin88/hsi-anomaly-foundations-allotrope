@@ -46,6 +46,10 @@ files are meant to be read start to finish in about an hour.
 Low-level designs for individual subsystems live in [docs/lld/](docs/lld/) — why a piece is
 built the way it is, and what breaks if you tidy it.
 
+**New to hyperspectral data?** Start with the course in
+[docs/training/anomaly-detection/](docs/training/anomaly-detection/) — fourteen parts taking
+you from "what is a band" to reading the source, with the arithmetic worked out.
+
 Also in the repo:
 
 - **`final design/`** — the product and UX spec the frontend implements. Frontend source
