@@ -1,4 +1,4 @@
-﻿"""
+"""
 Getting results out of the system: the export bundle and the match probe.
 
 Split out of actions.py. Both endpoints turn a finished analysis into something

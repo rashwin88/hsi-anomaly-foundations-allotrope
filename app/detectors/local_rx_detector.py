@@ -1,4 +1,4 @@
-﻿"""
+"""
 Local RX (LRX) anomaly detector for hyperspectral data (lrx-had-v1).
 
 Algorithm

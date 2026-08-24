@@ -1,7 +1,7 @@
 """Worker-side implementation of the `anomaly_scoring` action.
 
 Kept in its own module so the api-side import of `anomaly_scoring.py`
-doesn't pay for torch / rasterio / matplotlib / app.foundation_models —
+doesn't pay for torch / rasterio / matplotlib / app.foundation_models â€”
 this file is only loaded when the worker calls `run`.
 
 Recipe per the action's META:
@@ -10,10 +10,10 @@ Recipe per the action's META:
   2. Optional: load keep_mask from the upstream scene_segmentation Output.
   3. Optional: load GT raster from the bound Scene's annotation.
   4. For each picked model codename:
-       a. Resolve codename → checkpoint + inferencer config.
+       a. Resolve codename â†’ checkpoint + inferencer config.
        b. Apply per-codename overrides (scoring_method, patch/stride/
           batch_size, sam_l1_alpha) on top of capability defaults.
-       c. predict_full_scene → reconstruction.
+       c. predict_full_scene â†’ reconstruction.
        d. Score with the resolved method.
        e. Apply keep_mask if provided.
        f. Write per-model rasters (score + reconstruction) and
@@ -22,7 +22,7 @@ Recipe per the action's META:
   5. Render an RGB scene PNG + thumbnail montage.
   6. Write summary.json (lean) + diagnostics.json (rich).
 
-No thresholding, no detection raster — this is the raw scoring pass.
+No thresholding, no detection raster â€” this is the raw scoring pass.
 """
 
 from __future__ import annotations
@@ -34,6 +34,18 @@ import pickle
 import time
 from pathlib import Path
 from typing import Any
+
+from ._anomaly_scoring_render import (
+    _load_annotation_gt,
+    _make_rgb,
+    _render_recon_png,
+    _render_score_png,
+    _render_thumbnail,
+    _safe_dirname,
+    _save_png_array,
+    _save_raster_2d,
+    _save_raster_3d,
+)
 
 logger = logging.getLogger("allotrope.action_types.anomaly_scoring")
 
@@ -76,8 +88,6 @@ _MODELS_DIR_NAME = "models"
 # Cap the max edge of any rendered PNG. The frontend zooms into these
 # directly via a <canvas>; bigger than 4k blows up memory on the host
 # without buying more usable detail than panzoom can address.
-_PNG_MAX_EDGE = 4096
-_THUMBNAIL_DPI = 110
 
 
 def run(ctx: Any) -> None:
@@ -161,7 +171,7 @@ def run(ctx: Any) -> None:
             with rasterio.open(keep_tif) as src:
                 km = src.read(1).astype(np.uint8)
             keep_mask = (km & spatial_valid).astype(np.uint8)
-            keep_source = "scene_segmentation.keep_mask ∧ spatial_validity"
+            keep_source = "scene_segmentation.keep_mask âˆ§ spatial_validity"
         else:
             logger.warning("scene_segmentation output missing keep_mask.tif")
     elif cfg.get("input_cloud_mask_output_id"):
@@ -172,7 +182,7 @@ def run(ctx: Any) -> None:
             with rasterio.open(keep_tif) as src:
                 km = src.read(1).astype(np.uint8)
             keep_mask = (km & spatial_valid).astype(np.uint8)
-            keep_source = "cloud_mask.keep_mask ∧ spatial_validity"
+            keep_source = "cloud_mask.keep_mask âˆ§ spatial_validity"
         else:
             logger.warning("cloud_mask output missing keep_mask.tif")
 
@@ -188,14 +198,14 @@ def run(ctx: Any) -> None:
     # carry baked per-band normalisation stats that assume the input
     # cube is in the same units as their training data (Kelvin /
     # reflectance respectively). Sensors that ship vendables in a
-    # different unit space — currently HotSat-1 L2 Visual, which is
-    # uncalibrated 14-bit DN — would be many standard deviations out of
+    # different unit space â€” currently HotSat-1 L2 Visual, which is
+    # uncalibrated 14-bit DN â€” would be many standard deviations out of
     # the training distribution if fed directly. We override the
     # normalisation stats with per-scene (mean, std) computed from the
     # valid pixels of THIS scene so the model sees an input that is
     # roughly N(0,1) per band, matching what it learned to reconstruct.
     #
-    # Trade-off: scores become scene-relative — comparable WITHIN this
+    # Trade-off: scores become scene-relative â€” comparable WITHIN this
     # scene but not across scenes. The action's diagnostics carry the
     # ``normalization_mode`` field so the UI can show a banner saying
     # so. Skip this for hyperspectral scenes (their vendables already
@@ -205,11 +215,11 @@ def run(ctx: Any) -> None:
     normalization_mode = "baked"
     units = getattr(vendable, "units", None)
     if isinstance(units, str) and units.startswith("DN_"):
-        # Compute per-band (mean, std) over keep_mask ∧ spatial_valid.
+        # Compute per-band (mean, std) over keep_mask âˆ§ spatial_valid.
         # Falls back to spatial_valid if no keep_mask was attached.
         # We use float64 for the moments to avoid catastrophic cancel-
-        # lation on the squared term — HotSat DN sits around 5000±400,
-        # so var = E[x²] − E[x]² is ~160000 − ~25e6 in raw float32.
+        # lation on the squared term â€” HotSat DN sits around 5000Â±400,
+        # so var = E[xÂ²] âˆ’ E[x]Â² is ~160000 âˆ’ ~25e6 in raw float32.
         cube_f64 = cube_np.astype(np.float64, copy=False)
         mask_2d = keep_mask.astype(bool)
         if not mask_2d.any():
@@ -225,7 +235,7 @@ def run(ctx: Any) -> None:
             m = float(vals.mean())
             s = float(vals.std())
             # Guard against degenerate scenes where every kept pixel
-            # has the same value — a zero std would divide by zero in
+            # has the same value â€” a zero std would divide by zero in
             # the model's normalisation layer.
             if not math.isfinite(s) or s < 1e-6:
                 s = 1.0
@@ -263,7 +273,7 @@ def run(ctx: Any) -> None:
     roc_records: dict[str, dict[str, Any]] = {}
 
     for codename in cfg["model_codenames"]:
-        ctx.on_step(f"model={codename} · resolve")
+        ctx.on_step(f"model={codename} Â· resolve")
         m = by_codename.get(codename.strip().lower())
         if m is None:
             raise ValueError(f"unknown codename at run time: {codename!r}")
@@ -275,15 +285,15 @@ def run(ctx: Any) -> None:
         batch_size = int(ovr.get("batch_size") or m.default_batch_size)
         sam_l1_alpha = float(ovr.get("sam_l1_alpha") or 0.5)
         # Optional erosion kernel override for the SegFormer-MAE
-        # family. None → keep the InferenceConfig default (15) baked
+        # family. None â†’ keep the InferenceConfig default (15) baked
         # into the inferencer; SegFormer reads `self.config.erosion_kernel_size`
         # inside predict_full_scene. Autoencoder family ignores it.
         erosion_ks_override = ovr.get("erosion_kernel_size")
 
         # Optional keep_mask erosion. Applies to BOTH foundation and
-        # classical paths — strips off the boundary-rim score artifact
+        # classical paths â€” strips off the boundary-rim score artifact
         # where cloud/water/segmentation edges otherwise score high.
-        # Default (None) means kernel=1 → no erosion → keep_mask used
+        # Default (None) means kernel=1 â†’ no erosion â†’ keep_mask used
         # as-is, preserving existing behavior. Odd-int validation
         # happened at submit time.
         keep_mask_erosion_ks = int(
@@ -299,8 +309,8 @@ def run(ctx: Any) -> None:
                 keep_mask.astype(bool), structure=structure
             ).astype(np.uint8)
             logger.info(
-                "model=%s · keep_mask eroded by %d (kernel=%d): "
-                "%d → %d pixels kept",
+                "model=%s Â· keep_mask eroded by %d (kernel=%d): "
+                "%d â†’ %d pixels kept",
                 codename, half, keep_mask_erosion_ks,
                 int(keep_mask.sum()), int(eroded_keep_mask.sum()),
             )
@@ -313,7 +323,7 @@ def run(ctx: Any) -> None:
         # which returns a score map directly (no reconstruction).
         # Outputs are unified: both write anomaly_score.{tif,png} and a
         # reconstruction.{tif,png} (classical's "reconstruction" is a
-        # copy of the input cube — visually meaningful, lets the
+        # copy of the input cube â€” visually meaningful, lets the
         # viewer's three-panel layout stay the same).
         is_classical = m.family == "classical"
 
@@ -321,19 +331,19 @@ def run(ctx: Any) -> None:
             from app.models.ad_models.ad_model import ADModel
             from app.utils.anomaly_detection.detector_factory import get_detector
 
-            ctx.on_step(f"model={codename} · instantiate_detector")
+            ctx.on_step(f"model={codename} Â· instantiate_detector")
             t0 = time.time()
             detector_cls = get_detector(ADModel(m.detector_key))
             detector = detector_cls(vendable)
             load_s = time.time() - t0
 
-            ctx.on_step(f"model={codename} · fit")
+            ctx.on_step(f"model={codename} Â· fit")
             t0 = time.time()
             detector.fit()
             fit_s = time.time() - t0
 
             # Restrict the classical detector's background ROI to
-            # keep_mask. RX/MNF-RX/Thermal-GRX have NO trained prior —
+            # keep_mask. RX/MNF-RX/Thermal-GRX have NO trained prior â€”
             # their covariance is estimated fresh from whichever pixels
             # the internal `_spatial_mask` selects. The `fit()` step
             # builds that mask from the vendable's validity cube alone
@@ -344,7 +354,7 @@ def run(ctx: Any) -> None:
             # only kept-ROI pixels for the covariance.
             #
             # Foundation models keep the original "score everywhere,
-            # mask at render" semantics — pre-masking their input would
+            # mask at render" semantics â€” pre-masking their input would
             # push it out-of-distribution at mask boundaries.
             #
             # Without keep_mask attached, keep_mask == spatial_valid
@@ -359,11 +369,11 @@ def run(ctx: Any) -> None:
                     int(detector._spatial_mask.sum()),
                 )
 
-            ctx.on_step(f"model={codename} · detect")
+            ctx.on_step(f"model={codename} Â· detect")
             score = detector.detect(cube_np, validity_np)
             infer_s = time.time() - t0
             # The "reconstruction" panel for a classical model is the
-            # input itself — visually clean, no special case in the
+            # input itself â€” visually clean, no special case in the
             # viewer. For HSI we write the full cube so the panel can
             # composite an RGB; for thermal we write the single band.
             recon_np = cube_np.astype(np.float32, copy=False)
@@ -390,7 +400,7 @@ def run(ctx: Any) -> None:
             # in-memory override would win anyway.
             if pixel_stats_override is not None:
                 # Sanity check: override length must match in_channels
-                # — for the thermal SegFormerMAE this is always 1, but
+                # â€” for the thermal SegFormerMAE this is always 1, but
                 # we validate to catch any future single-band-by-mistake
                 # bugs early.
                 in_ch = getattr(m.model_config, "in_channels", None)
@@ -404,12 +414,12 @@ def run(ctx: Any) -> None:
                 ic_kwargs["pixel_stats_path"] = None
             inference_cfg = InferenceConfig(**ic_kwargs)
 
-            ctx.on_step(f"model={codename} · load_checkpoint")
+            ctx.on_step(f"model={codename} Â· load_checkpoint")
             t0 = time.time()
             inferencer = get_inferencer(inference_cfg)
             load_s = time.time() - t0
 
-            ctx.on_step(f"model={codename} · predict_full_scene")
+            ctx.on_step(f"model={codename} Â· predict_full_scene")
             t0 = time.time()
             with torch.no_grad():
                 reconstruction = inferencer.predict_full_scene(
@@ -418,7 +428,7 @@ def run(ctx: Any) -> None:
             infer_s = time.time() - t0
             recon_np = reconstruction.detach().cpu().numpy().astype(np.float32, copy=False)
 
-            ctx.on_step(f"model={codename} · score={method}")
+            ctx.on_step(f"model={codename} Â· score={method}")
             # Use the eroded keep_mask here so cloud/water/segmentation
             # boundary rings don't bleed through into the score. The
             # raw keep_mask is still used for ROC computation below
@@ -439,16 +449,16 @@ def run(ctx: Any) -> None:
         _save_raster_2d(score, model_dir / "anomaly_score.tif", "float32")
         _save_raster_3d(recon_np, model_dir / "reconstruction.tif", "float32")
 
-        ctx.on_step(f"model={codename} · render")
+        ctx.on_step(f"model={codename} Â· render")
         # Classical (RX-family) scores are squared Mahalanobis
-        # distances — χ²-distributed with a heavy right tail. Render
+        # distances â€” Ï‡Â²-distributed with a heavy right tail. Render
         # with sqrt-stretch so the bulk of pixels lands in the mid-LUT
         # range where inferno actually has perceptual contrast.
         # Foundation reconstruction errors are roughly unimodal so the
         # linear stretch still works there.
         _render_score_png(
             score=score,
-            # Use eroded keep_mask here too — the score raster is only
+            # Use eroded keep_mask here too â€” the score raster is only
             # well-defined inside the detector's spatial_mask (which
             # we narrowed to keep_mask AND eroded_keep_mask for
             # classical) and inside compute_score's eroded keep for
@@ -468,7 +478,7 @@ def run(ctx: Any) -> None:
         # ROC if GT.
         roc: dict[str, Any] | None = None
         if gt_np is not None:
-            ctx.on_step(f"model={codename} · roc")
+            ctx.on_step(f"model={codename} Â· roc")
             # ROC evaluated over the eroded keep_mask: that's where
             # the score is actually defined. Using raw keep_mask would
             # feed NaN pixels from the eroded ring into the threshold
@@ -484,7 +494,7 @@ def run(ctx: Any) -> None:
         # zero pixels in the ring between raw_keep_mask and the
         # detector's actual spatial_mask. Classical detectors emit NaN
         # outside their internal mask; np.percentile over an array
-        # containing NaN returns NaN (→ JSON null), which breaks the
+        # containing NaN returns NaN (â†’ JSON null), which breaks the
         # frontend diagnostics renderer. Belt-and-braces: also strip
         # any non-finite values that snuck in from foundation-side
         # rounding.
@@ -508,7 +518,7 @@ def run(ctx: Any) -> None:
             "method": method,
             # patch/stride/batch are meaningless for classical detectors
             # (whole-cube ops). Serialize as None so the viewer's stats
-            # table can render "—" instead of "0".
+            # table can render "â€”" instead of "0".
             "patch_size": None if is_classical else patch_size,
             "stride": None if is_classical else stride,
             "batch_size": None if is_classical else batch_size,
@@ -518,7 +528,7 @@ def run(ctx: Any) -> None:
                 else (int(erosion_ks_override) if erosion_ks_override is not None else 15)
             ),
             "keep_mask_erosion_kernel_size": keep_mask_erosion_ks,
-            # Normalisation provenance — "baked" means the model used its
+            # Normalisation provenance â€” "baked" means the model used its
             # training-time pixel stats, "per_scene_dn_zscore" means the
             # action handler overrode them with per-scene stats (e.g. for
             # HotSat L2 Visual). "n/a" for classical detectors that
@@ -549,7 +559,7 @@ def run(ctx: Any) -> None:
         #
         # `inferencer` and `reconstruction` are only bound in the
         # foundation branch above (see ~line 290). On the classical
-        # branch they never exist, so `del` would raise NameError —
+        # branch they never exist, so `del` would raise NameError â€”
         # guard with `is_classical`. The `# noqa: F821` tells the
         # linter that the conditional `del` IS intentional even
         # though pyflakes can't prove the names are defined in this
@@ -603,7 +613,7 @@ def run(ctx: Any) -> None:
         # foundation model used its training-time pixel stats.
         # "per_scene_dn_zscore" = action overrode the stats with
         # per-scene (mean, std) computed from this scene's valid
-        # pixels — only set for uncalibrated sensors (HotSat-1 L2
+        # pixels â€” only set for uncalibrated sensors (HotSat-1 L2
         # Visual). The UI shows a banner explaining that scores are
         # scene-relative when this mode is active.
         "normalization_mode": normalization_mode,
@@ -664,7 +674,7 @@ def run(ctx: Any) -> None:
                 "n_positive": n_positive,
                 "n_dots": int(rows.size),
                 "sampled": sampled,
-                # Pairs of (row, col) — frontend scales to display
+                # Pairs of (row, col) â€” frontend scales to display
                 # coords using scene_shape vs the panel's rendered px.
                 "pixels": list(zip(rows.tolist(), cols.tolist())),
             },
@@ -690,311 +700,3 @@ def preview(ctx: Any, output_dir: Any) -> Any:
     return p if p.exists() else None
 
 
-# --- Internals ---------------------------------------------------------
-
-
-def _safe_dirname(codename: str) -> str:
-    return codename.strip().lower().replace(" ", "_")
-
-
-def _save_raster_2d(arr: Any, path: Any, dtype: str) -> None:
-    """Single-band GeoTIFF writer."""
-    import numpy as np
-    import rasterio
-    from rasterio.transform import Affine
-
-    a = np.asarray(arr).astype(dtype, copy=False)
-    if a.ndim != 2:
-        raise ValueError(f"expected (H, W); got {a.shape}")
-    h, w = a.shape
-    profile = {
-        "driver": "GTiff",
-        "height": h,
-        "width": w,
-        "count": 1,
-        "dtype": a.dtype.name,
-        "compress": "lzw",
-        "transform": Affine.identity(),
-    }
-    with rasterio.open(path, "w", **profile) as dst:
-        dst.write(a, 1)
-
-
-def _save_raster_3d(arr: Any, path: Any, dtype: str) -> None:
-    """Multi-band (C, H, W) GeoTIFF writer."""
-    import numpy as np
-    import rasterio
-    from rasterio.transform import Affine
-
-    a = np.asarray(arr).astype(dtype, copy=False)
-    if a.ndim != 3:
-        raise ValueError(f"expected (C, H, W); got {a.shape}")
-    c, h, w = a.shape
-    profile = {
-        "driver": "GTiff",
-        "height": h,
-        "width": w,
-        "count": c,
-        "dtype": a.dtype.name,
-        "compress": "lzw",
-        "transform": Affine.identity(),
-    }
-    with rasterio.open(path, "w", **profile) as dst:
-        dst.write(a)
-
-
-def _save_png_array(rgb01: Any, path: Any) -> None:
-    """Write an (H, W, 3) float [0, 1] array as a PNG with PIL."""
-    import numpy as np
-    from PIL import Image
-
-    arr = (np.clip(rgb01, 0.0, 1.0) * 255.0).astype(np.uint8)
-    h, w = arr.shape[:2]
-    if max(h, w) > _PNG_MAX_EDGE:
-        scale = _PNG_MAX_EDGE / max(h, w)
-        new_h = max(1, int(round(h * scale)))
-        new_w = max(1, int(round(w * scale)))
-        arr = np.asarray(Image.fromarray(arr).resize((new_w, new_h), Image.BILINEAR))
-    Image.fromarray(arr).save(path, format="PNG", optimize=True)
-
-
-def _load_annotation_gt(ctx: Any, annotation_wire_id: str) -> tuple[Any, dict[str, Any]]:
-    """Load a binary GT raster from the Scene's attached annotation."""
-    import re
-    import numpy as np
-    import rasterio
-
-    if not annotation_wire_id.startswith("annotation_"):
-        raise ValueError(f"not a wire-format annotation id: {annotation_wire_id}")
-    annotation_uuid = annotation_wire_id[len("annotation_"):]
-    if not re.fullmatch(r"[0-9a-fA-F-]{36}", annotation_uuid):
-        raise ValueError(f"bad annotation uuid: {annotation_uuid}")
-
-    annotation_dir = (
-        ctx.data_dir
-        / "scenes"
-        / str(ctx.scene_id)
-        / "annotations"
-        / annotation_uuid
-    )
-    if not annotation_dir.exists():
-        raise FileNotFoundError(f"annotation dir not on disk: {annotation_dir}")
-    tifs = sorted(annotation_dir.glob("*.tif"))
-    if not tifs:
-        raise FileNotFoundError(
-            f"no .tif under {annotation_dir} — supported annotation types "
-            "must materialise a raster file."
-        )
-    with rasterio.open(tifs[0]) as src:
-        raw = src.read(1)
-    gt = (raw > 0).astype(np.uint8)
-    return gt, {
-        "annotation_id": annotation_wire_id,
-        "raster_filename": tifs[0].name,
-        "n_positive": int(gt.sum()),
-    }
-
-
-def _render_score_png(
-    *,
-    score: Any,
-    kept: Any,
-    out_path: Path,
-    stretch: str = "linear",
-) -> None:
-    """Render the score raster as an inferno-coloured PNG with invalid
-    pixels transparent. Capped at 99.5th percentile for legibility.
-    Downsample-before-colormap (per the project's viz feedback).
-
-    `stretch`:
-      - "linear": score / p99.5, the original behavior. Works well for
-        foundation-model reconstruction errors which are roughly
-        unimodal and not heavy-tailed.
-      - "sqrt":   sqrt(score) / sqrt(p99.5). Use for RX-family scores.
-        Mahalanobis squared-distance is χ²-distributed (very long
-        right tail; p50 is ~10% of the way to the mean). Linear
-        stretching crushes the bulk of pixels into the first few
-        inferno indices and the image reads as nearly black. sqrt
-        moves the bulk into the mid-LUT range where the colormap has
-        the perceptual spread to show structure.
-    """
-    import numpy as np
-    from matplotlib import cm
-    from PIL import Image
-
-    h, w = score.shape
-    scale = min(1.0, _PNG_MAX_EDGE / max(h, w))
-    if scale < 1.0:
-        new_h = max(1, int(round(h * scale)))
-        new_w = max(1, int(round(w * scale)))
-        score_ds = np.asarray(
-            Image.fromarray(score).resize((new_w, new_h), Image.BILINEAR)
-        )
-        kept_ds = (
-            np.asarray(
-                Image.fromarray(kept.astype(np.uint8)).resize(
-                    (new_w, new_h), Image.NEAREST
-                )
-            )
-            > 0
-        )
-    else:
-        score_ds = score
-        kept_ds = kept
-
-    # Apply the chosen stretch on a copy so the underlying score raster
-    # is untouched (the .tif on disk + the percentile stats stay in
-    # native units).
-    if stretch == "sqrt":
-        stretched = np.sqrt(np.clip(score_ds.astype(np.float32), 0.0, None))
-    else:
-        stretched = score_ds.astype(np.float32)
-
-    # Restrict the percentile to pixels that are BOTH kept AND finite.
-    # `kept_ds` (NEAREST-downsampled keep mask) can mark a pixel as kept
-    # even when `score_ds` (BILINEAR-downsampled score) is NaN at the
-    # same location — np.percentile then returns NaN and the entire PNG
-    # renders as solid black with only the alpha channel carrying signal.
-    sample_mask = kept_ds & np.isfinite(stretched)
-    if sample_mask.any():
-        vmax = float(np.percentile(stretched[sample_mask], 99.5))
-        vmax = max(vmax, 1e-6)
-    else:
-        vmax = 1.0
-    # NaN in `stretched` would propagate through the division. Replace
-    # NaN with 0 before normalising; those pixels are masked out below
-    # anyway via the alpha channel.
-    safe = np.where(np.isfinite(stretched), stretched, 0.0)
-    norm = np.clip(safe / vmax, 0.0, 1.0).astype(np.float32)
-    norm[~kept_ds] = 0.0
-
-    lut = (cm.get_cmap("inferno", 256)(np.linspace(0, 1, 256))[:, :3] * 255).astype(np.uint8)
-    idx = (norm * 255).astype(np.uint8)
-    rgb = lut[idx]                                   # (H, W, 3)
-    alpha = (kept_ds.astype(np.uint8) * 255)[..., None]
-    rgba = np.concatenate([rgb, alpha], axis=-1)
-    Image.fromarray(rgba, mode="RGBA").save(out_path, format="PNG", optimize=True)
-
-
-def _render_recon_png(
-    *,
-    recon: Any,
-    wavelengths: Any,
-    spatial_valid: Any,
-    out_path: Path,
-) -> None:
-    """Render the reconstruction cube the same way as the input RGB:
-    pick R/G/B nearest-band slices for HSI, single-channel grey for
-    thermal, validity-masked, 2/98 percentile stretch."""
-    rgb = _make_rgb(recon, wavelengths, spatial_valid)
-    _save_png_array(rgb, out_path)
-
-
-def _render_thumbnail(
-    *,
-    output_path: Path,
-    rgb: Any,
-    keep_mask: Any,
-    models_root: Path,
-    per_model_records: list[dict[str, Any]],
-) -> None:
-    """Small static RGB + per-model heatmap montage. Used for the
-    Action card thumbnail; the live viewer is built from the per-model
-    PNGs."""
-    import numpy as np
-    import matplotlib
-
-    matplotlib.use("Agg")
-    import matplotlib.pyplot as plt
-    import rasterio
-
-    n_models = len(per_model_records)
-    n_cols = n_models + 1
-    fig, axes = plt.subplots(1, n_cols, figsize=(3.6 * n_cols, 3.8))
-    if n_cols == 1:
-        axes = [axes]
-    else:
-        axes = list(axes)
-
-    axes[0].imshow(rgb)
-    axes[0].set_title("RGB scene", fontsize=10, pad=6)
-    axes[0].set_xticks([])
-    axes[0].set_yticks([])
-
-    kept = keep_mask.astype(bool)
-    for i, rec in enumerate(per_model_records):
-        ax = axes[i + 1]
-        codename = rec["codename"]
-        score_path = models_root / _safe_dirname(codename) / "anomaly_score.tif"
-        with rasterio.open(score_path) as src:
-            score = src.read(1).astype(np.float32, copy=False)
-        # Strip NaNs before the percentile cap — classical detectors
-        # write NaN outside their internal spatial_mask, which can
-        # sit inside the raw keep_mask when keep_mask_erosion is on.
-        # np.percentile over NaN returns NaN and the whole panel
-        # renders black.
-        sample = score[kept]
-        sample = sample[np.isfinite(sample)]
-        if sample.size > 0:
-            vmax = float(np.percentile(sample, 99.5))
-            vmax = max(vmax, 1e-6)
-        else:
-            vmax = 1.0
-        # Mask both raw kept and NaN positions so the colormap
-        # ignores them (renders as the masked color, not bright).
-        masked = np.ma.masked_where(~kept | ~np.isfinite(score), score)
-        ax.imshow(masked, cmap="inferno", vmin=0.0, vmax=vmax)
-        title = f"{codename}\n{rec['method']}"
-        if rec.get("auc") is not None:
-            title += f" · AUC={rec['auc']:.3f}"
-        ax.set_title(title, fontsize=9, pad=6)
-        ax.set_xticks([])
-        ax.set_yticks([])
-
-    fig.tight_layout()
-    fig.savefig(output_path, dpi=_THUMBNAIL_DPI)
-    plt.close(fig)
-
-
-def _make_rgb(cube: Any, wl: Any, validity: Any) -> Any:
-    """Validity-masked RGB composite. R/G/B nearest bands (660/550/450 nm)
-    for HSI; for thermal (single band) we replicate the channel into all
-    three after a 2/98 stretch. Returns (H, W, 3) float32 0..1."""
-    import numpy as np
-
-    valid = validity.astype(bool)
-    if cube.shape[0] == 1:
-        v = cube[0]
-        vals = v[valid] if valid.any() else v.ravel()
-        if vals.size:
-            p2, p98 = np.percentile(vals, [2, 98])
-            if p98 - p2 > 1e-6:
-                stretched = np.clip((v - p2) / (p98 - p2), 0.0, 1.0)
-            else:
-                stretched = np.zeros_like(v)
-        else:
-            stretched = np.zeros_like(v)
-        rgb = np.stack([stretched, stretched, stretched], axis=-1).astype(np.float32)
-        rgb[~valid] = 0.0
-        return rgb
-
-    def nearest(target: float) -> int:
-        return int(np.argmin(np.abs(wl - target)))
-
-    r_idx = nearest(660)
-    g_idx = nearest(550)
-    b_idx = nearest(450)
-    rgb = np.stack(
-        [cube[r_idx], cube[g_idx], cube[b_idx]], axis=-1
-    ).astype(np.float32)
-    for ch in range(3):
-        v = rgb[:, :, ch]
-        vals = v[valid] if valid.any() else v.ravel()
-        if vals.size == 0:
-            continue
-        p2, p98 = np.percentile(vals, [2, 98])
-        if p98 - p2 < 1e-6:
-            continue
-        rgb[:, :, ch] = np.clip((v - p2) / (p98 - p2), 0.0, 1.0)
-    rgb[~valid] = 0.0
-    return rgb

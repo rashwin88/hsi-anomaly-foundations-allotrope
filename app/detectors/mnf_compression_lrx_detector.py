@@ -1,4 +1,4 @@
-﻿"""
+"""
 MNF Compression + Local RX anomaly detector.
 
 Applies Minimum Noise Fraction (MNF) dimensionality reduction before

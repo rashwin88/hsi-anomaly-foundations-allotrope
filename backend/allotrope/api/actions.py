@@ -1,4 +1,4 @@
-﻿"""Action endpoints (Step 12c).
+"""Action endpoints (Step 12c).
 
 Routes:
     POST   /projects/{project_id}/actions  â€” submit an Action + enqueue its `action_run` Job

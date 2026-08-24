@@ -1,4 +1,4 @@
-﻿"""
+"""
 Serving Action artifacts to the browser.
 
 Split out of actions.py. Three endpoints that all answer the same question -

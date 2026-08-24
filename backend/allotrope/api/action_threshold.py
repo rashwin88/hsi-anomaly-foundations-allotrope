@@ -1,4 +1,4 @@
-﻿"""
+"""
 The interactive threshold flow for anomaly_detection_prep.
 
 Split out of actions.py, which had grown past 1,300 lines. These three
