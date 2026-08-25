@@ -21,6 +21,7 @@ which is what later lets an export state where on Earth an anomaly was found.
 
 from typing import Dict, List, Any, Tuple
 import logging
+import os
 
 from pystac import Item, Asset, MediaType
 
@@ -45,7 +46,10 @@ class StacCreator:
         """
         self.file_path: str = file_path
         # First parse and create the filename
-        self.file_name: str = file_path.split("/")[-1]
+        # basename, not split("/"): on Windows an EnMAP *folder* path is
+        # backslash-separated, so splitting on "/" returned the whole path and
+        # the EnMAP-folder check below rejected it. Identical on Linux.
+        self.file_name: str = os.path.basename(file_path.rstrip("/\\"))
         logger.info("File Name: %s", self.file_name)
         self.file_id = self.file_name.split(".")[0]
 

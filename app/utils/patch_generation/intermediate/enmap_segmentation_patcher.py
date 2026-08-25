@@ -23,8 +23,13 @@ import random
 from collections import defaultdict
 from typing import Literal, Optional
 
+import numpy as np
+
 from app.abstract_classes.intermediate_sharder import IntermediateSharder
-from app.models.dataset.vendables import BandFilterConfig
+from app.models.dataset.vendables import (
+    DEFAULT_COMMON_WAVELENGTH_GRID,
+    BandFilterConfig,
+)
 from app.utils.files.enmap_scene_cover import read_scene_cover
 from app.utils.patch_generation.scene_storage import SceneStorage
 
@@ -82,12 +87,24 @@ class EnmapSegmentationSharder(IntermediateSharder):
         self.height = height
         self.stride = stride
         self.patch_validity_threshold = patch_validity_threshold
-        # Forced, not defaulted. With quality masks applied the builder zeroes
-        # validity at every cloud/shadow/haze pixel, so the labels are consumed
-        # before patching and cannot be recovered - and the patch filter then
-        # discards any patch more than half cloud, which is the training data.
+        # Both forced, not defaulted, because getting either wrong produces
+        # shards that look fine and are unusable.
+        #
+        # quality_masks_to_apply=[]: with masks applied the builder zeroes
+        #   validity at every cloud/shadow/haze pixel, so the labels are
+        #   consumed before patching and cannot be recovered - and the patch
+        #   filter then discards any patch more than half cloud, which is the
+        #   training data.
+        # common_wavelength_grid: the field defaults to None, which disables
+        #   resampling and yields EnMAP's ~188 native bands. The segmentation
+        #   head reuses Indradhanu's encoder, which takes exactly 165 channels
+        #   on the common grid. A smoke test on 2026-08-25 produced 188-band
+        #   shards before this was set.
         self.band_filter_config = (band_filter_config or BandFilterConfig()).model_copy(
-            update={"quality_masks_to_apply": []}
+            update={
+                "quality_masks_to_apply": [],
+                "common_wavelength_grid": DEFAULT_COMMON_WAVELENGTH_GRID,
+            }
         )
         self.max_scenes = max_scenes
 
@@ -205,6 +222,10 @@ class EnmapSegmentationSharder(IntermediateSharder):
             scene_id=builder.stac_item.id,
             sensor="enmap",
             include_labels=True,
+            # Halves the dominant term (10.8 -> 5.4 MB/patch at 165x128x128).
+            # Reflectance is ~0-1, where float16 errs by ~1e-5 — far below
+            # sensor noise. The trainer must cast to float32.
+            pixel_dtype=np.float16,
         )
 
     def shard_name(self, scene_id: str) -> str:

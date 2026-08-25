@@ -131,6 +131,23 @@ cannot import the reconstruction sharder at all.
 Indradhanu's data-production path inside the blast radius of every change here. A separate
 class costs duplication and buys the guarantee that the reconstruction lane is untouched.
 
+## Verified end to end, 2026-08-25
+
+One real EnMAP scene through the full path on the Windows dev box: 5 patches, 165 bands
+at 460-2450 nm matching `DEFAULT_COMMON_WAVELENGTH_GRID`, all six `label_*` keys present,
+`label_classes` showing 63.1% land / 0.1% water / 36.7% off-swath for an edge patch.
+Source scene folders intact afterwards.
+
+It found two real bugs that no amount of reading would have:
+
+- **`stac_items.py` split paths on `"/"` only**, so on Windows an EnMAP *folder* was
+  rejected as an unsupported file type. Fixed to `os.path.basename`; unchanged on Linux.
+- **The common wavelength grid was never set.** `BandFilterConfig.common_wavelength_grid`
+  defaults to `None`, which disables resampling — the reconstruction script passes it
+  explicitly and this sharder did not. Shards came out at **188 native bands instead of
+  165**, and nothing would have complained until the first forward pass hit
+  `Conv2d(165, 32)`. Now forced alongside `quality_masks_to_apply`.
+
 ## Known cost
 
 Under `S3SceneStorage`, stratification needs each scene's METADATA.XML, and `fetch_scene`

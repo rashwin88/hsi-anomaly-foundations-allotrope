@@ -86,10 +86,12 @@ is costed in `docs/tech-debt/s3-coupling-in-sharding.md`.
 - **`app/utils/files/enmap_scene_cover.py` has no test.** It parses a real METADATA.XML and
   those are gitignored payloads. A four-tag synthetic document is enough to exercise it —
   proven incidentally during development — so this is worth closing.
-- **Nothing has run against real EnMAP scenes yet.** Every chunk was verified against
-  synthetic fixtures plus live scene *discovery* and *metadata* on a mounted Drive. The
-  vendable-building step has never executed, because `rasterio` will not load on the
-  Windows dev machine. First real proof is a Colab run.
+- **Storage is large.** At stride 64 a 165-band float16 patch is ~8.2 MB (5.4 pixels +
+  2.7 per-band validity + 0.1 labels), so 212 scenes come to **~562 GB**. Per-band validity
+  is retained deliberately even though the current trainers read only band 0, to keep
+  per-band masking open. Dropping it to a 2D mask saves a further ~33%.
+- **A float16 shard must be cast to float32 by its trainer.** The models are fp32.
+  Segmentation shards store float16; the reconstruction lane still stores float32.
 
 ## Config knobs that do nothing
 

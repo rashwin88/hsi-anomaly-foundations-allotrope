@@ -148,6 +148,11 @@ Six extra keys, uint8 `(1,H,W)`, EnMAP only:
 | `label_cirrus.npy` | **0-3** by thickness, not binary |
 | `label_classes.npy` | 0 = no-data (error), 1 = land, 2 = water, 3 = no-data (off-swath) |
 
+Pixels in this lane are **float16**, halving the dominant term to ~5.4 MB per patch;
+reflectance sits in ~0-1 where float16 errs by ~1e-5, well below sensor noise. **A trainer
+reading these must cast to float32** — the models are fp32. The reconstruction lane is
+unchanged at float32.
+
 Values are recorded exactly as the provider wrote them — no thresholding, no remapping.
 Interpretation is the trainer's job, so a change of mind costs no re-shard. Note that in
 `label_classes.npy` **both 0 and 3 are no-data**; off-swath padding alone is ~25% of every

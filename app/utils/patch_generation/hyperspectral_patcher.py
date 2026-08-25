@@ -46,6 +46,7 @@ def patch_hyperspectral_vendable(
     scene_id: str,
     sensor: Literal["prisma", "enmap"],
     include_labels: bool = False,
+    pixel_dtype: type = np.float32,
 ) -> Generator[Dict, None, None]:
     """
     Yields patches from a hyperspectral vendable dataset.
@@ -64,6 +65,12 @@ def patch_hyperspectral_vendable(
 
     Only EnMAP carries these layers; PRISMA has no provider masks at all,
     so `include_labels=True` on a PRISMA vendable emits nothing extra.
+
+    `pixel_dtype` defaults to float32 — the reconstruction lane's format, and
+    what Indradhanu trained on. Segmentation sharding passes float16, halving
+    the dominant term: reflectance sits in ~0-1, where float16 resolves to
+    about 5e-4 relative, far below sensor noise. **A trainer reading float16
+    shards must cast to float32 before the model**, which is fp32.
     """
     wavelengths = np.array(vendable.band_cw_order, dtype=np.float64)
 
@@ -106,7 +113,7 @@ def patch_hyperspectral_vendable(
                 "band_count": band_count,
             },
             "pixels.npy": cube[:, row_coords:r_end, col_coords:c_end].astype(
-                np.float32
+                pixel_dtype
             ),
             "validity_cube.npy": validity[
                 :, row_coords:r_end, col_coords:c_end

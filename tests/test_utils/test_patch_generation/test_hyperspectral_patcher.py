@@ -40,7 +40,7 @@ class _StubVendable:
             self.quality_classes_mask = np.full((H, W), 2, np.uint8)
 
 
-def _patches(vendable, include_labels):
+def _patches(vendable, include_labels, **kwargs):
     plan = PatchPlanGenerator().generate_patching_plan(
         PatchRequest(input_cube=(BANDS, H, W), width=PATCH, height=PATCH, stride=PATCH)
     )
@@ -51,8 +51,26 @@ def _patches(vendable, include_labels):
             scene_id="SCENE",
             sensor="enmap",
             include_labels=include_labels,
+            **kwargs,
         )
     )
+
+
+def test_pixels_default_to_float32():
+    """The reconstruction lane's format. Indradhanu trained on float32 shards;
+    changing this default would silently alter them."""
+    patch = _patches(_StubVendable(with_labels=False), include_labels=False)[0]
+    assert patch["pixels.npy"].dtype == np.float32
+
+
+def test_pixel_dtype_is_opt_in():
+    """Segmentation sharding halves storage with float16; a trainer reading
+    these must cast back to float32 before the model."""
+    patch = _patches(
+        _StubVendable(with_labels=False), include_labels=False, pixel_dtype=np.float16
+    )[0]
+    assert patch["pixels.npy"].dtype == np.float16
+    assert patch["validity_cube.npy"].dtype == np.int8, "validity is unaffected"
 
 
 def test_labels_absent_by_default():
