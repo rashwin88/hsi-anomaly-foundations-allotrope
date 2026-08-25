@@ -134,6 +134,39 @@ Stride is conventionally `size // 2`. Sample contents:
 Run them with `scripts/generate_hyperspectral_patches.py` and
 `scripts/generate_landsat_patches.py` (both support `--skip-intermediate` / `--skip-final`).
 
+### Segmentation shards — a third, separate lane
+
+`scripts/generate_segmentation_patches.py` writes EnMAP patches carrying the **provider
+quality layers as training labels**, under its own `enmap_seg` sensor prefix. Indradhanu's
+`enmap` and `hyperspectral` shards are untouched by it.
+
+Six extra keys, uint8 `(1,H,W)`, EnMAP only:
+
+| key | values |
+|---|---|
+| `label_cloud.npy` · `label_haze.npy` · `label_cloud_shadow.npy` · `label_snow.npy` | 0/1 |
+| `label_cirrus.npy` | **0-3** by thickness, not binary |
+| `label_classes.npy` | 0 = no-data (error), 1 = land, 2 = water, 3 = no-data (off-swath) |
+
+Values are recorded exactly as the provider wrote them — no thresholding, no remapping.
+Interpretation is the trainer's job, so a change of mind costs no re-shard. Note that in
+`label_classes.npy` **both 0 and 3 are no-data**; off-swath padding alone is ~25% of every
+raster, outnumbering cloud pixels roughly 35:1, so treating it as a class would swamp
+training.
+
+Three deliberate differences from the reconstruction lane:
+
+- **Quality masks are not applied** during vending. Normally cloud/shadow/haze pixels have
+  their validity zeroed, which consumes the labels before patching and then makes the
+  validity filter discard any patch more than half cloud — precisely the training data.
+- **The train/test split is stratified on scene cloud cover**, not random. Cloud appears in
+  only 37 of 212 scenes screened on 2026-08-25, so a random split can leave a test set with
+  no cloud in it.
+- **One shard per scene, resumable.** Sharding is intended to run on Colab against mounted
+  Drive; a killed session costs the scene in flight, not the run. Scene folders are read
+  through a `SceneStorage` backend rather than boto3 — see
+  `docs/lld/segmentation-sharding.md`.
+
 This path is **only for training data**. Live analysis in the product runs on whole scenes
 through Actions.
 

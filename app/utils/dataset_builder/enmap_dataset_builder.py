@@ -199,6 +199,11 @@ class EnmapDatasetBuilder(DatasetBuilder):
         snow_mask = self.file_helper.extract_quality_mask(
             EnmapFileComponents.QUALITY_SNOW
         )
+        # Not a binary mask like the five above — 0/3 are both no-data,
+        # 1 = land, 2 = water. See VendableEnmapHyperspectralDataset.
+        quality_classes_mask = self.file_helper.extract_quality_mask(
+            EnmapFileComponents.QUALITY_CLASSES
+        )
 
         # Compute per-band valid pixel percentage from the validity cube (C, H, W).
         pixels_per_band = overall_validity.shape[1] * overall_validity.shape[2]
@@ -350,6 +355,7 @@ class EnmapDatasetBuilder(DatasetBuilder):
             haze_mask=haze_mask,
             cloud_shadow_mask=cloud_shadow_mask,
             snow_mask=snow_mask,
+            quality_classes_mask=quality_classes_mask,
             vnir_channel_indices=vnir_channel_indices,
             swir_channel_indices=swir_channel_indices,
         )

@@ -22,17 +22,48 @@ from app.models.dataset.vendables import (
 from app.models.patches.patching_response import PatchingPlan
 
 
+# Provider quality layers -> shard key, emitted only when include_labels=True.
+# EnMAP-only: any vendable lacking the attribute (PRISMA) simply skips it, so
+# no caller has to know which sensor carries which layers.
+_LABEL_LAYERS: tuple[tuple[str, str], ...] = (
+    ("cloud_mask", "label_cloud.npy"),
+    ("cirrus_mask", "label_cirrus.npy"),
+    ("haze_mask", "label_haze.npy"),
+    ("cloud_shadow_mask", "label_cloud_shadow.npy"),
+    ("snow_mask", "label_snow.npy"),
+    # Categorical, NOT binary like the five above. Per the EnMAP product
+    # spec: 0 = no-data (error), 1 = land, 2 = water, 3 = no-data (outside
+    # the imaged swath, ~25% of every raster). Treating 0 or 3 as a class
+    # would swamp training - the swath padding alone outnumbers cloud
+    # pixels roughly 35:1. Consumers must map {0, 3} -> excluded.
+    ("quality_classes_mask", "label_classes.npy"),
+)
+
+
 def patch_hyperspectral_vendable(
     vendable: Union[VendableHyperspectralDataset, VendableEnmapHyperspectralDataset],
     patching_plan: PatchingPlan,
     scene_id: str,
     sensor: Literal["prisma", "enmap"],
+    include_labels: bool = False,
 ) -> Generator[Dict, None, None]:
     """
     Yields patches from a hyperspectral vendable dataset.
 
     Each patch contains the reflectance cube, validity cube, wavelengths,
     and metadata.
+
+    When `include_labels` is set, EnMAP's provider quality layers are
+    emitted alongside as `label_*.npy` keys — the training targets for
+    the segmentation model. Off by default, so the reconstruction
+    sharding path (Indradhanu's training data) is unaffected.
+
+    The `label_` prefix is deliberate: the thermal shards already carry
+    `predicted_cloud_mask.npy`, which is a *model output*. These are
+    provider ground truth. Do not conflate them.
+
+    Only EnMAP carries these layers; PRISMA has no provider masks at all,
+    so `include_labels=True` on a PRISMA vendable emits nothing extra.
     """
     wavelengths = np.array(vendable.band_cw_order, dtype=np.float64)
 
@@ -82,5 +113,15 @@ def patch_hyperspectral_vendable(
             ].astype(np.int8),
             "wavelengths.npy": wavelengths,
         }
+
+        if include_labels:
+            # Stored (H, W) on the vendable; every other shard array is
+            # channel-first, so add the leading axis here.
+            for attr, key in _LABEL_LAYERS:
+                mask = getattr(vendable, attr, None)
+                if mask is not None:
+                    output_object[key] = mask[
+                        None, row_coords:r_end, col_coords:c_end
+                    ].astype(np.uint8)
 
         yield output_object

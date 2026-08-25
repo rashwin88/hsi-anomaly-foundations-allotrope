@@ -290,6 +290,20 @@ class VendableEnmapHyperspectralDataset(BaseModel):
         default=None, description="Snow mask from QL_QUALITY_SNOW"
     )
 
+    quality_classes_mask: Optional[SkipValidation[np.ndarray]] = Field(
+        default=None,
+        description=(
+            "Land/water classification from QL_QUALITY_CLASSES. Unlike the "
+            "masks above this is not binary — per the EnMAP product "
+            "specification (EN-PCV-ICD-2009-2): 0 = background inside the "
+            "scene (missing values or errors), 1 = land, 2 = water, "
+            "3 = background outside the scene (map/sensor geometry "
+            "resampling artefact, consistently ~25% of every raster). "
+            "Only 1 and 2 are real surface classes; 0 and 3 are both "
+            "'no data' and must be excluded from any training loss."
+        ),
+    )
+
     vnir_channel_indices: List[int] = Field(
         ..., description="1-based channel numbers belonging to the VNIR detector"
     )
