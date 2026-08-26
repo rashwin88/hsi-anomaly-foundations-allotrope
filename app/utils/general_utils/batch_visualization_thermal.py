@@ -14,9 +14,10 @@ import numpy as np
 
 # Import the shard pipe expression builder for pulling in shards
 from app.utils.general_utils.shard_pipe_expression_builder import shard_pipe_expression_builder
+from app.utils.general_utils import s3_config
 from app.utils.image_transformation.image_cube_operations import ImageCubeOperations, CubeRepresentation
 
-S3_BUCKET : str = "allotrope-raw-data-india"
+S3_BUCKET : str = s3_config.BUCKET
 
 def visualize_thermal_patches(
         patch_location_key: str,

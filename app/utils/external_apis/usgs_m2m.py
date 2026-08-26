@@ -28,7 +28,7 @@ import time
 
 from dotenv import load_dotenv
 import requests
-import boto3
+from app.utils.general_utils import s3_config
 from tqdm import tqdm
 
 import app.utils.external_apis.usgs_m2m_filtration_templates as templates
@@ -38,7 +38,7 @@ load_dotenv()
 
 
 M2M_URL = "https://m2m.cr.usgs.gov/api/api/json/stable/"
-S3_LOCATION = "allotrope-raw-data-india"
+S3_LOCATION = s3_config.BUCKET
 
 # Module-scoped logger; callers can configure handlers/formatters as needed.
 logger = logging.getLogger("M2MAPI")
@@ -231,7 +231,7 @@ class M2MSampler:
         self.polygon = self.get_india_bb()
 
         # Load up the S3 client used for uploading downloads.
-        self.s3_client = boto3.client("s3", region_name="ap-south-1")
+        self.s3_client = s3_config.client()
         logger.info(
             "Initialized sampler for %s, %s -> %s",
             self.dataset_name,

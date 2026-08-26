@@ -11,7 +11,7 @@ Three deliberate departures from the reconstruction sharder:
 1. **Subclasses the ABC, not `EnmapIntermediateSharder`.** That class builds
    a boto3 client and performs a network listing inside `__init__`, so its
    constructor cannot run on Colab at all. See
-   `docs/tech-debt/s3-coupling-in-sharding.md`.
+   `docs/lld/segmentation-sharding.md`.
 2. **No I/O in `__init__`.** Scene discovery is lazy, so constructing this
    object is free and testable.
 3. **Storage is injected.** Scenes may come from Drive or from S3; this class
@@ -125,10 +125,10 @@ class EnmapSegmentationSharder(IntermediateSharder):
     def scene_ids(self) -> list[str]:
         """Scene ids belonging to this split, computed once on first access.
 
-        Costly under `S3SceneStorage`: reading a scene's cover percentages
-        needs its METADATA.XML, and `fetch_scene` downloads the whole scene.
-        Cheap under `LocalSceneStorage` (~3 ms/scene), which is the intended
-        path. See docs/tech-debt/s3-coupling-in-sharding.md.
+        Uses `storage.fetch_metadata`, which pulls only METADATA.XML rather
+        than the whole ~300 MB scene — splitting 212 scenes over S3 moves
+        ~14 MB instead of ~64 GB. A no-op under `LocalSceneStorage`
+        (~3 ms/scene), which is the intended path.
         """
         if self._scene_ids is None:
             self._scene_ids = self._split_scenes()
@@ -136,14 +136,16 @@ class EnmapSegmentationSharder(IntermediateSharder):
 
     def _split_scenes(self) -> list[str]:
         """Split each stratum independently, so scarce classes reach both sides."""
-        candidates = self.s3_searcher()
+        candidates = self.list_scenes()
         if self.max_scenes is not None:
             candidates = candidates[: self.max_scenes]
 
         strata: dict[str, list[str]] = defaultdict(list)
         for scene_id in candidates:
             try:
-                cover = read_scene_cover(self.storage.fetch_scene(scene_id, self.work_dir))
+                cover = read_scene_cover(
+                    self.storage.fetch_metadata(scene_id, self.work_dir)
+                )
             except FileNotFoundError:
                 # No METADATA.XML means the builder cannot read it either.
                 print(f"[enmap_seg] skipping {scene_id}: no METADATA.XML")
@@ -160,7 +162,7 @@ class EnmapSegmentationSharder(IntermediateSharder):
             chosen.extend(members[:cut] if self.split == "train" else members[cut:])
         return sorted(chosen)
 
-    def s3_searcher(self) -> list[str]:
+    def list_scenes(self) -> list[str]:
         """Every available scene id.
 
         Named for the ABC's contract, which predates the storage seam. This
@@ -169,7 +171,7 @@ class EnmapSegmentationSharder(IntermediateSharder):
         """
         return self.storage.list_scenes()
 
-    def s3_downloader(self, key: str) -> dict:
+    def prepare_scene(self, key: str) -> dict:
         """Make one scene readable locally and return its manifest.
 
         `key` is a bare scene id. The manifest shape - `{"scene_folder": ...}`
@@ -256,7 +258,7 @@ class EnmapSegmentationSharder(IntermediateSharder):
                 continue
 
             local_tar = os.path.join(self.work_dir, name)
-            manifest = self.s3_downloader(scene_id)
+            manifest = self.prepare_scene(scene_id)
             try:
                 kept = 0
                 # Hand TarWriter a stream, not a path: it routes paths through

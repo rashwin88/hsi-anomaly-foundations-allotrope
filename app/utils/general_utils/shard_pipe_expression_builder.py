@@ -4,11 +4,11 @@ Builds a shard pipe expression function for web datasets
 
 import logging
 
-import boto3
-
+from app.utils.general_utils import s3_config
 from app.utils.general_utils.paginated_s3_listing import get_all_objects_paginated
 
-DEFAULT_BUCKET_NAME: str = "allotrope-raw-data-india"
+# Kept as a name because callers import it; the value now comes from one place.
+DEFAULT_BUCKET_NAME: str = s3_config.BUCKET
 logger = logging.getLogger("ShardPipeExpressions")
 logger.setLevel(logging.DEBUG)
 
@@ -16,7 +16,7 @@ logger.setLevel(logging.DEBUG)
 def shard_pipe_expression_builder(
     data_key: str,
     bucket_name: str = DEFAULT_BUCKET_NAME,
-    region_name: str = "ap-south-1",
+    region_name: str = s3_config.REGION,
 ) -> str:
     """
     Given an S3 location constructs a shard pipe expression for the same

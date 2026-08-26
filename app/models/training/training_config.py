@@ -9,6 +9,7 @@ and checkpointing.
 from enum import Enum
 from typing import Annotated, Literal, Union, Tuple
 
+from app.utils.general_utils import s3_config
 from pydantic import BaseModel, Field, model_validator
 
 
@@ -165,8 +166,8 @@ class DataConfig(BaseModel):
         default="final",
         description="Shard stage: 'intermediate' or 'final'",
     )
-    bucket_name: str = "allotrope-raw-data-india"
-    region_name: str = "ap-south-1"
+    bucket_name: str = s3_config.BUCKET
+    region_name: str = s3_config.REGION
     batch_size: int = 32
     num_workers: int = 2
     shardshuffle: int = 10

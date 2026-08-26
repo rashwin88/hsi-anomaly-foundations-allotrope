@@ -34,7 +34,7 @@ import os
 import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-import boto3
+from app.utils.general_utils import s3_config
 
 logging.basicConfig(
     level=logging.INFO,
@@ -43,8 +43,8 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-S3_BUCKET = "allotrope-raw-data-india"
-S3_REGION = "ap-south-1"
+S3_BUCKET = s3_config.BUCKET
+S3_REGION = s3_config.REGION
 
 SHARD_KEY_TEMPLATE = "patches/{provider}/{split}/{stage}/w{size}_h{size}_s{stride}/"
 
@@ -155,7 +155,7 @@ def main():
     )
 
     args = parser.parse_args()
-    client = boto3.client("s3", region_name=S3_REGION)
+    client = s3_config.client()
 
     logger.info(f"Syncing to: {args.local_dir}")
     logger.info(f"Provider: {args.provider}, stage: {args.stage}, size: {args.size}")

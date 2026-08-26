@@ -1,12 +1,20 @@
 """
 The contract for stage-1 patch generation, shared across sensors.
 
-Implemented by LandsatIntermediateSharder, PrismaIntermediateSharder and
-EnmapIntermediateSharder. Each follows the same five steps - discover scenes in
-S3, download one, build its vendable, cut patches, write and upload a shard -
-differing only in which builder and cutter they use.
+Implemented by LandsatIntermediateSharder, PrismaIntermediateSharder,
+EnmapIntermediateSharder and EnmapSegmentationSharder. Each follows the same
+five steps - list the available scenes, make one readable locally, build its
+vendable, cut patches, write and publish a shard - differing only in which
+builder and cutter they use.
 
-The value here is build_prefix(), which is the single definition of the S3
+Where scenes come from is not this contract's business. Implementations take a
+`SceneStorage` (app/utils/patch_generation/scene_storage.py), so the same
+sharder runs against S3 or a mounted disk. This docstring used to say "discover
+scenes in S3", and the methods below were called `s3_searcher` and
+`s3_downloader` - an abstraction naming the thing it was supposed to abstract
+over, which is why sharding could not run anywhere but AWS.
+
+The value here is build_prefix(), which is the single definition of the shard
 layout:
 
     patches/{sensor}/{split}/{stage}/w{width}_h{height}_s{stride}/
@@ -33,7 +41,7 @@ class IntermediateSharder(ABC):
     Defines an intermediate sharder.
 
     Subclasses must define the sensor name and accept a split + patch dimensions.
-    The S3 destination prefix is computed automatically as:
+    The destination prefix is computed automatically as:
         patches/{sensor}/{split}/intermediate/w{width}_h{height}_s{stride}/
     """
 
@@ -52,7 +60,7 @@ class IntermediateSharder(ABC):
         stride: int,
     ) -> str:
         """
-        Builds a structured S3 prefix from the given parameters.
+        Builds the structured shard prefix from the given parameters.
         Example: patches/landsat/train/intermediate/w128_h128_s64/
         """
         return f"patches/{sensor}/{split}/{stage}/w{width}_h{height}_s{stride}/"
@@ -74,16 +82,19 @@ class IntermediateSharder(ABC):
         pass
 
     @abstractmethod
-    def s3_searcher(self) -> List:
+    def list_scenes(self) -> List:
         """
-        Searches S3 and returns a list of all the possible files or their prefixes
+        Every scene id available from the storage backend.
         """
         pass
 
     @abstractmethod
-    def s3_downloader(self, key: str) -> Dict | None:
+    def prepare_scene(self, key: str) -> Dict | None:
         """
-        Downloads the target file from S3
+        Make one scene readable locally and return a manifest describing where
+        its parts landed. The manifest's shape is the implementation's choice:
+        EnMAP returns {"scene_folder": ...}, PRISMA {"he5": ...}, Landsat names
+        the ST_B10 and QA_PIXEL files the builder needs.
         """
         pass
 

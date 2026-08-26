@@ -143,6 +143,10 @@ class EnmapDatasetBuilder(DatasetBuilder):
         logger.info("Raw cube shape: %s, dtype: %s", raw_cube.shape, raw_cube.dtype)
 
         # 2. Build nodata mask (1=valid, 0=nodata)
+        # Ashwin notes: In this case the no data value is a scalar. 
+        # This denotes the exact out of bounds value for the EnMap sensor, so anything
+        # in the raw cube that matches this value is considered invalid by virtue of there being
+        # no data at all
         nodata_mask = (raw_cube != metadata.spatial_info.background_value).astype(
             np.int8
         )

@@ -23,6 +23,7 @@ import argparse
 from app.utils.patch_generation.intermediate.enmap_segmentation_patcher import (
     EnmapSegmentationSharder,
 )
+from app.utils.general_utils import s3_config
 from app.utils.patch_generation.scene_storage import (
     LocalSceneStorage,
     S3SceneStorage,
@@ -86,7 +87,7 @@ def main() -> None:
     )
 
     s3 = parser.add_argument_group("s3 storage")
-    s3.add_argument("--bucket", default="allotrope-raw-data-india")
+    s3.add_argument("--bucket", default=s3_config.BUCKET)
     s3.add_argument("--scene-prefix", default="enmap/")
     s3.add_argument("--shard-prefix", default=None)
 

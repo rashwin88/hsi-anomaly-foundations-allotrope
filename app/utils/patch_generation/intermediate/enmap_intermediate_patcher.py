@@ -10,10 +10,7 @@ import logging
 from typing import List, Dict, Generator, Literal, Optional
 import random
 import os
-import shutil
-from functools import partial
 
-import boto3
 from tqdm import tqdm
 import webdataset as wds
 
@@ -26,10 +23,11 @@ from app.utils.patch_generation.generate_patch_plan import (
     PatchPlanGenerator,
     PatchRequest,
 )
-from app.utils.general_utils.s3_upload_and_delete import s3_upload_and_cleanup
+from app.utils.general_utils import s3_config
+from app.utils.patch_generation.scene_storage import SceneStorage, S3SceneStorage
 
 
-S3_BUCKET: str = "allotrope-raw-data-india"
+S3_BUCKET: str = s3_config.BUCKET
 
 
 class EnmapIntermediateSharder(IntermediateSharder):
@@ -58,9 +56,8 @@ class EnmapIntermediateSharder(IntermediateSharder):
         patch_validity_threshold: float = 0.5,
         band_filter_config: Optional[BandFilterConfig] = None,
         max_scenes: Optional[int] = None,
+        storage: Optional[SceneStorage] = None,
     ):
-        self.s3_client = boto3.client("s3", region_name="ap-south-1")
-        self.paginator = self.s3_client.get_paginator("list_objects_v2")
         self._source_folder = source_folder
         self._destination_folder = destination_folder
         self.split = split
@@ -71,22 +68,12 @@ class EnmapIntermediateSharder(IntermediateSharder):
         self.band_filter_config = band_filter_config if band_filter_config is not None else BandFilterConfig()
         self.target_size = 1 * 1024 * 1024 * 1024  # 1 GB per shard
 
-        # Discover all scene folders, cap to max_scenes, then split deterministically
-        all_scenes = sorted(self.s3_searcher())
-        rng = random.Random(seed)
-        rng.shuffle(all_scenes)
-        if max_scenes is not None and max_scenes < len(all_scenes):
-            all_scenes = all_scenes[:max_scenes]
-        split_idx = int(len(all_scenes) * (1 - test_fraction))
-        if split == "train":
-            self._scene_prefixes = all_scenes[:split_idx]
-        else:
-            self._scene_prefixes = all_scenes[split_idx:]
-
-        print(
-            f"[EnMAP] Split '{split}': {len(self._scene_prefixes)} scenes "
-            f"(of {len(all_scenes)} total, seed={seed}, test_fraction={test_fraction})"
-        )
+        # Split inputs are stored, not acted on. Discovery happens on first
+        # access to `_scene_prefixes` — see the property below.
+        self._seed = seed
+        self._test_fraction = test_fraction
+        self._max_scenes = max_scenes
+        self._scene_prefixes_cache: Optional[List[str]] = None
 
         self.destination_prefix = self.build_prefix(
             sensor=self.SENSOR,
@@ -99,11 +86,11 @@ class EnmapIntermediateSharder(IntermediateSharder):
 
         self.shard_pattern = f"{self.destination_folder}intermediate_shard_%04d.tar"
 
-        self.upload_hook = partial(
-            s3_upload_and_cleanup,
-            bucket_name=S3_BUCKET,
-            s3_prefix=self.destination_prefix,
-            client=self.s3_client,
+        # Storage is built after destination_prefix because the default S3
+        # backend needs it: with shard_prefix unset, publish_shard is a no-op.
+        # Pass a LocalSceneStorage to shard from, and to, a mounted disk.
+        self.storage = storage or S3SceneStorage(
+            scene_prefix="enmap/", shard_prefix=self.destination_prefix
         )
 
     @property
@@ -114,46 +101,71 @@ class EnmapIntermediateSharder(IntermediateSharder):
     def destination_folder(self) -> str:
         return self._destination_folder
 
-    def s3_searcher(self) -> List:
+    @property
+    def _scene_prefixes(self) -> List[str]:
+        """Scenes belonging to this split, discovered on first access.
+
+        This used to run in `__init__`, so merely constructing a sharder
+        required a network and credentials — which is why none of these
+        classes had tests. Behaviour is otherwise identical: same sort,
+        same seeded shuffle, same cap, same cut.
         """
-        Lists all scene folder prefixes under the enmap/ prefix in S3.
-        Each prefix represents a complete EnMAP scene (multiple TIFs + XML).
-        """
-        output = []
-        page_iterator = self.paginator.paginate(
-            Bucket=S3_BUCKET,
-            Prefix="enmap/",
-            Delimiter="/",
-            PaginationConfig={"PageSize": 500},
+        if self._scene_prefixes_cache is None:
+            self._scene_prefixes_cache = self._split_scenes()
+        return self._scene_prefixes_cache
+
+    def _split_scenes(self) -> List[str]:
+        all_scenes = sorted(self.list_scenes())
+        rng = random.Random(self._seed)
+        rng.shuffle(all_scenes)
+        if self._max_scenes is not None and self._max_scenes < len(all_scenes):
+            all_scenes = all_scenes[: self._max_scenes]
+        split_idx = int(len(all_scenes) * (1 - self._test_fraction))
+        chosen = (
+            all_scenes[:split_idx] if self.split == "train" else all_scenes[split_idx:]
         )
-        for page in page_iterator:
-            for folder in page.get("CommonPrefixes", []):
-                output.append(folder.get("Prefix"))
-        return output
+        print(
+            f"[EnMAP] Split '{self.split}': {len(chosen)} scenes "
+            f"(of {len(all_scenes)} total, seed={self._seed}, "
+            f"test_fraction={self._test_fraction})"
+        )
+        return chosen
 
-    def s3_downloader(self, key: str) -> Dict:
-        """
-        Downloads all files in a scene folder from S3 to a local directory.
-        Preserves the scene folder name for FileSourceConfig auto-detection.
-        """
-        # Extract scene folder name from prefix (e.g. "enmap/ENMAP01-..../")
-        scene_name = key.rstrip("/").split("/")[-1]
-        local_folder = os.path.join(self.source_folder, scene_name)
-        os.makedirs(local_folder, exist_ok=True)
+    def list_scenes(self) -> List:
+        """Every available scene id, via the injected storage backend.
 
-        # List and download all files in the scene
-        objects = self.s3_client.list_objects(Bucket=S3_BUCKET, Prefix=key)
-        for content in objects.get("Contents", []):
-            obj_key = content.get("Key", "")
-            file_name = obj_key.split("/")[-1]
-            if not file_name:
-                continue
-            local_path = os.path.join(local_folder, file_name)
-            self.s3_client.download_file(
-                Bucket=S3_BUCKET, Key=obj_key, Filename=local_path
+        Ids are bare folder names, not `enmap/<id>/` prefixes — both backends
+        speak that vocabulary so this class never learns which it holds.
+        """
+        return self.storage.list_scenes()
+
+    def publish_hook(self, local_path: str) -> None:
+        """Hand a finished shard to storage, then delete the local copy.
+
+        `wds.ShardWriter` calls this with each completed shard.
+
+        Deletion is conditional on `shard_exists` confirming the shard landed.
+        `publish_shard` is a *no-op* on a backend with no destination
+        configured, so deleting unconditionally — which is what
+        `s3_upload_and_cleanup` did — would discard shards that were never
+        stored, silently and irrecoverably.
+        """
+        self.storage.publish_shard(local_path)
+        if self.storage.shard_exists(os.path.basename(local_path)):
+            os.remove(local_path)
+        else:
+            print(
+                f"[EnMAP] shard NOT published, keeping local copy: {local_path}. "
+                "Does the storage backend have a destination configured?"
             )
 
-        return {"scene_folder": local_folder}
+    def prepare_scene(self, key: str) -> Dict:
+        """Make one scene readable locally and return its manifest.
+
+        The scene folder name is preserved, because `FileSourceConfig`
+        auto-detects the sensor from it.
+        """
+        return {"scene_folder": self.storage.fetch_scene(key, self.source_folder)}
 
     def patch_generator(self, manifest: Dict) -> Generator:
         """
@@ -191,7 +203,7 @@ class EnmapIntermediateSharder(IntermediateSharder):
         processed_patches = 0
         valid_patches = 0
         with wds.ShardWriter(
-            self.shard_pattern, maxsize=self.target_size, post=self.upload_hook
+            self.shard_pattern, maxsize=self.target_size, post=self.publish_hook
         ) as sink:
             scene_prefixes = list(self._scene_prefixes)
             random.shuffle(scene_prefixes)
@@ -199,7 +211,7 @@ class EnmapIntermediateSharder(IntermediateSharder):
             for scene in tqdm(scene_prefixes, desc="EnMAP Scene"):
                 try:
                     print(f"Processing Scene: {scene}")
-                    manifest = self.s3_downloader(scene)
+                    manifest = self.prepare_scene(scene)
                     patches = self.patch_generator(manifest)
                     for patch_sample in tqdm(patches, desc="Patch"):
                         spatial_validity = patch_sample["validity_cube.npy"][0]
@@ -208,10 +220,9 @@ class EnmapIntermediateSharder(IntermediateSharder):
                             sink.write(patch_sample)
                             valid_patches += 1
                         processed_patches += 1
-                    # Cleanup downloaded scene folder
-                    scene_folder = manifest.get("scene_folder", "")
-                    if os.path.isdir(scene_folder):
-                        shutil.rmtree(scene_folder, ignore_errors=True)
+                    # Cleanup goes through the backend, never rmtree here: it
+                    # cannot tell a temp download from a user's own folder.
+                    self.storage.release_scene(manifest.get("scene_folder", ""))
                 except Exception as err:
                     print(f"Failed to process scene {scene}: {err}")
         print(f"[EnMAP] Processed Patches: {processed_patches}")

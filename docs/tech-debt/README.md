@@ -32,6 +32,5 @@ Delete an entry when the debt is paid. Do not annotate it as done — same rule 
 `09-known-issues.md`. If a decision reverses and the debt becomes permanent by choice,
 move the reasoning into the relevant numbered doc and delete the entry.
 
-| file | subject |
-|---|---|
-| `s3-coupling-in-sharding.md` | the patch-generation pipeline assumes S3 everywhere |
+*(No open entries. `s3-coupling-in-sharding.md` was paid off on 2026-08-26 and deleted,
+per the lifecycle above.)*

@@ -24,11 +24,18 @@ are invalid, and `enmap_intermediate_patcher.py:205-207` drops any patch below
 `patch_validity_threshold` (0.5). **Any patch more than half cloud is silently discarded.**
 Correct for reconstruction; fatal for a cloud detector. Fixing (1) fixes this too.
 
-**3. The parent's constructor cannot be called.** It builds a boto3 client and performs a
-network listing inside `__init__` (`enmap_intermediate_patcher.py:62,75`), so it cannot run
-on Colab at all. `EnmapSegmentationSharder` therefore subclasses the **ABC**, not the
-concrete EnMAP sharder, and duplicates ~20 lines of vendable-building. See
-`docs/tech-debt/s3-coupling-in-sharding.md`.
+**3. The parent's constructor could not be called.** It built a boto3 client and performed
+a network listing inside `__init__`, so it could not run on Colab at all.
+`EnmapSegmentationSharder` therefore subclasses the **ABC**, not the concrete EnMAP
+sharder, and duplicates ~20 lines of vendable-building.
+
+**That reason is now gone** — the S3-coupling debt was paid on 2026-08-26 and all four
+sharders take a `SceneStorage` with no I/O in `__init__`. The duplication was re-examined
+and **kept deliberately**: collapsing it means subclassing `EnmapIntermediateSharder` and
+parameterising its `patch_generator` with `include_labels` / `pixel_dtype`, which puts
+segmentation-shaped knobs on the class that produces Indradhanu's training data. The
+188-band bug was exactly a defaulted-instead-of-forced band config and would have cost a
+~560 GB run. 26 lines is a cheap price for that isolation.
 
 ## Interfaces
 

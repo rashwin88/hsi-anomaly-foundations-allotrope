@@ -37,6 +37,7 @@ import sys
 
 import numpy as np
 import webdataset as wds
+from app.utils.general_utils import s3_config
 from tqdm import tqdm
 
 logging.basicConfig(
@@ -133,7 +134,7 @@ def build_dataset(shard_dir: str = None, s3_prefix: str = None):
         return wds.WebDataset(shard_files, shardshuffle=False).decode()
 
     if s3_prefix is not None:
-        bucket = "allotrope-raw-data-india"
+        bucket = s3_config.BUCKET
         url = f"pipe: aws s3 cp s3://{bucket}/{s3_prefix} - 2>/dev/null"
         logger.info("Streaming from S3: %s", s3_prefix)
         return wds.WebDataset(url, shardshuffle=False).decode()

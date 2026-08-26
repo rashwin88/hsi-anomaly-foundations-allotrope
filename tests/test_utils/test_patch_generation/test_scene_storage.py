@@ -22,7 +22,14 @@ from app.utils.patch_generation.scene_storage import (
     SceneStorage,
 )
 
-_METHODS = ["list_scenes", "fetch_scene", "publish_shard", "release_scene", "shard_exists"]
+_METHODS = [
+    "list_scenes",
+    "fetch_scene",
+    "fetch_metadata",
+    "publish_shard",
+    "release_scene",
+    "shard_exists",
+]
 
 
 @pytest.fixture
@@ -57,6 +64,37 @@ def test_fetch_returns_the_source_path_and_copies_nothing(scene_root):
     got = LocalSceneStorage(scene_root).fetch_scene("ENMAP01-a", dest_dir="/ignored")
     assert got == os.path.join(scene_root, "ENMAP01-a")
     assert os.path.isdir(got)
+
+
+def test_local_metadata_fetch_is_the_same_no_op(scene_root):
+    """Nothing is downloaded locally, so there is nothing cheaper to download."""
+    storage = LocalSceneStorage(scene_root)
+    assert storage.fetch_metadata("ENMAP01-a", "/ignored") == storage.fetch_scene(
+        "ENMAP01-a", "/ignored"
+    )
+
+
+def test_s3_metadata_fetch_downloads_only_metadata(tmp_path):
+    """The point of the method: splitting 212 scenes must not move ~64 GB to
+    read ~14 MB of cover percentages."""
+    s3 = _bare_s3()
+    s3.bucket, s3.scene_prefix, s3.metadata_suffix = "b", "enmap/", "METADATA.XML"
+    keys = [
+        "enmap/SCENE/SCENE-SPECTRAL_IMAGE.TIF",
+        "enmap/SCENE/SCENE-METADATA.XML",
+        "enmap/SCENE/SCENE-QL_QUALITY_CLOUD.TIF",
+    ]
+    s3.client = type("C", (), {
+        "list_objects": lambda self, **kw: {"Contents": [{"Key": k} for k in keys]},
+        "download_file": lambda self, Bucket, Key, Filename: downloaded.append(Key),
+    })()
+    downloaded = []
+    s3.fetch_metadata("SCENE", str(tmp_path))
+    assert downloaded == ["enmap/SCENE/SCENE-METADATA.XML"]
+
+    downloaded.clear()
+    s3.fetch_scene("SCENE", str(tmp_path))
+    assert downloaded == keys, "fetch_scene still takes everything"
 
 
 def test_release_does_not_delete_the_source(scene_root):
@@ -98,10 +136,22 @@ def test_no_destination_never_skips_work(scene_root):
 # --- S3SceneStorage -----------------------------------------------------
 
 
-def _bare_s3():
-    """An instance without __init__, so no boto3 client is built."""
+def _bare_s3(**overrides):
+    """An instance without __init__, so no boto3 client is built.
+
+    Every attribute the methods read must be set here — bypassing __init__
+    means a newly added one is missing and surfaces as AttributeError in
+    unrelated tests. Defaults mirror the real constructor.
+    """
     s3 = object.__new__(S3SceneStorage)
     s3._fetched = set()
+    s3.bucket = "bucket"
+    s3.scene_prefix = "enmap/"
+    s3.shard_prefix = None
+    s3.metadata_suffix = "METADATA.XML"
+    s3.scene_suffix = None
+    for key, value in overrides.items():
+        setattr(s3, key, value)
     return s3
 
 
@@ -116,6 +166,43 @@ def test_s3_lists_bare_ids_not_prefixes():
                                 {"Prefix": "enmap/ENMAP01-a/"}]}]}
     )()
     assert s3.list_scenes() == ["ENMAP01-a", "ENMAP01-b"]
+
+
+def test_local_lists_files_when_dirs_only_is_off(tmp_path):
+    """PRISMA ships one .he5 per scene, not a folder of files."""
+    (tmp_path / "PRS_a.he5").write_bytes(b"x")
+    (tmp_path / "PRS_b.he5").write_bytes(b"x")
+    (tmp_path / "PRS_c").mkdir()
+    (tmp_path / "notes.txt").write_text("")
+    storage = LocalSceneStorage(str(tmp_path), pattern="PRS_*", dirs_only=False)
+    assert storage.list_scenes() == ["PRS_a.he5", "PRS_b.he5"]
+
+
+def test_s3_lists_objects_when_scene_suffix_is_set(tmp_path):
+    s3 = _bare_s3()
+    s3.bucket, s3.scene_prefix, s3.scene_suffix = "b", "prisma/", ".he5"
+    keys = ["prisma/PRS_b.he5", "prisma/PRS_a.he5", "prisma/notes.txt"]
+    s3.paginator = type("P", (), {
+        "paginate": lambda self, **kw: [{"Contents": [{"Key": k} for k in keys]}]
+    })()
+    assert s3.list_scenes() == ["PRS_a.he5", "PRS_b.he5"], "sorted, bare, .he5 only"
+
+
+def test_s3_fetch_of_a_single_object_returns_the_file(tmp_path):
+    s3 = _bare_s3()
+    s3.bucket, s3.scene_prefix, s3.scene_suffix = "b", "prisma/", ".he5"
+    pulled = []
+    s3.client = type("C", (), {
+        "download_file": lambda self, Bucket, Key, Filename: (
+            pulled.append(Key), open(Filename, "wb").write(b"x")
+        ),
+    })()
+    got = s3.fetch_scene("PRS_a.he5", str(tmp_path))
+    assert pulled == ["prisma/PRS_a.he5"], "one object, not a folder listing"
+    assert got == str(tmp_path / "PRS_a.he5"), "returns the file, not a directory"
+
+    s3.release_scene(got)
+    assert not os.path.exists(got), "release must remove a file scene too"
 
 
 def test_s3_release_refuses_paths_it_did_not_fetch(tmp_path):

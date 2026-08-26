@@ -23,12 +23,10 @@ crops of the same field.
 """
 
 import logging
-from typing import List, Dict, Generator, Literal
+from typing import List, Dict, Generator, Literal, Optional
 import random
 import os
-from functools import partial
 
-import boto3
 from tqdm import tqdm
 import webdataset as wds
 
@@ -41,10 +39,11 @@ from app.utils.patch_generation.generate_patch_plan import (
     PatchPlanGenerator,
     PatchRequest,
 )
-from app.utils.general_utils.s3_upload_and_delete import s3_upload_and_cleanup
+from app.utils.general_utils import s3_config
+from app.utils.patch_generation.scene_storage import SceneStorage, S3SceneStorage
 
 
-S3_BUCKET: str = "allotrope-raw-data-india"
+S3_BUCKET: str = s3_config.BUCKET
 
 
 class LandsatIntermediateSharder(IntermediateSharder):
@@ -71,9 +70,8 @@ class LandsatIntermediateSharder(IntermediateSharder):
         width: int = 128,
         height: int = 128,
         stride: int = 64,
+        storage: Optional[SceneStorage] = None,
     ):
-        self.s3_client = boto3.client("s3", region_name="ap-south-1")
-        self.paginator = self.s3_client.get_paginator("list_objects_v2")
         self._source_folder = source_folder
         self._destination_folder = destination_folder
         self.split = split
@@ -82,20 +80,11 @@ class LandsatIntermediateSharder(IntermediateSharder):
         self.stride = stride
         self.target_size = 1 * 1024 * 1024 * 1024  # 1 GB per shard
 
-        # Discover all scenes and split deterministically
-        all_scenes = sorted(self.s3_searcher())
-        rng = random.Random(seed)
-        rng.shuffle(all_scenes)
-        split_idx = int(len(all_scenes) * (1 - test_fraction))
-        if split == "train":
-            self._scene_prefixes = all_scenes[:split_idx]
-        else:
-            self._scene_prefixes = all_scenes[split_idx:]
-
-        print(
-            f"Split '{split}': {len(self._scene_prefixes)} scenes "
-            f"(of {len(all_scenes)} total, seed={seed}, test_fraction={test_fraction})"
-        )
+        # Split inputs are stored, not acted on. Discovery happens on first
+        # access to `_scene_prefixes` — see the property below.
+        self._seed = seed
+        self._test_fraction = test_fraction
+        self._scene_prefixes_cache: Optional[List[str]] = None
 
         # Build the structured S3 prefix
         self.destination_prefix = self.build_prefix(
@@ -109,12 +98,10 @@ class LandsatIntermediateSharder(IntermediateSharder):
 
         self.shard_pattern = f"{self.destination_folder}intermediate_shard_%04d.tar"
 
-        # Build the upload hook
-        self.upload_hook = partial(
-            s3_upload_and_cleanup,
-            bucket_name=S3_BUCKET,
-            s3_prefix=self.destination_prefix,
-            client=self.s3_client,
+        # Built after destination_prefix: the default backend needs it as
+        # shard_prefix, or publish_shard silently does nothing.
+        self.storage = storage or S3SceneStorage(
+            scene_prefix="landsat/", shard_prefix=self.destination_prefix
         )
 
     @property
@@ -125,47 +112,73 @@ class LandsatIntermediateSharder(IntermediateSharder):
     def destination_folder(self) -> str:
         return self._destination_folder
 
-    def s3_searcher(self) -> List:
+    @property
+    def _scene_prefixes(self) -> List[str]:
+        """Scenes belonging to this split, discovered on first access.
+
+        This used to run in `__init__`, so merely constructing a sharder
+        required a network and credentials — which is why none of these
+        classes had tests. Behaviour is otherwise identical: same sort,
+        same seeded shuffle, same cut. Note Landsat has no `max_scenes`
+        cap, unlike the PRISMA and EnMAP sharders.
+        """
+        if self._scene_prefixes_cache is None:
+            self._scene_prefixes_cache = self._split_scenes()
+        return self._scene_prefixes_cache
+
+    def _split_scenes(self) -> List[str]:
+        all_scenes = sorted(self.list_scenes())
+        rng = random.Random(self._seed)
+        rng.shuffle(all_scenes)
+        split_idx = int(len(all_scenes) * (1 - self._test_fraction))
+        chosen = (
+            all_scenes[:split_idx] if self.split == "train" else all_scenes[split_idx:]
+        )
+        print(
+            f"Split '{self.split}': {len(chosen)} scenes "
+            f"(of {len(all_scenes)} total, seed={self._seed}, "
+            f"test_fraction={self._test_fraction})"
+        )
+        return chosen
+
+    def list_scenes(self) -> List:
         """
         Runs through the S3 bucket and returns specific folders representing scenes
         """
-        output = []
-        # Build the page iterator
-        page_iterator = self.paginator.paginate(
-            Bucket=S3_BUCKET,
-            Prefix="landsat/",
-            Delimiter="/",
-            PaginationConfig={"PageSize": 500},
-        )
-        # Add to the output list
-        for page in page_iterator:
-            for folder in page.get("CommonPrefixes"):
-                output.append(folder.get("Prefix"))
-        return output
+        return self.storage.list_scenes()
 
-    def s3_downloader(self, key: str) -> Dict:
-        """
-        Downloads the files to the destination folder.
-        Here the key refers to the scene prefix
-        """
-        # We begin with a key and we download all the files from that key
-        objects = self.s3_client.list_objects(Bucket=S3_BUCKET, Prefix=key)
+    def publish_hook(self, local_path: str) -> None:
+        """Hand a finished shard to storage, then delete the local copy.
 
-        # List everything we want to download
-        downloadable = [content.get("Key") for content in objects.get("Contents")]
-        print(downloadable)
-        download_result = {}
-        # Download to the destination bucket
-        for download in downloadable:
-            file_name = self.source_folder + download.split("/")[-1]
-            self.s3_client.download_file(
-                Bucket=S3_BUCKET, Key=download, Filename=file_name
-            )
-            if "ST_B10" in download:
-                download_result["b10"] = file_name
-            elif "QA_PIXEL" in download:
-                download_result["qa_pixel"] = file_name
-        return download_result
+        Deletion is conditional on `shard_exists` confirming it landed:
+        `publish_shard` is a no-op on a backend with no destination, so
+        deleting unconditionally would discard shards silently.
+        """
+        self.storage.publish_shard(local_path)
+        if self.storage.shard_exists(os.path.basename(local_path)):
+            os.remove(local_path)
+        else:
+            print(f"[Landsat] shard NOT published, keeping local copy: {local_path}")
+
+    def prepare_scene(self, key: str) -> Dict:
+        """Make one scene readable locally and pick out the two files we use.
+
+        Landsat's manifest names files rather than the folder: the builder
+        wants the ST_B10 band and the QA_PIXEL mask specifically.
+
+        Note the files now land in a per-scene subfolder rather than flat in
+        `source_folder`, because that is what `fetch_scene` returns. That
+        also removes a latent collision — two scenes' files previously shared
+        one directory.
+        """
+        scene_folder = self.storage.fetch_scene(key, self.source_folder)
+        manifest = {"scene_folder": scene_folder}
+        for file_name in sorted(os.listdir(scene_folder)):
+            if "ST_B10" in file_name:
+                manifest["b10"] = os.path.join(scene_folder, file_name)
+            elif "QA_PIXEL" in file_name:
+                manifest["qa_pixel"] = os.path.join(scene_folder, file_name)
+        return manifest
 
     def patch_generator(self, manifest: Dict) -> Generator:
         """
@@ -205,7 +218,7 @@ class LandsatIntermediateSharder(IntermediateSharder):
         processed_patches = 0
         valid_patches = 0
         with wds.ShardWriter(
-            self.shard_pattern, maxsize=self.target_size, post=self.upload_hook
+            self.shard_pattern, maxsize=self.target_size, post=self.publish_hook
         ) as sink:
             scene_prefixes = list(self._scene_prefixes)
             # Shuffle within the split for shard diversity
@@ -217,7 +230,7 @@ class LandsatIntermediateSharder(IntermediateSharder):
             for scene in tqdm(scene_prefixes, desc="Scene Number"):
                 try:
                     print(f"Processing Scene: {scene}")
-                    manifest = self.s3_downloader(scene)
+                    manifest = self.prepare_scene(scene)
                     # create the patcher
                     patches = self.patch_generator(manifest)
                     for patch_sample in tqdm(patches, desc="Patch"):
@@ -229,13 +242,9 @@ class LandsatIntermediateSharder(IntermediateSharder):
                             sink.write(patch_sample)
                             valid_patches += 1
                         processed_patches += 1
-                    # Delete the files in the manifest
-                    for file_path in manifest.values():
-                        if isinstance(file_path, str) and os.path.exists(file_path):
-                            try:
-                                os.remove(file_path)
-                            except Exception as e:
-                                print(f"Failed to delete {file_path}: {e}")
+                    # Cleanup goes through the backend, never os.remove here:
+                    # it cannot tell a temp download from source data.
+                    self.storage.release_scene(manifest.get("scene_folder", ""))
                 except Exception as err:
                     print(f"Failed to download scene {scene}. Moving on.")
         print(f"Processed Patches: {processed_patches}")

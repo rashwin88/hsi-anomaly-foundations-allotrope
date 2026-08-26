@@ -7,7 +7,6 @@ final shards under a unified 'hyperspectral' prefix.
 """
 
 import os
-import boto3
 from typing import List, Literal
 from functools import partial
 
@@ -17,9 +16,10 @@ from tqdm import tqdm
 import torch
 
 from app.abstract_classes.intermediate_sharder import IntermediateSharder
+from app.utils.general_utils import s3_config
 from app.utils.general_utils.s3_upload_and_delete import s3_upload_and_cleanup
 
-S3_BUCKET: str = "allotrope-raw-data-india"
+S3_BUCKET: str = s3_config.BUCKET
 FINAL_SHARD_PATTERN: str = "final_shard_%05d.tar"
 TARGET_GB = 1024**3
 
@@ -46,7 +46,7 @@ class HyperspectralFinalShuffler:
         shuffle_size: int = 10,
         patch_write_count: int = 500_000,
     ):
-        self.s3_client = boto3.client("s3", region_name="ap-south-1")
+        self.s3_client = s3_config.client()
         self.paginator = self.s3_client.get_paginator("list_objects_v2")
 
         if sensors is None:

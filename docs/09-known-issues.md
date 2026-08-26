@@ -67,22 +67,14 @@ discards it. The intended guard against treating raw DN as °C is therefore not 
 ## Deliberate limitations in segmentation sharding
 
 Added 2026-08-25 with the `enmap_seg` lane. All known and accepted, not defects. Design
-rationale in `docs/lld/segmentation-sharding.md`; the S3-coupling debt this sits on top of
-is costed in `docs/tech-debt/s3-coupling-in-sharding.md`.
+rationale in `docs/lld/segmentation-sharding.md`.
 
-- **`EnmapSegmentationSharder` implements `s3_searcher` / `s3_downloader` and never touches
-  S3.** The names come from the ABC, which predates the storage seam. Renaming them means
-  editing three other sharders that produce Indradhanu's training data, so it waits for
-  the migration described in the debt entry.
 - **A scene that fails mid-patching leaves nothing to inspect.** The partial `.tar` is
   removed in `finally` so a resume cannot mistake it for finished work; the trade is that
   debugging a failure means re-running that scene.
 - **`S3SceneStorage.shard_exists` catches `ClientError` broadly**, so a permissions failure
   reads as "shard absent" and the work is redone. Errs toward doing work rather than
   skipping it, which is the safe direction, but it delays surfacing an auth problem.
-- **Stratifying under `S3SceneStorage` downloads every scene** — `fetch_scene` has no
-  metadata-only mode, so splitting 212 scenes pulls ~64 GB. Cheap on a local/Drive mount
-  (~3 ms/scene), which is the intended path.
 - **`app/utils/files/enmap_scene_cover.py` has no test.** It parses a real METADATA.XML and
   those are gitignored payloads. A four-tag synthetic document is enough to exercise it —
   proven incidentally during development — so this is worth closing.

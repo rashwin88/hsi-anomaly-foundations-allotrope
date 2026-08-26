@@ -122,6 +122,17 @@ shards to S3:
 s3://allotrope-raw-data-india/patches/{sensor}/{split}/{stage}/w{W}_h{H}_s{S}/
 ```
 
+**Where scenes come from is injectable.** All four intermediate sharders take a
+`SceneStorage` (`app/utils/patch_generation/scene_storage.py`) — `S3SceneStorage` by
+default, `LocalSceneStorage` to run against a mounted disk such as Drive on Colab. The
+bucket and region live in one place, `app/utils/general_utils/s3_config.py`, overridable
+with `ALLOTROPE_S3_BUCKET` / `ALLOTROPE_S3_REGION`.
+
+Two properties worth knowing: **constructing a sharder does no I/O** (scene discovery is
+lazy, so these classes are testable offline), and **a sharder never deletes a scene folder
+itself** — cleanup goes through `storage.release_scene`, which is a no-op locally, because
+under a local backend that path is the user's own data rather than a temp download.
+
 Stride is conventionally `size // 2`. Sample contents:
 
 | Hyperspectral | Thermal |
