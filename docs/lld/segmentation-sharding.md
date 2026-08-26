@@ -117,7 +117,9 @@ land.
 
 **One shard per scene, not a rolling `ShardWriter`.** Sharding runs on Colab, where
 sessions are killed at 12-24 hours. Per-scene shards make the run resumable at the cost of
-uneven shard sizes, which the final shuffle stage evens out anyway.
+uneven shard sizes and scene-ordered output, both of which the final stage fixes —
+see below. (An earlier version of this file said the *existing* `FinalShuffler` would
+even them out. It would not: it reads over S3 and there is no S3 in this path.)
 
 **`TarWriter` is handed a stream, not a path.** It routes paths through its URL opener,
 which reads a Windows `C:\...` drive letter as a scheme and fails with `no gopen handler
@@ -147,6 +149,57 @@ It found two real bugs that no amount of reading would have:
   explicitly and this sharder did not. Shards came out at **188 native bands instead of
   165**, and nothing would have complained until the first forward pass hit
   `Conv2d(165, 32)`. Now forced alongside `quality_masks_to_apply`.
+
+## The final stage — `LocalFinalShuffler`
+
+**File:** `app/utils/patch_generation/final/local_final_shuffler.py`
+**Tests:** `tests/test_utils/test_patch_generation/test_local_final_shuffler.py`
+
+One shard per scene is right for resume and wrong for training: each holds ~270
+spatially sequential tiles of one scene, and the trainers shuffle only at *shard*
+level (no `.shuffle(buffer)` anywhere in `foundation_trainer.py`). A batch would be
+drawn from very few scenes.
+
+```
+sorted *.tar  -> shard order shuffled (seed)
+   -> interleave group_size shards round-robin
+      -> window shuffle of shuffle_size samples
+         -> roll into shard_size_bytes tars
+```
+
+**`group_size` is the mixing parameter, not a speed one.** A scene shard holds ~270
+patches, so a 200-sample buffer cannot mix across one on its own — the interleave is
+what puts several scenes in flight. This was originally a DataLoader `worker_count`,
+which meant mixing silently collapsed if someone set workers to 0 while debugging.
+Making it an explicit interleave width removes that trap.
+
+**Reads with plain `tarfile`, not webdataset.** webdataset routes every shard name
+through its URL opener, which has no handler for a bare path and reads a Windows
+`C:\...` drive letter as a scheme. Three workarounds failed — a stream instead of a
+path (works for `TarWriter`, not for `ShardWriter`, which builds its own), and
+`file://` URIs (work through `gopen` directly, fail inside the pipeline). For a
+local-filesystem job the URL layer buys nothing. Reading tars directly also drops the
+torch dependency, which matters on a CPU Colab session, and — the deciding factor —
+makes the stage runnable on the dev machine, so its tests are real.
+
+**One complete pass, `resampled=False`.** `FinalShuffler` samples shards *with
+replacement* to reach a target patch count, which is why the hyperspectral trainer
+suppresses a `"duplicate file name in tar"` warning. For a fixed dataset every patch
+should appear exactly once; the tests assert both no loss and no duplication.
+
+**Records move as opaque bytes.** No decode/re-encode round trip. A test asserts
+`pixels.npy` is byte-identical before and after.
+
+**Inputs are never touched.** Output must be verifiable before ~89 GB of input is
+deleted.
+
+### Failure modes
+
+Reading is single-threaded. On a mounted Drive that may be slow for a large corpus;
+the fix is threads around `_records`, not a return to the URL layer.
+
+`group_size` set to 1 disables cross-scene mixing while still producing plausible
+output. `test_output_is_actually_mixed` is mutation-checked against exactly this.
 
 ## Known cost
 

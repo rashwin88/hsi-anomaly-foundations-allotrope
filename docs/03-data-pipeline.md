@@ -172,6 +172,12 @@ Three deliberate differences from the reconstruction lane:
   through a `SceneStorage` backend rather than boto3 — see
   `docs/lld/segmentation-sharding.md`.
 
+This lane has its own final stage, `LocalFinalShuffler`, because `FinalShuffler` reads over
+S3 and there is no S3 on the Colab path. It interleaves several per-scene shards at once,
+window-shuffles, and rolls ~1 GB output shards — one complete pass, every patch exactly
+once, and inputs left untouched so the output can be verified before anything is deleted.
+Its `group_size` is the mixing parameter, not a speed setting.
+
 This path is **only for training data**. Live analysis in the product runs on whole scenes
 through Actions.
 
