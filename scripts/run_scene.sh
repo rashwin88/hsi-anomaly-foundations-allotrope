@@ -4,7 +4,7 @@
 # =============================================================================
 set -euo pipefail
 
-IMG="${IMG:-enmap-isofit:1.1.3}"
+IMG="${IMG:-enmap-isofit:1.1.4}"
 L1C_DIR="${1:?Usage: $0 <l1c_dir> <l2a_out_dir> <dem_dir> [--season summer|winter|auto] [--n-cores N]}"
 L2A_DIR="${2:?output dir required}"
 DEM_DIR="${3:?DEM dir required}"

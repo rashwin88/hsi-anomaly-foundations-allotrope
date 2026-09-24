@@ -11,7 +11,7 @@
 set -euo pipefail
 
 IMAGE_NAME="${IMAGE_NAME:-enmap-isofit}"
-IMAGE_VERSION="${IMAGE_VERSION:-1.1.3}"
+IMAGE_VERSION="${IMAGE_VERSION:-1.1.4}"
 ISOFIT_VERSION="${ISOFIT_VERSION:-3.7.7}"
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -47,7 +47,7 @@ echo "==> Computing SHA256"
 ( cd "${DIST_DIR}" && sha256sum "$(basename "${TARBALL}")" > "enmap-isofit-${IMAGE_VERSION}.sha256" )
 
 echo "==> Extracting aux data bill of materials"
-docker run --rm --entrypoint /bin/bash "${TAG}" -c "
+docker run --rm --entrypoint bash "${TAG}" -c "
     echo '# sRTMnet weights';
     ls -l /root/.isofit/srtmnet/;
     echo;
