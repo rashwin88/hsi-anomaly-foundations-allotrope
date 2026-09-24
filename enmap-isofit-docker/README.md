@@ -78,7 +78,9 @@ enmap-isofit-docker/
 ├── entrypoint.sh
 ├── src/
 │   ├── enmap_l1c_preprocess.py   # L1C → 3 ENVI cubes for ISOFIT
-│   └── postprocess_to_paco.py    # ISOFIT output → PACO-style L2A
+│   ├── postprocess_to_paco.py    # ISOFIT output → PACO-style L2A
+│   └── validate_vs_paco.py       # our L2A vs DLR PACO L2A, per scene
+├── validation/                   # dated validation results + notes
 ├── configs/
 │   ├── enmap_summer.json           # LUTConfig overrides (H2O / AOD bounds)
 │   ├── enmap_winter.json
@@ -266,7 +268,11 @@ find /data/enmap/l1c -maxdepth 1 -mindepth 1 -type d \
   spatial correlation 0.86 at 418 nm, 0.95-0.997 from 497 nm on; mean
   absolute difference 0.013, median spectral angle 5.1°. Compare on land
   only (`QL_QUALITY_CLASSES == 1`) - water runs high, see Known gaps. A new
-  scene well outside these numbers needs investigation.
+  scene well outside these numbers needs investigation. Five-scene results,
+  including a snow-covered Himalayan scene, are in
+  [validation/README.md](validation/README.md). To check new scenes, run
+  `python -m validate_vs_paco --paco <PACO root> --ours <our root> --csv
+  <out.csv>` inside the image; its docstring has the full `docker run` line.
 
 ---
 
