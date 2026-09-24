@@ -1,0 +1,23 @@
+# Throwaway fast path: derive the current image from the previous one instead of
+# rebuilding from the conda layer, because BuildKit keeps dropping its RUN-layer
+# cache and a clean build re-downloads 5.8 GB of sRTMnet. Local testing only -
+# the air-gap bundle must come from scripts/build_image.sh so the image is
+# reproducible from the real Dockerfile. Delete this file once that is done.
+#
+#   docker build -f Dockerfile.hotfix -t enmap-isofit:1.1.3 .
+FROM enmap-isofit:1.1.1
+ENV PIPELINE_VERSION=1.1.3
+
+# Keep in step with the equivalent layers in Dockerfile.
+ARG EL=/opt/conda/lib/python3.10/site-packages/isofit/utils/empirical_line.py
+RUN grep -qc "(nll, nlb, nls)" "$EL" && \
+    sed -i "s/\(output_reflectance_file, (nll, \)nlb\(, nls)\)/\1n_input_bands\2/; \
+            s/\(output_uncertainty_file, (nll, \)nlb\(, nls)\)/\1n_input_bands\2/" "$EL" && \
+    [ "$(grep -c 'n_input_bands, nls' "$EL")" = "2" ] && \
+    python -c "import isofit.utils.empirical_line" && \
+    echo "patched empirical_line: nlb -> n_input_bands (2 sites)"
+
+COPY src/          /opt/pipeline/src/
+COPY configs/      /opt/pipeline/configs/
+COPY entrypoint.sh /opt/pipeline/entrypoint.sh
+RUN chmod +x /opt/pipeline/entrypoint.sh

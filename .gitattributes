@@ -1,0 +1,6 @@
+# Everything here runs inside a Linux container. core.autocrlf=true on this
+# Windows box would otherwise check scripts out with CRLF, and bash then fails
+# on "$'\r': command not found" inside the image.
+* text=auto eol=lf
+*.bat text eol=crlf
+*.ps1 text eol=crlf
