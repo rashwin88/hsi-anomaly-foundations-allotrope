@@ -1,0 +1,26 @@
+{
+  "_comment": [
+    "EnMAP summer preset, consumed by `apply_oe --lut_config_file`.",
+    "Schema is a FLAT override of isofit.utils.template_construction.LUTConfig",
+    "attributes (3.7.7 template_construction.py:476, `__dict__.update`) - not a",
+    "forward_model config. Grids are built by LUTConfig.get_grid as",
+    "linspace(min, max, ceil((max-min)/spacing)+1).",
+    "AOD is set via aerosol_2_*: with a non-.jld2 emulator (sRTMnet) ISOFIT",
+    "copies aerosol_2_* onto aot_550_* and zeroes aerosol_2_spacing, so setting",
+    "aot_550_* here would be overwritten (template_construction.py:490).",
+    "With --presolve, h2o_range is replaced by the 2nd/98th percentile of the",
+    "presolve retrieval; these bounds govern the presolve LUT and clamp it.",
+    "AOD ceiling raised 0.40 -> 0.90 (1.1.2 vs PACO, 25N Ganges scene in April):",
+    "reflectance ran +0.16 high at 418 nm, fading by 700 nm - the signature of",
+    "under-removed aerosol scattering from a retrieval pinned at the ceiling."
+  ],
+  "h2o_range": [0.5, 4.5],
+  "h2o_spacing": 0.5,
+  "h2o_spacing_min": 0.03,
+  "h2o_min": 0.5,
+  "aerosol_2_range": [0.05, 0.90],
+  "aerosol_2_spacing": 0.0875,
+  "aerosol_2_spacing_min": 0.0,
+  "elevation_spacing": 0.25,
+  "elevation_spacing_min": 0.2
+}

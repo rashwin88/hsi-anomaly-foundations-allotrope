@@ -1,0 +1,68 @@
+{
+  "output_model_file": "/opt/aux/surface/multicomponent_surface.mat",
+  "wavelength_file": "PLACEHOLDER_REPLACED_AT_BUILD",
+  "normalize": "Euclidean",
+  "reference_windows": [[400, 1300], [1450, 1780], [2000, 2450]],
+  "sources": [
+    {
+      "input_spectrum_files": [
+        "/opt/aux/isofit-data/reflectance/filtered_veg"
+      ],
+      "n_components": 8,
+      "windows": [
+        {"interval": [300,  400],  "regularizer": 10, "correlation": "decorrelated"},
+        {"interval": [400,  1300], "regularizer": 1e-6, "correlation": "EM"},
+        {"interval": [1300, 1450], "regularizer": 10, "correlation": "decorrelated"},
+        {"interval": [1450, 1780], "regularizer": 1e-6, "correlation": "EM"},
+        {"interval": [1780, 2000], "regularizer": 10, "correlation": "decorrelated"},
+        {"interval": [2000, 2450], "regularizer": 1e-6, "correlation": "EM"},
+        {"interval": [2450, 2550], "regularizer": 10, "correlation": "decorrelated"}
+      ]
+    },
+    {
+      "input_spectrum_files": [
+        "/opt/aux/isofit-data/reflectance/ecostress_library_with_mixtures"
+      ],
+      "n_components": 8,
+      "windows": [
+        {"interval": [300,  400],  "regularizer": 10, "correlation": "decorrelated"},
+        {"interval": [400,  1300], "regularizer": 1e-6, "correlation": "EM"},
+        {"interval": [1300, 1450], "regularizer": 10, "correlation": "decorrelated"},
+        {"interval": [1450, 1780], "regularizer": 1e-6, "correlation": "EM"},
+        {"interval": [1780, 2000], "regularizer": 10, "correlation": "decorrelated"},
+        {"interval": [2000, 2450], "regularizer": 1e-6, "correlation": "EM"},
+        {"interval": [2450, 2550], "regularizer": 10, "correlation": "decorrelated"}
+      ]
+    },
+    {
+      "input_spectrum_files": [
+        "/opt/aux/isofit-data/reflectance/ecostress_snow_mixtures"
+      ],
+      "n_components": 4,
+      "windows": [
+        {"interval": [300,  400],  "regularizer": 10, "correlation": "decorrelated"},
+        {"interval": [400,  1300], "regularizer": 1e-6, "correlation": "EM"},
+        {"interval": [1300, 1450], "regularizer": 10, "correlation": "decorrelated"},
+        {"interval": [1450, 1780], "regularizer": 1e-6, "correlation": "EM"},
+        {"interval": [1780, 2000], "regularizer": 10, "correlation": "decorrelated"},
+        {"interval": [2000, 2450], "regularizer": 1e-6, "correlation": "EM"},
+        {"interval": [2450, 2550], "regularizer": 10, "correlation": "decorrelated"}
+      ]
+    },
+    {
+      "input_spectrum_files": [
+        "/opt/aux/isofit-data/reflectance/ocean_spectra_rev2"
+      ],
+      "n_components": 2,
+      "windows": [
+        {"interval": [300,  400],  "regularizer": 10, "correlation": "decorrelated"},
+        {"interval": [400,  1300], "regularizer": 1e-6, "correlation": "EM"},
+        {"interval": [1300, 1450], "regularizer": 10, "correlation": "decorrelated"},
+        {"interval": [1450, 1780], "regularizer": 1e-6, "correlation": "EM"},
+        {"interval": [1780, 2000], "regularizer": 10, "correlation": "decorrelated"},
+        {"interval": [2000, 2450], "regularizer": 1e-6, "correlation": "EM"},
+        {"interval": [2450, 2550], "regularizer": 10, "correlation": "decorrelated"}
+      ]
+    }
+  ]
+}

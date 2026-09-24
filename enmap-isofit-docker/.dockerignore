@@ -1,0 +1,48 @@
+# =============================================================================
+# .dockerignore for enmap-isofit-docker
+#
+# Excludes files that don't belong in the build context. Keeps vendor/ IN
+# because Dockerfile needs vendor/sRTMnet/sRTMnet_v100.zip.
+# =============================================================================
+
+# Build output — never send to daemon
+dist/
+*.tar
+*.tar.gz
+*.tgz
+
+# Python bytecode & caches
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Editor / OS junk
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+# Local env files that shouldn't leak into images
+.env
+.env.*
+*.local
+
+# Docker compose overrides (dev only)
+docker-compose.override.yml
+
+# Logs
+*.log
+logs/
+
+# Any accidentally-unzipped vendor content (keep the .zip, drop extracted dirs)
+vendor/sRTMnet/sRTMnet_v100/
+vendor/**/*.h5
+vendor/**/*.npz
