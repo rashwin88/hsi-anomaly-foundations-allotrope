@@ -4,9 +4,9 @@
 # the air-gap bundle must come from scripts/build_image.sh so the image is
 # reproducible from the real Dockerfile. Delete this file once that is done.
 #
-#   docker build -f Dockerfile.hotfix -t enmap-isofit:1.1.3 .
+#   docker build -f Dockerfile.hotfix -t enmap-isofit:1.1.4 .
 FROM enmap-isofit:1.1.1
-ENV PIPELINE_VERSION=1.1.3
+ENV PIPELINE_VERSION=1.1.4
 
 # Keep in step with the equivalent layers in Dockerfile.
 ARG EL=/opt/conda/lib/python3.10/site-packages/isofit/utils/empirical_line.py

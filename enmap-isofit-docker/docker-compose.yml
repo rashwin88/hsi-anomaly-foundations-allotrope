@@ -9,7 +9,7 @@ services:
       context: .
       args:
         ISOFIT_VERSION: "3.4.0"
-    image: enmap-isofit:1.1.3
+    image: enmap-isofit:1.1.4
     user: "${UID:-1000}:${GID:-1000}"
     volumes:
       - ${L1C_DIR:?set L1C_DIR to your EnMAP L1C product dir}:/data/l1c:ro

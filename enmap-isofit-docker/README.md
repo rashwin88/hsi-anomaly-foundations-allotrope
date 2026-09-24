@@ -103,8 +103,8 @@ Requires `docker` (or `podman` with docker alias) and internet.
 ```bash
 # 1. Build image and export tarball
 ./scripts/build_image.sh
-# → dist/enmap-isofit-1.1.3.tar.gz  (~2 GB compressed)
-# → dist/enmap-isofit-1.1.3.sha256
+# → dist/enmap-isofit-1.1.4.tar.gz  (~9.6 GB compressed, 24.7 GB loaded)
+# → dist/enmap-isofit-1.1.4.sha256
 # → dist/aux-manifest.txt
 
 # 2. Stage Cop-DEM tiles for your AOI (or per-scene)
@@ -124,7 +124,7 @@ Requires `docker` (or `podman`). No internet.
 
 ```bash
 # 1. Verify + load the image
-./scripts/deploy_airgap.sh enmap-isofit-1.1.3.tar.gz enmap-isofit-1.1.3.sha256
+./scripts/deploy_airgap.sh enmap-isofit-1.1.4.tar.gz enmap-isofit-1.1.4.sha256
 
 # The script runs a smoke test importing isofit + tensorflow and confirming
 # sRTMnet weights are present.
@@ -153,7 +153,7 @@ docker run --rm \
     -v /data/enmap/l1c/SCENE:/data/l1c:ro \
     -v /data/enmap/l2a:/data/l2a \
     -v /srv/aux/dem:/aux/dem:ro \
-    enmap-isofit:1.1.3 \
+    enmap-isofit:1.1.4 \
     /data/l1c /data/l2a --season auto --n-cores 16
 ```
 
@@ -305,6 +305,22 @@ find /data/enmap/l1c -maxdepth 1 -mindepth 1 -type d \
 ---
 
 ## Changelog
+
+### 1.1.4
+
+1. **Summer `h2o_min` lowered 0.5 → 0.2 cm** (ISOFIT's default and the
+   presolve floor). `apply_oe` floors the final H2O range at `h2o_min` and
+   drops presolve pixels at or below it from the percentiles that set that
+   range, so on the Himalayan scene DT0000187759 water vapour pinned at
+   0.50 cm and pressure elevation compensated ~1 km high. Now: H2O
+   0.21–0.52 cm, retrieved elevation within +0.11 km of the DEM (r 0.90),
+   977/1128 nm bias vs PACO halved. Plains scenes are unaffected - their
+   H2O ranges start well above either floor.
+2. **`src/validate_vs_paco.py`** compares this pipeline's L2A with DLR PACO
+   L2A per scene (land / water, per band, summary, optional CSV). The
+   five-scene results are in [validation/](validation/README.md).
+3. First image built from the real `Dockerfile` via `scripts/build_image.sh`
+   since 1.1.1; 1.1.2 and 1.1.3 were `Dockerfile.hotfix` derivatives.
 
 ### 1.1.3
 

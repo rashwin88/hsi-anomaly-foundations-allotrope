@@ -16,7 +16,7 @@ if [[ -z "$TARBALL" || -z "$SHA_FILE" ]]; then
 Usage: $0 <tarball.tar.gz> <sha256_file>
 
 Example:
-    $0 enmap-isofit-1.1.3.tar.gz enmap-isofit-1.1.3.sha256
+    $0 enmap-isofit-1.1.4.tar.gz enmap-isofit-1.1.4.sha256
 EOF
     exit 1
 fi

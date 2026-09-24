@@ -1,5 +1,5 @@
 # =============================================================================
-# EnMAP L1C -> L2A pipeline (ISOFIT + sRTMnet)  --  v1.1.3
+# EnMAP L1C -> L2A pipeline (ISOFIT + sRTMnet)  --  v1.1.4
 #
 # Bumped to ISOFIT 3.7.7. Adds gfortran and builds 6SV2.1 (required by
 # sRTMnet's preSim step — without it, LUT sims produce all-NaN outputs and
@@ -13,8 +13,8 @@
 FROM condaforge/mambaforge:24.9.2-0
 
 LABEL org.opencontainers.image.title="EnMAP L1C to L2A via ISOFIT/sRTMnet"
-LABEL org.opencontainers.image.version="1.1.3"
-ENV PIPELINE_VERSION=1.1.3
+LABEL org.opencontainers.image.version="1.1.4"
+ENV PIPELINE_VERSION=1.1.4
 LABEL org.opencontainers.image.source="internal"
 
 ARG ISOFIT_VERSION=3.7.7
