@@ -89,6 +89,8 @@ def compare_class(dt, name, P, O, wl) -> tuple[list[dict], dict]:
     ok = np.isfinite(P) & np.isfinite(O)
     bands = []
     for i in TABLE_BANDS:
+        if i >= len(wl):
+            continue
         k = ok[i]
         if k.sum() < 100:
             continue
@@ -98,7 +100,9 @@ def compare_class(dt, name, P, O, wl) -> tuple[list[dict], dict]:
                           bias=np.median(o - p), r=np.corrcoef(p, o)[0, 1]))
     d = np.where(ok, O - P, np.nan)
     grid = (wl >= GRID_NM[0]) & (wl <= GRID_NM[1])
-    covered = np.isfinite(P).mean(1) > 0.5
+    # Bands both products fill; ACOLITE leaves strong-absorption bands blank,
+    # and counting those as 0 would inflate the angle.
+    covered = ok.mean(1) > 0.5
     summary = dict(
         scene=dt, cls=name, pixels=P.shape[1],
         mae_all=np.nanmean(np.abs(d)),
