@@ -55,6 +55,18 @@ class Client:
         """`timeout=None` for calls that legitimately run long (server-side imports)."""
         return self.request("POST", path, json=body, timeout=timeout)
 
+    def verified_files(self, dataset_id: str) -> dict[str, str]:
+        """{relative_path: sha256} of every verified file, paging through
+        /files (a collection can hold ~500k)."""
+        out: dict[str, str] = {}
+        offset = 0
+        while True:
+            page = self.get(f"/datasets/{dataset_id}/files", uploaded="true", limit=1000, offset=offset)
+            out.update({f["relative_path"]: f["sha256"] for f in page["items"]})
+            offset += len(page["items"])
+            if not page["items"] or offset >= page["total"]:
+                return out
+
     def put(self, path: str) -> Any:
         return self.request("PUT", path)
 

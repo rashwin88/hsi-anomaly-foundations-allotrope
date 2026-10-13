@@ -9,6 +9,9 @@ Commands:
                                  register, hash, upload (resumable), finalise
     import-s3 s3://bucket/prefix/ --sensor --level --scene-id [...]
                                  hash in place, copy server-side, finalise
+    unpack-archive DS_ID --scene-id [...]
+                                 stream an archive dataset into a collection,
+                                 one verified object + row per member file
     download DS_ID DEST          fetch every file and verify its sha256
 """
 
@@ -56,7 +59,8 @@ def sensors() -> None:
 def ls(
     sensor: str | None = typer.Option(None, help="sensor slug, e.g. prisma"),
     level: str | None = typer.Option(None, help="processing level, e.g. L2D"),
-    status: str | None = typer.Option(None, help="pending | available | failed"),
+    status: str | None = typer.Option(None, help="pending | available | failed | retired"),
+    kind: str | None = typer.Option(None, help="scene | archive | collection"),
     tag: list[str] = typer.Option([], help="repeatable; all must match"),
     q: str | None = typer.Option(None, help="substring of the scene id"),
     bbox: str | None = typer.Option(None, help="min_lon,min_lat,max_lon,max_lat"),
@@ -67,7 +71,7 @@ def ls(
 ) -> None:
     """List datasets, newest-registered first."""
     page = Client().get(
-        "/datasets", sensor_type=sensor, processing_level=level, status=status, tag=tag,
+        "/datasets", sensor_type=sensor, processing_level=level, status=status, kind=kind, tag=tag,
         q=q, bbox=bbox, acquired_from=since, acquired_to=until, limit=limit, offset=offset,
     )
     for d in page["items"]:
@@ -147,6 +151,7 @@ def ingest(
     sensor: str = typer.Option(..., help="sensor slug, e.g. prisma"),
     level: str = typer.Option(..., help="processing level, e.g. L2D"),
     scene_id: str = typer.Option(..., help="the provider's product id"),
+    kind: str = typer.Option("scene", help="scene | archive | collection"),
     acquired_at: str | None = typer.Option(None, help="ISO timestamp, UTC"),
     footprint: Path | None = typer.Option(None, exists=True, help="GeoJSON geometry (or Feature) file"),
     meta: list[str] = typer.Option([], help="repeatable key=value; values parsed as JSON when they can be"),
@@ -175,7 +180,7 @@ def ingest(
     # 1. Register, or pick up the pending dataset from an earlier run.
     d = register_or_resume(c, {
         "sensor_type": sensor, "sensor_scene_id": scene_id, "processing_level": level,
-        "acquisition_at": acquired_at, "footprint": geom, "metadata": metadata,
+        "kind": kind, "acquisition_at": acquired_at, "footprint": geom, "metadata": metadata,
         "sources": source,
     })
     if d is None:
@@ -183,7 +188,7 @@ def ingest(
     ds = d["id"]
 
     # 2. Hash everything not already verified in an earlier run.
-    done = {f["relative_path"]: f["sha256"] for f in c.get(f"/datasets/{ds}")["files"] if f["uploaded"]}
+    done = c.verified_files(ds)
     decls, total = [], 0
     for f in files:
         size, sha, parts = transfer.hash_file(f)
@@ -236,6 +241,7 @@ def import_s3(
     sensor: str = typer.Option(..., help="sensor slug, e.g. enmap"),
     level: str = typer.Option(..., help="processing level, e.g. L2A"),
     scene_id: str = typer.Option(..., help="the provider's product id"),
+    kind: str = typer.Option("scene", help="scene | archive | collection"),
     acquired_at: str | None = typer.Option(None, help="ISO timestamp, UTC"),
     meta: list[str] = typer.Option([], help="repeatable key=value"),
     tag: list[str] = typer.Option([], help="repeatable"),
@@ -282,12 +288,12 @@ def import_s3(
             metadata[k] = v
     d = register_or_resume(c, {
         "sensor_type": sensor, "sensor_scene_id": scene_id, "processing_level": level,
-        "acquisition_at": acquired_at, "metadata": metadata, "sources": [uri],
+        "kind": kind, "acquisition_at": acquired_at, "metadata": metadata, "sources": [uri],
     })
     if d is None:
         return
     ds = d["id"]
-    done = {f["relative_path"] for f in c.get(f"/datasets/{ds}")["files"] if f["uploaded"]}
+    done = set(c.verified_files(ds))
     todo = [o for o in objs if rel[o["Key"]] not in done]
     typer.echo(f"{len(done)} already verified, {len(todo)} to copy")
 
@@ -309,6 +315,40 @@ def import_s3(
     for t in tag:
         c.put(f"/datasets/{ds}/tags/{t}")
     typer.secho(f"{ds} available  {d['s3_uri']}", fg=typer.colors.GREEN)
+
+
+@app.command("unpack-archive")
+def unpack_archive(
+    archive_id: str = typer.Argument(..., help="ds_<uuid> of an available kind=archive dataset"),
+    scene_id: str = typer.Option(..., help="sensor_scene_id for the new collection"),
+    sensor: str | None = typer.Option(None, help="defaults to the archive's sensor"),
+    level: str | None = typer.Option(None, help="defaults to the archive's processing level"),
+    parts_glob: str = typer.Option("*.tar.gz", help="which archive files, in natural order, form the stream"),
+    tag: list[str] = typer.Option([], help="repeatable"),
+    put_workers: int = typer.Option(64, min=1, max=256, help="member uploads in flight"),
+) -> None:
+    """Stream a multi-part .tar.gz archive into a new kind=collection dataset:
+    every regular member becomes its own S3 object (single PUT, SHA-256
+    verified by S3) and a row registered in verified batches. Resumable."""
+    from . import unpack
+
+    c = Client()
+    a = c.get(f"/datasets/{archive_id}")
+    if a["kind"] != "archive" or a["status"] != "available":
+        _fail(f"{archive_id} is {a['kind']}/{a['status']}; need an available archive")
+    d = register_or_resume(c, {
+        "sensor_type": sensor or a["sensor_type"], "sensor_scene_id": scene_id,
+        "processing_level": level or a["processing_level"], "kind": "collection",
+        "metadata": {"unpacked_from": archive_id, "archive_scene_id": a["sensor_scene_id"]},
+        "sources": [a["s3_uri"]],
+    })
+    if d is None:
+        return
+    unpack.run(c, a, d, parts_glob, put_workers, echo=typer.echo)
+    d = c.post(f"/datasets/{d['id']}/finalize", timeout=None)
+    for t in tag:
+        c.put(f"/datasets/{d['id']}/tags/{t}")
+    typer.secho(f"{d['id']} available  {d['s3_uri']}", fg=typer.colors.GREEN)
 
 
 @app.command("download")

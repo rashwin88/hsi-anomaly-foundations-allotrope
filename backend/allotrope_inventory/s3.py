@@ -12,8 +12,11 @@ of the stored bytes rests on the per-part checks.
 """
 
 import base64
+import gzip
 import hashlib
+import io
 import json
+from collections.abc import Iterable
 from concurrent.futures import ThreadPoolExecutor
 from functools import cache
 
@@ -139,6 +142,19 @@ def put_manifest(prefix: str, body: dict) -> None:
     )
 
 
+def put_files_manifest(prefix: str, rows: Iterable[dict]) -> None:
+    """Write `<prefix>/files.jsonl.gz`: one JSON line per file. Streamed into
+    a gzip buffer, so 500k rows cost tens of MB, not one giant JSON string."""
+    buf = io.BytesIO()
+    with gzip.GzipFile(fileobj=buf, mode="wb", mtime=0) as gz:
+        for r in rows:
+            gz.write(json.dumps(r, separators=(",", ":")).encode() + b"\n")
+    client().put_object(
+        Bucket=settings.bucket, Key=f"{prefix}/files.jsonl.gz", Body=buf.getvalue(),
+        ContentType="application/x-ndjson", ContentEncoding="gzip", ChecksumAlgorithm="SHA256",
+    )
+
+
 def download_url(key: str, version_id: str | None) -> str:
     """Presigned GET, pinned to `version_id` so a later overwrite can't swap
     the bytes behind a verified checksum."""
@@ -146,6 +162,42 @@ def download_url(key: str, version_id: str | None) -> str:
     if version_id:
         params["VersionId"] = version_id
     return client().generate_presigned_url("get_object", Params=params, ExpiresIn=URL_TTL_SECONDS)
+
+
+def hex_to_b64(sha256_hex: str) -> str:
+    return base64.b64encode(bytes.fromhex(sha256_hex)).decode()
+
+
+def verify_single_put(key: str, size_bytes: int, sha256_hex: str) -> tuple[str | None, str | None]:
+    """(version_id, None) if `key` holds exactly these bytes, else (None, reason).
+
+    For a single-PUT object written with ChecksumSHA256, S3's stored checksum
+    is the true whole-file SHA-256 (no `-N` part suffix), so this HEAD proves
+    the bytes without reading them.
+    """
+    try:
+        h = client().head_object(Bucket=settings.bucket, Key=key, ChecksumMode="ENABLED")
+    except client().exceptions.ClientError as e:
+        return None, f"not stored ({e.response['Error'].get('Code', 'error')})"
+    if h["ContentLength"] != size_bytes:
+        return None, f"size {h['ContentLength']} != declared {size_bytes}"
+    if h.get("ChecksumSHA256") != hex_to_b64(sha256_hex):
+        return None, "stored SHA-256 missing or different (must be a single PUT with ChecksumSHA256)"
+    return h.get("VersionId"), None
+
+
+def delete_all_versions(prefix: str) -> tuple[int, int]:
+    """Permanently delete every version and delete marker under `prefix`.
+    Returns (objects, bytes) removed. Irreversible — callers gate it."""
+    objects = size = 0
+    for page in client().get_paginator("list_object_versions").paginate(Bucket=settings.bucket, Prefix=prefix):
+        batch = [{"Key": v["Key"], "VersionId": v["VersionId"]}
+                 for v in page.get("Versions", []) + page.get("DeleteMarkers", [])]
+        objects += len(page.get("Versions", []))
+        size += sum(v["Size"] for v in page.get("Versions", []))
+        for i in range(0, len(batch), 1000):
+            client().delete_objects(Bucket=settings.bucket, Delete={"Objects": batch[i:i + 1000], "Quiet": True})
+    return objects, size
 
 
 COPY_WORKERS = 16                     # UploadPartCopy calls in flight per imported file

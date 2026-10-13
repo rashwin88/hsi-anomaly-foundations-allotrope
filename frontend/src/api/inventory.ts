@@ -11,6 +11,8 @@ import type {
   InventoryDatasetDetail,
   InventoryDatasetsPage,
   InventoryEvent,
+  InventoryFilesPage,
+  InventoryKind,
   InventorySensor,
   InventoryStats,
   InventoryStatus,
@@ -55,6 +57,7 @@ export interface ListInventoryOptions {
   sensor_type?: string;
   processing_level?: string;
   status?: InventoryStatus;
+  kind?: InventoryKind;
   /** Every tag must match. */
   tags?: string[];
   /** Substring of the provider's scene id. */
@@ -75,6 +78,7 @@ export async function listInventoryDatasets(
   if (opts.sensor_type) params.set("sensor_type", opts.sensor_type);
   if (opts.processing_level) params.set("processing_level", opts.processing_level);
   if (opts.status) params.set("status", opts.status);
+  if (opts.kind) params.set("kind", opts.kind);
   for (const t of opts.tags ?? []) params.append("tag", t);
   if (opts.q && opts.q.trim() !== "") params.set("q", opts.q.trim());
   if (opts.bbox && opts.bbox.trim() !== "") params.set("bbox", opts.bbox.trim());
@@ -85,6 +89,18 @@ export async function listInventoryDatasets(
 
 export async function getInventoryDataset(id: string): Promise<InventoryDatasetDetail> {
   return getJson<InventoryDatasetDetail>(`/datasets/${encodeURIComponent(id)}`);
+}
+
+/** One page of a dataset's files; `q` matches anywhere in the path (e.g. a site id). */
+export async function listInventoryFiles(
+  id: string,
+  opts: { q?: string; limit?: number; offset?: number } = {},
+): Promise<InventoryFilesPage> {
+  const params = new URLSearchParams();
+  params.set("limit", String(opts.limit ?? 100));
+  params.set("offset", String(opts.offset ?? 0));
+  if (opts.q && opts.q.trim() !== "") params.set("q", opts.q.trim());
+  return getJson<InventoryFilesPage>(`/datasets/${encodeURIComponent(id)}/files`, params);
 }
 
 export async function listInventoryEvents(id: string): Promise<InventoryEvent[]> {

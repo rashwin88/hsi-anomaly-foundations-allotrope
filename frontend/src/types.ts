@@ -378,7 +378,11 @@ export interface CreateActionPayload {
 // --- Raw-dataset inventory (backend/allotrope_inventory) -------------
 // A separate service reached through nginx at /inventory-api/ (read-only).
 
-export type InventoryStatus = "pending" | "available" | "failed";
+export type InventoryStatus = "pending" | "available" | "failed" | "retired";
+
+/** scene: one acquisition · archive: a packaged delivery kept as-is ·
+ *  collection: many small items unpacked from an archive (e.g. patches). */
+export type InventoryKind = "scene" | "archive" | "collection";
 
 /** GeoJSON geometry, EPSG:4326 lon/lat. Only Polygon/MultiPolygon are drawn. */
 export interface GeoJsonGeometry {
@@ -392,6 +396,7 @@ export interface InventoryDataset {
   sensor_scene_id: string;
   processing_level: string;
   status: InventoryStatus;
+  kind: InventoryKind;
   acquisition_at: string | null;
   footprint: GeoJsonGeometry | null;
   s3_uri: string;
@@ -418,10 +423,19 @@ export interface InventorySource {
   fetched_at: string;
 }
 
+/** Files are paged separately (a collection can hold ~500k). */
 export interface InventoryDatasetDetail extends InventoryDataset {
-  files: InventoryDatasetFile[];
+  file_count: number;
+  uploading_count: number;
   total_bytes: number;
   sources: InventorySource[];
+}
+
+export interface InventoryFilesPage {
+  items: InventoryDatasetFile[];
+  total: number;
+  limit: number;
+  offset: number;
 }
 
 export interface InventoryDatasetsPage {

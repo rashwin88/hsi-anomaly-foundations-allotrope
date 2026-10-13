@@ -46,7 +46,7 @@ def _sync_manifest(db: Session, d: Dataset) -> None:
     the commit so an S3 failure rolls the tag change back."""
     if d.status == "available":
         db.flush()
-        write_manifest(db, d)
+        write_manifest(db, d, with_files=False)
 
 
 # --- Routes -----------------------------------------------------------

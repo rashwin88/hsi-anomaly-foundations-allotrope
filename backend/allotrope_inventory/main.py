@@ -8,6 +8,7 @@ from fastapi import Depends, FastAPI
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+from .api.bulk import router as bulk_router
 from .api.datasets import router as datasets_router
 from .api.imports import router as imports_router
 from .api.sensors import router as sensors_router
@@ -26,6 +27,7 @@ app.include_router(datasets_router)
 app.include_router(tags_router)
 app.include_router(uploads_router)
 app.include_router(imports_router)
+app.include_router(bulk_router)
 app.include_router(stats_router)
 
 

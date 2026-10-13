@@ -15,8 +15,14 @@ import {
   getInventoryDataset,
   isInventoryUnavailable,
   listInventoryEvents,
+  listInventoryFiles,
 } from "../api/inventory";
-import type { GeoJsonGeometry, InventoryDatasetDetail, InventoryEvent } from "../types";
+import type {
+  GeoJsonGeometry,
+  InventoryDatasetDetail,
+  InventoryEvent,
+  InventoryFilesPage,
+} from "../types";
 import { formatInventoryDate, statusPillClass } from "./InventoryPage";
 
 type Ring = [number, number][];
@@ -99,6 +105,10 @@ function describeEvent(e: InventoryEvent): string {
       return `Finalised — ${String(p.files)} files, ${formatBytes(Number(p.total_bytes ?? 0))}`;
     case "dataset.downloaded":
       return "Download links issued";
+    case "files.bulk_registered":
+      return `Registered ${Number(p.registered ?? 0).toLocaleString()} files in bulk`;
+    case "dataset.retired":
+      return `Retired — payload deleted (${Number(p.objects_deleted ?? 0).toLocaleString()} objects, ${formatBytes(Number(p.bytes_deleted ?? 0))}): ${String(p.reason)}`;
     case "tag.added":
       return `Tagged ${String(p.tag)}`;
     case "tag.removed":
@@ -106,6 +116,106 @@ function describeEvent(e: InventoryEvent): string {
     default:
       return e.kind;
   }
+}
+
+const FILES_PAGE = 100;
+
+/** Paged, path-searchable file list — a collection can hold ~500k files. */
+function FilesSection({ datasetId, retired }: { datasetId: string; retired: boolean }) {
+  const [q, setQ] = useState("");
+  const [query, setQuery] = useState("");
+  const [offset, setOffset] = useState(0);
+  const [page, setPage] = useState<InventoryFilesPage | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const t = window.setTimeout(() => {
+      setQuery(q);
+      setOffset(0);
+    }, 300);
+    return () => window.clearTimeout(t);
+  }, [q]);
+
+  useEffect(() => {
+    let cancelled = false;
+    listInventoryFiles(datasetId, { q: query, limit: FILES_PAGE, offset })
+      .then((p) => !cancelled && setPage(p))
+      .catch((err) => !cancelled && setError(err instanceof ApiError ? err.detail ?? `HTTP ${err.status}` : "Could not load files."));
+    return () => {
+      cancelled = true;
+    };
+  }, [datasetId, query, offset]);
+
+  const total = page?.total ?? 0;
+  return (
+    <>
+      <div className="inventory-detail__files-head">
+        <h3 className="inventory-detail__section-title">
+          Files {page ? <span className="muted small">({total.toLocaleString()}{query ? " matching" : ""})</span> : null}
+        </h3>
+        <label className="form__field inventory-detail__files-search">
+          <input
+            type="text"
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Search path, e.g. a site id like 0019846"
+          />
+        </label>
+      </div>
+      {retired && (
+        <p className="muted small">
+          This dataset is retired: its payload was deleted and the list below is the record of what it held.
+        </p>
+      )}
+      {error && <p className="form__error">{error}</p>}
+      <div className="data-table-wrap">
+        <table className="data-table">
+          <thead>
+            <tr>
+              <th>Path</th>
+              <th>Size</th>
+              <th>SHA-256</th>
+              <th>State</th>
+            </tr>
+          </thead>
+          <tbody>
+            {(page?.items ?? []).map((f) => (
+              <tr key={f.relative_path}>
+                <td className="data-table__primary mono">{f.relative_path}</td>
+                <td>{formatBytes(f.size_bytes)}</td>
+                <td className="mono inventory-detail__hash" title={f.sha256}>
+                  {f.sha256.slice(0, 16)}…
+                </td>
+                <td>
+                  <span className={statusPillClass(retired ? "retired" : f.uploaded ? "available" : "pending")}>
+                    {retired ? "deleted" : f.uploaded ? "verified" : "uploading"}
+                  </span>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {total > FILES_PAGE && (
+        <div className="pagination">
+          <span className="pagination__range">
+            {(offset + 1).toLocaleString()}–{Math.min(offset + FILES_PAGE, total).toLocaleString()} of{" "}
+            {total.toLocaleString()}
+          </span>
+          <div className="pagination__buttons">
+            <button type="button" className="pagination__btn" disabled={offset === 0}
+              onClick={() => setOffset(Math.max(0, offset - FILES_PAGE))}>
+              Previous
+            </button>
+            <button type="button" className="pagination__btn" disabled={offset + FILES_PAGE >= total}
+              onClick={() => setOffset(offset + FILES_PAGE)}>
+              Next
+            </button>
+          </div>
+        </div>
+      )}
+    </>
+  );
 }
 
 export function InventoryDatasetPage() {
@@ -170,6 +280,7 @@ export function InventoryDatasetPage() {
         <div>
           <h2 className="page__title mono inventory-detail__title">{d.sensor_scene_id}</h2>
           <p className="page__subtitle">
+            <span className={`inventory__kind inventory__kind--${d.kind}`}>{d.kind}</span>{" "}
             <span className="sensor-pill">{d.sensor_type}</span>{" "}
             <span className="muted">{d.processing_level}</span>{" "}
             <span className={statusPillClass(d.status)}>{d.status}</span>
@@ -192,7 +303,9 @@ export function InventoryDatasetPage() {
             <div className="panel__row">
               <dt>Size</dt>
               <dd>
-                {formatBytes(d.total_bytes)} in {d.files.length} file{d.files.length === 1 ? "" : "s"}
+                {formatBytes(d.total_bytes)} in {d.file_count.toLocaleString()} file
+                {d.file_count === 1 ? "" : "s"}
+                {d.uploading_count > 0 && <span className="muted"> ({d.uploading_count} still uploading)</span>}
               </dd>
             </div>
             <div className="panel__row">
@@ -274,35 +387,7 @@ export function InventoryDatasetPage() {
         </section>
       </div>
 
-      <h3 className="inventory-detail__section-title">Files</h3>
-      <div className="data-table-wrap">
-        <table className="data-table">
-          <thead>
-            <tr>
-              <th>Path</th>
-              <th>Size</th>
-              <th>SHA-256</th>
-              <th>State</th>
-            </tr>
-          </thead>
-          <tbody>
-            {d.files.map((f) => (
-              <tr key={f.relative_path}>
-                <td className="data-table__primary mono">{f.relative_path}</td>
-                <td>{formatBytes(f.size_bytes)}</td>
-                <td className="mono inventory-detail__hash" title={f.sha256}>
-                  {f.sha256.slice(0, 16)}…
-                </td>
-                <td>
-                  <span className={statusPillClass(f.uploaded ? "available" : "pending")}>
-                    {f.uploaded ? "verified" : "uploading"}
-                  </span>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <FilesSection datasetId={d.id} retired={d.status === "retired"} />
 
       <h3 className="inventory-detail__section-title">Activity</h3>
       <ol className="inventory-detail__timeline">

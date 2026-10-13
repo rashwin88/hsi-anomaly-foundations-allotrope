@@ -4,7 +4,11 @@ Conventions (mirroring the main app's Scene):
 - `(sensor_type, sensor_scene_id, processing_level)` is unique — the same
   delivery cannot be catalogued twice. L1 and L2D of one capture are two rows.
 - Status is text, not an ENUM: `pending` (registered, uploading) →
-  `available` (finalised, checksums verified) or `failed`.
+  `available` (finalised, checksums verified) or `failed`; `retired` once
+  its payload is deleted (row, manifest and audit trail kept).
+- Kind is text: `scene` (one acquisition, the default), `archive` (a
+  packaged delivery kept as-is), `collection` (many small items unpacked
+  from an archive, e.g. SpectralEarth patches).
 - Footprint is EPSG:4326, any geometry type (scenes can be multipolygons).
 - Every row is reproducible from `<s3_prefix>/manifest.json`; the bucket is
   the record of truth and this table is its index.
@@ -31,6 +35,7 @@ class Dataset(Base):
             name="datasets_sensor_scene_level_uq",
         ),
         Index("datasets_status_idx", "status"),
+        Index("datasets_kind_idx", "kind"),
         Index("datasets_acquisition_at_idx", "acquisition_at"),
         Index("datasets_footprint_idx", "footprint", postgresql_using="gist"),
     )
@@ -48,6 +53,9 @@ class Dataset(Base):
 
     status: Mapped[str] = mapped_column(
         Text, nullable=False, server_default=text("'pending'")
+    )
+    kind: Mapped[str] = mapped_column(
+        Text, nullable=False, server_default=text("'scene'")
     )
 
     # --- Where and when ---------------------------------------------------

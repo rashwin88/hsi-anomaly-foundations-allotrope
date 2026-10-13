@@ -40,6 +40,14 @@ router = APIRouter(prefix="/datasets", tags=["uploads"])
 # --- Schemas ----------------------------------------------------------
 
 
+def check_relative_path(v: str) -> str:
+    """A clean forward-slash path that cannot escape payload/ (shared with bulk)."""
+    segments = v.split("/")
+    if "\\" in v or any(s in ("", ".", "..") for s in segments) or not v.isprintable():
+        raise ValueError("relative_path must be a clean forward-slash path inside payload/")
+    return v
+
+
 class FileDeclaration(BaseModel):
     relative_path: str = Field(
         min_length=1, max_length=512, description="Path under payload/, forward slashes."
@@ -54,10 +62,7 @@ class FileDeclaration(BaseModel):
     @field_validator("relative_path")
     @classmethod
     def _safe_path(cls, v: str) -> str:
-        segments = v.split("/")
-        if "\\" in v or any(s in ("", ".", "..") for s in segments) or not v.isprintable():
-            raise ValueError("relative_path must be a clean forward-slash path inside payload/")
-        return v
+        return check_relative_path(v)
 
     @field_validator("source_uri")
     @classmethod

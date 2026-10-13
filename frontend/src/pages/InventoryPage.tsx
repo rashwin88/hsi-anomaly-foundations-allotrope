@@ -22,6 +22,7 @@ import {
 } from "../api/inventory";
 import type {
   InventoryDatasetsPage,
+  InventoryKind,
   InventorySensor,
   InventoryStats,
   InventoryStatus,
@@ -29,13 +30,20 @@ import type {
 } from "../types";
 
 const PAGE_SIZE = 50;
-const STATUSES: InventoryStatus[] = ["available", "pending", "failed"];
+const STATUSES: InventoryStatus[] = ["available", "pending", "failed", "retired"];
+const KINDS: InventoryKind[] = ["scene", "collection", "archive"];
 // Filter keys mirrored in the URL. `tag` repeats.
-const FILTER_KEYS = ["q", "sensor", "level", "status", "tag", "from", "to", "bbox"];
+const FILTER_KEYS = ["q", "sensor", "level", "status", "kind", "tag", "from", "to", "bbox"];
 
 export function statusPillClass(status: string): string {
   const tone =
-    status === "available" ? "complete" : status === "pending" ? "running" : "failed";
+    status === "available"
+      ? "complete"
+      : status === "pending"
+        ? "running"
+        : status === "retired"
+          ? "retired"
+          : "failed";
   return `status-pill status-pill--${tone}`;
 }
 
@@ -62,6 +70,7 @@ export function InventoryPage() {
   const sensor = params.get("sensor") ?? "";
   const level = params.get("level") ?? "";
   const status = (params.get("status") ?? "") as InventoryStatus | "";
+  const kind = (params.get("kind") ?? "") as InventoryKind | "";
   const tags = params.getAll("tag");
   const from = params.get("from") ?? "";
   const to = params.get("to") ?? "";
@@ -131,6 +140,7 @@ export function InventoryPage() {
       sensor_type: sensor || undefined,
       processing_level: level || undefined,
       status: status || undefined,
+      kind: kind || undefined,
       tags,
       bbox,
       acquired_from: from || undefined,
@@ -150,7 +160,7 @@ export function InventoryPage() {
     return () => {
       cancelled = true;
     };
-  }, [q, sensor, level, status, tagKey, from, to, bbox, offset]);
+  }, [q, sensor, level, status, kind, tagKey, from, to, bbox, offset]);
 
   const bySensor = useMemo(() => {
     const out = new Map<string, { datasets: number; bytes: number }>();
@@ -309,6 +319,17 @@ export function InventoryPage() {
           </select>
         </label>
         <label className="form__field">
+          <span className="form__label">Kind</span>
+          <select value={kind} onChange={(e) => setFilter("kind", e.target.value)}>
+            <option value="">Any kind</option>
+            {KINDS.map((k) => (
+              <option key={k} value={k}>
+                {k}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="form__field">
           <span className="form__label">Acquired from</span>
           <input type="date" value={from} onChange={(e) => setFilter("from", e.target.value)} />
         </label>
@@ -369,6 +390,7 @@ export function InventoryPage() {
             <thead>
               <tr>
                 <th>Scene id</th>
+                <th>Kind</th>
                 <th>Sensor</th>
                 <th>Level</th>
                 <th>Acquired</th>
@@ -395,6 +417,9 @@ export function InventoryPage() {
                     }}
                   >
                     <td className="data-table__primary mono">{d.sensor_scene_id}</td>
+                    <td>
+                      <span className={`inventory__kind inventory__kind--${d.kind}`}>{d.kind}</span>
+                    </td>
                     <td>
                       <span className="sensor-pill">{sensorName(d.sensor_type)}</span>
                     </td>

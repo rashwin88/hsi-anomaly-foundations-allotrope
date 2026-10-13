@@ -6748,3 +6748,43 @@ a.inventory__tag:hover {
 .inventory-detail__timeline li:nth-child(odd) {
   background: var(--row-stripe);
 }
+
+/* Inventory: kinds, retired status, paged files */
+
+.inventory__kind {
+  display: inline-block;
+  padding: 0.12rem 0.55rem;
+  border-radius: 999px;
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  border: 1px solid var(--rule);
+  color: var(--fg-dim);
+  text-transform: lowercase;
+}
+
+.inventory__kind--collection {
+  border-color: var(--accent-warm);
+  color: var(--accent-warm);
+}
+
+.inventory__kind--archive {
+  border-style: dashed;
+}
+
+.status-pill--retired {
+  background: var(--bg-subtle);
+  color: var(--fg-dim);
+}
+
+.inventory-detail__files-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--sp-4);
+  flex-wrap: wrap;
+}
+
+.inventory-detail__files-search {
+  min-width: 280px;
+  margin-bottom: var(--sp-3);
+}

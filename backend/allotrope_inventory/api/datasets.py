@@ -1,8 +1,11 @@
-"""Datasets — one scene delivery each.
+"""Datasets — one holding each: a scene, an archive, or an unpacked collection.
 
 Lifecycle: POST registers a `pending` row and fixes its S3 prefix; files
-are then uploaded and the dataset finalised (later routes). Footprints go in
-and out as GeoJSON geometries in EPSG:4326.
+are then uploaded (or copied, or bulk-registered) and the dataset finalised
+(later routes). Footprints go in and out as GeoJSON geometries in EPSG:4326.
+
+A collection can hold hundreds of thousands of files, so the detail view
+carries counts and the files themselves are paged through /files.
 """
 
 import uuid
@@ -29,6 +32,8 @@ router = APIRouter(prefix="/datasets", tags=["datasets"])
 
 # Origins a delivery can be fetched from; the scheme doubles as the kind.
 SOURCE_SCHEMES = ("s3://", "gdrive://", "file://", "https://", "http://")
+# See models/dataset.py for what each kind means.
+KIND_PATTERN = r"^(scene|archive|collection)$"
 
 
 # --- Schemas ----------------------------------------------------------
@@ -42,6 +47,7 @@ class DatasetCreate(BaseModel):
     )
     # Becomes an S3 path segment, hence the tight pattern.
     processing_level: str = Field(pattern=r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,31}$", examples=["L2D"])
+    kind: str = Field(default="scene", pattern=KIND_PATTERN)
     acquisition_at: datetime | None = None
     footprint: dict[str, Any] | None = Field(
         default=None, description="GeoJSON geometry, EPSG:4326 lon/lat."
@@ -78,7 +84,8 @@ class DatasetPublic(BaseModel):
     sensor_type: str
     sensor_scene_id: str
     processing_level: str
-    status: str                   # pending | available | failed
+    status: str                   # pending | available | failed | retired
+    kind: str                     # scene | archive | collection
     acquisition_at: datetime | None
     footprint: dict[str, Any] | None
     s3_uri: str                   # s3://<bucket>/<prefix>/
@@ -96,6 +103,7 @@ class DatasetPublic(BaseModel):
             sensor_scene_id=d.sensor_scene_id,
             processing_level=d.processing_level,
             status=d.status,
+            kind=d.kind,
             acquisition_at=d.acquisition_at,
             footprint=mapping(to_shape(d.footprint)) if d.footprint is not None else None,
             s3_uri=f"s3://{settings.bucket}/{d.s3_prefix}/",
@@ -124,11 +132,22 @@ class ProvenancePublic(BaseModel):
 
 
 class DatasetDetail(DatasetPublic):
-    """DatasetPublic plus its files and origins (GET /datasets/{id} only)."""
+    """DatasetPublic plus file totals and origins (GET /datasets/{id} only).
+    The files themselves are paged through GET /datasets/{id}/files."""
 
-    files: list[DatasetFilePublic]
+    file_count: int
+    uploading_count: int          # files whose upload is still open
     total_bytes: int
     sources: list[ProvenancePublic]
+
+
+class FilesPage(BaseModel):
+    """Paginated files of one dataset."""
+
+    items: list[DatasetFilePublic]
+    total: int
+    limit: int
+    offset: int
 
 
 class DatasetsPage(BaseModel):
@@ -164,50 +183,59 @@ def tags_by_dataset(db: Session, ids: list[uuid.UUID]) -> dict[uuid.UUID, list[s
 
 
 def dataset_detail(db: Session, d: Dataset) -> DatasetDetail:
-    """The full read view of one dataset: row, tags, files, origins."""
-    files = db.scalars(
-        select(DatasetFile).where(DatasetFile.dataset_id == d.id).order_by(DatasetFile.relative_path)
-    ).all()
-    path_of = {f.id: f.relative_path for f in files}
-    origins = db.scalars(
-        select(Provenance).where(Provenance.dataset_id == d.id).order_by(Provenance.fetched_at)
+    """The read view of one dataset: row, tags, file totals, origins."""
+    count, uploading, total = db.execute(
+        select(
+            func.count(DatasetFile.id),
+            func.count(DatasetFile.upload_id),
+            func.coalesce(func.sum(DatasetFile.size_bytes), 0),
+        ).where(DatasetFile.dataset_id == d.id)
+    ).one()
+    rows = db.execute(
+        select(Provenance, DatasetFile.relative_path)
+        .outerjoin(DatasetFile, DatasetFile.id == Provenance.dataset_file_id)
+        .where(Provenance.dataset_id == d.id).order_by(Provenance.fetched_at).limit(500)
     ).all()
     public = DatasetPublic.from_orm_dataset(d, tags_by_dataset(db, [d.id])[d.id])
     return DatasetDetail(
         **public.model_dump(),
-        files=[
-            DatasetFilePublic(
-                relative_path=f.relative_path, size_bytes=f.size_bytes, sha256=f.sha256,
-                uploaded=f.upload_id is None, s3_version_id=f.s3_version_id,
-            )
-            for f in files
-        ],
-        total_bytes=sum(f.size_bytes for f in files),
+        file_count=count,
+        uploading_count=uploading,
+        total_bytes=total,
         sources=[
             ProvenancePublic(
-                source_uri=o.source_uri, relative_path=path_of.get(o.dataset_file_id),
+                source_uri=o.source_uri, relative_path=path,
                 note=o.note, fetched_by=o.fetched_by, fetched_at=o.fetched_at,
             )
-            for o in origins
+            for o, path in rows
         ],
     )
 
 
-def write_manifest(db: Session, d: Dataset) -> None:
-    """Rewrite `<prefix>/manifest.json` from the current rows.
+def write_manifest(db: Session, d: Dataset, with_files: bool = True) -> None:
+    """Rewrite `<prefix>/manifest.json`, and with it `files.jsonl.gz`.
 
-    Called on finalise and on every tag change of an available dataset, so
-    the bucket alone is enough to rebuild this database. Part hashes ride
-    along so a rebuilt index can still verify the stored objects.
+    manifest.json is the dataset's summary; files.jsonl.gz holds one line per
+    file (path, size, sha256, part hashes, version) — split out because a
+    collection can have ~500k files. Together they are enough to rebuild this
+    database from the bucket. Tag changes pass `with_files=False`: the file
+    list hasn't changed, and rewriting 500k lines per tag would be waste.
     """
     body = dataset_detail(db, d).model_dump(mode="json")
-    part_hashes = dict(db.execute(
-        select(DatasetFile.relative_path, DatasetFile.part_sha256)
-        .where(DatasetFile.dataset_id == d.id)
-    ).all())
-    for f in body["files"]:
-        f["part_sha256"] = part_hashes[f["relative_path"]]
     body["part_size"] = s3.PART_SIZE
+    body["files_manifest"] = "files.jsonl.gz"
+    if with_files:
+        rows = db.execute(
+            select(
+                DatasetFile.relative_path, DatasetFile.size_bytes, DatasetFile.sha256,
+                DatasetFile.part_sha256, DatasetFile.s3_version_id,
+            ).where(DatasetFile.dataset_id == d.id).order_by(DatasetFile.relative_path)
+            .execution_options(yield_per=10_000)
+        )
+        s3.put_files_manifest(d.s3_prefix, (
+            {"relative_path": p, "size_bytes": n, "sha256": h, "part_sha256": ph, "s3_version_id": v}
+            for p, n, h, ph, v in rows
+        ))
     s3.put_manifest(d.s3_prefix, body)
 
 
@@ -239,6 +267,7 @@ def register_dataset(
         sensor_type=body.sensor_type,
         sensor_scene_id=body.sensor_scene_id,
         processing_level=body.processing_level,
+        kind=body.kind,
         acquisition_at=body.acquisition_at,
         footprint=from_shape(shape(body.footprint), srid=4326) if body.footprint else None,
         s3_prefix=f"{body.sensor_type}/{body.processing_level}/{to_prefixed('ds', dataset_id)}",
@@ -271,7 +300,8 @@ def list_datasets(
     offset: int = Query(0, ge=0, description="Offset into the result set"),
     sensor_type: str | None = Query(None, description="e.g. prisma"),
     processing_level: str | None = Query(None, description="e.g. L2D"),
-    status_: str | None = Query(None, alias="status", description="pending | available | failed"),
+    status_: str | None = Query(None, alias="status", description="pending | available | failed | retired"),
+    kind: str | None = Query(None, description="scene | archive | collection"),
     tag: list[str] = Query([], description="Repeatable; a dataset must carry every tag given"),
     q: str | None = Query(None, max_length=200, description="Substring of sensor_scene_id"),
     bbox: str | None = Query(
@@ -291,6 +321,8 @@ def list_datasets(
         base = base.where(Dataset.processing_level == processing_level)
     if status_ is not None:
         base = base.where(Dataset.status == status_)
+    if kind is not None:
+        base = base.where(Dataset.kind == kind)
     for t in tag:
         base = base.where(
             select(DatasetTag.tag)
@@ -300,8 +332,7 @@ def list_datasets(
     if q is not None and q.strip():
         # Escape LIKE wildcards rather than strip them: product ids are full
         # of underscores (PRS_L2D_STD_…), and stripping would never match.
-        needle = q.strip().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
-        base = base.where(Dataset.sensor_scene_id.ilike(f"%{needle}%", escape="\\"))
+        base = base.where(Dataset.sensor_scene_id.ilike(f"%{like_needle(q)}%", escape="\\"))
     if bbox is not None:
         try:
             min_lon, min_lat, max_lon, max_lat = (float(v) for v in bbox.split(","))
@@ -368,3 +399,46 @@ def list_events(
         EventPublic(kind=e.kind, actor=e.actor, payload=e.payload, created_at=e.created_at)
         for e in rows
     ]
+
+
+
+def like_needle(q: str) -> str:
+    """Escape LIKE wildcards so `_` in product ids and paths is literal."""
+    return q.strip().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+
+@router.get(
+    "/{dataset_id}/files",
+    response_model=FilesPage,
+    status_code=status.HTTP_200_OK,
+    summary="Files of one dataset (paged, searchable by path)",
+)
+def list_files(
+    dataset_id: str,
+    limit: int = Query(100, ge=1, le=1000),
+    offset: int = Query(0, ge=0),
+    q: str | None = Query(None, max_length=300, description="Substring of the path, e.g. a site id"),
+    uploaded: bool | None = Query(None, description="Only verified (true) or still-uploading (false)"),
+    _actor: str = Depends(require_key),
+    db: Session = Depends(get_db),
+) -> FilesPage:
+    d = dataset_or_404(dataset_id, db)
+    base = select(DatasetFile).where(DatasetFile.dataset_id == d.id)
+    if q is not None and q.strip():
+        base = base.where(DatasetFile.relative_path.ilike(f"%{like_needle(q)}%", escape="\\"))
+    if uploaded is not None:
+        base = base.where(
+            DatasetFile.upload_id.is_(None) if uploaded else DatasetFile.upload_id.is_not(None)
+        )
+    total = db.scalar(select(func.count()).select_from(base.subquery())) or 0
+    rows = db.scalars(base.order_by(DatasetFile.relative_path).limit(limit).offset(offset)).all()
+    return FilesPage(
+        items=[
+            DatasetFilePublic(
+                relative_path=f.relative_path, size_bytes=f.size_bytes, sha256=f.sha256,
+                uploaded=f.upload_id is None, s3_version_id=f.s3_version_id,
+            )
+            for f in rows
+        ],
+        total=total, limit=limit, offset=offset,
+    )
