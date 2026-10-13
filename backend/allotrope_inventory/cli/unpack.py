@@ -13,8 +13,8 @@ start again — a .tar.gz cannot be seeked — but members already verified in
 the collection are neither uploaded nor registered twice.
 
 Needs boto3, read on the archive and write on the collection prefix (on the
-EC2 box: the instance role). Uses `pigz` when it is on PATH, else Python's
-gzip reader.
+EC2 box: the instance role). Decompresses with `igzip` (apt: isal) or
+`pigz` when on PATH, else Python's gzip reader.
 """
 
 import base64
@@ -84,10 +84,12 @@ def run(c, archive: dict, coll: dict, parts_glob: str, put_workers: int, echo=pr
     done = set(c.verified_files(coll["id"]))
     echo(f"{len(done):,} members already in the collection")
 
-    # The parts concatenated are one gzip stream. pigz decompresses it when
-    # present (the box); otherwise tarfile's own gzip reader does, slower.
-    if shutil.which("pigz"):
-        pigz = subprocess.Popen(["pigz", "-dc"], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+    # The parts concatenated are one gzip stream, and gzip inflates on one
+    # core only, so the decompressor sets the pace. Measured on the box
+    # (2 GiB of SpectralEarth): igzip (ISA-L) 261 MiB/s, pigz 129, gzip 114.
+    tool = next((t for t in ("igzip", "pigz") if shutil.which(t)), None)
+    if tool:
+        pigz = subprocess.Popen([tool, "-dc"], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                                 bufsize=4 * 1024 * 1024)
         sink, stream, mode = pigz.stdin, pigz.stdout, "r|"
     else:
@@ -180,7 +182,7 @@ def run(c, archive: dict, coll: dict, parts_glob: str, put_workers: int, echo=pr
     if feed_error:
         raise SystemExit(f"reading the archive failed: {feed_error[0]}")
     if pigz is not None and pigz.wait() != 0:
-        raise SystemExit(f"pigz exited {pigz.returncode}: the archive stream is corrupt or truncated")
+        raise SystemExit(f"{tool} exited {pigz.returncode}: the archive stream is corrupt or truncated")
     echo(f"unpacked {stats['seen']:,} members ({stats['new']:,} new, "
          f"{stats['bytes'] / 1024**4:.2f} TiB) in {(time.time() - t0) / 3600:.1f} h")
 
