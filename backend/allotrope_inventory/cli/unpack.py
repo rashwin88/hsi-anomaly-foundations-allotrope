@@ -31,6 +31,8 @@ import time
 from concurrent.futures import Future, ThreadPoolExecutor, wait
 
 BATCH = 2000                          # rows per POST /files/bulk
+RANGE = 64 * 1024 * 1024              # archive read in ranged GETs of this size…
+RANGES_IN_FLIGHT = 8                  # …this many at once: one S3 stream caps near 100 MB/s
 MAX_IN_FLIGHT = 256                   # members read but not yet uploaded (~1.7 GB of patches)
 
 
@@ -46,14 +48,34 @@ def _s3():
     return boto3.client("s3", region_name="ap-south-1", config=Config(max_pool_connections=300))
 
 
+def ordered_ranges(cli, bucket: str, key: str, size: int):
+    """Yield an object's bytes in order, fetched RANGES_IN_FLIGHT ranges at a
+    time. A single GET stream tops out near 100 MB/s, which starved the
+    decompressor (measured 94 MiB/s on the first SpectralEarth run)."""
+    n = max(1, -(-size // RANGE))
+
+    def fetch(i: int) -> bytes:
+        lo = i * RANGE
+        return cli.get_object(Bucket=bucket, Key=key, Range=f"bytes={lo}-{min(lo + RANGE, size) - 1}")["Body"].read()
+
+    with ThreadPoolExecutor(max_workers=RANGES_IN_FLIGHT) as pool:
+        futures = [pool.submit(fetch, i) for i in range(min(RANGES_IN_FLIGHT, n))]
+        for i in range(n):
+            data = futures[i].result()
+            if i + RANGES_IN_FLIGHT < n:
+                futures.append(pool.submit(fetch, i + RANGES_IN_FLIGHT))
+            futures[i] = None         # let the buffer go once written
+            yield data
+
+
 def run(c, archive: dict, coll: dict, parts_glob: str, put_workers: int, echo=print) -> None:
     cli = _s3()
     a_bucket, _, a_prefix = archive["s3_uri"].removeprefix("s3://").partition("/")
     c_bucket, _, c_prefix = coll["s3_uri"].removeprefix("s3://").partition("/")
 
+    sizes = {f["relative_path"]: f["size_bytes"] for f in _all_files(c, archive["id"])}
     parts = sorted(
-        (f["relative_path"] for f in _all_files(c, archive["id"])
-         if fnmatch.fnmatch(f["relative_path"].rsplit("/", 1)[-1], parts_glob)),
+        (rel for rel in sizes if fnmatch.fnmatch(rel.rsplit("/", 1)[-1], parts_glob)),
         key=_natural,
     )
     if not parts:
@@ -65,7 +87,8 @@ def run(c, archive: dict, coll: dict, parts_glob: str, put_workers: int, echo=pr
     # The parts concatenated are one gzip stream. pigz decompresses it when
     # present (the box); otherwise tarfile's own gzip reader does, slower.
     if shutil.which("pigz"):
-        pigz = subprocess.Popen(["pigz", "-dc"], stdin=subprocess.PIPE, stdout=subprocess.PIPE, bufsize=0)
+        pigz = subprocess.Popen(["pigz", "-dc"], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                                bufsize=4 * 1024 * 1024)
         sink, stream, mode = pigz.stdin, pigz.stdout, "r|"
     else:
         pigz = None
@@ -76,8 +99,7 @@ def run(c, archive: dict, coll: dict, parts_glob: str, put_workers: int, echo=pr
     def feed() -> None:
         try:
             for rel in parts:
-                body = cli.get_object(Bucket=a_bucket, Key=f"{a_prefix}payload/{rel}")["Body"]
-                for chunk in body.iter_chunks(16 * 1024 * 1024):
+                for chunk in ordered_ranges(cli, a_bucket, f"{a_prefix}payload/{rel}", sizes[rel]):
                     sink.write(chunk)
         except BaseException as e:    # surfaced by the main loop
             feed_error.append(e)
