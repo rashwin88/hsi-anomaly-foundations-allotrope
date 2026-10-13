@@ -1,0 +1,44 @@
+# Production override for the EC2 box — layered on docker-compose.yml:
+#
+#   docker compose -f docker/docker-compose.yml -f docker/docker-compose.prod.yml \
+#       --profile inventory up -d
+#
+# Adds Caddy as the only public listener (80 → redirect, 443 → TLS with an
+# automatic Let's Encrypt certificate for SITE_ADDRESS) in front of the
+# frontend's nginx. Everything else keeps its 127.0.0.1 binding. CPU only —
+# do not add docker-compose.gpu.yml here.
+#
+# SITE_ADDRESS comes from docker/.env, written by scripts/ec2/write_env.sh:
+# `<ip-with-dashes>.sslip.io` until the Cloudflare subdomain exists, then
+# the subdomain (DNS-only record — Cloudflare's proxy caps uploads at 100 MB).
+
+services:
+  caddy:
+    image: caddy:2.10-alpine
+    container_name: allotrope_caddy
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      SITE_ADDRESS: ${SITE_ADDRESS:?SITE_ADDRESS must be set in docker/.env}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      # Certificates and ACME account. Losing this means re-issuing, which
+      # Let's Encrypt rate-limits — keep the volume.
+      - allotrope_caddy_data:/data
+      - allotrope_caddy_config:/config
+    depends_on:
+      - frontend
+    restart: unless-stopped
+
+  api:
+    environment:
+      # Browser only ever reaches the api over HTTPS (via Caddy), so the
+      # JWT cookie is marked Secure.
+      COOKIE_SECURE: "true"
+
+volumes:
+  allotrope_caddy_data:
+    name: allotrope_caddy_data
+  allotrope_caddy_config:
+    name: allotrope_caddy_config
