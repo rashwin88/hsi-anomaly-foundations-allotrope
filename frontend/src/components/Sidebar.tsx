@@ -1,6 +1,6 @@
 // Sidebar (storyboard-spec § 4).
 //
-// Six standard destinations + an admin-only "Users" entry below a divider.
+// Seven standard destinations + an admin-only "Users" entry below a divider.
 // Active state is owned by NavLink (URL-driven). Keyboard navigation works
 // out of the box — anchors are tab-stops; focus-visible styling is in CSS.
 //
@@ -26,6 +26,7 @@ interface SidebarItem {
 const STANDARD_ITEMS: SidebarItem[] = [
   { to: "/", label: "Home", icon: "home", end: true },
   { to: "/scenes", label: "Scenes", icon: "scenes" },
+  { to: "/inventory", label: "Inventory", icon: "inventory" },
   { to: "/projects", label: "Projects", icon: "projects" },
   { to: "/models", label: "Models", icon: "models" },
   { to: "/jobs", label: "Jobs", icon: "jobs" },

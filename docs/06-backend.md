@@ -114,6 +114,57 @@ Paths are always stored **relative**; two volumes hold the bytes.
 Deleting a project is one `rm -rf projects/<pid>/` — the layout is designed so there are no
 orphans.
 
+
+## The raw-dataset inventory — a third, separate service
+
+`backend/allotrope_inventory/` is **not** part of the api/worker pair. It shares no code,
+no database and no volume with them, and nothing in the main stack depends on it. It is the
+catalogue of raw scene deliveries — one row per delivery, exactly as the provider shipped
+it — and the bytes live in **`s3://allotrope-raw-inventory-india`** (Prod account,
+ap-south-1). Inventory only: no sharding, no vendables, no processing.
+
+| | |
+|---|---|
+| Database | **Supabase** Postgres 17 + PostGIS (Mumbai), via the *session pooler* — the direct host is IPv6-only |
+| Migrations | `backend/alembic_inventory/`, run with `alembic -c alembic-inventory.ini upgrade head` |
+| Auth | `X-Inventory-Key` header; keys are `name:key` pairs in `INVENTORY_API_KEYS`, and the name is the actor in every audit row |
+| Config | `INVENTORY_*` env vars; local runs read `backend/.env.inventory` (gitignored) |
+| Port | 8020 |
+
+**API.** All under the service root; ids are `ds_<uuid>`.
+
+| Method | Path | Does |
+|---|---|---|
+| GET / POST | `/sensors` | list / add a sensor (slugs match `scenes.sensor_type`) |
+| POST | `/datasets` | register a delivery → `pending`; fixes its S3 prefix |
+| GET | `/datasets` | filter by `sensor_type`, `processing_level`, `status`, `tag` (repeat = AND), `q`, `bbox`, `acquired_from/to` |
+| GET | `/datasets/{id}` | row + files + sources + tags |
+| POST | `/datasets/{id}/uploads` | declare files → presigned multipart part URLs; **re-call to resume** |
+| POST | `/datasets/{id}/finalize` | complete + verify every upload, write `manifest.json` → `available` |
+| GET | `/datasets/{id}/download` | version-pinned presigned GETs |
+| PUT / DELETE | `/datasets/{id}/tags/{tag}` | idempotent; tag is `name` or `key:value` |
+| GET | `/tags` | tags with usage counts |
+
+**Bucket layout.** `<sensor>/<level>/ds_<uuid>/payload/<original paths>` plus
+`<sensor>/<level>/ds_<uuid>/manifest.json`. The manifest is the record of truth; the
+database is an index rebuildable from the bucket. Why, and how integrity is enforced:
+[`lld/inventory.md`](lld/inventory.md).
+
+**CLI** — HTTP only, needs just `requirements-inventory-cli.txt`. Run from `backend/` with
+`INVENTORY_URL` and `INVENTORY_KEY` set:
+
+```bash
+python -m allotrope_inventory.cli ingest ./PRS_L2D_…/ --sensor prisma --level L2D \
+    --scene-id PRS_L2D_STD_… --acquired-at 2025-03-01T05:12:00Z --footprint fp.geojson \
+    --meta cloud_cover_pct=3.2 --source gdrive://<id> --tag site:jharia
+python -m allotrope_inventory.cli ls --sensor prisma --bbox 86,23,87,24 --tag site:jharia
+python -m allotrope_inventory.cli download ds_<uuid> ./out/
+```
+
+`ingest` is resumable — re-run the same command after an interruption and only missing
+parts are sent. Registration fields (metadata, footprint, acquisition time) are fixed at
+first registration; there is no PATCH yet.
+
 ---
 
 **Next:** [7. Frontend](07-frontend.md) · [5. Detectors](05-detectors.md)

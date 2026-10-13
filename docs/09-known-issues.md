@@ -64,6 +64,12 @@ restores an empty optimizer state. (Noted in the old checkpoint inventory; still
 `VendableThermalDataset`, which has no such field and no `extra="allow"` — Pydantic v2
 discards it. The intended guard against treating raw DN as °C is therefore not in effect.
 
+**8. Scene search strips `_` and `%` instead of escaping them.** `list_scenes` in
+`backend/allotrope/api/scenes.py` removes both characters from `q` before the `ILIKE`, so
+any search containing an underscore — which is every PRISMA/EnMAP product id
+(`PRS_L2D_STD_…`) — becomes a different string and matches nothing. Fix: escape them and
+pass `escape="\\"`, as `allotrope_inventory/api/datasets.py` does.
+
 ## Deliberate limitations in segmentation sharding
 
 Added 2026-08-25 with the `enmap_seg` lane. All known and accepted, not defects. Design
@@ -84,6 +90,30 @@ rationale in `docs/lld/segmentation-sharding.md`.
   per-band masking open. Dropping it to a 2D mask saves a further ~33%.
 - **A float16 shard must be cast to float32 by its trainer.** The models are fp32.
   Segmentation shards store float16; the reconstruction lane still stores float32.
+
+## Raw-dataset inventory — deliberate limitations
+
+Added 2026-10-13 with `backend/allotrope_inventory/`. Design rationale in
+[`lld/inventory.md`](lld/inventory.md).
+
+- **No automated tests.** Every path was exercised by hand against live S3 and Supabase on
+  2026-10-13 (upload, resume, checksum rejection, finalise, manifest, download, CLI), but
+  nothing re-runs it. A harness was scoped — moto in server mode plus a throwaway PostGIS
+  container — and dropped.
+- **The container cannot reach S3 yet.** It needs `AWS_ACCESS_KEY_ID` /
+  `AWS_SECRET_ACCESS_KEY` in `backend/.env.inventory`. The intended identity is a dedicated
+  IAM user scoped to the one bucket; not yet created. Local runs use the `Allotrope-Prod`
+  profile.
+- **Registration fields are immutable.** Metadata, footprint and acquisition time are set
+  at `POST /datasets` and cannot be changed — no `PATCH`. `ingest` warns when a resume
+  passes different values.
+- **The whole-file SHA-256 is client-declared.** S3 cannot compute one for a multipart
+  object; integrity rests on per-part checks. See the LLD.
+- **Not built yet:** server-side import from the Beta bucket (Deep Archive needs a restore
+  first), a Google Drive source, the UI section, `rebuild-index` from manifests, and
+  deleting a dataset.
+- **Orphaned multipart uploads** from a request that fails after `start_upload` but before
+  commit are left to the bucket's 7-day abort rule.
 
 ## Config knobs that do nothing
 
@@ -132,6 +162,10 @@ Declared, set in real configs, never read by any code:
   `.claude/*` + a negation). **Audit the rest of `.gitignore` for unanchored directory
   patterns** — this file was assembled from the standard Python template, which assumes a
   single-language repo, and this one has three.
+- **`python -m allotrope.cli --help` likely crashes in the api image.** It runs typer
+  0.13.1 against click 8.4.2; typer 0.13 calls `Parameter.make_metavar()` without the `ctx`
+  click 8.2 made mandatory. The commands themselves run — only the help/options panel
+  breaks. Pin `click<8.2` (the inventory CLI pins `click==8.1.8`) or bump typer.
 - **A leaked Docker Desktop WSL forwarder can squat the published ports** (`wslrelay.exe`
   holding 3010/8010/5432 with no containers running), so `up` fails with "ports are not
   available". Restart Docker Desktop to clear it.

@@ -18,6 +18,7 @@ adding another.
 | `frequency-destriper.md` | the FFT notch filter and its significance test |
 | `test-harness.md` | how anything gets verified in this repo |
 | `segmentation-sharding.md` | the `enmap_seg` lane that attaches provider labels to shards |
+| `inventory.md` | the raw-dataset inventory: checksum chain, manifest-as-truth, Supabase lockout |
 
 ## How these are written
 

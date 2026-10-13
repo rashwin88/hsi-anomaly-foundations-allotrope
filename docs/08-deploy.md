@@ -2,7 +2,7 @@
 
 ## The stack
 
-Five compose services. Everything binds to `127.0.0.1` — nothing is exposed publicly.
+Five compose services, plus one opt-in. Everything binds to `127.0.0.1` — nothing is exposed publicly.
 
 | Service | Image | Port |
 |---|---|---|
@@ -11,9 +11,17 @@ Five compose services. Everything binds to `127.0.0.1` — nothing is exposed pu
 | `api` | `backend/Dockerfile` | 8010 → 8000 |
 | `worker` | `backend/Dockerfile.worker` | none (queue-driven) |
 | `frontend` | `frontend/Dockerfile` (nginx) | **3010** → 80 |
+| `inventory` *(opt-in)* | `backend/Dockerfile.inventory` | 8020 |
 
 Startup order: `postgres` (healthcheck) → `bootstrap` (migrate + seed, then exits) →
 `api` + `worker` → `frontend`.
+
+`inventory` sits behind the compose profile `inventory` and starts only with
+`--profile inventory up -d inventory`. It is independent of everything above — Supabase for
+its database, S3 for its bytes, migrations run by its own CMD — so a missing
+`backend/.env.inventory` never blocks the main stack. It needs `AWS_ACCESS_KEY_ID` /
+`AWS_SECRET_ACCESS_KEY` in that env file to reach S3. See
+[6. Backend](06-backend.md#the-raw-dataset-inventory--a-third-separate-service).
 
 **Dockerfiles are not in `docker/`** — they sit next to their source. The api and worker
 build with the **repo root** as context so `app/` can be copied in alongside `backend/`.

@@ -1,0 +1,27 @@
+# Allotrope inventory service image
+#
+# Build context is the REPO ROOT (see docker-compose.yml inventory.build),
+# matching the api image. Pure Python — no GDAL/HDF5 build tooling: the
+# inventory never opens a scene, it only moves and catalogues bytes.
+
+FROM python:3.14-slim
+
+ENV PYTHONUNBUFFERED=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PYTHONDONTWRITEBYTECODE=1
+
+WORKDIR /srv
+
+COPY backend/requirements-inventory.txt .
+RUN pip install -r requirements-inventory.txt
+
+COPY backend/allotrope_inventory ./allotrope_inventory
+COPY backend/alembic_inventory ./alembic_inventory
+COPY backend/alembic-inventory.ini ./alembic-inventory.ini
+
+EXPOSE 8020
+
+# Migrate, then serve. Safe to repeat: alembic no-ops when already at head,
+# and the inventory database has a single writer of its schema (this image).
+CMD ["sh", "-c", "alembic -c alembic-inventory.ini upgrade head && exec uvicorn allotrope_inventory.main:app --host 0.0.0.0 --port 8020"]

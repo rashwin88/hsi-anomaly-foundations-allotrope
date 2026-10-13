@@ -33,6 +33,8 @@ import { ToastProvider } from "./components/Toast";
 import { TopBar } from "./components/TopBar";
 import { AdminUsersPage } from "./pages/AdminUsersPage";
 import { HomePage } from "./pages/HomePage";
+import { InventoryDatasetPage } from "./pages/InventoryDatasetPage";
+import { InventoryPage } from "./pages/InventoryPage";
 import { JobsPage } from "./pages/JobsPage";
 import { LoginPage } from "./pages/LoginPage";
 import { MonitoringPage } from "./pages/MonitoringPage";
@@ -113,6 +115,8 @@ function Router() {
         <Route path="/" element={<HomePage />} />
         <Route path="/scenes" element={<ScenesPage />} />
         <Route path="/scenes/:sceneId" element={<SceneDetailPage />} />
+        <Route path="/inventory" element={<InventoryPage />} />
+        <Route path="/inventory/:datasetId" element={<InventoryDatasetPage />} />
         <Route path="/projects" element={<ProjectsPage />} />
         <Route
           path="/projects/:projectId"

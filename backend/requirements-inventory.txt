@@ -1,0 +1,22 @@
+# Allotrope inventory service — runtime dependencies
+#
+# Shared pins are kept in lockstep with requirements.txt. Bump deliberately.
+
+# Web
+fastapi==0.115.0
+uvicorn[standard]==0.32.0
+
+# DB (Supabase Postgres + PostGIS). geoalchemy2 maps the footprint column.
+sqlalchemy==2.0.45
+psycopg[binary]==3.2.13
+alembic==1.13.3
+geoalchemy2==0.17.1
+# shapely: GeoJSON <-> PostGIS footprints, and geometry validation. Lockstep
+# with requirements.txt.
+shapely==2.1.2
+
+# Config
+pydantic-settings==2.6.1
+
+# S3: presigned multipart uploads, checksum verification, manifests.
+boto3==1.42.53

@@ -6557,3 +6557,194 @@ dl.action-output-viewer__stats {
   justify-content: space-between;
   gap: 0.5rem;
 }
+
+/* === Inventory (raw-dataset catalogue, read-only) ================== */
+
+.inventory__stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: var(--sp-3);
+  margin-bottom: var(--sp-5);
+}
+
+.inventory__stat {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  background: var(--bg-elev);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-md);
+  padding: var(--sp-3) var(--sp-4);
+  text-align: left;
+  font-family: var(--font-sans);
+  color: var(--fg);
+}
+
+.inventory__stat--button {
+  cursor: pointer;
+}
+
+.inventory__stat--button:hover {
+  border-color: var(--fg-dim);
+}
+
+.inventory__stat--button.is-active {
+  border-color: var(--accent-strong);
+  background: var(--pill-bg);
+}
+
+.inventory__stat-value {
+  font-size: var(--fs-xl);
+  font-weight: 600;
+  line-height: var(--lh-tight);
+}
+
+.inventory__stat-label {
+  font-size: var(--fs-sm);
+  color: var(--fg-dim);
+  text-transform: capitalize;
+}
+
+.inventory__filters {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+  gap: var(--sp-3);
+  align-items: end;
+  margin-bottom: var(--sp-3);
+}
+
+.inventory__filter--wide {
+  grid-column: span 2;
+}
+
+.inventory__filters input[type="date"] {
+  background: var(--bg);
+  border: 1px solid var(--rule);
+  color: var(--fg);
+  padding: 0.55rem 0.6rem;
+  font-family: var(--font-sans);
+  font-size: 0.92rem;
+  border-radius: 4px;
+}
+
+.inventory__clear {
+  justify-self: start;
+}
+
+.inventory__tags {
+  margin-bottom: var(--sp-4);
+}
+
+.inventory__tag-cell {
+  max-width: 260px;
+}
+
+.inventory__tag {
+  display: inline-block;
+  margin: 0 0.25rem 0.2rem 0;
+  padding: 0.1rem 0.5rem;
+  border-radius: 999px;
+  border: 1px solid var(--rule);
+  font-size: var(--fs-xs);
+  color: var(--fg);
+  background: var(--bg-subtle);
+  text-decoration: none;
+}
+
+a.inventory__tag:hover {
+  border-color: var(--accent-strong);
+  color: var(--accent-strong);
+}
+
+.inventory__unavailable {
+  background: var(--bg-elev);
+  border: 1px dashed var(--rule);
+  border-radius: var(--radius-md);
+  padding: var(--sp-5);
+  max-width: 70ch;
+}
+
+.inventory__unavailable p {
+  margin: 0 0 var(--sp-2);
+}
+
+.inventory-detail__title {
+  font-size: var(--fs-lg);
+  word-break: break-all;
+}
+
+.inventory-detail__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+  gap: var(--sp-4);
+  margin-bottom: var(--sp-5);
+}
+
+/* .panel caps at 600px for the landing page; here the grid sizes it. */
+.inventory-detail__panel {
+  max-width: none;
+  margin-bottom: 0;
+}
+
+.inventory-detail__footprint {
+  margin: 0;
+}
+
+.inventory-detail__footprint svg {
+  width: 100%;
+  max-width: 420px;
+  height: auto;
+  display: block;
+  margin-bottom: var(--sp-2);
+}
+
+.footprint__frame {
+  fill: var(--bg-subtle);
+  stroke: var(--rule);
+}
+
+.footprint__shape {
+  fill: var(--pill-bg);
+  stroke: var(--accent-strong);
+  stroke-width: 1.5;
+  stroke-linejoin: round;
+}
+
+.inventory-detail__list {
+  margin: 0;
+  padding-left: 1.1rem;
+  display: grid;
+  gap: var(--sp-2);
+  font-size: var(--fs-sm);
+  word-break: break-all;
+}
+
+.inventory-detail__section-title {
+  font-size: var(--fs-md);
+  font-weight: 600;
+  margin: var(--sp-5) 0 var(--sp-3);
+}
+
+.inventory-detail__hash {
+  color: var(--fg-dim);
+}
+
+.inventory-detail__timeline {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border-left: 2px solid var(--rule);
+}
+
+.inventory-detail__timeline li {
+  display: grid;
+  grid-template-columns: 11rem 1fr auto;
+  gap: var(--sp-3);
+  padding: var(--sp-2) var(--sp-3);
+  font-size: var(--fs-sm);
+  word-break: break-word;
+}
+
+.inventory-detail__timeline li:nth-child(odd) {
+  background: var(--row-stripe);
+}
