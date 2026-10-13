@@ -109,12 +109,14 @@ def bulk_register(
     d = pending_or_409(dataset_id, db)
     inserted = 0
     if good:
-        inserted = db.execute(insert(DatasetFile).values([
+        # RETURNING, not rowcount: psycopg reports -1 for this multi-row insert.
+        inserted = len(db.execute(insert(DatasetFile).values([
             {"dataset_id": d.id, "relative_path": f.relative_path, "size_bytes": f.size_bytes,
              "sha256": f.sha256, "part_sha256": [s3.hex_to_b64(f.sha256)],
              "upload_id": None, "s3_version_id": v}
             for f, v in good
-        ]).on_conflict_do_nothing(constraint="dataset_files_path_uq")).rowcount
+        ]).on_conflict_do_nothing(constraint="dataset_files_path_uq")
+            .returning(DatasetFile.id)).all())
     record(db, "files.bulk_registered", actor, d.id,
            registered=inserted, already_present=len(present), failed=len(failed))
     db.commit()
