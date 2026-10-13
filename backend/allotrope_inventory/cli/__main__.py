@@ -7,11 +7,15 @@ Commands:
     tag DS_ID TAG...             add tags        untag DS_ID TAG...  remove tags
     ingest PATH --sensor --level --scene-id [...]
                                  register, hash, upload (resumable), finalise
+    import-s3 s3://bucket/prefix/ --sensor --level --scene-id [...]
+                                 hash in place, copy server-side, finalise
     download DS_ID DEST          fetch every file and verify its sha256
 """
 
 import json
 import sys
+import threading
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 import httpx
@@ -109,6 +113,34 @@ def _find_existing(c: Client, sensor: str, level: str, scene_id: str) -> dict:
     _fail(f"api says {sensor}/{level}/{scene_id} exists but it can't be found")
 
 
+def register_or_resume(c: Client, body: dict) -> dict | None:
+    """Register the dataset, or return the pending one from an earlier run.
+
+    None when it is already available (nothing to do). Registration fields
+    are fixed at first registration; a re-run passing different ones gets a
+    warning rather than having them silently ignored.
+    """
+    try:
+        d = c.post("/datasets", body)
+        typer.echo(f"registered {d['id']}")
+        return d
+    except InventoryError as e:
+        if e.code != "dataset_exists":
+            raise
+    d = _find_existing(c, body["sensor_type"], body["processing_level"], body["sensor_scene_id"])
+    if d["status"] == "available":
+        typer.echo(f"{d['id']} is already available; nothing to do")
+        return None
+    typer.echo(f"resuming {d['id']}")
+    asked = {k: body.get(k) for k in ("metadata", "footprint", "acquisition_at")}
+    differs = [k for k, v in asked.items() if v and v != d[k] and not (
+        k == "acquisition_at" and d[k] and d[k][:19] == v[:19])]
+    if differs:
+        typer.secho(f"warning: kept the registered {', '.join(differs)}; "
+                    "this run's values were not applied", fg=typer.colors.YELLOW)
+    return d
+
+
 @app.command("ingest")
 def ingest(
     path: Path = typer.Argument(..., exists=True, help="a delivery file, or a folder (uploaded recursively)"),
@@ -141,29 +173,13 @@ def ingest(
             metadata[k] = v
 
     # 1. Register, or pick up the pending dataset from an earlier run.
-    try:
-        d = c.post("/datasets", {
-            "sensor_type": sensor, "sensor_scene_id": scene_id, "processing_level": level,
-            "acquisition_at": acquired_at, "footprint": geom, "metadata": metadata,
-            "sources": source,
-        })
-        typer.echo(f"registered {d['id']}")
-    except InventoryError as e:
-        if e.code != "dataset_exists":
-            raise
-        d = _find_existing(c, sensor, level, scene_id)
-        if d["status"] == "available":
-            typer.echo(f"{d['id']} is already available; nothing to do")
-            return
-        typer.echo(f"resuming {d['id']}")
-        # Registration fields are fixed at first registration; say so rather
-        # than silently ignore a re-run that passes different ones.
-        asked = {"metadata": metadata, "footprint": geom, "acquisition_at": acquired_at}
-        differs = [k for k, v in asked.items() if v and v != d[k] and not (
-            k == "acquisition_at" and d[k] and d[k][:19] == v[:19])]
-        if differs:
-            typer.secho(f"warning: kept the registered {', '.join(differs)}; "
-                        "this run's values were not applied", fg=typer.colors.YELLOW)
+    d = register_or_resume(c, {
+        "sensor_type": sensor, "sensor_scene_id": scene_id, "processing_level": level,
+        "acquisition_at": acquired_at, "footprint": geom, "metadata": metadata,
+        "sources": source,
+    })
+    if d is None:
+        return
     ds = d["id"]
 
     # 2. Hash everything not already verified in an earlier run.
@@ -209,6 +225,87 @@ def ingest(
     else:
         _fail(f"{ds}: still incomplete; re-run the same command to resume")
 
+    for t in tag:
+        c.put(f"/datasets/{ds}/tags/{t}")
+    typer.secho(f"{ds} available  {d['s3_uri']}", fg=typer.colors.GREEN)
+
+
+@app.command("import-s3")
+def import_s3(
+    uri: str = typer.Argument(..., help="s3://bucket/prefix/ — every object under it becomes a file"),
+    sensor: str = typer.Option(..., help="sensor slug, e.g. enmap"),
+    level: str = typer.Option(..., help="processing level, e.g. L2A"),
+    scene_id: str = typer.Option(..., help="the provider's product id"),
+    acquired_at: str | None = typer.Option(None, help="ISO timestamp, UTC"),
+    meta: list[str] = typer.Option([], help="repeatable key=value"),
+    tag: list[str] = typer.Option([], help="repeatable"),
+    hash_workers: int = typer.Option(8, min=1, max=64, help="objects hashed at once"),
+    copy_workers: int = typer.Option(3, min=1, max=16, help="objects copied server-side at once"),
+) -> None:
+    """Hash objects already in S3 (checking provider .md5 sidecars), then have
+    the api copy them in server-side and finalise. Re-run to resume."""
+    from . import s3import
+
+    c = Client()
+    if not uri.startswith("s3://"):
+        _fail("URI must be s3://bucket/prefix/")
+    bucket, prefix, objs, provider_md5 = s3import.list_objects(uri)
+    if not objs:
+        _fail(f"{uri}: no objects")
+    total = sum(o["Size"] for o in objs)
+    typer.echo(f"{len(objs)} objects, {_human(total)}; {len(provider_md5)} with provider .md5")
+
+    rel = {o["Key"]: o["Key"][len(prefix):].lstrip("/") or o["Key"].rsplit("/", 1)[-1] for o in objs}
+
+    # 1. Hash everything (cached per ETag, so re-runs are cheap) and check the
+    #    provider's MD5s *before* registering, so a bad source leaves nothing behind.
+    seen, lock = 0, threading.Lock()
+    def progress(n: int) -> None:
+        nonlocal seen
+        with lock:
+            seen += n
+            typer.echo(f"\r  hashed {_human(seen)} / {_human(total)}", nl=False)
+    hashes = s3import.hash_all(bucket, objs, hash_workers, progress)
+    typer.echo()
+    bad_md5 = [k for k, h in hashes.items() if k in provider_md5 and h["md5"] != provider_md5[k]]
+    if bad_md5:
+        _fail(f"MD5 differs from the provider's for: {', '.join(bad_md5)}; refusing to import")
+    for k in sorted(provider_md5):
+        typer.echo(f"  md5 ok  {rel[k]}")
+
+    metadata = {}
+    for kv in meta:
+        k, _, v = kv.partition("=")
+        try:
+            metadata[k] = json.loads(v)
+        except ValueError:
+            metadata[k] = v
+    d = register_or_resume(c, {
+        "sensor_type": sensor, "sensor_scene_id": scene_id, "processing_level": level,
+        "acquisition_at": acquired_at, "metadata": metadata, "sources": [uri],
+    })
+    if d is None:
+        return
+    ds = d["id"]
+    done = {f["relative_path"] for f in c.get(f"/datasets/{ds}")["files"] if f["uploaded"]}
+    todo = [o for o in objs if rel[o["Key"]] not in done]
+    typer.echo(f"{len(done)} already verified, {len(todo)} to copy")
+
+    # 2. Server-side copies, several at once; each call returns when its object is in.
+    def copy(o: dict) -> str:
+        h = hashes[o["Key"]]
+        note = f"md5 {h['md5']} matches provider .md5" if o["Key"] in provider_md5 else None
+        r = c.post(f"/datasets/{ds}/imports", {
+            "relative_path": rel[o["Key"]], "size_bytes": h["size"], "sha256": h["sha256"],
+            "part_sha256": h["part_sha256"], "source_uri": f"s3://{bucket}/{o['Key']}", "note": note,
+        }, timeout=None)
+        return f"  copied  {r['relative_path']}  ({r['parts_copied']} parts, {r['parts_already_held']} already held)"
+    with ThreadPoolExecutor(max_workers=copy_workers) as pool:
+        for f in as_completed([pool.submit(copy, o) for o in todo]):
+            typer.echo(f.result())
+
+    # 3. Finalise and tag.
+    d = c.post(f"/datasets/{ds}/finalize", timeout=None)
     for t in tag:
         c.put(f"/datasets/{ds}/tags/{t}")
     typer.secho(f"{ds} available  {d['s3_uri']}", fg=typer.colors.GREEN)

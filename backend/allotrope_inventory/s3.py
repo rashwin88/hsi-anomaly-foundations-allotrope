@@ -14,6 +14,7 @@ of the stored bytes rests on the per-part checks.
 import base64
 import hashlib
 import json
+from concurrent.futures import ThreadPoolExecutor
 from functools import cache
 
 import boto3
@@ -33,7 +34,9 @@ def client():
     return session.client(
         "s3",
         endpoint_url=f"https://s3.{settings.region}.amazonaws.com",
-        config=Config(signature_version="s3v4"),
+        # Server-side imports run many UploadPartCopy calls at once; the
+        # default pool of 10 connections would serialise them.
+        config=Config(signature_version="s3v4", max_pool_connections=64),
     )
 
 
@@ -143,3 +146,45 @@ def download_url(key: str, version_id: str | None) -> str:
     if version_id:
         params["VersionId"] = version_id
     return client().generate_presigned_url("get_object", Params=params, ExpiresIn=URL_TTL_SECONDS)
+
+
+COPY_WORKERS = 16                     # UploadPartCopy calls in flight per imported file
+
+
+def parse_s3_uri(uri: str) -> tuple[str, str]:
+    """`s3://bucket/key/with/slashes` → (bucket, key)."""
+    bucket, _, key = uri.removeprefix("s3://").partition("/")
+    if not bucket or not key:
+        raise ValueError(f"not an s3://bucket/key URI: {uri}")
+    return bucket, key
+
+
+def source_size(bucket: str, key: str) -> int:
+    return client().head_object(Bucket=bucket, Key=key)["ContentLength"]
+
+
+def copy_parts(
+    key: str, upload_id: str, src_bucket: str, src_key: str, size_bytes: int,
+    part_sha256_b64: list[str], skip: set[int],
+) -> list[int]:
+    """Server-side copy of every part not in `skip`, in parallel.
+
+    The upload was opened with ChecksumAlgorithm=SHA256, so S3 computes each
+    copied part's SHA-256 itself; any part whose result differs from the
+    declared hash is returned (verified on real S3, 2026-10-13). No bytes
+    pass through this process.
+    """
+    def one(n: int) -> int | None:
+        lo = (n - 1) * PART_SIZE
+        hi = min(lo + PART_SIZE, size_bytes) - 1
+        r = client().upload_part_copy(
+            Bucket=settings.bucket, Key=key, UploadId=upload_id, PartNumber=n,
+            CopySource={"Bucket": src_bucket, "Key": src_key},
+            # An empty source has no byte range to name; copy it whole.
+            **({"CopySourceRange": f"bytes={lo}-{hi}"} if size_bytes else {}),
+        )
+        return None if r["CopyPartResult"].get("ChecksumSHA256") == part_sha256_b64[n - 1] else n
+
+    todo = [n for n in range(1, len(part_sha256_b64) + 1) if n not in skip]
+    with ThreadPoolExecutor(max_workers=COPY_WORKERS) as pool:
+        return sorted(n for n in pool.map(one, todo) if n is not None)

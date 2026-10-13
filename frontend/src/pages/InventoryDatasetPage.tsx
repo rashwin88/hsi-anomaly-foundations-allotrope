@@ -91,6 +91,8 @@ function describeEvent(e: InventoryEvent): string {
       return `Declared ${String(p.path)} (${formatBytes(Number(p.size_bytes ?? 0))})`;
     case "file.uploaded":
       return `Uploaded and verified ${String(p.path)}`;
+    case "file.copied":
+      return `Copied ${String(p.path)} server-side from ${String(p.source)}`;
     case "file.rejected":
       return `Rejected ${String(p.path)} — checksum or size mismatch`;
     case "dataset.finalized":

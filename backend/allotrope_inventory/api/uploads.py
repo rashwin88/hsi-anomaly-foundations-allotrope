@@ -108,7 +108,7 @@ class UploadPlan(BaseModel):
 # --- Helpers ----------------------------------------------------------
 
 
-def _pending_or_409(dataset_id: str, db: Session) -> Dataset:
+def pending_or_409(dataset_id: str, db: Session) -> Dataset:
     """Row-locked so concurrent uploads/finalize on one dataset serialise."""
     d = dataset_or_404(dataset_id, db)
     db.refresh(d, with_for_update=True)
@@ -117,7 +117,7 @@ def _pending_or_409(dataset_id: str, db: Session) -> Dataset:
     return d
 
 
-def _key(d: Dataset, relative_path: str) -> str:
+def object_key(d: Dataset, relative_path: str) -> str:
     return f"{d.s3_prefix}/payload/{relative_path}"
 
 
@@ -128,6 +128,47 @@ def _duplicates(db: Session, sha256: str, own: uuid.UUID) -> list[str]:
         .distinct()
     )
     return [to_prefixed("ds", i) for i in rows]
+
+
+def declare_file(
+    db: Session, d: Dataset, decl: FileDeclaration, actor: str, note: str | None = None,
+) -> DatasetFile:
+    """The file's row with an open multipart upload, ready for parts.
+
+    Same declaration as before → the existing row and upload (resume).
+    Different declaration for a file still uploading → old upload aborted,
+    fresh one opened. Already verified → 409 `file_exists`. Shared by
+    presigned uploads and server-side imports so both follow one rule.
+    """
+    key = object_key(d, decl.relative_path)
+    row = db.scalar(select(DatasetFile).where(
+        DatasetFile.dataset_id == d.id, DatasetFile.relative_path == decl.relative_path
+    ))
+    if row is not None and row.upload_id is None:
+        raise HTTPException(status.HTTP_409_CONFLICT, detail="file_exists")
+    same = row is not None and (row.size_bytes, row.sha256, row.part_sha256) == (
+        decl.size_bytes, decl.sha256, decl.part_sha256
+    )
+    if row is not None and not same:
+        s3.abort_upload(key, row.upload_id)
+        db.delete(row)
+        db.flush()
+        row = None
+    if row is None:
+        row = DatasetFile(
+            dataset_id=d.id, relative_path=decl.relative_path, size_bytes=decl.size_bytes,
+            sha256=decl.sha256, part_sha256=decl.part_sha256, upload_id=s3.start_upload(key),
+        )
+        db.add(row)
+        db.flush()
+        if decl.source_uri:
+            db.add(Provenance(
+                dataset_id=d.id, dataset_file_id=row.id,
+                source_uri=decl.source_uri, note=note, fetched_by=actor,
+            ))
+        record(db, "file.declared", actor, d.id,
+               path=decl.relative_path, size_bytes=decl.size_bytes, sha256=decl.sha256)
+    return row
 
 
 # --- Routes -----------------------------------------------------------
@@ -146,41 +187,15 @@ def start_uploads(
 ) -> UploadPlan:
     """409 `dataset_not_pending` once finalised; 409 `file_exists` for a path
     already uploaded and verified."""
-    d = _pending_or_409(dataset_id, db)
+    d = pending_or_409(dataset_id, db)
     paths = [f.relative_path for f in body.files]
     if len(set(paths)) != len(paths):
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, detail="duplicate_paths")
 
     out: list[FileUpload] = []
     for decl in body.files:
-        key = _key(d, decl.relative_path)
-        row = db.scalar(select(DatasetFile).where(
-            DatasetFile.dataset_id == d.id, DatasetFile.relative_path == decl.relative_path
-        ))
-        if row is not None and row.upload_id is None:
-            raise HTTPException(status.HTTP_409_CONFLICT, detail="file_exists")
-        same = row is not None and (row.size_bytes, row.sha256, row.part_sha256) == (
-            decl.size_bytes, decl.sha256, decl.part_sha256
-        )
-        if row is not None and not same:
-            s3.abort_upload(key, row.upload_id)
-            db.delete(row)
-            db.flush()
-            row = None
-        if row is None:
-            row = DatasetFile(
-                dataset_id=d.id, relative_path=decl.relative_path, size_bytes=decl.size_bytes,
-                sha256=decl.sha256, part_sha256=decl.part_sha256, upload_id=s3.start_upload(key),
-            )
-            db.add(row)
-            db.flush()
-            if decl.source_uri:
-                db.add(Provenance(
-                    dataset_id=d.id, dataset_file_id=row.id,
-                    source_uri=decl.source_uri, fetched_by=actor,
-                ))
-            record(db, "file.declared", actor, d.id,
-                   path=decl.relative_path, size_bytes=decl.size_bytes, sha256=decl.sha256)
+        key = object_key(d, decl.relative_path)
+        row = declare_file(db, d, decl, actor)
         held = s3.uploaded_parts(key, row.upload_id)
         urls = s3.part_urls(key, row.upload_id, decl.part_sha256)
         out.append(FileUpload(
@@ -211,7 +226,7 @@ def finalize(
     `missing`: path → part numbers) if S3 lacks parts. 409 `checksum_mismatch`
     (with `paths`) if stored bytes disagree with the declaration — those files
     are removed and must be declared and uploaded again."""
-    d = _pending_or_409(dataset_id, db)
+    d = pending_or_409(dataset_id, db)
     files = db.scalars(select(DatasetFile).where(DatasetFile.dataset_id == d.id)).all()
     if not files:
         raise HTTPException(status.HTTP_409_CONFLICT, detail="no_files")
@@ -223,7 +238,7 @@ def finalize(
             continue
         try:
             f.s3_version_id = s3.complete_upload(
-                _key(d, f.relative_path), f.upload_id, f.part_sha256, f.size_bytes
+                object_key(d, f.relative_path), f.upload_id, f.part_sha256, f.size_bytes
             )
             f.upload_id = None
             record(db, "file.uploaded", actor, d.id, path=f.relative_path)
@@ -300,7 +315,7 @@ def download(
         files=[
             FileDownload(
                 relative_path=f.relative_path, size_bytes=f.size_bytes, sha256=f.sha256,
-                url=s3.download_url(_key(d, f.relative_path), f.s3_version_id),
+                url=s3.download_url(object_key(d, f.relative_path), f.s3_version_id),
             )
             for f in files
         ],

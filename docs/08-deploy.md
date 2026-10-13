@@ -50,6 +50,7 @@ sole writer of vendables, artifacts and models.
 | `docker-compose.remote.yml` | identical graph with every `build:` stripped, using bare `image:` tags — for a host that got its images via `docker load` |
 | `docker/docker-compose.gpu.yml` | override adding the nvidia device reservation to `worker` |
 | `docker-compose.gpu.remote.yml` | same override, remote variant |
+| `docker/docker-compose.prod.yml` | EC2 override: Caddy on 80/443 with automatic TLS, `COOKIE_SECURE=true` — see [Production on EC2](#production-on-ec2-prod-account) |
 
 GPU is an **override** rather than the default because an unconditional GPU request breaks
 `up` on a machine without nvidia-container-toolkit.
@@ -86,6 +87,60 @@ volumes, starts the stack.
 - The bundle ships your `.env` **with secrets in it**. Rotate afterwards.
 - Re-running `bootstrap.sh` **destroys the remote volumes** and restores from the bundle.
   Anything created on the remote is lost. Treat the remote as a one-way destination.
+
+## Production on EC2 (Prod account)
+
+Live since 2026-10-13. One box runs the whole compose stack, CPU only, with Caddy as the
+only public listener.
+
+| | |
+|---|---|
+| Instance | `allotrope-prod` · `i-07f79c11c54120f63` · m7i.xlarge (4 vCPU, 16 GiB) · ap-south-1a |
+| Address | Elastic IP `13.206.165.200` → **https://13-206-165-200.sslip.io** until the Cloudflare subdomain exists |
+| Disk | 300 GB gp3, encrypted, root volume (images + all named volumes) |
+| Network | default VPC, public subnet; SG `allotrope-prod-web` allows **80 and 443 only**, from anywhere |
+| Shell | **SSM Session Manager** — no SSH port, no key pair |
+| Identity | instance role `allotrope-prod-ec2`: inventory bucket read/write, `deploy/*` read on `allotrope-training-data-prod-india`, `/allotrope/prod/*` parameters, SSM core. No long-lived keys on the box |
+| Secrets | SSM Parameter Store `/allotrope/prod/*` (SecureString), written to `docker/.env` and `backend/.env.inventory` (mode 600) by `scripts/ec2/write_env.sh` |
+| Code | `/opt/allotrope`, cloned over SSH with a **read-only GitHub deploy key** (`/root/.ssh/allotrope_deploy`) |
+| Cost | ≈ $186/month on-demand (instance $155, disk $27, EIP $3.65) |
+
+**Request path:** browser → Caddy :443 (Let's Encrypt, `docker/Caddyfile`) → frontend
+nginx :80 → `/api/*` → api, `/inventory-api/*` → inventory (read-only). Everything except
+Caddy binds to `127.0.0.1`, exactly as on a laptop.
+
+**Compose:** `docker-compose.yml` + `docker-compose.prod.yml` (Caddy, `COOKIE_SECURE=true`),
+with `--profile inventory`. Never add `docker-compose.gpu.yml` here.
+
+### Operating it
+
+```bash
+# Shell on the box (needs the Session Manager plugin for the AWS CLI)
+aws ssm start-session --profile Allotrope-Prod --region ap-south-1 --target i-07f79c11c54120f63
+
+# On the box
+cd /opt/allotrope
+C="docker compose -f docker/docker-compose.yml -f docker/docker-compose.prod.yml --profile inventory"
+$C ps -a                          # worker must be 'running'
+git pull --ff-only && $C build && $C up -d      # deploy the branch head
+
+# Admin login for the app (username: admin)
+aws ssm get-parameter --profile Allotrope-Prod --region ap-south-1 \
+    --name /allotrope/prod/admin_password --with-decryption --query Parameter.Value --output text
+```
+
+First-time setup, in order: `scripts/ec2/bootstrap.sh` (Docker, AWS CLI, deploy key — add
+its public half on GitHub), clone to `/opt/allotrope`, `scripts/ec2/write_env.sh`,
+`scripts/ec2/restore_volumes.sh` (models + splib07 from
+`s3://allotrope-training-data-prod-india/deploy/volumes/`), then build and `up -d`.
+
+**Switching to the Cloudflare subdomain:** add an `A` record → `13.206.165.200` with proxy
+status **DNS only** (Cloudflare's proxy caps request bodies at 100 MB, which breaks scene
+uploads), update `/allotrope/prod/site_address`, re-run `write_env.sh`, and
+`$C up -d caddy`. Caddy fetches the new certificate itself.
+
+**Rotating a secret:** change it in Parameter Store, re-run `write_env.sh`, recreate the
+affected services. Rotating `inventory_db_password` also needs the new value in Supabase.
 
 ## Why the images are big, and what actually compiles
 

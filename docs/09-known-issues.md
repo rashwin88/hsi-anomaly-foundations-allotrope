@@ -112,6 +112,10 @@ Added 2026-10-13 with `backend/allotrope_inventory/`. Design rationale in
 - **Not built yet:** server-side import from the Beta bucket (Deep Archive needs a restore
   first), a Google Drive source, the UI section, `rebuild-index` from manifests, and
   deleting a dataset.
+- **Presigned URLs die with the credentials that signed them.** On EC2 the inventory signs
+  with the instance role's temporary credentials (rotated every few hours), so a URL can
+  expire well before its 24 h `ExpiresIn`. Uploads that outlive it fail with 403; re-running
+  `ingest` (resume) issues fresh URLs. Same for `/download`.
 - **Orphaned multipart uploads** from a request that fails after `start_upload` but before
   commit are left to the bucket's 7-day abort rule.
 

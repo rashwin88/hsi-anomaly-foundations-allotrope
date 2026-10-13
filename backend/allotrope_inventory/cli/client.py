@@ -51,8 +51,9 @@ class Client:
         # Drop unset filters so the api sees only what the user asked for.
         return self.request("GET", path, params={k: v for k, v in params.items() if v not in (None, [])})
 
-    def post(self, path: str, body: Any = None) -> Any:
-        return self.request("POST", path, json=body)
+    def post(self, path: str, body: Any = None, timeout: float | None = 60.0) -> Any:
+        """`timeout=None` for calls that legitimately run long (server-side imports)."""
+        return self.request("POST", path, json=body, timeout=timeout)
 
     def put(self, path: str) -> Any:
         return self.request("PUT", path)
