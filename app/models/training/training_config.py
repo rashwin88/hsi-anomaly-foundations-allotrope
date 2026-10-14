@@ -113,12 +113,13 @@ class SpectralStemMAEConfig(HyperspectralSegFormerMAEConfig):
     count comes from `bands` or, for cross_attention, from each batch's wavelengths)."""
 
     model_type: Literal["spectral_stem_mae"] = "spectral_stem_mae"
-    stem: Literal["linear", "gate", "cross_attention"] = "cross_attention"
+    stem: Literal["linear", "gate", "cross_attention", "reduced_attention"] = "cross_attention"
     bands: int = Field(default=202, description="Fixed input band count for the linear and gate stems.")
     compressed_channels: int = 32
     token_dim: int = 32
     attention_heads: int = 4
     gate_hidden: int = 32
+    bin_nm: float = Field(default=40.0, gt=0, description="reduced_attention: wavelength bin width for the attention tokens.")
     metrics_csv: str | None = Field(
         default=None, description="Append one row per epoch here - normally the run folder under "
         "research/experiments/indradhanu-se-pretrain/<id>/metrics.csv.")

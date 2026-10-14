@@ -1,7 +1,7 @@
 # E002 - Gate stem (variant B), SpectralEarth pretraining
 
 **Date:** not started
-**Status:** planned - starts automatically on the E003 instance when E003 stops (`../run_next.sh`)
+**Status:** queued after E004 on the kept instance (`../run_next.sh`)
 
 ## Question
 
@@ -11,8 +11,8 @@ Does per-pixel adaptivity alone - without wavelength tokens or exact band maskin
 
 ## Setup
 
-Identical to [E003](../E003-cross-attention/README.md) - same instance, shards, normalisation,
-model, optimisation and stopping rule - except:
+Identical to [E004](../E004-reduced-attention/README.md) - same instance, shards, normalisation,
+model, optimisation (batch 8 x 4, 6 workers), validation scoring and stopping rule - except:
 
 | | |
 |---|---|
@@ -25,7 +25,7 @@ model, optimisation and stopping rule - except:
 
 ## Results
 
-| metric | value | vs E003 |
+| metric | value | vs E004 |
 |---|---|---|
 | recon L1 (se-v1 test, hidden pixels) | | |
 | recon SAM, degrees | | |

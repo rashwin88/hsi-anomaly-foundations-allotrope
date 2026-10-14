@@ -34,14 +34,18 @@ from app.foundation_models.components.seg_former_encoder import SegFormerEncoder
 from app.foundation_models.components.spectral_attention import (
     SpectralCrossAttentionCompressor, SpectralCrossAttentionDecoder)
 from app.foundation_models.components.spectral_gate import SpectralGate
+from app.foundation_models.components.spectral_reduced import (
+    SpectralReducedCompressor, WavelengthLinearDecoder)
 
-STEMS = ("linear", "gate", "cross_attention")
+STEMS = ("linear", "gate", "cross_attention", "reduced_attention")
+# Stems that take any band list per call (wavelengths in, wavelengths out).
+WAVELENGTH_STEMS = ("cross_attention", "reduced_attention")
 
 
 class SpectralStemSegFormerMAE(nn.Module):
     def __init__(self, stem: str, stats_wavelengths_nm: list[float], stats_mean: list[float],
                  stats_std: list[float], bands: int = 202, compressed_channels: int = 32,
-                 token_dim: int = 32, attention_heads: int = 4, gate_hidden: int = 32,
+                 token_dim: int = 32, attention_heads: int = 4, gate_hidden: int = 32, bin_nm: float = 40.0,
                  embed_dims=(32, 64, 160, 256), num_heads=(1, 2, 5, 8), reduction_ratios=(8, 4, 2, 1),
                  num_blocks=(2, 2, 2, 2), decoder_dim: int = 256, expansion_ratio: int = 4,
                  drop_rate: float = 0.0):
@@ -53,6 +57,9 @@ class SpectralStemSegFormerMAE(nn.Module):
         if stem == "cross_attention":
             self.spectral_in = SpectralCrossAttentionCompressor(D, token_dim, attention_heads)
             self.spectral_out = SpectralCrossAttentionDecoder(D, token_dim, attention_heads)
+        elif stem == "reduced_attention":
+            self.spectral_in = SpectralReducedCompressor(D, token_dim, attention_heads, bin_nm)
+            self.spectral_out = WavelengthLinearDecoder(D, token_dim)
         else:
             mix_in = nn.Conv2d(bands, D, kernel_size=1)
             self.spectral_in = nn.Sequential(SpectralGate(bands, gate_hidden), mix_in) if stem == "gate" else mix_in
@@ -72,18 +79,18 @@ class SpectralStemSegFormerMAE(nn.Module):
         bool, False = dead voxel. keep_mask: (B, tokens) MAE keep mask for the encoder.
         Returns (B, N, H, W) reconstructed reflectance. Raises ValueError if a fixed-band
         stem gets a band count other than `bands`."""
-        if self.stem != "cross_attention" and x.shape[1] != self.bands:
+        if self.stem not in WAVELENGTH_STEMS and x.shape[1] != self.bands:
             raise ValueError(f"{self.stem} stem was built for {self.bands} bands, got {x.shape[1]}")
         z = self.stats.normalize(x, wavelengths_nm)                       # (B, N, H, W) z-scores
         if band_valid is not None:
             z = z.masked_fill(~band_valid, 0.0)
-        if self.stem == "cross_attention":
+        if self.stem in WAVELENGTH_STEMS:
             z = self.spectral_in(z, wavelengths_nm, band_valid)              # (B, D, H, W)
         else:
             z = self.spectral_in(z)
         features = self.encoder(self.norm(z), keep_mask=keep_mask)
         z_hat = self.decoder(features)                                    # (B, D, H, W)
-        if self.stem == "cross_attention":
+        if self.stem in WAVELENGTH_STEMS:
             z_hat = self.spectral_out(z_hat, wavelengths_nm)                 # (B, N, H, W)
         else:
             z_hat = self.spectral_out(z_hat)

@@ -1,5 +1,5 @@
 {
-  "_description": "E002-gate: variant B (gate spectral stem) pretrained on SpectralEarth se-v1. Identical to E003-cross-attention except model_config.stem and the run's own paths.",
+  "_description": "E002: variant B - per-pixel gate stem. Shared settings for E001, E002, E004 (2026-10-14): batch 8 x 4 accumulation = 32, 6 workers, validation scored at full SAM weight; only model_config.stem (and bin_nm for E004) differ.",
   "foundation_model_name": "spectral_stem_mae",
   "version": "0.3.0",
   "device": "cuda",
@@ -64,9 +64,9 @@
     "stage": "se-v1",
     "bucket_name": "allotrope-training-data-prod-india",
     "region_name": "ap-south-1",
-    "batch_size": 4,
-    "gradient_accumulation_steps": 8,
-    "num_workers": 3,
+    "batch_size": 8,
+    "gradient_accumulation_steps": 4,
+    "num_workers": 6,
     "shardshuffle": 100,
     "pixel_stats_path": "/opt/dlami/nvme/se_cache/stats.json"
   },

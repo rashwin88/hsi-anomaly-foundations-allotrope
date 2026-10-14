@@ -37,6 +37,10 @@ from app.foundation_models.trainers.hyperspectral_segformer_mae_trainer import (
 
 logger = logging.getLogger("SpectralStemMAETrainer")
 
+# What the validation score is; stored with the early-stop state so a checkpoint scored another way
+# cannot seed it (E003's epochs 1-3 were scored with the ramped SAM weight).
+VAL_SCORE = "l1+full_sam"
+
 # SpectralEarth's encoding (docs/lld/spectralearth.md): reflectance x 10,000 as int16.
 REFLECTANCE_SCALE, NODATA = 0.0001, -32768
 
@@ -108,6 +112,9 @@ class SpectralStemMAETrainer(HyperspectralSegFormerMAETrainer):
     def _load_checkpoint(self, path: str) -> None:
         super()._load_checkpoint(path)
         state = torch.load(path, map_location="cpu", weights_only=False).get("early_stop")
+        if state and state.get("score") != VAL_SCORE:
+            logger.info(f"  early-stop state ignored: scored as {state.get('score', 'l1+ramped_sam')}, now {VAL_SCORE}")
+            state = None
         if state and self.config.resume_mode == "resume":
             self._best_val, self._bad_epochs, self._lowest_val = state["best_val"], state["bad_epochs"], state["lowest_val"]
             logger.info(f"  early-stop state: best {self._best_val:.6f}, {self._bad_epochs} flat epochs")
@@ -129,7 +136,7 @@ class SpectralStemMAETrainer(HyperspectralSegFormerMAETrainer):
         ckpt_dir = Path(self.config.checkpoint.checkpoint_dir)
         ckpt = torch.load(ckpt_dir / f"{self.config.foundation_model_name.value}_v{self.config.version}_epoch{epoch}.pt",
                           map_location="cpu", weights_only=False)
-        ckpt["early_stop"] = {"best_val": self._best_val, "bad_epochs": self._bad_epochs,
+        ckpt["early_stop"] = {"score": VAL_SCORE, "best_val": self._best_val, "bad_epochs": self._bad_epochs,
                               "lowest_val": min(self._lowest_val, avg_val), "stopped": self._stop}
         names = ["last.pt"]
         if avg_val < self._lowest_val:
@@ -195,7 +202,7 @@ class SpectralStemMAETrainer(HyperspectralSegFormerMAETrainer):
         return SpectralStemSegFormerMAE(
             stem=cfg.stem, stats_wavelengths_nm=wl, stats_mean=mean, stats_std=std,
             bands=cfg.bands, compressed_channels=cfg.compressed_channels, token_dim=cfg.token_dim,
-            attention_heads=cfg.attention_heads, gate_hidden=cfg.gate_hidden,
+            attention_heads=cfg.attention_heads, gate_hidden=cfg.gate_hidden, bin_nm=cfg.bin_nm,
             embed_dims=cfg.embed_dims, num_heads=cfg.num_heads, reduction_ratios=cfg.reduction_ratios,
             num_blocks=cfg.num_blocks, decoder_dim=cfg.decoder_dim,
             expansion_ratio=cfg.expansion_ratio, drop_rate=cfg.drop_rate)
@@ -276,4 +283,8 @@ class SpectralStemMAETrainer(HyperspectralSegFormerMAETrainer):
         self._val_l1_sum += l1.item() * n
         self._val_sam_sum += sam.item() * n
         self._val_samples += n
-        return l1 + self._get_sam_weight(self._current_epoch) * sam, n
+        # Full SAM weight, not the training ramp: the validation score ranks epochs for early
+        # stopping and best.pt, so it must be on one scale. With the ramp, epoch 1 (lambda 0) scored
+        # ~0.055 and every later epoch ~0.1 - early stop would have fired at the first allowed epoch
+        # whatever the model did (found in E003 on 2026-10-14; the trial's lost checkpoint, again).
+        return l1 + cfg.sam_weight * sam, n

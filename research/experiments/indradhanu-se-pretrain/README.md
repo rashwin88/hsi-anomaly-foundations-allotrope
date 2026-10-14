@@ -11,8 +11,9 @@ fixed before any run; do not move it after seeing results.
 ## Current verdict
 
 Wiring verified (S01). C runs at ~5 patches/s and ~3.7 GiB per patch in bf16 on a 20 GB card,
-78x slower than the linear stem. Order decided 2026-10-14: E003 (C, no binning) first on one
-g6e.2xlarge, stopped early when losses flatten; then E001 (A) and E002 (B) under the same rule.
+78x slower than the linear stem. E003 (per-band C) ran 3 epochs on a kept g6e.2xlarge at 13.5
+patches/s and was superseded by E004, the reduced-attention stem (80 patches/s, 2026-10-14);
+E004 -> E001 -> E002 run in sequence on that instance, batch 8 x 4, validation at full SAM weight.
 
 ## Runs
 
@@ -21,10 +22,10 @@ One row per run, newest last. A run that crashed or was abandoned still gets a r
 | id | date | variant | question | instance | hours | cost | recon SAM (deg) | PRISMA ROC-AUC | verdict |
 |---|---|---|---|---|---|---|---|---|---|
 | S01 | 2026-10-14 | A, B, C | wiring smoke (CPU) + GPU cost probe | laptop RTX 4000 Ada 20 GB | 0.2 | 0 | - | - | done: all wired; C ~5 patches/s, ~3.7 GiB/patch bf16 (78x slower than A) |
-| E000 | - | C | throughput and batch size that fit | g6e.2xlarge | - | - | - | - | planned |
-| E001 | - | A | baseline | g6e.2xlarge | - | - | - | - | planned |
-| E002 | - | B | does per-pixel adaptivity help at all? | g6e.2xlarge | - | - | - | - | planned |
-| E003 | - | C | does the full design beat A and B? | g6e.2xlarge | - | - | - | - | planned |
+| E003 | 2026-10-14 | C (per-band) | per-band cross-attention stem | g6e.2xlarge (kept) | ~3 | ~$8 | 13.5 (ep 2) | - | superseded after epoch 3: 13.5 patches/s; replaced by E004 |
+| E004 | 2026-10-14 | C' (reduced) | does the reduced-attention stem beat A and B? | g6e.2xlarge (kept) | - | - | - | - | running |
+| E001 | - | A | baseline | g6e.2xlarge (kept) | - | - | - | - | queued after E004 |
+| E002 | - | B | does per-pixel adaptivity help at all? | g6e.2xlarge (kept) | - | - | - | - | queued after E001 |
 
 ## Layout
 
