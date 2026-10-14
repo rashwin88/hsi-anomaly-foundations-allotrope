@@ -1,0 +1,1446 @@
+{
+ "description": "SpectralEarth's 202 bands: EnMAP L2A minus 1-based bands 127-141 and 161-167.",
+ "generated_from": "s3://allotrope-raw-data-india/enmap/ENMAP01-____L2A-DT0000175050_20260123T052026Z_016_V010505_20260124T202046Z/ENMAP01-____L2A-DT0000175050_20260123T052026Z_016_V010505_20260124T202046Z-METADATA.XML",
+ "reflectance_scale": 0.0001,
+ "nodata": -32768,
+ "dropped_enmap_bands": [
+  127,
+  128,
+  129,
+  130,
+  131,
+  132,
+  133,
+  134,
+  135,
+  136,
+  137,
+  138,
+  139,
+  140,
+  141,
+  161,
+  162,
+  163,
+  164,
+  165,
+  166,
+  167
+ ],
+ "bands": [
+  {
+   "index": 0,
+   "enmap_band": 1,
+   "wavelength_nm": 418.416,
+   "fwhm_nm": 6.99561,
+   "family": "VNIR"
+  },
+  {
+   "index": 1,
+   "enmap_band": 2,
+   "wavelength_nm": 424.043,
+   "fwhm_nm": 6.6675,
+   "family": "VNIR"
+  },
+  {
+   "index": 2,
+   "enmap_band": 3,
+   "wavelength_nm": 429.457,
+   "fwhm_nm": 6.42408,
+   "family": "VNIR"
+  },
+  {
+   "index": 3,
+   "enmap_band": 4,
+   "wavelength_nm": 434.686,
+   "fwhm_nm": 6.25124,
+   "family": "VNIR"
+  },
+  {
+   "index": 4,
+   "enmap_band": 5,
+   "wavelength_nm": 439.757,
+   "fwhm_nm": 6.13485,
+   "family": "VNIR"
+  },
+  {
+   "index": 5,
+   "enmap_band": 6,
+   "wavelength_nm": 444.699,
+   "fwhm_nm": 6.06076,
+   "family": "VNIR"
+  },
+  {
+   "index": 6,
+   "enmap_band": 7,
+   "wavelength_nm": 449.539,
+   "fwhm_nm": 6.01486,
+   "family": "VNIR"
+  },
+  {
+   "index": 7,
+   "enmap_band": 8,
+   "wavelength_nm": 454.306,
+   "fwhm_nm": 5.98302,
+   "family": "VNIR"
+  },
+  {
+   "index": 8,
+   "enmap_band": 9,
+   "wavelength_nm": 459.031,
+   "fwhm_nm": 5.95232,
+   "family": "VNIR"
+  },
+  {
+   "index": 9,
+   "enmap_band": 10,
+   "wavelength_nm": 463.73,
+   "fwhm_nm": 5.9199,
+   "family": "VNIR"
+  },
+  {
+   "index": 10,
+   "enmap_band": 11,
+   "wavelength_nm": 468.411,
+   "fwhm_nm": 5.88775,
+   "family": "VNIR"
+  },
+  {
+   "index": 11,
+   "enmap_band": 12,
+   "wavelength_nm": 473.08,
+   "fwhm_nm": 5.8579,
+   "family": "VNIR"
+  },
+  {
+   "index": 12,
+   "enmap_band": 13,
+   "wavelength_nm": 477.744,
+   "fwhm_nm": 5.83239,
+   "family": "VNIR"
+  },
+  {
+   "index": 13,
+   "enmap_band": 14,
+   "wavelength_nm": 482.411,
+   "fwhm_nm": 5.81325,
+   "family": "VNIR"
+  },
+  {
+   "index": 14,
+   "enmap_band": 15,
+   "wavelength_nm": 487.087,
+   "fwhm_nm": 5.8025,
+   "family": "VNIR"
+  },
+  {
+   "index": 15,
+   "enmap_band": 16,
+   "wavelength_nm": 491.78,
+   "fwhm_nm": 5.8022,
+   "family": "VNIR"
+  },
+  {
+   "index": 16,
+   "enmap_band": 17,
+   "wavelength_nm": 496.497,
+   "fwhm_nm": 5.81407,
+   "family": "VNIR"
+  },
+  {
+   "index": 17,
+   "enmap_band": 18,
+   "wavelength_nm": 501.243,
+   "fwhm_nm": 5.83751,
+   "family": "VNIR"
+  },
+  {
+   "index": 18,
+   "enmap_band": 19,
+   "wavelength_nm": 506.02,
+   "fwhm_nm": 5.87076,
+   "family": "VNIR"
+  },
+  {
+   "index": 19,
+   "enmap_band": 20,
+   "wavelength_nm": 510.828,
+   "fwhm_nm": 5.91208,
+   "family": "VNIR"
+  },
+  {
+   "index": 20,
+   "enmap_band": 21,
+   "wavelength_nm": 515.672,
+   "fwhm_nm": 5.95969,
+   "family": "VNIR"
+  },
+  {
+   "index": 21,
+   "enmap_band": 22,
+   "wavelength_nm": 520.55,
+   "fwhm_nm": 6.01183,
+   "family": "VNIR"
+  },
+  {
+   "index": 22,
+   "enmap_band": 23,
+   "wavelength_nm": 525.467,
+   "fwhm_nm": 6.06674,
+   "family": "VNIR"
+  },
+  {
+   "index": 23,
+   "enmap_band": 24,
+   "wavelength_nm": 530.424,
+   "fwhm_nm": 6.12279,
+   "family": "VNIR"
+  },
+  {
+   "index": 24,
+   "enmap_band": 25,
+   "wavelength_nm": 535.422,
+   "fwhm_nm": 6.1794,
+   "family": "VNIR"
+  },
+  {
+   "index": 25,
+   "enmap_band": 26,
+   "wavelength_nm": 540.463,
+   "fwhm_nm": 6.23648,
+   "family": "VNIR"
+  },
+  {
+   "index": 26,
+   "enmap_band": 27,
+   "wavelength_nm": 545.551,
+   "fwhm_nm": 6.29397,
+   "family": "VNIR"
+  },
+  {
+   "index": 27,
+   "enmap_band": 28,
+   "wavelength_nm": 550.687,
+   "fwhm_nm": 6.35179,
+   "family": "VNIR"
+  },
+  {
+   "index": 28,
+   "enmap_band": 29,
+   "wavelength_nm": 555.873,
+   "fwhm_nm": 6.40987,
+   "family": "VNIR"
+  },
+  {
+   "index": 29,
+   "enmap_band": 30,
+   "wavelength_nm": 561.112,
+   "fwhm_nm": 6.46815,
+   "family": "VNIR"
+  },
+  {
+   "index": 30,
+   "enmap_band": 31,
+   "wavelength_nm": 566.405,
+   "fwhm_nm": 6.52654,
+   "family": "VNIR"
+  },
+  {
+   "index": 31,
+   "enmap_band": 32,
+   "wavelength_nm": 571.756,
+   "fwhm_nm": 6.58497,
+   "family": "VNIR"
+  },
+  {
+   "index": 32,
+   "enmap_band": 33,
+   "wavelength_nm": 577.166,
+   "fwhm_nm": 6.64338,
+   "family": "VNIR"
+  },
+  {
+   "index": 33,
+   "enmap_band": 34,
+   "wavelength_nm": 582.636,
+   "fwhm_nm": 6.70177,
+   "family": "VNIR"
+  },
+  {
+   "index": 34,
+   "enmap_band": 35,
+   "wavelength_nm": 588.171,
+   "fwhm_nm": 6.76072,
+   "family": "VNIR"
+  },
+  {
+   "index": 35,
+   "enmap_band": 36,
+   "wavelength_nm": 593.773,
+   "fwhm_nm": 6.82113,
+   "family": "VNIR"
+  },
+  {
+   "index": 36,
+   "enmap_band": 37,
+   "wavelength_nm": 599.446,
+   "fwhm_nm": 6.88388,
+   "family": "VNIR"
+  },
+  {
+   "index": 37,
+   "enmap_band": 38,
+   "wavelength_nm": 605.193,
+   "fwhm_nm": 6.94987,
+   "family": "VNIR"
+  },
+  {
+   "index": 38,
+   "enmap_band": 39,
+   "wavelength_nm": 611.017,
+   "fwhm_nm": 7.01999,
+   "family": "VNIR"
+  },
+  {
+   "index": 39,
+   "enmap_band": 40,
+   "wavelength_nm": 616.923,
+   "fwhm_nm": 7.09511,
+   "family": "VNIR"
+  },
+  {
+   "index": 40,
+   "enmap_band": 41,
+   "wavelength_nm": 622.92,
+   "fwhm_nm": 7.17533,
+   "family": "VNIR"
+  },
+  {
+   "index": 41,
+   "enmap_band": 42,
+   "wavelength_nm": 628.987,
+   "fwhm_nm": 7.25495,
+   "family": "VNIR"
+  },
+  {
+   "index": 42,
+   "enmap_band": 43,
+   "wavelength_nm": 635.112,
+   "fwhm_nm": 7.33145,
+   "family": "VNIR"
+  },
+  {
+   "index": 43,
+   "enmap_band": 44,
+   "wavelength_nm": 641.294,
+   "fwhm_nm": 7.40537,
+   "family": "VNIR"
+  },
+  {
+   "index": 44,
+   "enmap_band": 45,
+   "wavelength_nm": 647.537,
+   "fwhm_nm": 7.47729,
+   "family": "VNIR"
+  },
+  {
+   "index": 45,
+   "enmap_band": 46,
+   "wavelength_nm": 653.841,
+   "fwhm_nm": 7.54777,
+   "family": "VNIR"
+  },
+  {
+   "index": 46,
+   "enmap_band": 47,
+   "wavelength_nm": 660.207,
+   "fwhm_nm": 7.61738,
+   "family": "VNIR"
+  },
+  {
+   "index": 47,
+   "enmap_band": 48,
+   "wavelength_nm": 666.637,
+   "fwhm_nm": 7.68669,
+   "family": "VNIR"
+  },
+  {
+   "index": 48,
+   "enmap_band": 49,
+   "wavelength_nm": 673.131,
+   "fwhm_nm": 7.75628,
+   "family": "VNIR"
+  },
+  {
+   "index": 49,
+   "enmap_band": 50,
+   "wavelength_nm": 679.691,
+   "fwhm_nm": 7.8267,
+   "family": "VNIR"
+  },
+  {
+   "index": 50,
+   "enmap_band": 51,
+   "wavelength_nm": 686.319,
+   "fwhm_nm": 7.89853,
+   "family": "VNIR"
+  },
+  {
+   "index": 51,
+   "enmap_band": 52,
+   "wavelength_nm": 693.014,
+   "fwhm_nm": 7.97235,
+   "family": "VNIR"
+  },
+  {
+   "index": 52,
+   "enmap_band": 53,
+   "wavelength_nm": 699.78,
+   "fwhm_nm": 8.04871,
+   "family": "VNIR"
+  },
+  {
+   "index": 53,
+   "enmap_band": 54,
+   "wavelength_nm": 706.617,
+   "fwhm_nm": 8.1281,
+   "family": "VNIR"
+  },
+  {
+   "index": 54,
+   "enmap_band": 55,
+   "wavelength_nm": 713.524,
+   "fwhm_nm": 8.2102,
+   "family": "VNIR"
+  },
+  {
+   "index": 55,
+   "enmap_band": 56,
+   "wavelength_nm": 720.501,
+   "fwhm_nm": 8.29433,
+   "family": "VNIR"
+  },
+  {
+   "index": 56,
+   "enmap_band": 57,
+   "wavelength_nm": 727.545,
+   "fwhm_nm": 8.3798,
+   "family": "VNIR"
+  },
+  {
+   "index": 57,
+   "enmap_band": 58,
+   "wavelength_nm": 734.654,
+   "fwhm_nm": 8.46592,
+   "family": "VNIR"
+  },
+  {
+   "index": 58,
+   "enmap_band": 59,
+   "wavelength_nm": 741.826,
+   "fwhm_nm": 8.552,
+   "family": "VNIR"
+  },
+  {
+   "index": 59,
+   "enmap_band": 60,
+   "wavelength_nm": 749.06,
+   "fwhm_nm": 8.63735,
+   "family": "VNIR"
+  },
+  {
+   "index": 60,
+   "enmap_band": 61,
+   "wavelength_nm": 756.353,
+   "fwhm_nm": 8.72128,
+   "family": "VNIR"
+  },
+  {
+   "index": 61,
+   "enmap_band": 62,
+   "wavelength_nm": 763.703,
+   "fwhm_nm": 8.80311,
+   "family": "VNIR"
+  },
+  {
+   "index": 62,
+   "enmap_band": 63,
+   "wavelength_nm": 771.108,
+   "fwhm_nm": 8.88214,
+   "family": "VNIR"
+  },
+  {
+   "index": 63,
+   "enmap_band": 64,
+   "wavelength_nm": 778.567,
+   "fwhm_nm": 8.95779,
+   "family": "VNIR"
+  },
+  {
+   "index": 64,
+   "enmap_band": 65,
+   "wavelength_nm": 786.078,
+   "fwhm_nm": 9.03034,
+   "family": "VNIR"
+  },
+  {
+   "index": 65,
+   "enmap_band": 66,
+   "wavelength_nm": 793.639,
+   "fwhm_nm": 9.1005,
+   "family": "VNIR"
+  },
+  {
+   "index": 66,
+   "enmap_band": 67,
+   "wavelength_nm": 801.248,
+   "fwhm_nm": 9.16897,
+   "family": "VNIR"
+  },
+  {
+   "index": 67,
+   "enmap_band": 68,
+   "wavelength_nm": 808.905,
+   "fwhm_nm": 9.23646,
+   "family": "VNIR"
+  },
+  {
+   "index": 68,
+   "enmap_band": 69,
+   "wavelength_nm": 816.608,
+   "fwhm_nm": 9.30368,
+   "family": "VNIR"
+  },
+  {
+   "index": 69,
+   "enmap_band": 70,
+   "wavelength_nm": 824.355,
+   "fwhm_nm": 9.37133,
+   "family": "VNIR"
+  },
+  {
+   "index": 70,
+   "enmap_band": 71,
+   "wavelength_nm": 832.145,
+   "fwhm_nm": 9.44012,
+   "family": "VNIR"
+  },
+  {
+   "index": 71,
+   "enmap_band": 72,
+   "wavelength_nm": 839.976,
+   "fwhm_nm": 9.51076,
+   "family": "VNIR"
+  },
+  {
+   "index": 72,
+   "enmap_band": 73,
+   "wavelength_nm": 847.847,
+   "fwhm_nm": 9.58396,
+   "family": "VNIR"
+  },
+  {
+   "index": 73,
+   "enmap_band": 74,
+   "wavelength_nm": 855.757,
+   "fwhm_nm": 9.66032,
+   "family": "VNIR"
+  },
+  {
+   "index": 74,
+   "enmap_band": 75,
+   "wavelength_nm": 863.703,
+   "fwhm_nm": 9.73971,
+   "family": "VNIR"
+  },
+  {
+   "index": 75,
+   "enmap_band": 76,
+   "wavelength_nm": 871.683,
+   "fwhm_nm": 9.82161,
+   "family": "VNIR"
+  },
+  {
+   "index": 76,
+   "enmap_band": 77,
+   "wavelength_nm": 879.692,
+   "fwhm_nm": 9.90551,
+   "family": "VNIR"
+  },
+  {
+   "index": 77,
+   "enmap_band": 78,
+   "wavelength_nm": 887.729,
+   "fwhm_nm": 9.99089,
+   "family": "VNIR"
+  },
+  {
+   "index": 78,
+   "enmap_band": 79,
+   "wavelength_nm": 895.789,
+   "fwhm_nm": 10.0772,
+   "family": "VNIR"
+  },
+  {
+   "index": 79,
+   "enmap_band": 80,
+   "wavelength_nm": 901.962,
+   "fwhm_nm": 9.17725,
+   "family": "SWIR"
+  },
+  {
+   "index": 80,
+   "enmap_band": 81,
+   "wavelength_nm": 903.87,
+   "fwhm_nm": 10.164,
+   "family": "VNIR"
+  },
+  {
+   "index": 81,
+   "enmap_band": 82,
+   "wavelength_nm": 911.572,
+   "fwhm_nm": 9.31901,
+   "family": "SWIR"
+  },
+  {
+   "index": 82,
+   "enmap_band": 83,
+   "wavelength_nm": 911.968,
+   "fwhm_nm": 10.2508,
+   "family": "VNIR"
+  },
+  {
+   "index": 83,
+   "enmap_band": 84,
+   "wavelength_nm": 920.08,
+   "fwhm_nm": 10.3369,
+   "family": "VNIR"
+  },
+  {
+   "index": 84,
+   "enmap_band": 85,
+   "wavelength_nm": 921.32,
+   "fwhm_nm": 9.45441,
+   "family": "SWIR"
+  },
+  {
+   "index": 85,
+   "enmap_band": 86,
+   "wavelength_nm": 928.204,
+   "fwhm_nm": 10.422,
+   "family": "VNIR"
+  },
+  {
+   "index": 86,
+   "enmap_band": 87,
+   "wavelength_nm": 931.204,
+   "fwhm_nm": 9.58399,
+   "family": "SWIR"
+  },
+  {
+   "index": 87,
+   "enmap_band": 88,
+   "wavelength_nm": 936.335,
+   "fwhm_nm": 10.5054,
+   "family": "VNIR"
+  },
+  {
+   "index": 88,
+   "enmap_band": 89,
+   "wavelength_nm": 941.218,
+   "fwhm_nm": 9.7083,
+   "family": "SWIR"
+  },
+  {
+   "index": 89,
+   "enmap_band": 90,
+   "wavelength_nm": 944.47,
+   "fwhm_nm": 10.5862,
+   "family": "VNIR"
+  },
+  {
+   "index": 90,
+   "enmap_band": 91,
+   "wavelength_nm": 951.361,
+   "fwhm_nm": 9.82789,
+   "family": "SWIR"
+  },
+  {
+   "index": 91,
+   "enmap_band": 92,
+   "wavelength_nm": 952.608,
+   "fwhm_nm": 10.6589,
+   "family": "VNIR"
+  },
+  {
+   "index": 92,
+   "enmap_band": 93,
+   "wavelength_nm": 960.748,
+   "fwhm_nm": 10.716,
+   "family": "VNIR"
+  },
+  {
+   "index": 93,
+   "enmap_band": 94,
+   "wavelength_nm": 961.629,
+   "fwhm_nm": 9.94331,
+   "family": "SWIR"
+  },
+  {
+   "index": 94,
+   "enmap_band": 95,
+   "wavelength_nm": 968.891,
+   "fwhm_nm": 10.75,
+   "family": "VNIR"
+  },
+  {
+   "index": 95,
+   "enmap_band": 96,
+   "wavelength_nm": 972.017,
+   "fwhm_nm": 10.0551,
+   "family": "SWIR"
+  },
+  {
+   "index": 96,
+   "enmap_band": 97,
+   "wavelength_nm": 977.037,
+   "fwhm_nm": 10.7533,
+   "family": "VNIR"
+  },
+  {
+   "index": 97,
+   "enmap_band": 98,
+   "wavelength_nm": 982.524,
+   "fwhm_nm": 10.1638,
+   "family": "SWIR"
+  },
+  {
+   "index": 98,
+   "enmap_band": 99,
+   "wavelength_nm": 985.186,
+   "fwhm_nm": 10.7183,
+   "family": "VNIR"
+  },
+  {
+   "index": 99,
+   "enmap_band": 100,
+   "wavelength_nm": 993.145,
+   "fwhm_nm": 10.27,
+   "family": "SWIR"
+  },
+  {
+   "index": 100,
+   "enmap_band": 101,
+   "wavelength_nm": 993.338,
+   "fwhm_nm": 10.6375,
+   "family": "VNIR"
+  },
+  {
+   "index": 101,
+   "enmap_band": 102,
+   "wavelength_nm": 1003.88,
+   "fwhm_nm": 10.3742,
+   "family": "SWIR"
+  },
+  {
+   "index": 102,
+   "enmap_band": 103,
+   "wavelength_nm": 1014.72,
+   "fwhm_nm": 10.4768,
+   "family": "SWIR"
+  },
+  {
+   "index": 103,
+   "enmap_band": 104,
+   "wavelength_nm": 1025.66,
+   "fwhm_nm": 10.5775,
+   "family": "SWIR"
+  },
+  {
+   "index": 104,
+   "enmap_band": 105,
+   "wavelength_nm": 1036.7,
+   "fwhm_nm": 10.6753,
+   "family": "SWIR"
+  },
+  {
+   "index": 105,
+   "enmap_band": 106,
+   "wavelength_nm": 1047.84,
+   "fwhm_nm": 10.769,
+   "family": "SWIR"
+  },
+  {
+   "index": 106,
+   "enmap_band": 107,
+   "wavelength_nm": 1059.07,
+   "fwhm_nm": 10.8578,
+   "family": "SWIR"
+  },
+  {
+   "index": 107,
+   "enmap_band": 108,
+   "wavelength_nm": 1070.39,
+   "fwhm_nm": 10.9405,
+   "family": "SWIR"
+  },
+  {
+   "index": 108,
+   "enmap_band": 109,
+   "wavelength_nm": 1081.79,
+   "fwhm_nm": 11.0162,
+   "family": "SWIR"
+  },
+  {
+   "index": 109,
+   "enmap_band": 110,
+   "wavelength_nm": 1093.26,
+   "fwhm_nm": 11.0839,
+   "family": "SWIR"
+  },
+  {
+   "index": 110,
+   "enmap_band": 111,
+   "wavelength_nm": 1104.81,
+   "fwhm_nm": 11.1437,
+   "family": "SWIR"
+  },
+  {
+   "index": 111,
+   "enmap_band": 112,
+   "wavelength_nm": 1116.43,
+   "fwhm_nm": 11.196,
+   "family": "SWIR"
+  },
+  {
+   "index": 112,
+   "enmap_band": 113,
+   "wavelength_nm": 1128.11,
+   "fwhm_nm": 11.2414,
+   "family": "SWIR"
+  },
+  {
+   "index": 113,
+   "enmap_band": 114,
+   "wavelength_nm": 1139.84,
+   "fwhm_nm": 11.2806,
+   "family": "SWIR"
+  },
+  {
+   "index": 114,
+   "enmap_band": 115,
+   "wavelength_nm": 1151.62,
+   "fwhm_nm": 11.3139,
+   "family": "SWIR"
+  },
+  {
+   "index": 115,
+   "enmap_band": 116,
+   "wavelength_nm": 1163.44,
+   "fwhm_nm": 11.3421,
+   "family": "SWIR"
+  },
+  {
+   "index": 116,
+   "enmap_band": 117,
+   "wavelength_nm": 1175.31,
+   "fwhm_nm": 11.3656,
+   "family": "SWIR"
+  },
+  {
+   "index": 117,
+   "enmap_band": 118,
+   "wavelength_nm": 1187.2,
+   "fwhm_nm": 11.385,
+   "family": "SWIR"
+  },
+  {
+   "index": 118,
+   "enmap_band": 119,
+   "wavelength_nm": 1199.11,
+   "fwhm_nm": 11.4009,
+   "family": "SWIR"
+  },
+  {
+   "index": 119,
+   "enmap_band": 120,
+   "wavelength_nm": 1211.05,
+   "fwhm_nm": 11.4135,
+   "family": "SWIR"
+  },
+  {
+   "index": 120,
+   "enmap_band": 121,
+   "wavelength_nm": 1223.0,
+   "fwhm_nm": 11.4229,
+   "family": "SWIR"
+  },
+  {
+   "index": 121,
+   "enmap_band": 122,
+   "wavelength_nm": 1234.97,
+   "fwhm_nm": 11.4292,
+   "family": "SWIR"
+  },
+  {
+   "index": 122,
+   "enmap_band": 123,
+   "wavelength_nm": 1246.95,
+   "fwhm_nm": 11.4325,
+   "family": "SWIR"
+  },
+  {
+   "index": 123,
+   "enmap_band": 124,
+   "wavelength_nm": 1258.93,
+   "fwhm_nm": 11.4329,
+   "family": "SWIR"
+  },
+  {
+   "index": 124,
+   "enmap_band": 125,
+   "wavelength_nm": 1270.92,
+   "fwhm_nm": 11.4305,
+   "family": "SWIR"
+  },
+  {
+   "index": 125,
+   "enmap_band": 126,
+   "wavelength_nm": 1282.92,
+   "fwhm_nm": 11.4253,
+   "family": "SWIR"
+  },
+  {
+   "index": 126,
+   "enmap_band": 142,
+   "wavelength_nm": 1518.87,
+   "fwhm_nm": 10.8984,
+   "family": "SWIR"
+  },
+  {
+   "index": 127,
+   "enmap_band": 143,
+   "wavelength_nm": 1530.29,
+   "fwhm_nm": 10.8577,
+   "family": "SWIR"
+  },
+  {
+   "index": 128,
+   "enmap_band": 144,
+   "wavelength_nm": 1541.68,
+   "fwhm_nm": 10.8161,
+   "family": "SWIR"
+  },
+  {
+   "index": 129,
+   "enmap_band": 145,
+   "wavelength_nm": 1553.01,
+   "fwhm_nm": 10.7738,
+   "family": "SWIR"
+  },
+  {
+   "index": 130,
+   "enmap_band": 146,
+   "wavelength_nm": 1564.31,
+   "fwhm_nm": 10.7308,
+   "family": "SWIR"
+  },
+  {
+   "index": 131,
+   "enmap_band": 147,
+   "wavelength_nm": 1575.55,
+   "fwhm_nm": 10.6872,
+   "family": "SWIR"
+  },
+  {
+   "index": 132,
+   "enmap_band": 148,
+   "wavelength_nm": 1586.76,
+   "fwhm_nm": 10.643,
+   "family": "SWIR"
+  },
+  {
+   "index": 133,
+   "enmap_band": 149,
+   "wavelength_nm": 1597.91,
+   "fwhm_nm": 10.5985,
+   "family": "SWIR"
+  },
+  {
+   "index": 134,
+   "enmap_band": 150,
+   "wavelength_nm": 1609.02,
+   "fwhm_nm": 10.5535,
+   "family": "SWIR"
+  },
+  {
+   "index": 135,
+   "enmap_band": 151,
+   "wavelength_nm": 1620.09,
+   "fwhm_nm": 10.5082,
+   "family": "SWIR"
+  },
+  {
+   "index": 136,
+   "enmap_band": 152,
+   "wavelength_nm": 1631.11,
+   "fwhm_nm": 10.4626,
+   "family": "SWIR"
+  },
+  {
+   "index": 137,
+   "enmap_band": 153,
+   "wavelength_nm": 1642.08,
+   "fwhm_nm": 10.4169,
+   "family": "SWIR"
+  },
+  {
+   "index": 138,
+   "enmap_band": 154,
+   "wavelength_nm": 1653.0,
+   "fwhm_nm": 10.371,
+   "family": "SWIR"
+  },
+  {
+   "index": 139,
+   "enmap_band": 155,
+   "wavelength_nm": 1663.87,
+   "fwhm_nm": 10.3251,
+   "family": "SWIR"
+  },
+  {
+   "index": 140,
+   "enmap_band": 156,
+   "wavelength_nm": 1674.7,
+   "fwhm_nm": 10.2793,
+   "family": "SWIR"
+  },
+  {
+   "index": 141,
+   "enmap_band": 157,
+   "wavelength_nm": 1685.47,
+   "fwhm_nm": 10.2335,
+   "family": "SWIR"
+  },
+  {
+   "index": 142,
+   "enmap_band": 158,
+   "wavelength_nm": 1696.2,
+   "fwhm_nm": 10.1879,
+   "family": "SWIR"
+  },
+  {
+   "index": 143,
+   "enmap_band": 159,
+   "wavelength_nm": 1706.87,
+   "fwhm_nm": 10.1425,
+   "family": "SWIR"
+  },
+  {
+   "index": 144,
+   "enmap_band": 160,
+   "wavelength_nm": 1717.5,
+   "fwhm_nm": 10.0974,
+   "family": "SWIR"
+  },
+  {
+   "index": 145,
+   "enmap_band": 168,
+   "wavelength_nm": 1977.08,
+   "fwhm_nm": 9.00775,
+   "family": "SWIR"
+  },
+  {
+   "index": 146,
+   "enmap_band": 169,
+   "wavelength_nm": 1986.45,
+   "fwhm_nm": 8.96875,
+   "family": "SWIR"
+  },
+  {
+   "index": 147,
+   "enmap_band": 170,
+   "wavelength_nm": 1995.79,
+   "fwhm_nm": 8.92995,
+   "family": "SWIR"
+  },
+  {
+   "index": 148,
+   "enmap_band": 171,
+   "wavelength_nm": 2005.08,
+   "fwhm_nm": 8.89134,
+   "family": "SWIR"
+  },
+  {
+   "index": 149,
+   "enmap_band": 172,
+   "wavelength_nm": 2014.33,
+   "fwhm_nm": 8.85292,
+   "family": "SWIR"
+  },
+  {
+   "index": 150,
+   "enmap_band": 173,
+   "wavelength_nm": 2023.54,
+   "fwhm_nm": 8.81469,
+   "family": "SWIR"
+  },
+  {
+   "index": 151,
+   "enmap_band": 174,
+   "wavelength_nm": 2032.71,
+   "fwhm_nm": 8.77665,
+   "family": "SWIR"
+  },
+  {
+   "index": 152,
+   "enmap_band": 175,
+   "wavelength_nm": 2041.83,
+   "fwhm_nm": 8.73878,
+   "family": "SWIR"
+  },
+  {
+   "index": 153,
+   "enmap_band": 176,
+   "wavelength_nm": 2050.92,
+   "fwhm_nm": 8.70111,
+   "family": "SWIR"
+  },
+  {
+   "index": 154,
+   "enmap_band": 177,
+   "wavelength_nm": 2059.96,
+   "fwhm_nm": 8.66361,
+   "family": "SWIR"
+  },
+  {
+   "index": 155,
+   "enmap_band": 178,
+   "wavelength_nm": 2068.97,
+   "fwhm_nm": 8.62632,
+   "family": "SWIR"
+  },
+  {
+   "index": 156,
+   "enmap_band": 179,
+   "wavelength_nm": 2077.93,
+   "fwhm_nm": 8.58923,
+   "family": "SWIR"
+  },
+  {
+   "index": 157,
+   "enmap_band": 180,
+   "wavelength_nm": 2086.86,
+   "fwhm_nm": 8.55236,
+   "family": "SWIR"
+  },
+  {
+   "index": 158,
+   "enmap_band": 181,
+   "wavelength_nm": 2095.74,
+   "fwhm_nm": 8.51572,
+   "family": "SWIR"
+  },
+  {
+   "index": 159,
+   "enmap_band": 182,
+   "wavelength_nm": 2104.59,
+   "fwhm_nm": 8.47932,
+   "family": "SWIR"
+  },
+  {
+   "index": 160,
+   "enmap_band": 183,
+   "wavelength_nm": 2113.4,
+   "fwhm_nm": 8.44317,
+   "family": "SWIR"
+  },
+  {
+   "index": 161,
+   "enmap_band": 184,
+   "wavelength_nm": 2122.17,
+   "fwhm_nm": 8.40728,
+   "family": "SWIR"
+  },
+  {
+   "index": 162,
+   "enmap_band": 185,
+   "wavelength_nm": 2130.9,
+   "fwhm_nm": 8.37166,
+   "family": "SWIR"
+  },
+  {
+   "index": 163,
+   "enmap_band": 186,
+   "wavelength_nm": 2139.6,
+   "fwhm_nm": 8.33632,
+   "family": "SWIR"
+  },
+  {
+   "index": 164,
+   "enmap_band": 187,
+   "wavelength_nm": 2148.26,
+   "fwhm_nm": 8.30128,
+   "family": "SWIR"
+  },
+  {
+   "index": 165,
+   "enmap_band": 188,
+   "wavelength_nm": 2156.88,
+   "fwhm_nm": 8.26653,
+   "family": "SWIR"
+  },
+  {
+   "index": 166,
+   "enmap_band": 189,
+   "wavelength_nm": 2165.47,
+   "fwhm_nm": 8.2321,
+   "family": "SWIR"
+  },
+  {
+   "index": 167,
+   "enmap_band": 190,
+   "wavelength_nm": 2174.02,
+   "fwhm_nm": 8.198,
+   "family": "SWIR"
+  },
+  {
+   "index": 168,
+   "enmap_band": 191,
+   "wavelength_nm": 2182.53,
+   "fwhm_nm": 8.16422,
+   "family": "SWIR"
+  },
+  {
+   "index": 169,
+   "enmap_band": 192,
+   "wavelength_nm": 2191.01,
+   "fwhm_nm": 8.13079,
+   "family": "SWIR"
+  },
+  {
+   "index": 170,
+   "enmap_band": 193,
+   "wavelength_nm": 2199.46,
+   "fwhm_nm": 8.09771,
+   "family": "SWIR"
+  },
+  {
+   "index": 171,
+   "enmap_band": 194,
+   "wavelength_nm": 2207.86,
+   "fwhm_nm": 8.065,
+   "family": "SWIR"
+  },
+  {
+   "index": 172,
+   "enmap_band": 195,
+   "wavelength_nm": 2216.24,
+   "fwhm_nm": 8.03267,
+   "family": "SWIR"
+  },
+  {
+   "index": 173,
+   "enmap_band": 196,
+   "wavelength_nm": 2224.58,
+   "fwhm_nm": 8.00072,
+   "family": "SWIR"
+  },
+  {
+   "index": 174,
+   "enmap_band": 197,
+   "wavelength_nm": 2232.89,
+   "fwhm_nm": 7.96916,
+   "family": "SWIR"
+  },
+  {
+   "index": 175,
+   "enmap_band": 198,
+   "wavelength_nm": 2241.16,
+   "fwhm_nm": 7.93802,
+   "family": "SWIR"
+  },
+  {
+   "index": 176,
+   "enmap_band": 199,
+   "wavelength_nm": 2249.4,
+   "fwhm_nm": 7.90728,
+   "family": "SWIR"
+  },
+  {
+   "index": 177,
+   "enmap_band": 200,
+   "wavelength_nm": 2257.61,
+   "fwhm_nm": 7.87694,
+   "family": "SWIR"
+  },
+  {
+   "index": 178,
+   "enmap_band": 201,
+   "wavelength_nm": 2265.79,
+   "fwhm_nm": 7.84695,
+   "family": "SWIR"
+  },
+  {
+   "index": 179,
+   "enmap_band": 202,
+   "wavelength_nm": 2273.93,
+   "fwhm_nm": 7.81727,
+   "family": "SWIR"
+  },
+  {
+   "index": 180,
+   "enmap_band": 203,
+   "wavelength_nm": 2282.04,
+   "fwhm_nm": 7.78785,
+   "family": "SWIR"
+  },
+  {
+   "index": 181,
+   "enmap_band": 204,
+   "wavelength_nm": 2290.12,
+   "fwhm_nm": 7.75866,
+   "family": "SWIR"
+  },
+  {
+   "index": 182,
+   "enmap_band": 205,
+   "wavelength_nm": 2298.17,
+   "fwhm_nm": 7.72966,
+   "family": "SWIR"
+  },
+  {
+   "index": 183,
+   "enmap_band": 206,
+   "wavelength_nm": 2306.19,
+   "fwhm_nm": 7.70079,
+   "family": "SWIR"
+  },
+  {
+   "index": 184,
+   "enmap_band": 207,
+   "wavelength_nm": 2314.18,
+   "fwhm_nm": 7.67203,
+   "family": "SWIR"
+  },
+  {
+   "index": 185,
+   "enmap_band": 208,
+   "wavelength_nm": 2322.13,
+   "fwhm_nm": 7.64333,
+   "family": "SWIR"
+  },
+  {
+   "index": 186,
+   "enmap_band": 209,
+   "wavelength_nm": 2330.05,
+   "fwhm_nm": 7.61464,
+   "family": "SWIR"
+  },
+  {
+   "index": 187,
+   "enmap_band": 210,
+   "wavelength_nm": 2337.94,
+   "fwhm_nm": 7.58593,
+   "family": "SWIR"
+  },
+  {
+   "index": 188,
+   "enmap_band": 211,
+   "wavelength_nm": 2345.81,
+   "fwhm_nm": 7.55715,
+   "family": "SWIR"
+  },
+  {
+   "index": 189,
+   "enmap_band": 212,
+   "wavelength_nm": 2353.64,
+   "fwhm_nm": 7.52827,
+   "family": "SWIR"
+  },
+  {
+   "index": 190,
+   "enmap_band": 213,
+   "wavelength_nm": 2361.44,
+   "fwhm_nm": 7.49924,
+   "family": "SWIR"
+  },
+  {
+   "index": 191,
+   "enmap_band": 214,
+   "wavelength_nm": 2369.21,
+   "fwhm_nm": 7.47001,
+   "family": "SWIR"
+  },
+  {
+   "index": 192,
+   "enmap_band": 215,
+   "wavelength_nm": 2376.95,
+   "fwhm_nm": 7.44055,
+   "family": "SWIR"
+  },
+  {
+   "index": 193,
+   "enmap_band": 216,
+   "wavelength_nm": 2384.66,
+   "fwhm_nm": 7.41082,
+   "family": "SWIR"
+  },
+  {
+   "index": 194,
+   "enmap_band": 217,
+   "wavelength_nm": 2392.34,
+   "fwhm_nm": 7.38077,
+   "family": "SWIR"
+  },
+  {
+   "index": 195,
+   "enmap_band": 218,
+   "wavelength_nm": 2400.0,
+   "fwhm_nm": 7.35037,
+   "family": "SWIR"
+  },
+  {
+   "index": 196,
+   "enmap_band": 219,
+   "wavelength_nm": 2407.62,
+   "fwhm_nm": 7.31957,
+   "family": "SWIR"
+  },
+  {
+   "index": 197,
+   "enmap_band": 220,
+   "wavelength_nm": 2415.21,
+   "fwhm_nm": 7.28832,
+   "family": "SWIR"
+  },
+  {
+   "index": 198,
+   "enmap_band": 221,
+   "wavelength_nm": 2422.78,
+   "fwhm_nm": 7.25659,
+   "family": "SWIR"
+  },
+  {
+   "index": 199,
+   "enmap_band": 222,
+   "wavelength_nm": 2430.32,
+   "fwhm_nm": 7.22434,
+   "family": "SWIR"
+  },
+  {
+   "index": 200,
+   "enmap_band": 223,
+   "wavelength_nm": 2437.83,
+   "fwhm_nm": 7.19152,
+   "family": "SWIR"
+  },
+  {
+   "index": 201,
+   "enmap_band": 224,
+   "wavelength_nm": 2445.3,
+   "fwhm_nm": 7.1581,
+   "family": "SWIR"
+  }
+ ]
+}
