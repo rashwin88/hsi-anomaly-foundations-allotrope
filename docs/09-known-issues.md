@@ -121,6 +121,26 @@ Added 2026-10-13 with `backend/allotrope_inventory/`. Design rationale in
   route `/inventory-api/` is GET-only behind the app login. Remote scripts need either SSM
   or a future API-key route through Caddy.
 
+## SpectralEarth — known gaps
+
+Added 2026-10-14 with `app/utils/spectralearth/`. Rationale in
+[`lld/spectralearth.md`](lld/spectralearth.md).
+
+- **No cloud screening yet.** SpectralEarth ships no quality layers, and DLR filtered
+  clouds only per source scene (< ~10%, by eye), so some patches are partly or mostly
+  cloud. The `ScreenChain` slot exists; a cloud screen is unbuilt and must first be shown
+  to work without the 1380 nm band SpectralEarth dropped. Until then, cloud enters training
+  as "normal" surface.
+- **No georeference, date or source-scene id per patch** — patches can be found by site
+  and patch id only. Searching by place or time needs a DLR metadata table we don't have.
+- **Too slow to train straight from S3** (18 samples/s through a DataLoader). Training
+  needs the collection on local NVMe via the source's cache, or shards.
+- **The band table rests on a drop list from related literature** (HySpecNet), stated but
+  not enumerated in the SpectralEarth paper. Three independent checks agree with it (see
+  the LLD); a DLR-published band list would settle it.
+- **`common_grid_pipeline.py` duplicates the EnMAP builder's step order** rather than the
+  builder calling it. A change to either must be mirrored in the other.
+
 ## Config knobs that do nothing
 
 Declared, set in real configs, never read by any code:
