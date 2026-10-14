@@ -122,7 +122,7 @@ aws ssm start-session --profile Allotrope-Prod --region ap-south-1 --target i-07
 cd /opt/allotrope
 C="docker compose -f docker/docker-compose.yml -f docker/docker-compose.prod.yml --profile inventory"
 $C ps -a                          # worker must be 'running'
-git pull --ff-only && $C build && $C up -d      # deploy the branch head
+git pull --ff-only && $C build && $C up -d      # deploy main (the box tracks main)
 
 # Admin login for the app (username: admin)
 aws ssm get-parameter --profile Allotrope-Prod --region ap-south-1 \
