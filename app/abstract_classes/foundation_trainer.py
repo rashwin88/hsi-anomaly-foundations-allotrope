@@ -332,6 +332,11 @@ class FoundationTrainer(ABC):
     # Dataloader
     # ------------------------------------------------------------------
 
+    def _sample_decoders(self) -> list:
+        """Extra webdataset decoders, tried before the built-in ones. They run inside the
+        DataLoader workers, which is where per-sample decoding must happen to keep up."""
+        return []
+
     def _build_dataloader(self, split: str, size: int):
         """Build a webdataset dataloader streaming from S3."""
         shard_key = self.config.data.resolve_shard_key(split=split, size=size)
@@ -344,7 +349,7 @@ class FoundationTrainer(ABC):
             pipe_expr,
             shardshuffle=self.config.data.shardshuffle,
             handler=wds.warn_and_continue,
-        ).decode()
+        ).decode(*self._sample_decoders())
 
         return torch.utils.data.DataLoader(
             dataset,
@@ -369,7 +374,7 @@ class FoundationTrainer(ABC):
             urls,
             shardshuffle=self.config.data.shardshuffle,
             handler=wds.warn_and_continue,
-        ).decode()
+        ).decode(*self._sample_decoders())
 
         return torch.utils.data.DataLoader(
             dataset,

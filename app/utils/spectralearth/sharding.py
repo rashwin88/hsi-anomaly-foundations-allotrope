@@ -106,3 +106,29 @@ def write_shard(patches: Iterable[SpectralEarthPatch], fileobj) -> tuple[list[st
             stats.add(patch.raw, patch.bands.reflectance_scale, patch.bands.nodata)
             keys.append(patch.key)
     return keys, stats
+
+
+def recompress_shard(src, dst) -> list[str]:
+    """Copy a shard tar from `src` to `dst` (binary file objects), storing each `<key>.pixels.npy`
+    as `<key>.pixels.i16dz` (app/utils/shard_codec.py: exact, ~1.9x smaller). Every other member
+    is copied byte for byte, in the same order. Returns the sample keys, in order.
+
+    Members keep mtime 0, so the same input always gives the same bytes - a rerun after an
+    interruption produces an identical object and an identical sha256 in the manifest.
+    """
+    from app.utils.shard_codec import encode_i16dz
+
+    keys = []
+    with tarfile.open(fileobj=src, mode="r|") as tin, \
+            tarfile.open(fileobj=dst, mode="w", format=tarfile.USTAR_FORMAT) as tout:
+        for m in tin:
+            data = tin.extractfile(m).read()
+            name = m.name
+            if name.endswith(".pixels.npy"):
+                data = encode_i16dz(np.load(io.BytesIO(data), allow_pickle=False))
+                name = name[: -len(".npy")] + ".i16dz"
+                keys.append(name[: -len(".pixels.i16dz")])
+            info = tarfile.TarInfo(name)
+            info.size, info.mtime, info.mode = len(data), 0, 0o444
+            tout.addfile(info, io.BytesIO(data))
+    return keys

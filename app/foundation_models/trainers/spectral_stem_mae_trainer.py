@@ -45,6 +45,15 @@ METRICS_COLUMNS = ("epoch", "train_l1", "train_sam_deg", "val_l1", "val_sam_deg"
                    "train_patches", "seconds", "patches_per_s", "peak_gpu_gb")
 
 
+def decode_i16dz_member(key: str, data: bytes):
+    """webdataset handler: `.pixels.i16dz` (band-delta + zstd, app/utils/shard_codec.py) -> int16
+    ndarray. Module-level so DataLoader workers can pickle it on spawn (Windows, macOS)."""
+    if key.endswith(".i16dz"):
+        from app.utils.shard_codec import decode_i16dz
+        return decode_i16dz(data)
+    return None
+
+
 class _EarlyStop(Exception):
     """Raised after the epoch whose checkpoint met the early-stop rule; caught by train()."""
 
@@ -176,6 +185,9 @@ class SpectralStemMAETrainer(HyperspectralSegFormerMAETrainer):
             raise _EarlyStop(f"no {self.config.model_config_.early_stop_min_delta:.0%} improvement in "
                              f"{self._bad_epochs} epochs; best avg val {self._best_val:.6f} (best.pt)")
 
+    def _sample_decoders(self) -> list:
+        return [decode_i16dz_member]
+
     def build_model(self) -> nn.Module:
         cfg = self.config.model_config_
         wl, mean, std = resolve_wavelength_stats(self.config.data.pixel_stats_path)
@@ -191,7 +203,9 @@ class SpectralStemMAETrainer(HyperspectralSegFormerMAETrainer):
     def _decode_batch(self, batch: dict) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         """-> (reflectance (B, N, H, W) float32, band_valid (B, N, H, W) bool,
         wavelengths (N,) or (B, N), pixel mask (B, 1, H, W) float)."""
-        raw = torch.as_tensor(batch["pixels.npy"]).to(self.device)
+        # Raw shards carry pixels.npy; recompressed ones pixels.i16dz, already decoded to the
+        # same int16 array by decode_i16dz_member in the workers.
+        raw = torch.as_tensor(batch["pixels.npy"] if "pixels.npy" in batch else batch["pixels.i16dz"]).to(self.device)
         band_valid = raw != NODATA
         pixels = torch.where(band_valid, raw.float() * REFLECTANCE_SCALE, torch.zeros((), device=self.device))
         wl = torch.as_tensor(batch["wavelengths.npy"]).to(self.device).float()      # (B, N)

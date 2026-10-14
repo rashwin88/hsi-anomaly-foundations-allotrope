@@ -17,6 +17,7 @@ tqdm
 boto3
 pympler
 webdataset
+zstandard
 torchvision
 flask
 psutil

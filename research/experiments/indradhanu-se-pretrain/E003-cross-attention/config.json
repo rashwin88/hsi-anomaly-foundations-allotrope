@@ -1,0 +1,93 @@
+{
+  "_description": "E003: variant C (cross-attention spectral stem, no binning) pretrained on SpectralEarth se-v1. Shared hyperparameters for E001-E003; only model_config.stem differs.",
+  "foundation_model_name": "spectral_stem_mae",
+  "version": "0.3.0",
+  "device": "cuda",
+  "model_config": {
+    "model_type": "spectral_stem_mae",
+    "stem": "cross_attention",
+    "bands": 202,
+    "compressed_channels": 32,
+    "token_dim": 32,
+    "attention_heads": 4,
+    "gate_hidden": 32,
+    "embed_dims": [
+      32,
+      64,
+      160,
+      256
+    ],
+    "num_heads": [
+      2,
+      2,
+      5,
+      8
+    ],
+    "reduction_ratios": [
+      8,
+      4,
+      2,
+      1
+    ],
+    "num_blocks": [
+      2,
+      2,
+      2,
+      2
+    ],
+    "decoder_dim": 256,
+    "expansion_ratio": 4,
+    "drop_rate": 0.4,
+    "mask_ratio": 0.65,
+    "trim_fraction": 0.0,
+    "sam_weight": 0.5,
+    "sam_ramp_epochs": 10,
+    "erosion_kernel_size": 1,
+    "metrics_csv": "/opt/dlami/nvme/run/metrics.csv",
+    "amp_bf16": true,
+    "early_stop_patience": 10,
+    "early_stop_min_delta": 0.01,
+    "early_stop_min_epochs": 20,
+    "checkpoint_s3_uri": "s3://allotrope-training-data-prod-india/experiments/indradhanu-se-pretrain/E003-cross-attention/checkpoints/",
+    "auto_resume": true
+  },
+  "data": {
+    "num_epochs": 200,
+    "data_provider": "spectralearth",
+    "train_samples_per_epoch": {
+      "128": 30000
+    },
+    "test_samples_per_epoch": {
+      "128": 1500
+    },
+    "shard_key_template": "patches/spectralearth/se-v1/{split}/",
+    "stage": "se-v1",
+    "bucket_name": "allotrope-training-data-prod-india",
+    "region_name": "ap-south-1",
+    "batch_size": 4,
+    "gradient_accumulation_steps": 8,
+    "num_workers": 3,
+    "shardshuffle": 100,
+    "pixel_stats_path": "/opt/dlami/nvme/se_cache/stats.json"
+  },
+  "learning_rate": 0.0005,
+  "lr_schedule": {
+    "scheduler_type": "cosine",
+    "warmup_epochs": 0,
+    "min_lr": 1e-06,
+    "step_size": 10,
+    "step_gamma": 0.5
+  },
+  "checkpoint": {
+    "checkpoint_dir": "/opt/dlami/nvme/ckpt",
+    "save_every_n_epochs": 1,
+    "keep_top_k": 2
+  },
+  "hot_storage": {
+    "enabled": true,
+    "local_cache_dir": "/opt/dlami/nvme/se_cache",
+    "train_shards_per_size": 200,
+    "test_shards_per_size": 10,
+    "skip_sync_if_exists": true
+  }
+}

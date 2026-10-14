@@ -90,3 +90,23 @@ def test_shard_reads_back_through_webdataset(tmp_path):
     samples = list(wds.WebDataset(["file:" + path.as_posix()], shardshuffle=False).decode())
     assert [s["__key__"] for s in samples] == [p.key for p in patches]
     assert np.array_equal(samples[1]["pixels.npy"], patches[1].raw)
+
+
+def test_recompress_shard_is_exact_and_deterministic():
+    from app.utils.shard_codec import decode_i16dz
+    from app.utils.spectralearth.sharding import recompress_shard
+    patches = [_patch(i) for i in range(2)]
+    patches[0].raw[:, :10, :10] = -32768
+    raw = io.BytesIO()
+    write_shard(patches, raw)
+    first, second = io.BytesIO(), io.BytesIO()
+    keys = recompress_shard(io.BytesIO(raw.getvalue()), first)
+    recompress_shard(io.BytesIO(raw.getvalue()), second)
+    assert keys == [p.key for p in patches]
+    assert first.getvalue() == second.getvalue()
+    with tarfile.open(fileobj=io.BytesIO(first.getvalue())) as tar:
+        names = tar.getnames()
+        assert names == ["se_0000000_00001.pixels.i16dz", "se_0000000_00001.wavelengths.npy",
+                         "se_0000001_00001.pixels.i16dz", "se_0000001_00001.wavelengths.npy"]
+        for p, name in zip(patches, names[::2]):
+            assert np.array_equal(decode_i16dz(tar.extractfile(name).read()), p.raw)
