@@ -27,6 +27,7 @@ class name.
 | `normalized_masked_autoencoder` | **Drashta** द्रष्टा | conv MAE, explicit mask channels |
 | `segformer_mae` | **Chakshu** चक्षु | transformer MAE (thermal) |
 | `hyperspectral_segformer_mae` | **Indradhanu** इंद्रधनु | transformer MAE + spectral bottleneck |
+| `spectral_stem_mae` | *(experimental, no codename)* | Indradhanu's SegFormer with a swappable spectral stem - training only, not served |
 
 Shipped checkpoints: **Chakshu** 406 k params, val 0.2565 @ epoch 495. **Indradhanu**
 5.5 M params, val 0.0435 @ epoch 200.
@@ -77,6 +78,13 @@ H/4, H/8, H/16, H/32. Total stride 32, so **patch size must be divisible by 32**
 asymmetry is intentional: the compressor stabilises the encoder's input distribution, while
 the decompressor's output must stay unconstrained because it feeds denormalisation.
 
+**The next spectral stem (experimental)** - `spectral_stem_mae` keeps Indradhanu's SegFormer
+and swaps the stem: today's 1×1 compressor, a per-pixel gate, or cross-attention over band
+tokens tagged with their wavelength, which takes any band list and skips dead bands exactly.
+Normalisation is a curve over wavelength (`WavelengthStats`), not per band position. It is
+the subject of the SpectralEarth pretraining experiment and is not wired into inference -
+see [docs/lld/spectral-stem.md](lld/spectral-stem.md).
+
 Its loss is `L1 + λ(t)·SAM`, with λ **ramped in** over the first ~10–20 epochs — SAM's
 gradient is unstable early when reconstructions are near-random.
 
@@ -111,7 +119,9 @@ Things that surprise people:
   it, shards stream from S3 through `pipe: aws s3 cp`.
 
 `resume_mode` is `"resume"` (weights + optimizer + epoch + scheduler) or `"finetune"`
-(weights only).
+(weights only). Resume **loads the saved scheduler state** (fixed 2026-10-14: it used to
+rebuild the scheduler at `last_epoch`, which for cosine took one extra step and resumed on the
+wrong learning rate).
 
 > Several config knobs are **read by nothing**: `warmup_epochs`, `save_to_s3`, and
 > `masking_range` on some trainers. Don't assume setting them does anything —

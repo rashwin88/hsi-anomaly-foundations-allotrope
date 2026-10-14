@@ -1,0 +1,79 @@
+{
+  "_description": "S01 laptop smoke: wiring check of the cross_attention stem on 20-patch smoke shards, CPU. Not an experiment.",
+  "foundation_model_name": "spectral_stem_mae",
+  "version": "0.0.1",
+  "device": "cpu",
+  "model_config": {
+    "model_type": "spectral_stem_mae",
+    "stem": "cross_attention",
+    "bands": 202,
+    "compressed_channels": 32,
+    "embed_dims": [
+      8,
+      16,
+      32,
+      64
+    ],
+    "num_heads": [
+      1,
+      1,
+      2,
+      2
+    ],
+    "reduction_ratios": [
+      8,
+      4,
+      2,
+      1
+    ],
+    "num_blocks": [
+      1,
+      1,
+      1,
+      1
+    ],
+    "decoder_dim": 32,
+    "drop_rate": 0.0,
+    "mask_ratio": 0.65,
+    "sam_weight": 0.5,
+    "sam_ramp_epochs": 1,
+    "metrics_csv": "research/experiments/indradhanu-se-pretrain/S01-laptop-smoke/metrics_cross_attention.csv"
+  },
+  "data": {
+    "num_epochs": 2,
+    "data_provider": "spectralearth",
+    "train_samples_per_epoch": {
+      "128": 8
+    },
+    "test_samples_per_epoch": {
+      "128": 4
+    },
+    "shard_key_template": "patches/spectralearth/se-v1/{split}/",
+    "stage": "se-v1",
+    "bucket_name": "allotrope-training-data-prod-india",
+    "batch_size": 2,
+    "num_workers": 0,
+    "shardshuffle": 1,
+    "pixel_stats_path": "C:/Users/FITT/AppData/Local/Temp/claude/c--Users-FITT-OneDrive-Documents-GitHub-hsi-anomaly-foundations-allotrope/788c753e-9469-41c6-b3b0-db0026d037fc/scratchpad/se_shards_smoke/stats.json"
+  },
+  "learning_rate": 0.001,
+  "lr_schedule": {
+    "scheduler_type": "cosine",
+    "warmup_epochs": 5,
+    "min_lr": 1e-06,
+    "step_size": 10,
+    "step_gamma": 0.5
+  },
+  "checkpoint": {
+    "checkpoint_dir": "C:/Users/FITT/AppData/Local/Temp/claude/c--Users-FITT-OneDrive-Documents-GitHub-hsi-anomaly-foundations-allotrope/788c753e-9469-41c6-b3b0-db0026d037fc/scratchpad/s01_ckpt/cross_attention/",
+    "save_every_n_epochs": 1,
+    "keep_top_k": 1
+  },
+  "hot_storage": {
+    "enabled": true,
+    "local_cache_dir": "C:/Users/FITT/AppData/Local/Temp/claude/c--Users-FITT-OneDrive-Documents-GitHub-hsi-anomaly-foundations-allotrope/788c753e-9469-41c6-b3b0-db0026d037fc/scratchpad/se_cache",
+    "train_shards_per_size": 1,
+    "test_shards_per_size": 1,
+    "skip_sync_if_exists": true
+  }
+}

@@ -1,0 +1,11 @@
+2026-10-14 13:02:40,174 | allotrope.pixel_stats | INFO | Wavelength stats loaded: 202 bands, 418-2445 nm
+2026-10-14 13:02:42,655 | FoundationTrainer | INFO |   Local test shards verified (1 shards, 1 per size). Skipping S3 sync.
+2026-10-14 13:02:42,657 | FoundationTrainer | INFO |   Local train shards verified (1 shards, 1 per size). Skipping S3 sync.
+2026-10-14 13:02:43,336 | FoundationTrainer | INFO | Epoch 1/2 | train_loss: 0.096452 | val_loss: [128px: 0.095634] | avg_val: 0.095634 | lr: 5.01e-04
+2026-10-14 13:02:43,357 | FoundationTrainer | INFO | Checkpoint saved: C:\Users\FITT\AppData\Local\Temp\claude\c--Users-FITT-OneDrive-Documents-GitHub-hsi-anomaly-foundations-allotrope\788c753e-9469-41c6-b3b0-db0026d037fc\scratchpad\s01_ckpt\linear\spectral_stem_mae_v0.0.1_epoch1.pt
+2026-10-14 13:02:43,357 | HyperspectralSegFormerMAETrainer | INFO |   L1: 0.096452 | SAM: 0.366801 rad (21.02 deg) | lambda: 0.000
+2026-10-14 13:02:43,985 | FoundationTrainer | INFO | Epoch 2/2 | train_loss: 0.279489 | val_loss: [128px: 0.222114] | avg_val: 0.222114 | lr: 1.00e-06
+2026-10-14 13:02:44,000 | FoundationTrainer | INFO | Checkpoint saved: C:\Users\FITT\AppData\Local\Temp\claude\c--Users-FITT-OneDrive-Documents-GitHub-hsi-anomaly-foundations-allotrope\788c753e-9469-41c6-b3b0-db0026d037fc\scratchpad\s01_ckpt\linear\spectral_stem_mae_v0.0.1_epoch2.pt
+2026-10-14 13:02:44,016 | FoundationTrainer | INFO | Removed checkpoint: C:\Users\FITT\AppData\Local\Temp\claude\c--Users-FITT-OneDrive-Documents-GitHub-hsi-anomaly-foundations-allotrope\788c753e-9469-41c6-b3b0-db0026d037fc\scratchpad\s01_ckpt\linear\spectral_stem_mae_v0.0.1_epoch2.pt
+2026-10-14 13:02:44,016 | HyperspectralSegFormerMAETrainer | INFO |   L1: 0.096444 | SAM: 0.366090 rad (20.98 deg) | lambda: 0.500
+2026-10-14 13:02:44,016 | FoundationTrainer | INFO | Training complete. Local shards kept for future runs.

@@ -74,9 +74,9 @@ controlled comparison - same SpectralEarth subset, same training budget, same sp
 
 | variant | compressor | input bands |
 |---|---|---|
-| A | today's 1x1 convolution | 165-band grid |
-| B | per-pixel gating: a small network reweights each band, then the 1x1 convolution | 165-band grid |
-| C | cross-attention compressor and spectral decoder (this sequel) | native 202 |
+| A | today's 1x1 convolution | SpectralEarth's 202 bands, as fixed positions |
+| B | per-pixel gating: a small network reweights each band, then the 1x1 convolution (part 39) | SpectralEarth's 202 bands, as fixed positions |
+| C | cross-attention compressor and spectral decoder (this sequel) | SpectralEarth's 202 bands, as wavelength tokens |
 
 Two scores per variant:
 
@@ -133,6 +133,4 @@ with the band index replaced by its wavelength - the same move the whole sequel 
 
 ---
 
-That is the sequel. The next step is a written design (shapes, normalisation, evaluation
-protocol) in `docs/proposals/spectral-attention-bottleneck.md`, reviewed before any model code
-is written.
+**Next:** part 39 - per-pixel gating, the cheap rival in variant B.

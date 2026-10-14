@@ -27,6 +27,7 @@ class FoundationModelName(str, Enum):
     NORMALIZED_MASKED_AUTOENCODER = "normalized_masked_autoencoder"
     SEGFORMER_MAE = "segformer_mae"
     HYPERSPECTRAL_SEGFORMER_MAE = "hyperspectral_segformer_mae"
+    SPECTRAL_STEM_MAE = "spectral_stem_mae"
 
 
 
@@ -105,6 +106,37 @@ class HyperspectralSegFormerMAEConfig(BaseModel):
     )
 
 
+class SpectralStemMAEConfig(HyperspectralSegFormerMAEConfig):
+    """The SegFormer MAE with a swappable spectral stem - the three variants of the
+    SpectralEarth pretraining experiment (docs/proposals/spectral-attention-bottleneck.md).
+    Inherits every SegFormer, masking and loss field; `in_channels` is unused (the band
+    count comes from `bands` or, for cross_attention, from each batch's wavelengths)."""
+
+    model_type: Literal["spectral_stem_mae"] = "spectral_stem_mae"
+    stem: Literal["linear", "gate", "cross_attention"] = "cross_attention"
+    bands: int = Field(default=202, description="Fixed input band count for the linear and gate stems.")
+    compressed_channels: int = 32
+    token_dim: int = 32
+    attention_heads: int = 4
+    gate_hidden: int = 32
+    metrics_csv: str | None = Field(
+        default=None, description="Append one row per epoch here - normally the run folder under "
+        "research/experiments/indradhanu-se-pretrain/<id>/metrics.csv.")
+    amp_bf16: bool = Field(default=False, description="Run the model under bf16 autocast (CUDA); "
+                           "the loss stays fp32. Roughly halves C's activation memory.")
+    early_stop_patience: int | None = Field(
+        default=None, ge=1, description="Stop when avg val loss has not improved on its best by "
+        "early_stop_min_delta (relative) for this many epochs. None = run all num_epochs.")
+    early_stop_min_delta: float = Field(default=0.01, ge=0, le=0.5, description="Relative improvement that counts, e.g. 0.01 = 1%.")
+    early_stop_min_epochs: int = Field(default=20, ge=0, description="Never stop before this epoch (lets the SAM ramp finish).")
+    checkpoint_s3_uri: str | None = Field(
+        default=None, description="s3://bucket/prefix/ - last.pt is uploaded every epoch and best.pt on "
+        "each improvement, so a terminated instance loses nothing.")
+    auto_resume: bool = Field(
+        default=False, description="On start, resume from checkpoint_dir/last.pt, or else from "
+        "checkpoint_s3_uri/last.pt, if either exists; otherwise start fresh.")
+
+
 class SpectralCompressorConfig(BaseModel):
     """Architecture config for SpectralCompressor (linear autoencoder)."""
 
@@ -116,7 +148,7 @@ class SpectralCompressorConfig(BaseModel):
 # Pydantic picks the right config based on the model_type literal field.
 # Adding a new model = add a config class above and extend this union.
 ModelSpecificConfig = Annotated[
-    Union[SpatialAutoencoderConfig, SpectralCompressorConfig, SpatialMaskedAutoEncoderConfig, NormalizedMaskedAutoEncoderConfig, SegFormerMAEConfig, HyperspectralSegFormerMAEConfig],
+    Union[SpatialAutoencoderConfig, SpectralCompressorConfig, SpatialMaskedAutoEncoderConfig, NormalizedMaskedAutoEncoderConfig, SegFormerMAEConfig, HyperspectralSegFormerMAEConfig, SpectralStemMAEConfig],
     Field(discriminator="model_type"),
 ]
 
@@ -395,6 +427,16 @@ class TrainingConfig(BaseModel):
         description="'resume' restores weights, optimizer, epoch, and scheduler. "
         "'finetune' loads weights only — fresh optimizer, scheduler, and epoch.",
     )
+
+    @model_validator(mode="after")
+    def _early_stop_needs_epoch_checkpoints(self) -> "TrainingConfig":
+        """Early stopping and auto-resume read and write their state at checkpoint time."""
+        m = self.model_config_
+        if isinstance(m, SpectralStemMAEConfig) and (m.early_stop_patience or m.auto_resume or m.checkpoint_s3_uri):
+            if self.checkpoint.save_every_n_epochs != 1:
+                raise ValueError("early_stop_patience / auto_resume / checkpoint_s3_uri need "
+                                 "checkpoint.save_every_n_epochs = 1")
+        return self
 
     @model_validator(mode="after")
     def _patch_sizes_compatible_with_model(self) -> "TrainingConfig":

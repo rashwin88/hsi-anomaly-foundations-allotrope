@@ -24,6 +24,13 @@ SpectralEarthSource(cache_dir, s3_client, workers) # .load(entry) .load_many(ent
 ScreenChain([NodataScreen(), ...]).apply(patch)    # -> ScreenReport(keep (H,W), rejected_by, usable())
 SpectralEarthTorchDataset(catalog, source, mode="native"|"common_grid", screens, band_filter_config)
 to_common_grid(cube, validity, wavelengths, families, fwhm, config, pixel_reject) -> VendableHyperspectralDataset
+shard_plan(entries, seed, per_shard=150) -> list[list[CatalogEntry]]
+write_shard(patches, fileobj) -> (keys, BandStats)  # BandStats: .add(raw, scale, nodata) .merge() .mean_std()
+```
+
+```bash
+python scripts/shard_spectralearth.py <collection s3://...> <out s3://... | dir> [--part K/N] [--limit N]
+python scripts/shard_spectralearth.py <collection> <out> --finalize    # manifest.json + stats.json
 ```
 
 ## Data flow
@@ -81,6 +88,31 @@ interpolated (the 40% rule decides).
 **7. Worker-safe.** The source rebuilds its S3 client per process and drops it when
 pickled, so forked and spawned DataLoader workers each get their own.
 
+## Shards
+
+`app/utils/spectralearth/sharding.py` + `scripts/shard_spectralearth.py` pack the collection
+into WebDataset tars for the trainer's `hot_storage` path.
+
+- **Where:** `s3://allotrope-training-data-prod-india/patches/spectralearth/se-v1/`
+  `{train,test}/shard-NNNNNN.tar`, each with a `.json` sidecar (keys, sha256, bytes, per-band
+  count / sum / sum of squares), plus `manifest.json` and `stats.json` at the top.
+- **Sample:** `<key>.pixels.npy` raw int16 `(202, 128, 128)` and `<key>.wavelengths.npy`
+  float32 `(202,)` in band order; the WebDataset `__key__` is `se_<site>_<patch>`. No
+  validity cube - the reader derives it from `-32768`.
+- **Plan:** each split is shuffled with `--seed` (0) and cut into 150-patch shards (~0.99 GB),
+  so shard n is fixed by the seed. A shard counts as done when its sidecar exists - written
+  only after its tar - so reruns resume, and `--part K/N` spreads shards over processes.
+- **`stats.json`:** per-band mean and population std of valid reflectance over the train
+  split (float64 sums, merged from the sidecars) - the wavelength-normalisation curve of
+  `docs/proposals/spectral-attention-bottleneck.md`, decision 5.
+- **Writes with stdlib `tarfile`**, members at mtime 0: byte-identical tars for the same
+  patches, and the sharding host needs no `webdataset`.
+- **Not in the inventory.** The inventory registers only objects in its own bucket; shards are
+  derived training data, and `manifest.json` (collection, split, seed, every shard's sha256)
+  is their record.
+- **Permissions:** the prod box role `allotrope-prod-ec2` may list, read and write
+  `patches/spectralearth/*` in that bucket (statements `TrainingShardsList`/`Write`).
+
 ## Numbers (measured 2026-10-14)
 
 | | |
@@ -92,6 +124,7 @@ pickled, so forked and spawned DataLoader workers each get their own.
 | Native batch of 32 | ~424 MB (202 × 128 × 128 × 4 bytes each) — loader containers need `--shm-size` ≥ 16 GB at 8 workers |
 | Nodata | 0 of 500 sampled patches have any |
 | Reflectance | 0.1st pct −0.032 · median 0.19 · 99th 0.71 · 99.9th 1.11 |
+| Sharding, prod box (m7i.4xlarge) | ~115 MiB/s per process to local disk; ~64 MiB/s per process incl. S3 upload, ~510 MiB/s with 8 processes |
 
 ## Failure modes
 
@@ -102,12 +135,14 @@ pickled, so forked and spawned DataLoader workers each get their own.
 | Two screens with the same name | counts add up (an earlier version overwrote — caught by a test) |
 | Too little shared memory in a loader container | `unable to allocate shared memory(shm)` from collate |
 | `split()` with a fraction outside (0, 1) | `ValueError` |
+| Sharder process dies mid-shard | no sidecar, so the shard is redone on the next run; a stale `.tar` is overwritten |
+| Finalize finds a missing shard or keys that differ from the plan | stops (`SystemExit`); nothing is written |
 
 ## Decisions
 
-- **Random access, no shards (for now).** Every patch is already its own verified S3
-  object. Shards may still be needed for GPU throughput; that is a training-setup decision,
-  and the cache (local NVMe) may be enough. Measured: S3 alone is not.
+- **Shards for training, random access for everything else.** S3 alone gives 18 samples/s,
+  so training reads WebDataset shards (below); the torch dataset and the cache remain for
+  sampling, sanity checks and anything that needs one patch by name.
 - **Native 202 bands as a first-class mode.** The next Indradhanu may take SpectralEarth's
   bands directly rather than resampling to 165; the layer doesn't pre-empt that.
 - **Read the inventory's bucket layout directly** (`files.jsonl.gz`, `payload/`), not its

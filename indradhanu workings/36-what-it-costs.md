@@ -114,6 +114,34 @@ Part 34's prototype ran 16 pixels, not 16,384. At that size everything is tiny. 
 scale with pixels count do not show up in a toy run** - always redo the byte arithmetic at the
 real patch and batch size before trusting a design.
 
+## Measured on a real GPU
+
+On 2026-10-14 the real module was timed at Indradhanu's real encoder size, one training step
+on 128 x 128 patches, on a 20 GB laptop GPU (RTX 4000 Ada). The run is recorded in
+`research/experiments/indradhanu-se-pretrain/S01-laptop-smoke/`.
+
+| stem | best batch that fits, bf16 | patches per second | memory per patch |
+|---|---|---|---|
+| today's 1x1 compressor | 64 | 391 | ~0.08 GiB |
+| per-pixel gate (part 39) | 64 | 282 | ~0.11 GiB |
+| cross-attention | 4 | 5 | **~3.7 GiB** |
+
+Two things the arithmetic above did not predict:
+
+- **Training keeps more than K and V.** The backward pass needs every intermediate the forward
+  pass made - the tokens, the stretched values, keys, values, the attention output - and many
+  of them have the same `(pixels, 202, 32)` shape as K. One such tensor in bf16 is
+  `16,384 * 202 * 32 * 2 = 211,812,352` bytes = 202 MiB; 3.7 GiB is about `3,789 / 202 = 19`
+  of them. **Inference-time memory is not training-time memory.**
+- **A hardware limit nobody mentions.** The GPU's fused attention puts the batch on a launch
+  axis capped at 65,535. Here the "batch" is pixels, so 4 patches - `4 * 16,384 = 65,536`
+  rows - failed with `invalid configuration argument`, one row over. The module now runs
+  attention in chunks of 32,768 pixels; because pixels are independent, the result is
+  identical.
+
+End to end the cross-attention model is about **78 times slower** than today's, not 163: the
+shared SegFormer costs the same in all three, and dilutes the difference.
+
 ## Common confusions
 
 **"Same parameters, so same speed?"** No. Parameters are stored once; arithmetic and
@@ -141,6 +169,9 @@ from negligible to noticeable.
    1,048,576 bytes.)
 4. Why does cross-attention need so much less memory than self-attention over bands?
 5. Band grouping makes 202 bands into 51 tokens. Name one thing that could get worse.
+6. Training needs ~3.7 GiB per patch. On a 48 GB card, leaving 4 GB for everything else, how
+   many patches fit in one batch? How many batches of 128 x 128 patches is that in pixels, and
+   does it stay under the 65,535-row attention limit without chunking?
 
 <details>
 <summary>Answers</summary>
@@ -154,6 +185,8 @@ from negligible to noticeable.
    than with its square.
 5. Spectral detail narrower than a group (about 4 bands) is blended before attention can look
    at it - narrow absorption features may be harder to represent.
+6. `(48 - 4) / 3.7 = 44 / 3.7 = 11.9`, so 11 patches. `11 * 16,384 = 180,224` pixel rows -
+   far over 65,535, so chunking is required: `180,224 / 32,768 = 5.5`, six calls per step.
 
 </details>
 

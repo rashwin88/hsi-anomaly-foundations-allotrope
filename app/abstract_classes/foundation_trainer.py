@@ -8,6 +8,7 @@ and validation_step().
 """
 
 import logging
+import os
 import random
 import subprocess
 from abc import ABC, abstractmethod
@@ -361,7 +362,9 @@ class FoundationTrainer(ABC):
                 f"No shards found in {local_dir}. Did _sync_shards run?"
             )
 
-        urls = [str(p) for p in shard_paths]
+        # webdataset reads "C:\..." as a URL with scheme "c"; "file:C:/..." opens. Linux keeps
+        # bare paths: there "file:/home/..." would lose its leading slash in gopen_file.
+        urls = [f"file:{p.as_posix()}" if os.name == "nt" else str(p) for p in shard_paths]
         dataset = wds.WebDataset(
             urls,
             shardshuffle=self.config.data.shardshuffle,
@@ -559,9 +562,20 @@ class FoundationTrainer(ABC):
             self.optimizer.load_state_dict(ckpt["optimizer_state_dict"])
             self.start_epoch = ckpt["epoch"]
 
-            # Rebuild scheduler with current config but starting at resumed epoch.
-            # This uses the new num_epochs for T_max while respecting where we left off.
-            self.scheduler = self._build_scheduler(last_epoch=self.start_epoch)
+            # Restore the scheduler's saved state rather than rebuilding it at last_epoch:
+            # CosineAnnealingLR steps recursively from the optimizer's current lr, so a rebuild
+            # at last_epoch=k took one extra step and resumed on the wrong lr (measured
+            # 2026-10-14: a run killed after epoch 2 continued 1e-6, 1.47e-4 instead of
+            # 1.47e-4, 1e-6). T_max still follows the current num_epochs, as before.
+            self.scheduler = self._build_scheduler()
+            if self.scheduler is not None and ckpt.get("scheduler_state_dict"):
+                self.scheduler.load_state_dict(ckpt["scheduler_state_dict"])
+                if hasattr(self.scheduler, "T_max"):
+                    self.scheduler.T_max = self.config.data.num_epochs
+                for group, lr in zip(self.optimizer.param_groups, self.scheduler.get_last_lr()):
+                    group["lr"] = lr
+            elif self.scheduler is not None:
+                self.scheduler = self._build_scheduler(last_epoch=self.start_epoch)
 
             logger.info(
                 f"  Resumed at epoch {self.start_epoch}, "

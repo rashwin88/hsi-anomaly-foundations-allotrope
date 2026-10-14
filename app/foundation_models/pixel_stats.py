@@ -69,3 +69,19 @@ def resolve_pixel_stats(
     else:
         logger.info("Pixel stats loaded: %d means, %d stds", len(mean), len(std))
     return mean, std
+
+
+def resolve_wavelength_stats(stats_path: str) -> tuple[list[float], list[float], list[float]]:
+    """(wavelengths_nm, mean, std) from a stats file that carries wavelengths - the
+    `stats.json` scripts/shard_spectralearth.py writes beside the shards. Raises ValueError
+    if the file has no `wavelengths_nm` or the three lists differ in length: a band-position
+    stats file (the 165-entry app/constants ones) cannot be read off at other wavelengths."""
+    with open(stats_path) as handle:
+        stats = json.load(handle)
+    if "wavelengths_nm" not in stats:
+        raise ValueError(f"{stats_path}: no wavelengths_nm - not a wavelength stats file")
+    wl, mean, std = stats["wavelengths_nm"], stats["mean"], stats["std"]
+    if not len(wl) == len(mean) == len(std):
+        raise ValueError(f"{stats_path}: {len(wl)} wavelengths, {len(mean)} means, {len(std)} stds")
+    logger.info("Wavelength stats loaded: %d bands, %.0f-%.0f nm", len(wl), min(wl), max(wl))
+    return wl, mean, std

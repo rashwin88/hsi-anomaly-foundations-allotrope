@@ -1,0 +1,594 @@
+<title>__TITLE__</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&family=Schibsted+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+  :root {
+    --paper: #f5f6f3; --surface: #ffffff; --ink: #16181c; --ink-2: #4a515b; --muted: #747b85;
+    --rule: #dcdfd9; --accent: #1b5e64; --accent-soft: #e1eded; --code-bg: #eceee9;
+    --warm: #a2541b; --ok: #2f7a4b;
+    --serif: "Newsreader", Georgia, "Times New Roman", serif;
+    --sans: "Schibsted Grotesk", system-ui, -apple-system, "Segoe UI", sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --paper: #0f1113; --surface: #161a1d; --ink: #e6e8ea; --ink-2: #b8bec5; --muted: #868d96;
+      --rule: #2a2f34; --accent: #67c3c8; --accent-soft: #182a2c; --code-bg: #1b1f23;
+      --warm: #e09a62; --ok: #6cc28f;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --paper: #0f1113; --surface: #161a1d; --ink: #e6e8ea; --ink-2: #b8bec5; --muted: #868d96;
+    --rule: #2a2f34; --accent: #67c3c8; --accent-soft: #182a2c; --code-bg: #1b1f23;
+    --warm: #e09a62; --ok: #6cc28f;
+  }
+  html { background: var(--paper); }
+  body { background: var(--paper); color: var(--ink); font-family: var(--serif); font-size: 18px; line-height: 1.62; margin: 0; }
+  a { color: var(--accent); }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  /* top bar with the spectrum strip */
+  .topbar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 20; background: var(--paper);
+            border-bottom: 1px solid var(--rule); padding-inline: 16px; }
+  .topbar-row { display: flex; align-items: center; gap: 14px; max-width: 1280px; margin: 0 auto; height: 52px; }
+  .brand { font-family: var(--sans); font-weight: 700; font-size: 1rem; letter-spacing: 0.01em; white-space: nowrap; color: var(--ink); text-decoration: none; }
+  .brand small { font-weight: 500; color: var(--muted); margin-left: 6px; }
+  .menu-btn { display: none; font: 600 0.85rem var(--sans); background: none; border: 1px solid var(--rule); color: var(--ink);
+              border-radius: 6px; padding: 6px 10px; cursor: pointer; }
+  .strip { flex: 1; display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 2px; height: 14px; min-width: 0; }
+  .strip a { display: block; border-radius: 2px; opacity: 0.22; transition: opacity 0.2s, transform 0.2s; }
+  .strip a.read { opacity: 1; }
+  .strip a.here { opacity: 1; transform: scaleY(1.6); }
+  .strip a:hover { opacity: 0.85; }
+  .progress { font: 500 0.78rem var(--mono); color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
+
+  /* layout */
+  .shell { display: grid; grid-template-columns: 290px minmax(0, 1fr); max-width: 1280px; margin: 0 auto; }
+  nav.toc { position: sticky; top: calc(53px + env(safe-area-inset-top, 0px)); align-self: start; height: calc(100vh - 53px);
+            overflow-y: auto; padding: 20px 16px 40px 16px; border-right: 1px solid var(--rule); font-family: var(--sans); }
+  .toc h3 { font-size: 0.7rem; letter-spacing: 0.09em; text-transform: uppercase; color: var(--muted); margin: 18px 0 6px; font-weight: 600; }
+  .toc ol { list-style: none; margin: 0; padding: 0; }
+  .toc a { display: grid; grid-template-columns: 26px 1fr 14px; gap: 6px; align-items: baseline; text-decoration: none;
+           color: var(--ink-2); font-size: 0.86rem; line-height: 1.35; padding: 5px 8px; border-radius: 6px; }
+  .toc a:hover { background: var(--accent-soft); color: var(--ink); }
+  .toc a.here { background: var(--accent-soft); color: var(--ink); font-weight: 600; }
+  .toc .num { font-family: var(--mono); font-size: 0.74rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .toc .tick { color: var(--ok); font-size: 0.8rem; }
+  .toc .seq-note { font-size: 0.74rem; color: var(--warm); margin: 2px 8px 4px; }
+
+  main { padding-inline: 16px; padding-block: 28px 80px; min-width: 0; }
+  article { max-width: 70ch; margin: 0 auto; }
+  .part-head { display: grid; gap: 8px; margin-bottom: 18px; }
+  .eyebrow { font: 600 0.74rem var(--sans); letter-spacing: 0.09em; text-transform: uppercase; color: var(--muted); display: flex; gap: 10px; align-items: center; }
+  .swatch { width: 26px; height: 8px; border-radius: 2px; display: inline-block; }
+  article h1 { font-family: var(--sans); font-weight: 700; font-size: clamp(1.75rem, 3.4vw, 2.4rem); line-height: 1.12; margin: 0; text-wrap: balance; letter-spacing: -0.01em; }
+  article h2 { font-family: var(--sans); font-weight: 650; font-size: 1.35rem; margin: 2.2em 0 0.5em; text-wrap: balance; }
+  article h3 { font-family: var(--sans); font-weight: 600; font-size: 1.08rem; margin: 1.7em 0 0.4em; }
+  article p, article li { color: var(--ink); }
+  article blockquote { margin: 1.2em 0; padding: 0.7em 1.1em; border-left: 3px solid var(--accent); background: var(--accent-soft); border-radius: 0 6px 6px 0; }
+  article blockquote p { margin: 0.3em 0; }
+  article blockquote.lede { font-size: 1.12rem; border-left-width: 4px; }
+  article code { font-family: var(--mono); font-size: 0.82em; background: var(--code-bg); padding: 0.1em 0.35em; border-radius: 4px; }
+  article pre { background: var(--code-bg); border-radius: 8px; padding: 14px 16px; overflow-x: auto; line-height: 1.5; }
+  article pre code { background: none; padding: 0; font-size: 0.8rem; }
+  .table-wrap { overflow-x: auto; margin: 1.2em 0; }
+  article table { border-collapse: collapse; font-family: var(--sans); font-size: 0.88rem; width: 100%; }
+  article th, article td { border-bottom: 1px solid var(--rule); padding: 7px 10px; text-align: left; vertical-align: top; }
+  article th { color: var(--muted); font-weight: 600; font-size: 0.8rem; }
+  article details { margin: 1.2em 0; border: 1px solid var(--rule); border-radius: 8px; background: var(--surface); }
+  article details summary { cursor: pointer; padding: 10px 14px; font: 600 0.92rem var(--sans); color: var(--accent); }
+  article details > *:not(summary) { margin-inline: 16px; }
+  article hr { border: none; border-top: 1px solid var(--rule); margin: 2.4em 0; }
+  .part-nav { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 48px; font-family: var(--sans); }
+  .part-nav a, .part-nav button { display: block; text-decoration: none; border: 1px solid var(--rule); border-radius: 8px; padding: 12px 14px;
+                                  color: var(--ink); background: var(--surface); font: inherit; text-align: left; cursor: pointer; }
+  .part-nav .next { text-align: right; }
+  .part-nav small { display: block; color: var(--muted); font-size: 0.75rem; margin-bottom: 2px; }
+  .mark { grid-column: 1 / -1; text-align: center !important; font-weight: 600; color: var(--accent) !important; }
+  .mark.done { color: var(--ok) !important; }
+
+  /* figures */
+  .fig { margin: 1.6em 0; border: 1px solid var(--rule); border-radius: 10px; background: var(--surface); padding: 16px; font-family: var(--sans); }
+  .fig-title { font-weight: 650; font-size: 0.95rem; margin: 0 0 4px; }
+  .fig-sub { color: var(--muted); font-size: 0.82rem; margin: 0 0 12px; }
+  .fig svg { width: 100%; height: auto; display: block; }
+  .fig svg text { font-family: var(--mono); font-size: 11px; fill: var(--muted); }
+  .fig .controls { display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: center; margin-top: 10px; font-size: 0.84rem; color: var(--ink-2); }
+  .fig label { display: flex; align-items: center; gap: 8px; }
+  .fig input[type=range] { width: 140px; accent-color: var(--accent); }
+  .fig button.chip { font: 500 0.8rem var(--sans); border: 1px solid var(--rule); background: var(--paper); color: var(--ink); border-radius: 999px; padding: 4px 11px; cursor: pointer; }
+  .fig button.chip.on { background: var(--accent); color: var(--surface); border-color: var(--accent); }
+  .fig .readout { font-family: var(--mono); font-size: 0.8rem; color: var(--ink); background: var(--code-bg); border-radius: 6px; padding: 8px 10px; margin-top: 10px; white-space: pre-wrap; overflow-x: auto; }
+  .fig .scroll { overflow-x: auto; }
+
+  /* landing */
+  .hero-strip { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 3px; height: 54px; margin: 22px 0 6px; }
+  .hero-strip a { border-radius: 3px; display: block; }
+  .hero-axis { display: flex; justify-content: space-between; font: 500 0.72rem var(--mono); color: var(--muted); }
+
+  @media (max-width: 860px) {
+    .shell { grid-template-columns: 1fr; }
+    .menu-btn { display: inline-block; }
+    nav.toc { position: fixed; inset: calc(53px + env(safe-area-inset-top, 0px)) 0 0 0; height: auto; background: var(--paper); z-index: 15;
+              border-right: none; transform: translateX(-100%); transition: transform 0.2s; }
+    nav.toc.open { transform: none; }
+    .progress { display: none; }
+    body { font-size: 17px; }
+  }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<header class="topbar">
+  <div class="topbar-row">
+    <button class="menu-btn" id="menuBtn" aria-controls="toc" aria-expanded="false">Parts</button>
+    <a class="brand" href="#p00">__BRAND__<small>__BRAND_SMALL__</small></a>
+    <div class="strip" id="strip" aria-label="Course progress across the spectrum"></div>
+    <span class="progress" id="progress"></span>
+  </div>
+</header>
+<div class="shell">
+  <nav class="toc" id="toc" aria-label="Course parts"></nav>
+  <main><article id="article" aria-live="polite"></article></main>
+</div>
+
+<script type="application/json" id="course-data">__COURSE_JSON__</script>
+<script type="application/json" id="config-data">__CONFIG_JSON__</script>
+<script type="application/json" id="spectrum-data">__SPECTRUM_JSON__</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js"></script>
+<script>
+(() => {
+  const PARTS = JSON.parse(document.getElementById("course-data").textContent);
+  const SPEC = JSON.parse(document.getElementById("spectrum-data").textContent);
+  const REPO = "https://github.com/rashwin88/hsi-anomaly-foundations-allotrope/blob/main/";
+  const CFG = JSON.parse(document.getElementById("config-data").textContent);
+  const SECTIONS = CFG.sections;
+  const byNum = Object.fromEntries(PARTS.map(p => [p.num, p]));
+  const nums = PARTS.map(p => p.num).sort((a, b) => a - b);
+  const course = nums.filter(n => n > 0);
+
+  // ---- per-viewer read state (best effort) ----
+  const KEY = CFG.storageKey;
+  let read = new Set();
+  try { read = new Set(JSON.parse(localStorage.getItem(KEY) || "[]")); } catch (e) {}
+  const saveRead = () => { try { localStorage.setItem(KEY, JSON.stringify([...read])); } catch (e) {} };
+
+  // ---- each part gets a colour from the spectrum: the first part near 420 nm, the last near 2400 nm ----
+  const LAST = Math.max(...PARTS.map(p => p.num));
+  const wlOf = (n) => 420 + (Math.max(n, 1) - 1) / Math.max(LAST - 1, 1) * (2400 - 420);
+  function colourOf(n) {
+    const w = wlOf(n);
+    if (w <= 700) {
+      const stops = [[420, 268], [460, 235], [490, 195], [520, 130], [560, 75], [590, 45], [630, 15], [700, 0]];
+      for (let i = 0; i < stops.length - 1; i++) {
+        const [w0, h0] = stops[i], [w1, h1] = stops[i + 1];
+        if (w <= w1) return `hsl(${h0 + (h1 - h0) * (w - w0) / (w1 - w0)} 78% 52%)`;
+      }
+    }
+    const t = (w - 700) / (2400 - 700);            // infrared: deep red -> wine -> dusk violet
+    return `hsl(${350 - 60 * t} ${62 - 22 * t}% ${44 - 12 * t}%)`;
+  }
+
+  // ---- navigation ----
+  const toc = document.getElementById("toc");
+  toc.innerHTML = SECTIONS.map(([name, a, b]) => {
+    const items = nums.filter(n => n >= a && n <= b).map(n => {
+      const p = byNum[n];
+      return `<li><a href="#p${String(n).padStart(2, "0")}" data-n="${n}"><span class="num">${String(n).padStart(2, "0")}</span><span>${p.title}</span><span class="tick" aria-hidden="true"></span></a></li>`;
+    }).join("");
+    const note = CFG.notes[a] ? `<p class="seq-note">${CFG.notes[a]}</p>` : "";
+    return `<h3>${name}</h3>${note}<ol>${items}</ol>`;
+  }).join("");
+  const strip = document.getElementById("strip");
+  strip.innerHTML = course.map(n => `<a href="#p${String(n).padStart(2, "0")}" data-n="${n}" style="background:${colourOf(n)}" title="${String(n).padStart(2, "0")} · ${byNum[n].title.replace(/"/g, "&quot;")}" aria-label="Part ${n}"></a>`).join("");
+
+  function refreshChrome(cur) {
+    toc.querySelectorAll("a[data-n]").forEach(a => {
+      const n = +a.dataset.n;
+      a.classList.toggle("here", n === cur);
+      a.querySelector(".tick").textContent = read.has(n) ? "✓" : "";
+    });
+    strip.querySelectorAll("a").forEach(a => {
+      const n = +a.dataset.n;
+      a.classList.toggle("read", read.has(n));
+      a.classList.toggle("here", n === cur);
+    });
+    document.getElementById("progress").textContent = `${course.filter(n => read.has(n)).length} / ${course.length} read`;
+  }
+
+  // ---- markdown -> page ----
+  marked.setOptions({ gfm: true });
+  function fixLinks(root) {
+    root.querySelectorAll("a[href]").forEach(a => {
+      const h = a.getAttribute("href");
+      const m = h.match(/^(\d{2})-[^/]*\.md(#.*)?$/);
+      if (m) { a.setAttribute("href", `#p${m[1]}`); return; }
+      if (/^https?:/.test(h)) { a.target = "_blank"; a.rel = "noopener"; return; }
+      if (h.startsWith("#")) return;
+      const path = decodeURIComponent(new URL(h, "https://x/" + CFG.folder + "/").pathname.slice(1));
+      a.setAttribute("href", REPO + path.split("/").map(encodeURIComponent).join("/"));
+      a.target = "_blank"; a.rel = "noopener";
+    });
+    root.querySelectorAll("table").forEach(t => {
+      const w = document.createElement("div"); w.className = "table-wrap";
+      t.parentNode.insertBefore(w, t); w.appendChild(t);
+    });
+  }
+
+  const article = document.getElementById("article");
+  function render(n) {
+    if (!byNum[n]) n = 0;
+    const p = byNum[n];
+    const tag = String(n).padStart(2, "0");
+    const body = p.md.replace(/^#\s+.*\n/, "");          // the title is drawn by the page head
+    const sectionName = (SECTIONS.find(([, a, b]) => n >= a && n <= b) || ["", 0, 0])[0];
+    article.innerHTML = `
+      <div class="part-head">
+        <div class="eyebrow">${n ? `<span class="swatch" style="background:${colourOf(n)}"></span>Part ${tag} · ${sectionName}` : "Start here"}</div>
+        <h1>${p.title}</h1>
+      </div>
+      <div class="md">${marked.parse(body)}</div>`;
+    const first = article.querySelector(".md > blockquote");
+    if (first && /one thing/i.test(first.textContent)) first.classList.add("lede");
+    fixLinks(article);
+    if (n === 0) landing(article);
+    (FIGS[n] || []).forEach(f => insertFigure(f));
+
+    const i = nums.indexOf(n), prev = nums[i - 1], next = nums[i + 1];
+    const nav = document.createElement("div"); nav.className = "part-nav";
+    nav.innerHTML =
+      (prev !== undefined ? `<a class="prev" href="#p${String(prev).padStart(2, "0")}"><small>Previous</small>${byNum[prev].title}</a>` : "<span></span>") +
+      (next !== undefined ? `<a class="next" href="#p${String(next).padStart(2, "0")}"><small>Next</small>${byNum[next].title}</a>` : "<span></span>") +
+      (n ? `<button class="mark ${read.has(n) ? "done" : ""}" id="markBtn">${read.has(n) ? "✓ Read - mark as unread" : "Mark this part as read"}</button>` : "");
+    article.appendChild(nav);
+    const mb = document.getElementById("markBtn");
+    if (mb) mb.onclick = () => { read.has(n) ? read.delete(n) : read.add(n); saveRead(); render(n); };
+    nav.querySelector(".next")?.addEventListener("click", () => { if (n) { read.add(n); saveRead(); } });
+    refreshChrome(n);
+    document.title = n ? `${tag} ${p.title} - ${CFG.title}` : CFG.title;
+  }
+
+  function landing(root) {
+    const lede = document.createElement("div");
+    lede.innerHTML = `<div class="hero-strip">${course.map(n => `<a href="#p${String(n).padStart(2, "0")}" style="background:${colourOf(n)};opacity:${read.has(n) ? 1 : 0.85}" title="${String(n).padStart(2, "0")} · ${byNum[n].title.replace(/"/g, "&quot;")}" aria-label="Part ${n}"></a>`).join("")}</div>
+      <div class="hero-axis"><span>part 01 · 420 nm</span><span>visible | infrared</span><span>part ${String(LAST).padStart(2, "0")} · 2400 nm</span></div>
+      <p style="font-family:var(--sans);font-size:0.86rem;color:var(--muted)">Each part takes a colour from the spectrum the sensors read, from violet at part 01 into the shortwave infrared at part ${String(LAST).padStart(2, "0")}. The strip at the top fills in as you mark parts read.</p>`;
+    root.querySelector(".md").prepend(lede);
+  }
+
+  function insertFigure(f) {
+    const host = document.createElement("div"); host.className = "fig";
+    const anchor = article.querySelector(".md > blockquote.lede") || article.querySelector(".md > blockquote") || article.querySelector(".md > p");
+    anchor ? anchor.after(host) : article.querySelector(".md").prepend(host);
+    f(host);
+  }
+
+  // ---- figures ----
+  const NS = "http://www.w3.org/2000/svg";
+  const css = (v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+  function svg(w, h, label) { const s = document.createElementNS(NS, "svg"); s.setAttribute("viewBox", `0 0 ${w} ${h}`); s.setAttribute("role", "img"); s.setAttribute("aria-label", label); return s; }
+  function el(parent, tag, attrs, text) { const e = document.createElementNS(NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); if (text !== undefined) e.textContent = text; parent.appendChild(e); return e; }
+  const head = (host, t, s) => { host.insertAdjacentHTML("beforeend", `<p class="fig-title">${t}</p><p class="fig-sub">${s}</p>`); };
+  const f4 = (x) => x.toFixed(4);
+
+  // part 02 - a real spectrum
+  function figSpectrum(host) {
+    head(host, "A real pixel is a curve", "Median reflectance of 128,000 pixels from 500 random SpectralEarth patches, with the 10th-90th percentile band. Hover to read it.");
+    const W = 640, H = 260, m = { l: 44, r: 10, t: 10, b: 30 }, x0 = 400, x1 = 2460, yMax = 0.6;
+    const s = svg(W, H, "Median SpectralEarth reflectance spectrum from 418 to 2445 nm"); host.appendChild(s);
+    const X = w => m.l + (w - x0) / (x1 - x0) * (W - m.l - m.r), Y = v => H - m.b - Math.min(v, yMax) / yMax * (H - m.t - m.b);
+    for (let v = 0; v <= yMax + 1e-9; v += 0.2) { el(s, "line", { x1: m.l, x2: W - m.r, y1: Y(v), y2: Y(v), stroke: css("--rule") }); el(s, "text", { x: m.l - 6, y: Y(v) + 4, "text-anchor": "end" }, v.toFixed(1)); }
+    [500, 1000, 1500, 2000].forEach(w => el(s, "text", { x: X(w), y: H - 10, "text-anchor": "middle" }, `${w} nm`));
+    const segs = []; let cur = [];
+    SPEC.wavelength_nm.forEach((w, i) => { if (cur.length && w - SPEC.wavelength_nm[i - 1] > 30) { segs.push(cur); cur = []; } cur.push(i); }); segs.push(cur);
+    segs.forEach(sg => {
+      const top = sg.map(i => `${X(SPEC.wavelength_nm[i])},${Y(SPEC.p90[i])}`), bot = sg.slice().reverse().map(i => `${X(SPEC.wavelength_nm[i])},${Y(SPEC.p10[i])}`);
+      el(s, "polygon", { points: top.concat(bot).join(" "), fill: css("--accent"), "fill-opacity": 0.14 });
+      el(s, "polyline", { points: sg.map(i => `${X(SPEC.wavelength_nm[i])},${Y(SPEC.median[i])}`).join(" "), fill: "none", stroke: css("--accent"), "stroke-width": 2, "stroke-linejoin": "round" });
+    });
+    el(s, "text", { x: X(712), y: Y(0.34), fill: css("--ink-2") }, "red edge");
+    el(s, "text", { x: X(1400), y: Y(0.56), "text-anchor": "middle" }, "water");
+    el(s, "text", { x: X(1850), y: Y(0.56), "text-anchor": "middle" }, "water");
+    const ro = document.createElement("div"); ro.className = "readout"; ro.textContent = "Hover the curve."; host.appendChild(ro);
+    const dot = el(s, "circle", { r: 4, fill: css("--accent"), visibility: "hidden" });
+    s.addEventListener("pointermove", e => {
+      const r = s.getBoundingClientRect(), wl = x0 + ((e.clientX - r.left) / r.width * W - m.l) / (W - m.l - m.r) * (x1 - x0);
+      let i = 0; SPEC.wavelength_nm.forEach((w, k) => { if (Math.abs(w - wl) < Math.abs(SPEC.wavelength_nm[i] - wl)) i = k; });
+      dot.setAttribute("cx", X(SPEC.wavelength_nm[i])); dot.setAttribute("cy", Y(SPEC.median[i])); dot.setAttribute("visibility", "visible");
+      ro.textContent = `${SPEC.wavelength_nm[i].toFixed(1)} nm  ${SPEC.family[i]}  median ${SPEC.median[i].toFixed(3)}  (p10 ${SPEC.p10[i].toFixed(3)} - p90 ${SPEC.p90[i].toFixed(3)})`;
+    });
+  }
+
+  // part 08 & 35 - softmax, optionally with masking
+  function figSoftmax(host, withMask) {
+    head(host, withMask ? "Masking a dead band" : "Softmax, live",
+      withMask ? "Mark a band dead and its score becomes minus infinity: its weight drops to exactly zero, and the others grow to fill the gap."
+               : "Drag the scores. Softmax turns them into weights that are all positive and sum to 1.");
+    const scores = withMask ? [2, 1, 0] : [2, 1, 0], dead = [false, false, false];
+    const W = 640, H = 170, s = svg(W, H, "Softmax weights for three scores"); host.appendChild(s);
+    const ctr = document.createElement("div"); ctr.className = "controls"; host.appendChild(ctr);
+    const ro = document.createElement("div"); ro.className = "readout"; host.appendChild(ro);
+    scores.forEach((v, i) => {
+      const lab = document.createElement("label");
+      lab.innerHTML = `score ${i + 1} <input type="range" id="sm${withMask ? "m" : ""}${i}" min="-4" max="6" step="0.5" value="${v}"> <b>${v}</b>`;
+      ctr.appendChild(lab);
+      lab.querySelector("input").oninput = e => { scores[i] = +e.target.value; lab.querySelector("b").textContent = scores[i]; draw(); };
+      if (withMask) { const b = document.createElement("button"); b.className = "chip"; b.textContent = `band ${i + 1} dead`; b.onclick = () => { dead[i] = !dead[i]; b.classList.toggle("on", dead[i]); draw(); }; ctr.appendChild(b); }
+    });
+    function draw() {
+      s.replaceChildren();
+      const ex = scores.map((v, i) => dead[i] ? 0 : Math.exp(v)), sum = ex.reduce((a, b) => a + b, 0) || 1, w = ex.map(e => e / sum);
+      w.forEach((v, i) => {
+        const x = 70 + i * 190, h = v * 120;
+        el(s, "rect", { x, y: 140 - h, width: 120, height: Math.max(h, 0.5), rx: 4, fill: dead[i] ? css("--rule") : css("--accent") });
+        el(s, "text", { x: x + 60, y: 132 - h, "text-anchor": "middle", fill: css("--ink") }, v.toFixed(4));
+        el(s, "text", { x: x + 60, y: 160, "text-anchor": "middle" }, dead[i] ? `band ${i + 1}: -inf` : `band ${i + 1}: ${scores[i]}`);
+      });
+      ro.textContent = scores.map((v, i) => `exp(${dead[i] ? "-inf" : v}) = ${dead[i] ? "0" : f4(Math.exp(v))}`).join("\n") + `\nsum = ${f4(sum)}\nweights = [${w.map(f4).join(", ")}]  (sum ${w.reduce((a, b) => a + b, 0).toFixed(4)})`;
+    }
+    draw();
+  }
+
+  // part 10 - the mixdown
+  function figMixdown(host) {
+    head(host, "The compressor's mixdown, by hand", "Part 10's four-band pixel and two fixed recipes. Change the pixel: the recipes never change - that is what part 31 calls the ceiling.");
+    const x = [1.2, 1.0, -0.4, -0.6], W = [[0.5, 0.5, 0, 0], [0, 0, 0.5, 0.5]];
+    const ctr = document.createElement("div"); ctr.className = "controls"; host.appendChild(ctr);
+    const ro = document.createElement("div"); ro.className = "readout"; host.appendChild(ro);
+    x.forEach((v, i) => { const lab = document.createElement("label"); lab.innerHTML = `band ${i} <input type="range" id="mx${i}" min="-2" max="2" step="0.1" value="${v}"> <b>${v}</b>`; ctr.appendChild(lab);
+      lab.querySelector("input").oninput = e => { x[i] = +e.target.value; lab.querySelector("b").textContent = x[i].toFixed(1); draw(); }; });
+    function draw() {
+      const y = W.map(r => r.reduce((a, w, i) => a + w * x[i], 0));
+      ro.textContent = W.map((r, c) => `y${c} = ${r.map((w, i) => `${w}*${x[i].toFixed(1)}`).join(" + ")} = ${y[c].toFixed(2)}`).join("\n");
+    }
+    draw();
+  }
+
+  // part 12 - attention between three tokens
+  function figAttention(host) {
+    head(host, "Attention between three tokens", "Part 12's example, identity projections. Pick which token is asking; line thickness is its attention weight.");
+    const toks = [[1, 0], [0, 1], [1, 1]]; let q = 0;
+    const W = 640, H = 220, s = svg(W, H, "Attention weights from one token to three"); host.appendChild(s);
+    const ctr = document.createElement("div"); ctr.className = "controls"; host.appendChild(ctr);
+    const ro = document.createElement("div"); ro.className = "readout"; host.appendChild(ro);
+    toks.forEach((t, i) => { const b = document.createElement("button"); b.className = "chip" + (i === 0 ? " on" : ""); b.textContent = `token ${i + 1} asks`; b.onclick = () => { q = i; ctr.querySelectorAll("button").forEach((x, k) => x.classList.toggle("on", k === i)); draw(); }; ctr.appendChild(b); });
+    function draw() {
+      s.replaceChildren();
+      const sc = toks.map(k => (toks[q][0] * k[0] + toks[q][1] * k[1]) / Math.SQRT2), ex = sc.map(Math.exp), sum = ex.reduce((a, b) => a + b), w = ex.map(e => e / sum);
+      const out = [0, 1].map(d => w.reduce((a, wi, i) => a + wi * toks[i][d], 0));
+      const qx = 110, qy = 110;
+      toks.forEach((t, i) => {
+        const kx = 470, ky = 40 + i * 70;
+        el(s, "line", { x1: qx + 40, y1: qy, x2: kx - 40, y2: ky, stroke: css("--accent"), "stroke-width": 1 + w[i] * 14, "stroke-linecap": "round", "stroke-opacity": 0.85 });
+        el(s, "rect", { x: kx - 40, y: ky - 18, width: 80, height: 36, rx: 6, fill: css("--paper"), stroke: css("--rule") });
+        el(s, "text", { x: kx, y: ky + 4, "text-anchor": "middle", fill: css("--ink") }, `x${i + 1} = [${t}]`);
+        el(s, "text", { x: kx + 50, y: ky + 4 }, `w ${w[i].toFixed(4)}`);
+      });
+      el(s, "rect", { x: qx - 40, y: qy - 18, width: 80, height: 36, rx: 6, fill: css("--accent") });
+      el(s, "text", { x: qx, y: qy + 4, "text-anchor": "middle", fill: css("--surface") }, `q = [${toks[q]}]`);
+      ro.textContent = `scaled scores = [${sc.map(f4).join(", ")}]\nweights       = [${w.map(f4).join(", ")}]\noutput        = [${out.map(f4).join(", ")}]`;
+    }
+    draw();
+  }
+
+  // part 18 - which tokens get hidden
+  function figMaskGrid(host) {
+    head(host, "Hiding 65% of the tokens", "A 32 x 32 grid of stage-1 tokens (one 128 x 128 patch). Filled squares stay visible to the encoder; hollow ones must be predicted from them.");
+    const s = svg(640, 330, "Random token mask over a 32 by 32 grid"); host.appendChild(s);
+    const ctr = document.createElement("div"); ctr.className = "controls"; host.appendChild(ctr);
+    let ratio = 0.65;
+    ctr.innerHTML = `<label>mask ratio <input type="range" id="mgr" min="0.1" max="0.9" step="0.05" value="0.65"> <b>65%</b></label> <button class="chip" id="mgb">reshuffle</button>`;
+    const ro = document.createElement("div"); ro.className = "readout"; host.appendChild(ro);
+    function draw() {
+      s.replaceChildren(); let hidden = 0;
+      const idx = [...Array(1024).keys()].sort(() => Math.random() - 0.5), hide = new Set(idx.slice(0, Math.round(1024 * ratio)));
+      for (let i = 0; i < 1024; i++) {
+        const r = Math.floor(i / 32), c = i % 32, h = hide.has(i); if (h) hidden++;
+        el(s, "rect", { x: 160 + c * 10, y: 5 + r * 10, width: 8, height: 8, rx: 1.5, fill: h ? "none" : css("--accent"), stroke: h ? css("--rule") : "none" });
+      }
+      ro.textContent = `${1024 - hidden} visible, ${hidden} hidden of 1,024 tokens (${Math.round(ratio * 100)}%)`;
+    }
+    ctr.querySelector("#mgr").oninput = e => { ratio = +e.target.value; ctr.querySelector("b").textContent = `${Math.round(ratio * 100)}%`; draw(); };
+    ctr.querySelector("#mgb").onclick = draw; draw();
+  }
+
+  // part 32 - self versus cross
+  function figCrossSelf(host) {
+    head(host, "Self-attention against cross-attention", "Scores per pixel, per head, as the band count grows. Self compares every band with every band; cross puts 32 questions to them.");
+    const s = svg(640, 230, "Score counts for self and cross attention"); host.appendChild(s);
+    const ctr = document.createElement("div"); ctr.className = "controls"; host.appendChild(ctr);
+    let nb = 202;
+    ctr.innerHTML = `<label>bands <input type="range" id="csn" min="50" max="450" step="1" value="202"> <b>202</b></label>
+      <button class="chip" data-n="165">grid 165</button><button class="chip on" data-n="202">SpectralEarth 202</button><button class="chip" data-n="224">EnMAP 224</button><button class="chip" data-n="239">PRISMA 239</button><button class="chip" data-n="425">AVIRIS-NG 425</button>`;
+    const ro = document.createElement("div"); ro.className = "readout"; host.appendChild(ro);
+    const set = n => { nb = n; ctr.querySelector("input").value = n; ctr.querySelector("b").textContent = n; ctr.querySelectorAll("button").forEach(b => b.classList.toggle("on", +b.dataset.n === n)); draw(); };
+    ctr.querySelector("input").oninput = e => set(+e.target.value);
+    ctr.querySelectorAll("button").forEach(b => b.onclick = () => set(+b.dataset.n));
+    function draw() {
+      s.replaceChildren();
+      const self = nb * nb, cross = 32 * nb, max = 450 * 450, Wd = 470;
+      [["self  N x N", self], ["cross 32 x N", cross]].forEach(([lab, v], i) => {
+        const y = 40 + i * 90;
+        el(s, "text", { x: 10, y: y + 22, fill: css("--ink") }, lab);
+        el(s, "rect", { x: 150, y, width: Math.max(2, v / max * Wd), height: 34, rx: 4, fill: i ? css("--accent") : css("--warm") });
+        el(s, "text", { x: 150 + Math.max(2, v / max * Wd) + 8, y: y + 22, fill: css("--ink") }, v.toLocaleString());
+      });
+      ro.textContent = `N = ${nb} bands\nself : ${nb} x ${nb} = ${self.toLocaleString()} scores\ncross: 32 x ${nb} = ${cross.toLocaleString()} scores  (${(self / cross).toFixed(1)}x fewer)`;
+    }
+    draw();
+  }
+
+  // part 33 - the wavelength fingerprint
+  function figEncoding(host) {
+    head(host, "A wavelength's fingerprint", "16 periods from 10 nm to 10,000 nm, each giving a sine and a cosine: 32 numbers per wavelength. Move the two wavelengths and watch the similarity.");
+    const enc = wl => { const out = []; for (let i = 0; i < 16; i++) { const P = 10 * Math.pow(1000, i / 15), a = 2 * Math.PI * wl / P; out.push(Math.sin(a)); } for (let i = 0; i < 16; i++) { const P = 10 * Math.pow(1000, i / 15), a = 2 * Math.PI * wl / P; out.push(Math.cos(a)); } return out; };
+    const cos = (a, b) => { let d = 0, na = 0, nb = 0; a.forEach((v, i) => { d += v * b[i]; na += v * v; nb += b[i] * b[i]; }); return d / Math.sqrt(na * nb); };
+    const s = svg(640, 150, "Sinusoidal encodings of two wavelengths"); host.appendChild(s);
+    const ctr = document.createElement("div"); ctr.className = "controls"; host.appendChild(ctr);
+    let A = 660, B = 670;
+    ctr.innerHTML = `<label>A <input type="range" id="ea" min="400" max="2500" step="5" value="660"> <b>660 nm</b></label><label>B <input type="range" id="eb" min="400" max="2500" step="5" value="670"> <b>670 nm</b></label>
+      <button class="chip" data-a="660" data-b="670">660 vs 670</button><button class="chip" data-a="660" data-b="1650">660 vs 1650</button>`;
+    const ro = document.createElement("div"); ro.className = "readout"; host.appendChild(ro);
+    const sync = () => { const [ia, ib] = ctr.querySelectorAll("input"); ia.value = A; ib.value = B; const bs = ctr.querySelectorAll("b"); bs[0].textContent = `${A} nm`; bs[1].textContent = `${B} nm`; draw(); };
+    ctr.querySelectorAll("input")[0].oninput = e => { A = +e.target.value; sync(); };
+    ctr.querySelectorAll("input")[1].oninput = e => { B = +e.target.value; sync(); };
+    ctr.querySelectorAll("button").forEach(b => b.onclick = () => { A = +b.dataset.a; B = +b.dataset.b; sync(); });
+    function row(y, v, lab) {
+      el(s, "text", { x: 6, y: y + 18, fill: css("--ink") }, lab);
+      v.forEach((x, i) => el(s, "rect", { x: 90 + i * 16.5, y, width: 15, height: 28, rx: 2, fill: x >= 0 ? css("--accent") : css("--warm"), "fill-opacity": 0.15 + 0.85 * Math.abs(x) }));
+    }
+    function draw() {
+      s.replaceChildren(); const ea = enc(A), eb = enc(B);
+      row(20, ea, `${A} nm`); row(70, eb, `${B} nm`);
+      el(s, "text", { x: 90, y: 128 }, "sin, periods 10 nm ... 10,000 nm"); el(s, "text", { x: 354, y: 128 }, "cos, same periods");
+      ro.textContent = `cosine similarity(${A} nm, ${B} nm) = ${cos(ea, eb).toFixed(3)}\n(1 = identical direction, 0 = unrelated)`;
+    }
+    draw();
+  }
+
+  // part 36 - the memory wall
+  function figMemory(host) {
+    head(host, "The memory wall, per 128 x 128 patch", "Log scale. Compressor activations only, 202 bands, d = 32, 4 heads. Self-attention is shown for contrast.");
+    const rows = [["self-attention weights, fp32", 10200, "--warm"], ["cross-attn weights, fp32 (if stored)", 1616, "--warm"],
+                  ["keys + values, fp32", 808, "--accent"], ["keys + values, bf16", 404, "--accent"], ["band groups of 4, fp32", 204, "--accent"], ["band groups of 4, bf16", 102, "--accent"]];
+    const W = 640, H = 40 + rows.length * 38, s = svg(W, H, "Memory per patch under different designs"); host.appendChild(s);
+    const L = v => Math.log10(v), x0 = 250, x1 = 600, lo = L(50), hi = L(20000), X = v => x0 + (L(v) - lo) / (hi - lo) * (x1 - x0);
+    [100, 1000, 10000].forEach(v => { el(s, "line", { x1: X(v), x2: X(v), y1: 10, y2: H - 20, stroke: css("--rule") }); el(s, "text", { x: X(v), y: H - 6, "text-anchor": "middle" }, `${v.toLocaleString()} MiB`); });
+    rows.forEach(([lab, v, c], i) => { const y = 14 + i * 38;
+      el(s, "text", { x: x0 - 8, y: y + 17, "text-anchor": "end", fill: css("--ink") }, lab);
+      el(s, "rect", { x: x0, y, width: X(v) - x0, height: 24, rx: 3, fill: css(c), "fill-opacity": 0.85 });
+      el(s, "text", { x: X(v) + 6, y: y + 17, fill: css("--ink") }, `${v.toLocaleString()}`); });
+  }
+
+  // anomaly course part 08 - why RX divides by the covariance
+  function figRX(host) {
+    head(host, "Distance in units of how the scene varies", "Two bands, a background whose bands move together. P and Q are the same straight-line distance from the mean; RX (Mahalanobis) disagrees. Push the correlation towards 1 and watch Q's score explode - the near-singular problem in two dimensions.");
+    let rho = 0.8;
+    const W = 640, H = 340, cx = 320, cy = 170, k = 46, s = svg(W, H, "Correlated two-band scatter with Mahalanobis contours"); host.appendChild(s);
+    const ctr = document.createElement("div"); ctr.className = "controls"; host.appendChild(ctr);
+    ctr.innerHTML = `<label>band correlation <input type="range" id="rxr" min="0" max="0.999" step="0.001" value="0.8"> <b>0.800</b></label>`;
+    const ro = document.createElement("div"); ro.className = "readout"; host.appendChild(ro);
+    let seed = 7; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+    const Z = Array.from({ length: 260 }, () => { const u = rnd(), v = rnd(), r = Math.sqrt(-2 * Math.log(u)); return [r * Math.cos(2 * Math.PI * v), r * Math.sin(2 * Math.PI * v)]; });
+    const P = [1.5, 1.5], Q = [1.5, -1.5], X = x => cx + x * k, Y = y => cy - y * k;
+    function draw() {
+      s.replaceChildren();
+      el(s, "line", { x1: 40, x2: W - 40, y1: cy, y2: cy, stroke: css("--rule") }); el(s, "line", { x1: cx, x2: cx, y1: 10, y2: H - 10, stroke: css("--rule") });
+      el(s, "text", { x: W - 40, y: cy - 6, "text-anchor": "end" }, "band 1"); el(s, "text", { x: cx + 6, y: 20 }, "band 2");
+      const c = Math.sqrt(1 - rho * rho);
+      Z.forEach(([a, b]) => { const y = rho * a + c * b; if (Math.abs(a) < 6.5 && Math.abs(y) < 3.5) el(s, "circle", { cx: X(a), cy: Y(y), r: 2.2, fill: css("--muted"), "fill-opacity": 0.45 }); });
+      [1, 2, 3].forEach(m => el(s, "ellipse", { cx, cy, rx: Math.max(0.5, m * Math.sqrt(1 + rho) * k), ry: Math.max(0.5, m * Math.sqrt(1 - rho) * k), transform: `rotate(-45 ${cx} ${cy})`, fill: "none", stroke: css("--accent"), "stroke-opacity": 0.7 }));
+      [[P, "P"], [Q, "Q"]].forEach(([p, n]) => { el(s, "circle", { cx: X(p[0]), cy: Y(p[1]), r: 6, fill: n === "P" ? css("--accent") : css("--warm"), stroke: css("--surface"), "stroke-width": 2 }); el(s, "text", { x: X(p[0]) + 10, y: Y(p[1]) + 4, fill: css("--ink") }, n); });
+      const m2 = ([x, y]) => (x * x - 2 * rho * x * y + y * y) / (1 - rho * rho);
+      ro.textContent = `straight-line distance  P ${Math.hypot(...P).toFixed(2)}   Q ${Math.hypot(...Q).toFixed(2)}\nRX score (x-mu)^T Sigma^-1 (x-mu), unit variances\n  P = 4.5 / (1 + rho) = ${m2(P).toFixed(2)}\n  Q = 4.5 / (1 - rho) = ${m2(Q).toFixed(2)}\ncovariance determinant 1 - rho^2 = ${(1 - rho * rho).toFixed(6)}`;
+    }
+    ctr.querySelector("input").oninput = e => { rho = +e.target.value; ctr.querySelector("b").textContent = rho.toFixed(3); draw(); };
+    draw();
+  }
+
+  // anomaly course part 11 - the checkerboard and its inverse
+  function figTwoPass(host) {
+    head(host, "Two passes, every pixel hidden exactly once", "An 8 x 8 corner. Filled = visible to the model, hollow = hidden and predicted. Switch passes, then look at where each final value comes from. Click any pixel.");
+    let view = 0, pick = null;
+    const s = svg(640, 270, "Checkerboard masks for two inference passes"); host.appendChild(s);
+    const ctr = document.createElement("div"); ctr.className = "controls"; host.appendChild(ctr);
+    const ro = document.createElement("div"); ro.className = "readout"; host.appendChild(ro);
+    ["pass 1", "pass 2", "combined"].forEach((t, i) => { const b = document.createElement("button"); b.className = "chip" + (i === 0 ? " on" : ""); b.textContent = t; b.onclick = () => { view = i; ctr.querySelectorAll("button").forEach((x, j) => x.classList.toggle("on", j === i)); draw(); }; ctr.appendChild(b); });
+    function draw() {
+      s.replaceChildren();
+      for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) {
+        const hidden1 = (r + c) % 2 === 1, x = 200 + c * 32, y = 6 + r * 32;
+        let attrs;
+        if (view < 2) { const hidden = view === 0 ? hidden1 : !hidden1; attrs = { fill: hidden ? "none" : css("--accent"), stroke: hidden ? css("--muted") : "none" }; }
+        else attrs = { fill: hidden1 ? css("--accent") : css("--warm"), stroke: "none" };
+        const rect = el(s, "rect", { x, y, width: 28, height: 28, rx: 3, ...attrs, "stroke-width": 1.5, style: "cursor:pointer" });
+        if (pick && pick[0] === r && pick[1] === c) el(s, "rect", { x: x - 2, y: y - 2, width: 32, height: 32, rx: 4, fill: "none", stroke: css("--ink"), "stroke-width": 2 });
+        rect.addEventListener("click", () => { pick = [r, c]; draw(); });
+      }
+      if (view === 2) { el(s, "rect", { x: 470, y: 20, width: 14, height: 14, rx: 2, fill: css("--accent") }); el(s, "text", { x: 490, y: 31 }, "from pass 1"); el(s, "rect", { x: 470, y: 44, width: 14, height: 14, rx: 2, fill: css("--warm") }); el(s, "text", { x: 490, y: 55 }, "from pass 2"); }
+      if (pick) { const [r, c] = pick, h1 = (r + c) % 2 === 1;
+        ro.textContent = `pixel (${r},${c}): ${h1 ? "hidden" : "visible"} in pass 1, ${h1 ? "visible" : "hidden"} in pass 2\nfinal value taken from pass ${h1 ? 1 : 2} - the pass where it was hidden`; }
+      else ro.textContent = view === 2 ? "Every position is coloured once: each pixel's value comes from the one pass that hid it." : `${view === 0 ? "Pass 1" : "Pass 2"}: 32 pixels visible, 32 hidden and predicted.`;
+    }
+    draw();
+  }
+
+  // anomaly course part 12 - magnitude error versus shape error
+  function figL1SAM(host) {
+    head(host, "Magnitude error against shape error", "Part 12's three-band pixel. Dashed outlines are the truth; filled bars are a reconstruction. L1 measures how far off the heights are; SAM measures the angle between the two spectra, so brightness alone does not move it.");
+    const truth = [0.2, 0.5, 0.3], presets = { "recon A": [0.3, 0.6, 0.4], "recon B": [0.3, 0.4, 0.3], "bright cloud (x1.5)": [0.3, 0.75, 0.45] };
+    let rec = presets["recon A"].slice();
+    const s = svg(640, 210, "Three-band truth and reconstruction"); host.appendChild(s);
+    const ctr = document.createElement("div"); ctr.className = "controls"; host.appendChild(ctr);
+    const ro = document.createElement("div"); ro.className = "readout"; host.appendChild(ro);
+    Object.keys(presets).forEach(k => { const b = document.createElement("button"); b.className = "chip"; b.textContent = k; b.onclick = () => { rec = presets[k].slice(); sync(); }; ctr.appendChild(b); });
+    const sl = [0, 1, 2].map(i => { const lab = document.createElement("label"); lab.innerHTML = `band ${i + 1} <input type="range" min="0" max="0.9" step="0.01"> <b></b>`; ctr.appendChild(lab); lab.querySelector("input").oninput = e => { rec[i] = +e.target.value; sync(); }; return lab; });
+    function sync() { sl.forEach((lab, i) => { lab.querySelector("input").value = rec[i]; lab.querySelector("b").textContent = rec[i].toFixed(2); }); draw(); }
+    function draw() {
+      s.replaceChildren(); const Yb = v => 180 - v / 0.9 * 165;
+      [0, 0.3, 0.6, 0.9].forEach(v => { el(s, "line", { x1: 60, x2: 600, y1: Yb(v), y2: Yb(v), stroke: css("--rule") }); el(s, "text", { x: 52, y: Yb(v) + 4, "text-anchor": "end" }, v.toFixed(1)); });
+      truth.forEach((t, i) => { const x = 110 + i * 170;
+        el(s, "rect", { x, y: Yb(rec[i]), width: 90, height: 180 - Yb(rec[i]), rx: 3, fill: css("--accent"), "fill-opacity": 0.8 });
+        el(s, "rect", { x: x - 6, y: Yb(t), width: 102, height: 180 - Yb(t), rx: 3, fill: "none", stroke: css("--ink"), "stroke-width": 1.5, "stroke-dasharray": "4 3" });
+        el(s, "text", { x: x + 45, y: 200, "text-anchor": "middle" }, `band ${i + 1}`); });
+      const diffs = rec.map((r, i) => Math.abs(r - truth[i])), l1 = diffs.reduce((a, b) => a + b) / 3;
+      const dot = rec.reduce((a, r, i) => a + r * truth[i], 0), nr = Math.hypot(...rec), nt = Math.hypot(...truth), cs = nr ? Math.min(1, dot / (nr * nt)) : 0, ang = Math.acos(cs);
+      ro.textContent = `L1  = (${diffs.map(d => d.toFixed(2)).join(" + ")}) / 3 = ${l1.toFixed(4)}\ncos = ${dot.toFixed(4)} / (${nr.toFixed(4)} * ${nt.toFixed(4)}) = ${cs.toFixed(4)}\nSAM = arccos(${cs.toFixed(4)}) = ${ang.toFixed(4)} rad = ${(ang * 180 / Math.PI).toFixed(2)} degrees`;
+    }
+    sync();
+  }
+
+  // part 39 - per-pixel gating: faders in front of a fixed mixdown
+  function figGate(host) {
+    head(host, "Faders in front of a fixed mixdown", "Part 10's pixel and recipe. Each slider is the gate network's score for one band; sigmoid turns it into a fader between 0 and 1. The recipe W never changes - only the faders do.");
+    const x = [1.2, 1.0, -0.4, -0.6], W = [[0.5, 0.5, 0, 0], [0, 0, 0.5, 0.5]], z = [-2, -2, 2, 2];
+    const sig = v => 1 / (1 + Math.exp(-v));
+    const s = svg(640, 200, "Gate values per band and the gated outputs"); host.appendChild(s);
+    const ctr = document.createElement("div"); ctr.className = "controls"; host.appendChild(ctr);
+    const ro = document.createElement("div"); ro.className = "readout"; host.appendChild(ro);
+    const labs = z.map((v, i) => { const lab = document.createElement("label"); lab.innerHTML = `score z${i} <input type="range" min="-10" max="10" step="0.5" value="${v}"> <b>${v}</b>`; ctr.appendChild(lab);
+      lab.querySelector("input").oninput = e => { z[i] = +e.target.value; lab.querySelector("b").textContent = z[i]; draw(); }; return lab; });
+    [["shadowed: [-2,-2,2,2]", [-2, -2, 2, 2]], ["start of training: all 0", [0, 0, 0, 0]], ["try to kill band 0: -10", [-10, 0, 0, 0]]].forEach(([t, v]) => {
+      const b = document.createElement("button"); b.className = "chip"; b.textContent = t; ctr.appendChild(b);
+      b.onclick = () => { v.forEach((a, i) => { z[i] = a; labs[i].querySelector("input").value = a; labs[i].querySelector("b").textContent = a; }); draw(); }; });
+    function draw() {
+      s.replaceChildren();
+      const g = z.map(sig), xp = x.map((v, i) => g[i] * v), y = W.map(r => r.reduce((a, w, i) => a + w * xp[i], 0)), y0 = W.map(r => r.reduce((a, w, i) => a + w * x[i], 0));
+      g.forEach((v, i) => { const cx = 70 + i * 110;
+        el(s, "rect", { x: cx - 6, y: 20, width: 12, height: 140, rx: 6, fill: css("--code-bg") });
+        el(s, "rect", { x: cx - 6, y: 160 - 140 * v, width: 12, height: Math.max(140 * v, 1), rx: 6, fill: css("--accent") });
+        el(s, "rect", { x: cx - 18, y: 160 - 140 * v - 6, width: 36, height: 12, rx: 3, fill: css("--surface"), stroke: css("--ink") });
+        el(s, "text", { x: cx, y: 180, "text-anchor": "middle", fill: css("--ink") }, `g${i} ${v.toFixed(4)}`);
+        el(s, "text", { x: cx, y: 196, "text-anchor": "middle" }, `x${i} = ${x[i]}`); });
+      el(s, "text", { x: 470, y: 60, fill: css("--ink") }, `y0 = ${y[0].toFixed(3)}`); el(s, "text", { x: 470, y: 78 }, `today ${y0[0].toFixed(3)}`);
+      el(s, "text", { x: 470, y: 118, fill: css("--ink") }, `y1 = ${y[1].toFixed(3)}`); el(s, "text", { x: 470, y: 136 }, `today ${y0[1].toFixed(3)}`);
+      const eff = W.map(r => r.map((w, i) => (w * g[i]).toFixed(3)));
+      ro.textContent = `g  = sigmoid(z) = [${g.map(v => v.toFixed(4)).join(", ")}]\nx' = g * x      = [${xp.map(v => v.toFixed(3)).join(", ")}]\neffective recipe W . diag(g) = [[${eff[0].join(", ")}], [${eff[1].join(", ")}]]\nleak of a dead band holding 99 through g0: ${(99 * g[0]).toFixed(4)}  (cross-attention with -inf: exactly 0)`;
+    }
+    draw();
+  }
+
+  const FIGSETS = {
+    indradhanu: { 2: [figSpectrum], 8: [h => figSoftmax(h, false)], 10: [figMixdown], 12: [figAttention], 18: [figMaskGrid],
+                  32: [figCrossSelf], 33: [figEncoding], 35: [h => figSoftmax(h, true)], 36: [figMemory], 39: [figGate] },
+    anomaly: { 2: [figSpectrum], 8: [figRX], 11: [figTwoPass], 12: [figL1SAM] },
+  };
+  const FIGS = FIGSETS[CFG.figs] || {};
+
+  // ---- routing ----
+  function route() {
+    const m = location.hash.match(/^#p(\d{1,2})$/);
+    render(m ? +m[1] : 0);
+    window.scrollTo(0, 0);
+    toc.classList.remove("open"); document.getElementById("menuBtn").setAttribute("aria-expanded", "false");
+  }
+  window.addEventListener("hashchange", route);
+  document.getElementById("menuBtn").onclick = (e) => { const o = toc.classList.toggle("open"); e.currentTarget.setAttribute("aria-expanded", String(o)); };
+  const reRender = () => { const m = location.hash.match(/^#p(\d{1,2})$/); render(m ? +m[1] : 0); };
+  matchMedia("(prefers-color-scheme: dark)").addEventListener("change", reRender);
+  new MutationObserver(reRender).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+  route();
+})();
+</script>

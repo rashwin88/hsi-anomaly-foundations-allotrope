@@ -27,6 +27,9 @@ from app.foundation_models.trainers.segformer_mae_trainer import (
 from app.foundation_models.trainers.hyperspectral_segformer_mae_trainer import (
     HyperspectralSegFormerMAETrainer,
 )
+from app.foundation_models.trainers.spectral_stem_mae_trainer import (
+    SpectralStemMAETrainer,
+)
 
 from app.models.training.training_config import (
     FoundationModelName,
@@ -41,6 +44,7 @@ _REGISTRY: dict[FoundationModelName, type[FoundationTrainer]] = {
     FoundationModelName.NORMALIZED_MASKED_AUTOENCODER: NormalizedMaskedAutoencoderTrainer,
     FoundationModelName.SEGFORMER_MAE: SegFormerMAETrainer,
     FoundationModelName.HYPERSPECTRAL_SEGFORMER_MAE: HyperspectralSegFormerMAETrainer,
+    FoundationModelName.SPECTRAL_STEM_MAE: SpectralStemMAETrainer,
 }
 
 

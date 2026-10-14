@@ -19,7 +19,8 @@ adding another.
 | `test-harness.md` | how anything gets verified in this repo |
 | `segmentation-sharding.md` | the `enmap_seg` lane that attaches provider labels to shards |
 | `inventory.md` | the raw-dataset inventory: checksum chain, manifest-as-truth, Supabase lockout |
-| `spectralearth.md` | SpectralEarth patches: the derived band table, split by site, native vs common-grid loading |
+| `spectralearth.md` | SpectralEarth patches: the derived band table, split by site, native vs common-grid loading, shards |
+| `spectral-stem.md` | the swappable spectral stem (linear / gate / cross-attention) for SpectralEarth pretraining |
 
 ## How these are written
 

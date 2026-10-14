@@ -146,7 +146,8 @@ Added 2026-10-14 with `app/utils/spectralearth/`. Rationale in
 Declared, set in real configs, never read by any code:
 
 - `LRScheduleConfig.warmup_epochs` — no warmup path exists in `_build_scheduler`
-- `CheckpointConfig.save_to_s3` / `s3_checkpoint_key` — no upload code exists
+- `CheckpointConfig.save_to_s3` / `s3_checkpoint_key` — no upload code exists (the
+  `spectral_stem_mae` trainer uploads via its own `model_config.checkpoint_s3_uri` instead)
 - `SpatialMaskedAutoEncoderConfig.masking_range` — the trainer hardcodes
   `uniform_(0.13, 0.25)`; only the *normalized* variant honours the config
 

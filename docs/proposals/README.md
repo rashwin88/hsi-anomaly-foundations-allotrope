@@ -17,5 +17,5 @@ numbered doc explains the design that won.
 
 | file | subject |
 |---|---|
-| `spectral-attention-bottleneck.md` | replacing Indradhanu's fixed linear spectral compressor with band-level attention |
+| `spectral-attention-bottleneck.md` | **accepted, not built** - cross-attention spectral stem, SpectralEarth shards, and the A/B/C experiment that decides it |
 | `inference-harness-adoption.md` | adopting or deleting `InferenceHarness`, which is fully built, tested, and unused |
