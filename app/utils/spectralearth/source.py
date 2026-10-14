@@ -13,6 +13,7 @@ the model. Hashing 6.6 MB costs a few milliseconds against tens for the GET.
 Gotchas:
   - The cache is keyed by the patch's path, so one cache folder serves one collection.
   - load_many() returns patches in the order given, fetching up to `workers` at once.
+  - Safe inside DataLoader workers: the S3 client is rebuilt per process.
 """
 
 import hashlib
@@ -36,12 +37,24 @@ class SpectralEarthSource:
         self.cache_dir = Path(cache_dir) if cache_dir else None
         self.workers = workers
         self._client = s3_client
+        self._injected = s3_client is not None
+        self._client_pid = os.getpid()
 
     @property
     def client(self):
-        if self._client is None:
-            self._client = s3_config.client()
+        # A torch DataLoader copies this object into each worker process, and a boto3
+        # client must not cross a process boundary: each process builds its own.
+        if not self._injected and (self._client is None or self._client_pid != os.getpid()):
+            self._client, self._client_pid = s3_config.client(), os.getpid()
         return self._client
+
+    def __getstate__(self):
+        # Spawned DataLoader workers (Windows, macOS) receive a pickled copy, and a live
+        # boto3 client can't be pickled; the copy builds its own on first use.
+        state = self.__dict__.copy()
+        if not self._injected:
+            state["_client"] = None
+        return state
 
     def fetch_bytes(self, entry: CatalogEntry) -> bytes:
         """The patch's verified bytes. Raises PatchIntegrityError on a mismatch from S3;
