@@ -91,6 +91,30 @@ Every part has the same skeleton:
 | 29 | [29-inference.md](29-inference.md) | Running it on a real scene |
 | 30 | [30-scoring-and-the-product.md](30-scoring-and-the-product.md) | Turning errors into an answer |
 
+**Sequel - the next Indradhanu: a smarter spectral bottleneck (31-38)**
+
+Written 2026-10-14, after the decision to pretrain the next Indradhanu on SpectralEarth with a
+cross-attention spectral bottleneck. It is a **design studied before it is built**: none of
+parts 31 to 38 describes model code that exists in the repository yet. Assumes all of parts
+01 to 30; leans on 08, 10, 12, 13 and 17 to 21.
+
+| # | File | The one thing it teaches |
+|---|---|---|
+| 31 | [31-why-the-compressor-is-a-ceiling.md](31-why-the-compressor-is-a-ceiling.md) | One fixed recipe for every pixel, and what that costs |
+| 32 | [32-cross-attention.md](32-cross-attention.md) | Part 12's attention, with someone else asking |
+| 33 | [33-a-spectrum-as-tokens.md](33-a-spectrum-as-tokens.md) | Bands as tokens that know their wavelength |
+| 34 | [34-the-cross-attention-compressor.md](34-the-cross-attention-compressor.md) | 32 learned questions, assembled and counted |
+| 35 | [35-skipping-a-dead-band.md](35-skipping-a-dead-band.md) | Minus infinity, and mixing sensors in one batch |
+| 36 | [36-what-it-costs.md](36-what-it-costs.md) | Same parameters, 163x the arithmetic, and the memory wall |
+| 37 | [37-the-spectral-decoder.md](37-the-spectral-decoder.md) | Reconstructing any sensor's bands from one set of weights |
+| 38 | [38-trace-and-traps.md](38-trace-and-traps.md) | One pixel start to finish, and the three traps |
+
+The sequel's numbers were produced by a study prototype written alongside it, not by
+repository code. When the real module is built, re-verify parts 34 to 37: parameter counts
+(5,345 compressor, 6,401 decoder at `d = D = 32`), the cost and memory figures in part 36,
+and the masking result in part 35. Part 38's evaluation plan will be superseded by the
+design in `docs/proposals/spectral-attention-bottleneck.md`.
+
 ## How to actually study this
 
 - **Read in order.** Part 14 assumes part 13. There are no shortcuts.
