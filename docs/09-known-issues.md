@@ -97,27 +97,29 @@ Added 2026-10-13 with `backend/allotrope_inventory/`. Design rationale in
 [`lld/inventory.md`](lld/inventory.md).
 
 - **No automated tests.** Every path was exercised by hand against live S3 and Supabase on
-  2026-10-13 (upload, resume, checksum rejection, finalise, manifest, download, CLI), but
-  nothing re-runs it. A harness was scoped — moto in server mode plus a throwaway PostGIS
-  container — and dropped.
-- **The container cannot reach S3 yet.** It needs `AWS_ACCESS_KEY_ID` /
-  `AWS_SECRET_ACCESS_KEY` in `backend/.env.inventory`. The intended identity is a dedicated
-  IAM user scoped to the one bucket; not yet created. Local runs use the `Allotrope-Prod`
-  profile.
-- **Registration fields are immutable.** Metadata, footprint and acquisition time are set
-  at `POST /datasets` and cannot be changed — no `PATCH`. `ingest` warns when a resume
-  passes different values.
-- **The whole-file SHA-256 is client-declared.** S3 cannot compute one for a multipart
-  object; integrity rests on per-part checks. See the LLD.
-- **Not built yet:** server-side import from the Beta bucket (Deep Archive needs a restore
-  first), a Google Drive source, the UI section, `rebuild-index` from manifests, and
-  deleting a dataset.
+  2026-10-13/14 (upload, resume, checksum rejection, server-side import with provider MD5s,
+  bulk registration, unpack, retire, the UI proxy), but nothing re-runs it. A harness was
+  scoped — moto in server mode plus a throwaway PostGIS container — and dropped.
+- **Registration fields are immutable.** Metadata, footprint, acquisition time and kind are
+  set at `POST /datasets`; there is no `PATCH`. `ingest` / `import-s3` warn when a resume
+  passes different values. This is why scenes imported from file names carry no footprint.
+- **The whole-file SHA-256 of a multipart file is client-declared.** S3 cannot compute one
+  for a multipart object; integrity rests on per-part checks. Bulk-registered (single-PUT)
+  files don't have this gap.
+- **Not built yet:** a Google Drive source, `rebuild-index` from the manifests, and per-patch
+  metadata for SpectralEarth (the patches carry no georeference or date).
 - **Presigned URLs die with the credentials that signed them.** On EC2 the inventory signs
   with the instance role's temporary credentials (rotated every few hours), so a URL can
   expire well before its 24 h `ExpiresIn`. Uploads that outlive it fail with 403; re-running
   `ingest` (resume) issues fresh URLs. Same for `/download`.
+- **Re-running an interrupted `unpack-archive` re-reads the whole archive** — a `.tar.gz`
+  cannot be seeked — though members already registered aren't uploaded again. About 3.9 h
+  for SpectralEarth.
 - **Orphaned multipart uploads** from a request that fails after `start_upload` but before
   commit are left to the bucket's 7-day abort rule.
+- **Writes are CLI-only from outside the box.** Port 8020 binds to localhost; the public
+  route `/inventory-api/` is GET-only behind the app login. Remote scripts need either SSM
+  or a future API-key route through Caddy.
 
 ## Config knobs that do nothing
 

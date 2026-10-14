@@ -56,6 +56,15 @@ work.
 `ApiError(status, detail)` on non-2xx. Multipart uploads bypass it and use XHR directly so
 they can report progress.
 
+**One exception: the Inventory pages** (`pages/Inventory*.tsx`, `api/inventory.ts`) talk to
+a different service, the raw-dataset inventory, at `INVENTORY_BASE = "/inventory-api"`. nginx
+(`frontend/nginx.conf`, a template rendered at container start) only forwards **GET**s, only
+after `/api/auth/me` accepts the session cookie, and adds the inventory's api key itself — the
+browser never holds it. The upstream is resolved per request, so when the opt-in `inventory`
+service isn't running nginx still starts and the pages show "not reachable or not
+configured" (502/503/504/401 all map there). Lists can be huge — a collection holds ~500k
+files — so the dataset page pages its files through `/files` and filters live in the URL.
+
 ## Notable libraries that earn their place
 
 - `@xyflow/react` + `elkjs` — architecture and action flowcharts
