@@ -29,6 +29,10 @@ from app.utils.general_utils.shard_pipe_expression_builder import (
 from app.utils.torch_helpers.device_selection import get_device
 
 logger = logging.getLogger("FoundationTrainer")
+
+
+def _identity(sample):
+    return sample
 logger.setLevel(logging.INFO)
 
 
@@ -332,6 +336,11 @@ class FoundationTrainer(ABC):
     # Dataloader
     # ------------------------------------------------------------------
 
+    def _sample_transform(self):
+        """Per-sample function applied after decoding, inside the DataLoader workers (identity by
+        default). Must be picklable - a module-level function or functools.partial of one."""
+        return _identity
+
     def _sample_decoders(self) -> list:
         """Extra webdataset decoders, tried before the built-in ones. They run inside the
         DataLoader workers, which is where per-sample decoding must happen to keep up."""
@@ -349,7 +358,7 @@ class FoundationTrainer(ABC):
             pipe_expr,
             shardshuffle=self.config.data.shardshuffle,
             handler=wds.warn_and_continue,
-        ).decode(*self._sample_decoders())
+        ).decode(*self._sample_decoders()).map(self._sample_transform())
 
         return torch.utils.data.DataLoader(
             dataset,
@@ -374,7 +383,7 @@ class FoundationTrainer(ABC):
             urls,
             shardshuffle=self.config.data.shardshuffle,
             handler=wds.warn_and_continue,
-        ).decode(*self._sample_decoders())
+        ).decode(*self._sample_decoders()).map(self._sample_transform())
 
         return torch.utils.data.DataLoader(
             dataset,

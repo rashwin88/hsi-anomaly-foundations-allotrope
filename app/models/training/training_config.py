@@ -120,6 +120,10 @@ class SpectralStemMAEConfig(HyperspectralSegFormerMAEConfig):
     attention_heads: int = 4
     gate_hidden: int = 32
     bin_nm: float = Field(default=40.0, gt=0, description="reduced_attention: wavelength bin width for the attention tokens.")
+    band_list_path: str | None = Field(
+        default=None, description="JSON with a wavelengths_nm list (e.g. a shard set's stats.json): every "
+        "sample is aligned onto it by wavelength in the loader workers; bands it lacks become nodata. "
+        "Needed when samples carry different band lists (EnMAP native, PRISMA, mixed sets).")
     metrics_csv: str | None = Field(
         default=None, description="Append one row per epoch here - normally the run folder under "
         "research/experiments/indradhanu-se-pretrain/<id>/metrics.csv.")

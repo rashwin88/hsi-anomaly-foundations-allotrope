@@ -18,6 +18,7 @@ Gotchas:
 """
 
 import csv
+import functools
 import logging
 import math
 import os
@@ -56,6 +57,18 @@ def decode_i16dz_member(key: str, data: bytes):
         from app.utils.shard_codec import decode_i16dz
         return decode_i16dz(data)
     return None
+
+
+def align_sample(sample: dict, target_nm) -> dict:
+    """Loader-worker transform: pixels (decoded .npy or .i16dz) and wavelengths onto `target_nm`
+    by wavelength (app/utils/band_alignment.py). Labels and metadata pass through."""
+    from app.utils.band_alignment import align_bands
+    # Always out as pixels.npy: a batch may mix raw and recompressed shards, and collation needs
+    # every sample to carry the same keys.
+    raw = sample.pop("pixels.npy") if "pixels.npy" in sample else sample.pop("pixels.i16dz")
+    sample["pixels.npy"] = align_bands(raw, sample["wavelengths.npy"], target_nm)
+    sample["wavelengths.npy"] = target_nm
+    return sample
 
 
 class _EarlyStop(Exception):
@@ -194,6 +207,13 @@ class SpectralStemMAETrainer(HyperspectralSegFormerMAETrainer):
 
     def _sample_decoders(self) -> list:
         return [decode_i16dz_member]
+
+    def _sample_transform(self):
+        path = self.config.model_config_.band_list_path
+        if path is None:
+            return super()._sample_transform()
+        from app.utils.band_alignment import load_band_list
+        return functools.partial(align_sample, target_nm=load_band_list(path))
 
     def build_model(self) -> nn.Module:
         cfg = self.config.model_config_
