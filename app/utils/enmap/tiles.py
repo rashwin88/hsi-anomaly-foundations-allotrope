@@ -1,6 +1,6 @@
 """
-Cut an EnMAP scene into 128 x 128 training samples in the SpectralEarth shard format, plus the
-quality layers and facts a cloud/water segmentation head will need.
+Cut an EnMAP scene into 128 x 128 training samples at its native bands, plus the quality layers
+and facts a cloud/water segmentation head will need.
 
 Called by scripts/shard_enmap.py (pass 1: scene -> per-tile files); the shards themselves are
 written by app/utils/spectralearth/sharding.py's write_samples, so EnMAP and SpectralEarth
@@ -10,10 +10,17 @@ Why the whole scene is read at once: the rasters are 512 x 512-block COGs, so a 
 window still decompresses its whole block - reading tile by tile in shuffled order would
 decode every block up to 16 times. One scene is ~0.6 GB of int16 in memory.
 
+Why native bands (decided 2026-10-14): the wavelength-token stems read any band list, so nothing
+is chosen or resampled at shard time. Every one of the 224 bands is kept with the scene's own
+wavelengths; the trainer picks at load time (e.g. SpectralEarth's 202 for the fixed-band stems,
+or for batches mixed with SpectralEarth). 5 of 210 scenes number their bands differently - their
+wavelengths.npy says so, per sample.
+
 Sample keys (per tile):
-  pixels.npy        int16 (202, 128, 128) - SpectralEarth's bands and order; x 0.0001 =
-                    reflectance; -32768 = nodata, including every voxel QL_PIXELMASK flags
-  wavelengths.npy   float32 (202,)
+  pixels.npy        int16 (224, 128, 128) - all EnMAP bands in band-number order; x 0.0001 =
+                    reflectance; -32768 = nodata, including every voxel QL_PIXELMASK flags (the
+                    water-vapour bands are largely blanked to nodata by L2A itself)
+  wavelengths.npy   float32 (224,), this scene's band centres
   label_*.npy       uint8 (1, 128, 128), the six provider quality layers, never applied
   meta.json         scene facts (EnmapScene.facts) + tile row/col, pixel origin, centre
                     lon/lat, CRS and the tile's affine transform
@@ -42,21 +49,23 @@ MIN_VALID_FRACTION = 0.10
 
 @dataclass
 class SceneArrays:
-    """A scene read once: selected bands with the pixel mask applied, and the label layers."""
+    """A scene read once: all bands with the pixel mask applied, and the label layers."""
 
-    pixels: np.ndarray            # (202, H, W) int16
+    pixels: np.ndarray            # (224, H, W) int16, all bands
     labels: dict[str, np.ndarray] # key -> (H, W) uint8
     transform: rasterio.Affine
     crs: str
 
 
 def read_scene(scene: EnmapScene) -> SceneArrays:
-    bands = (scene.band_index + 1).tolist()                       # rasterio bands are 1-based
     with rasterio.open(find_member(scene.folder, "SPECTRAL_IMAGE")) as src:
-        pixels = src.read(bands)
+        pixels = src.read()
         transform, crs = src.transform, src.crs.to_string()
+    if pixels.shape[0] != len(scene.wavelengths_nm):
+        raise ValueError(f"{scene.scene_id}: {pixels.shape[0]} bands in the cube, "
+                         f"{len(scene.wavelengths_nm)} in METADATA.XML")
     with rasterio.open(find_member(scene.folder, "QL_PIXELMASK")) as src:
-        flagged = src.read(bands) != 0                            # 0 = valid, else flagged
+        flagged = src.read() != 0                                 # 0 = valid, else flagged
     pixels[flagged] = NODATA
     labels = {}
     for key, stem in LABEL_LAYERS.items():
@@ -75,7 +84,7 @@ def tiles(scene: EnmapScene, arrays: SceneArrays | None = None,
     """(key, sample) for every kept tile. key = `en_<datatake>_<tile>_r<row>c<col>`."""
     a = arrays or read_scene(scene)
     facts = scene.facts
-    wavelengths = scene.wavelengths_nm[scene.band_index].astype(np.float32)
+    wavelengths = scene.wavelengths_nm.astype(np.float32)
     _, h, w = a.pixels.shape
     for r, c in tile_grid(h, w):
         y0, x0 = r * TILE, c * TILE

@@ -18,6 +18,7 @@ Gotchas:
 """
 
 import io
+import json
 import random
 import tarfile
 from collections.abc import Iterable, Sequence
@@ -88,24 +89,51 @@ def _npy(a: np.ndarray) -> bytes:
     return buf.getvalue()
 
 
-def write_shard(patches: Iterable[SpectralEarthPatch], fileobj) -> tuple[list[str], BandStats]:
-    """Write patches as one WebDataset tar to a binary file object, in the order given.
+def _member_bytes(value) -> bytes:
+    """A sample member as stored: ndarray -> .npy, dict -> JSON, bytes as given."""
+    if isinstance(value, np.ndarray):
+        return _npy(value)
+    if isinstance(value, dict):
+        return json.dumps(value, sort_keys=True).encode()
+    if isinstance(value, bytes):
+        return value
+    raise TypeError(f"cannot store a {type(value).__name__} in a shard")
 
-    Per sample: `<key>.pixels.npy` (raw int16) and `<key>.wavelengths.npy` (float32, band
-    order). Returns the keys written and the shard's BandStats. Members carry mtime 0, so
-    the same patches always produce byte-identical tars.
-    """
+
+def write_samples(samples: Iterable[tuple[str, dict]], fileobj, reflectance_scale: float = 0.0001,
+                  nodata: int = -32768) -> tuple[list[str], BandStats]:
+    """Write (key, {member name: value}) samples as one WebDataset tar, in the order given and
+    with members in each dict's order. `pixels.npy` (int16) also feeds the shard's BandStats.
+    Members carry mtime 0, so the same samples always produce byte-identical tars. Keys must not
+    contain '.' or '/' (webdataset splits the extension at the first dot)."""
     keys, stats = [], BandStats()
     with tarfile.open(fileobj=fileobj, mode="w", format=tarfile.USTAR_FORMAT) as tar:
-        for patch in patches:
-            for name, data in (("pixels.npy", _npy(patch.raw)),
-                               ("wavelengths.npy", _npy(patch.wavelengths_nm.astype(np.float32)))):
-                info = tarfile.TarInfo(f"{patch.key}.{name}")
+        for key, members in samples:
+            if "." in key or "/" in key:
+                raise ValueError(f"shard key must not contain '.' or '/': {key!r}")
+            for name, value in members.items():
+                data = _member_bytes(value)
+                info = tarfile.TarInfo(f"{key}.{name}")
                 info.size, info.mtime, info.mode = len(data), 0, 0o444
                 tar.addfile(info, io.BytesIO(data))
-            stats.add(patch.raw, patch.bands.reflectance_scale, patch.bands.nodata)
-            keys.append(patch.key)
+            # Members passed through as bytes (re-sharding existing tiles) carry no stats here.
+            if isinstance(members.get("pixels.npy"), np.ndarray):
+                stats.add(members["pixels.npy"], reflectance_scale, nodata)
+            keys.append(key)
     return keys, stats
+
+
+def write_shard(patches: Iterable[SpectralEarthPatch], fileobj) -> tuple[list[str], BandStats]:
+    """SpectralEarth patches as one shard: `<key>.pixels.npy` (raw int16) and
+    `<key>.wavelengths.npy` (float32, band order) per sample, via write_samples."""
+    def samples():
+        for patch in patches:
+            yield patch.key, {"pixels.npy": patch.raw,
+                              "wavelengths.npy": patch.wavelengths_nm.astype(np.float32)}
+    patches = list(patches)
+    scale = patches[0].bands.reflectance_scale if patches else 0.0001
+    nodata = patches[0].bands.nodata if patches else -32768
+    return write_samples(samples(), fileobj, scale, nodata)
 
 
 def recompress_shard(src, dst) -> list[str]:

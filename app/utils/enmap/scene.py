@@ -1,6 +1,7 @@
 """
-One EnMAP L2A scene folder, read for training shards: SpectralEarth's 202 bands, the provider
-quality layers, and the scene facts a cloud/water head needs to decide when to trust them.
+One EnMAP L2A scene folder, read for training shards: its native bands and wavelengths, the
+provider quality layers, and the scene facts a cloud/water head needs to decide when to trust them.
+`band_index` maps SpectralEarth's 202 wavelengths onto the scene's bands for load-time selection.
 
 Used by app/utils/enmap/tiles.py, which cuts the scene into patches, and through it by
 scripts/shard_enmap.py. The product path (EnmapDatasetBuilder) is separate: it resamples onto
@@ -21,7 +22,6 @@ Gotchas:
   - spatial_info width/height in METADATA.XML are not the raster size; read the raster.
 """
 
-import glob
 import os
 import re
 from dataclasses import dataclass, field
@@ -52,9 +52,11 @@ class SceneError(ValueError):
 
 
 def find_member(folder: str, stem: str) -> str:
-    """Path of the scene file whose name ends in `-<stem>` + a raster/XML extension."""
-    hits = [p for p in glob.glob(os.path.join(folder, f"*-{stem}*"))
-            if re.search(rf"-{stem}(_COG)?\.(tiff?|TIF|XML)$", p)]
+    """Path of the scene file whose name ends in `-<stem>` + a raster/XML extension. Case-
+    insensitive: deliveries mix `-METADATA.XML` and `-METADATA.xml`, and a case-sensitive lookup
+    silently skipped those scenes on Linux in the October H200 trial."""
+    pattern = re.compile(rf"-{stem}(_COG)?\.(tiff?|xml)$", re.IGNORECASE)
+    hits = [os.path.join(folder, f) for f in os.listdir(folder) if pattern.search(f)]
     if len(hits) != 1:
         raise SceneError(f"{folder}: expected one *-{stem} file, found {len(hits)}")
     return hits[0]
