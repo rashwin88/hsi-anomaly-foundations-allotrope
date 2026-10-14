@@ -118,3 +118,23 @@ class SpectralEarthPatch:
         out = self.raw.astype(np.float32) * np.float32(self.bands.reflectance_scale)
         out[self.raw == self.bands.nodata] = 0.0
         return out
+
+    def to_vendable(self, config=None, keep=None):
+        """This patch on the common grid, through the same steps EnMAP scenes take.
+
+        `config` is a BandFilterConfig; by default the standard one resampling onto the
+        165-band grid. `keep` is a (rows, cols) bool mask from a ScreenChain; pixels
+        outside it are invalidated before gap filling. Returns a
+        VendableHyperspectralDataset, (165, 128, 128) by default.
+        """
+        # Imported here: the transformation stack is only needed by callers that resample.
+        from app.models.dataset.vendables import BandFilterConfig, DEFAULT_COMMON_WAVELENGTH_GRID
+        from app.utils.data_transformations.common_grid_pipeline import to_common_grid
+
+        config = config or BandFilterConfig(common_wavelength_grid=DEFAULT_COMMON_WAVELENGTH_GRID)
+        return to_common_grid(
+            cube=self.reflectance(), validity=self.validity(),
+            wavelengths_nm=self.wavelengths_nm.tolist(), families=list(self.families),
+            fwhm_nm=self.bands.fwhm_nm.tolist(), config=config,
+            pixel_reject=None if keep is None else ~keep,
+        )
