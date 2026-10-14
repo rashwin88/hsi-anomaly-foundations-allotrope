@@ -268,6 +268,10 @@ Three numbers became two. Output 0 just copied input 0; output 1 averaged inputs
 1 and 2 and added a small offset. In the real model these weights are learned,
 not chosen — but the arithmetic is identical.
 
+![Figure 8.1 - A 1x1 convolution is a matrix-vector product per pixel](figures/08-conv1x1.svg)
+
+*Figure 8.1 - A 1x1 convolution, worked with part 10's numbers. At every pixel the 4-band vector x is multiplied by the same 2 x 4 matrix W, giving 2 output channels: y0 = 1.1, y1 = -0.5. The spatial grid is untouched; only the channel axis changes.*
+
 ### Counting parameters
 
 A matrix of `D` rows and `C` columns has `D * C` entries, plus `D` bias values:

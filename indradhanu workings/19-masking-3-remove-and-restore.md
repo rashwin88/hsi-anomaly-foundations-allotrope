@@ -209,6 +209,10 @@ the hidden tokens were.
 
 ---
 
+![Figure 19.1 - Remove and restore](figures/19-remove-restore.svg)
+
+*Figure 19.1 - Hidden tokens are removed, not zeroed. gather keeps only the visible tokens (here 4 of 6), so the stage-1 blocks never see the hidden ones; after the blocks, scatter writes the encoded tokens back into a zero tensor at their original positions. The holes (grey) are exactly zero and are filled in by the decoder.*
+
 ## Who fills the holes in?
 
 **Nobody, at stage 1.** F1 keeps its holes. That is not an oversight; here is

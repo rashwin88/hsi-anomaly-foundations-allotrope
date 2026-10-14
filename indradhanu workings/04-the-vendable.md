@@ -156,6 +156,10 @@ different trade-off.
 
 ---
 
+![Figure 4.1 - How a vendable reaches Indradhanu](figures/04-vendable.svg)
+
+*Figure 4.1 - The model never reads a raw file. Scene onboarding turns the sensor file into a vendable with the sensor's native bands; band_filter_apply resamples it onto the 165-band grid. Of the filtered vendable's fields, the model uses the cube and the validity cube (bold); a pixel is spatially valid if it is valid in at least one band. Vendables carry no coordinate reference system - georeferencing is recovered at export.*
+
 ## What band_filter_apply does, in one paragraph
 
 You do not need its internals to understand Indradhanu, but you should know what

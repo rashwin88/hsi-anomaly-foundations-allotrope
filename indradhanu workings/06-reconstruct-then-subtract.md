@@ -109,6 +109,10 @@ unusual was there.
 
 ---
 
+![Figure 6.1 - Why the model must not see what it predicts](figures/06-masked-recon.svg)
+
+*Figure 6.1 - Why hiding is essential. (a) Asked to reproduce what it can see, a model learns to copy, the residual is zero everywhere and nothing is detected. (b) A masked autoencoder hides about 65% of the tokens (dashed) and is graded only on them; it must predict from context, so at the hidden anomaly (amber) it paints ordinary background and leaves a large error.*
+
 ## What is hidden, exactly
 
 Not individual pixels. **Tokens** — small square blocks, 4 pixels by 4 pixels in

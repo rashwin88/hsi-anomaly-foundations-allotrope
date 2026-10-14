@@ -106,6 +106,10 @@ Those are genuinely different orderings, so an axis swap is unavoidable.
 
 ---
 
+![Figure 7.1 - Spatial and sequence layouts](figures/07-layouts.svg)
+
+*Figure 7.1 - The two layouts of the same numbers. (a) Spatial (B, C, H, W): a grid of positions per channel, as convolutions need. (b) flatten(2) joins the two spatial axes into N = H x W positions. (c) transpose(1, 2) makes each position a row of C numbers - a token - as attention and LayerNorm need. A reshape alone would scramble the order.*
+
 ## The complete forward-pass shape table
 
 For one training patch, with `C = 165`, `D = 32`, `H = W = 128`.

@@ -104,6 +104,10 @@ token:           [-0.5943,  -0.6358 ]
 Adding rather than placing side by side keeps the token at width `d`. It works because
 training learns a value stretch and tags that occupy usefully different directions.
 
+![Figure 33.1 - A band token](figures/33-band-token.svg)
+
+*Figure 33.1 - Building one band token. (a) The band's value is stretched to d numbers by Linear(1, d) and added to a fixed sinusoidal tag of its wavelength. (b) The real 32-number tag for three wavelengths (teal positive, amber negative, shade = magnitude): 660 and 670 nm share most of their pattern (cosine similarity 0.671), 660 and 1650 nm almost none (0.013).*
+
 ## Why wavelength beats position
 
 | | position (today) | wavelength (next Indradhanu) |

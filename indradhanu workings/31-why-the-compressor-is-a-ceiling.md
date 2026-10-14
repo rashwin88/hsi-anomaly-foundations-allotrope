@@ -92,6 +92,10 @@ values between real measurements, and the grid's gaps (920-970, 1140-1150, 1350-
 1800-1950 nm) are invisible to the layer: input 45 and input 46 might be 10 nm apart or
 100 nm apart, and it cannot tell.
 
+![Figure 31.1 - One fixed recipe](figures/31-fixed-recipe.svg)
+
+*Figure 31.1 - The ceiling of a fixed compressor. (a) Every pixel - forest, desert or shadow - is mixed by the same trained matrix W. (b) A dead band filled with 0.0 still receives its weight: with part 10's numbers the output moves from -0.50 to -0.30.*
+
 ## What the fix has to do
 
 Turn the three consequences into requirements:

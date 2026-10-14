@@ -104,6 +104,10 @@ personalised update.
 
 ---
 
+![Figure 13.1 - Efficient self-attention](figures/13-esa.svg)
+
+*Figure 13.1 - Spatial reduction at stage 1. Queries keep all 1,024 tokens; keys and values are first shrunk by a strided convolution (kernel = stride = R = 8) to a 4 x 4 grid of 16 summary tokens. The score matrix is 1,024 x 16 instead of 1,024 x 1,024 - 64 times smaller (the hatched square is not drawn to scale). With R = 8, 4, 2, 1 every stage attends over the same 4 x 4 summary.*
+
 ## The reduction schedule, worked
 
 The configuration is `reduction_ratios = [8, 4, 2, 1]`. For a 128x128 patch:

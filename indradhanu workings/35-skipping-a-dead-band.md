@@ -87,6 +87,10 @@ PRISMA pixel:         239 real tokens                       -> 239, mask: 239 Tr
 The padding gets weight zero exactly as a dead band does. One mechanism handles broken bands,
 missing bands, and different sensors.
 
+![Figure 35.1 - Masking a dead band](figures/35-dead-band.svg)
+
+*Figure 35.1 - Minus infinity before softmax. Left: three valid scores [2, 1, 0] give weights [0.6652, 0.2447, 0.0900]. Middle: marking band 3 dead sets its score to -inf, its weight to exactly 0, and the other two renormalise to [0.7311, 0.2689]. Right: the same mask lets a 202-band SpectralEarth pixel share a batch with 239-band PRISMA pixels, its 37 padding tokens masked out.*
+
 ## What this does not fix
 
 Masking removes a band from the *compressor*. Two things it does not decide for you:

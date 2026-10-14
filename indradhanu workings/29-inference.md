@@ -141,6 +141,10 @@ without any loop.
 
 ---
 
+![Figure 29.1 - Two-pass checkerboard inference](figures/29-two-pass.svg)
+
+*Figure 29.1 - Every pixel predicted without being seen. Pass 1 hides the tokens where (row + col) is odd; pass 2 hides the inverse. Each token's final value is taken from the pass that hid it, so the combined reconstruction is built entirely from predictions.*
+
 ## Strategy B: random
 
 ```python
@@ -265,6 +269,10 @@ That is where the smoothness of the final residual map comes from — and it is
 why a stride of 32 is worth sixteen times the compute of a stride of 128.
 
 ---
+
+![Figure 29.2 - Sliding-window inference](figures/29-sliding.svg)
+
+*Figure 29.2 - Covering a whole scene. 128 x 128 tiles start every 32 pixels, so a 1000 x 1000 scene needs 29 x 29 = 841 tiles (left, first four drawn). Along one axis an interior pixel lies in 128 / 32 = 4 tiles (right), so it receives 4 x 4 = 16 independent reconstructions, which are summed and averaged.*
 
 ## Accumulate, then average
 

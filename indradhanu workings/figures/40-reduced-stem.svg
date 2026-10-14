@@ -1,0 +1,144 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 470" font-family="Helvetica, Arial, sans-serif" role="img" aria-label="The reduced spectral compressor for one pixel">
+<title>The reduced spectral compressor for one pixel</title>
+<defs><marker id="ah-ink" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0.8 L9,5 L0,9.2 L2.2,5 Z" fill="#1f2328"/></marker><marker id="ah-ink2" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0.8 L9,5 L0,9.2 L2.2,5 Z" fill="#4b535d"/></marker><marker id="ah-teal" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0.8 L9,5 L0,9.2 L2.2,5 Z" fill="#0f766e"/></marker><marker id="ah-indigo" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0.8 L9,5 L0,9.2 L2.2,5 Z" fill="#3a4aa8"/></marker><marker id="ah-plum" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0.8 L9,5 L0,9.2 L2.2,5 Z" fill="#8a3b86"/></marker><marker id="ah-amber" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0.8 L9,5 L0,9.2 L2.2,5 Z" fill="#b45f06"/></marker><marker id="ah-grey" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0.8 L9,5 L0,9.2 L2.2,5 Z" fill="#8f979f"/></marker><marker id="ah-muted" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0.8 L9,5 L0,9.2 L2.2,5 Z" fill="#7d858f"/></marker><pattern id="hatch" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="6" stroke="#8f979f" stroke-width="1.1"/></pattern></defs>
+<rect x="0" y="0" width="900" height="470" fill="#ffffff"/>
+<text x="18" y="24" font-size="12.5" text-anchor="start" fill="#1f2328" xml:space="preserve" style="white-space:pre" font-weight="700">a  Bands, grouped by 40 nm bin</text>
+<rect x="30" y="145" width="12" height="45" rx="1.5" fill="#e3f3f1" stroke="#0f766e" stroke-width="1"/>
+<rect x="45" y="135" width="12" height="55" rx="1.5" fill="#e3f3f1" stroke="#0f766e" stroke-width="1"/>
+<rect x="60" y="140" width="12" height="50" rx="1.5" fill="#e3f3f1" stroke="#0f766e" stroke-width="1"/>
+<rect x="89" y="130" width="12" height="60" rx="1.5" fill="#e3f3f1" stroke="#0f766e" stroke-width="1"/>
+<rect x="104" y="165" width="12" height="25" rx="1.5" fill="#e3f3f1" stroke="#0f766e" stroke-width="1"/>
+<rect x="119" y="120" width="12" height="70" rx="1.5" fill="#f2f4f6"/>
+<rect x="119" y="120" width="12" height="70" rx="1.5" fill="url(#hatch)" stroke="#8f979f" stroke-width="1"/>
+<rect x="134" y="132" width="12" height="58" rx="1.5" fill="#e3f3f1" stroke="#0f766e" stroke-width="1"/>
+<rect x="163" y="110" width="12" height="80" rx="1.5" fill="#e3f3f1" stroke="#0f766e" stroke-width="1"/>
+<rect x="178" y="105" width="12" height="85" rx="1.5" fill="#e3f3f1" stroke="#0f766e" stroke-width="1"/>
+<path d="M30,196 q0,5 5,5 L46,201 q5,0 5,5 q0,-5 5,-5 L67,201 q5,0 5,-5" fill="none" stroke="#0f766e" stroke-width="1" stroke-linejoin="round" stroke-linecap="round"/>
+<text x="51" y="218" font-size="10.5" text-anchor="middle" fill="#0f766e">bin g-1</text>
+<path d="M89,196 q0,5 5,5 L112.5,201 q5,0 5,5 q0,-5 5,-5 L141,201 q5,0 5,-5" fill="none" stroke="#0f766e" stroke-width="1" stroke-linejoin="round" stroke-linecap="round"/>
+<text x="117.5" y="218" font-size="10.5" text-anchor="middle" fill="#0f766e">bin g</text>
+<path d="M163,196 q0,5 5,5 L171.5,201 q5,0 5,5 q0,-5 5,-5 L185,201 q5,0 5,-5" fill="none" stroke="#0f766e" stroke-width="1" stroke-linejoin="round" stroke-linecap="round"/>
+<text x="176.5" y="218" font-size="10.5" text-anchor="middle" fill="#0f766e">bin g+1</text>
+<text x="116" y="236" font-size="10.5" text-anchor="middle" fill="#4b535d" xml:space="preserve" style="white-space:pre">v_b  (one value per band)</text>
+<text x="116" y="250" font-size="10.5" text-anchor="middle" fill="#7d858f">dead band: masked to 0, not counted</text>
+<rect x="14" y="242" width="10" height="9" rx="1" fill="#f2f4f6"/>
+<rect x="14" y="242" width="10" height="9" rx="1" fill="url(#hatch)" stroke="#8f979f" stroke-width="1"/>
+<rect x="30" y="262" width="175" height="58" rx="6" fill="#e3f3f1" stroke="#0f766e" stroke-width="1.3"/>
+<text x="117" y="282" font-size="12.5" text-anchor="middle" fill="#1f2328" xml:space="preserve" style="white-space:pre" font-weight="600">x  k(lambda_b)</text>
+<text x="117" y="298" font-size="10.5" text-anchor="middle" fill="#4b535d">own 32-vector per band,</text>
+<text x="117" y="311" font-size="10.5" text-anchor="middle" fill="#4b535d">computed from its wavelength</text>
+<line x1="116" y1="256" x2="116" y2="260" stroke="#0f766e" stroke-width="1.3" stroke-linecap="round" marker-end="url(#ah-teal)"/>
+<rect x="30" y="344" width="175" height="40" rx="6" fill="#e3f3f1" stroke="#0f766e" stroke-width="1.3"/>
+<text x="117.5" y="361" font-size="12.5" text-anchor="middle" fill="#1f2328" font-weight="600">mean within bin</text>
+<text x="117.5" y="376" font-size="10.5" text-anchor="middle" fill="#4b535d" font-family="Menlo, Consolas, 'DejaVu Sans Mono', monospace">+ bin-centre tag</text>
+<line x1="116" y1="320" x2="116" y2="342" stroke="#0f766e" stroke-width="1.3" stroke-linecap="round" marker-end="url(#ah-teal)"/>
+<text x="240" y="24" font-size="12.5" text-anchor="start" fill="#1f2328" xml:space="preserve" style="white-space:pre" font-weight="700">b  Bin tokens</text>
+<rect x="250" y="50" width="120" height="20" rx="3" fill="#e3f3f1" stroke="#0f766e" stroke-width="1.1"/>
+<rect x="256" y="55" width="10" height="10" rx="1.5" fill="#0f766e" fill-opacity="0.25"/>
+<rect x="270" y="55" width="10" height="10" rx="1.5" fill="#0f766e" fill-opacity="0.7"/>
+<rect x="284" y="55" width="10" height="10" rx="1.5" fill="#0f766e" fill-opacity="0.43"/>
+<rect x="298" y="55" width="10" height="10" rx="1.5" fill="#0f766e" fill-opacity="0.88"/>
+<rect x="312" y="55" width="10" height="10" rx="1.5" fill="#0f766e" fill-opacity="0.61"/>
+<rect x="326" y="55" width="10" height="10" rx="1.5" fill="#0f766e" fill-opacity="0.34"/>
+<rect x="340" y="55" width="10" height="10" rx="1.5" fill="#0f766e" fill-opacity="0.79"/>
+<rect x="354" y="55" width="10" height="10" rx="1.5" fill="#0f766e" fill-opacity="0.52"/>
+<rect x="250" y="80" width="120" height="20" rx="3" fill="#e3f3f1" stroke="#0f766e" stroke-width="1.1"/>
+<rect x="256" y="85" width="10" height="10" rx="1.5" fill="#0f766e" fill-opacity="0.52"/>
+<rect x="270" y="85" width="10" height="10" rx="1.5" fill="#0f766e" fill-opacity="0.25"/>
+<rect x="284" y="85" width="10" height="10" rx="1.5" fill="#0f766e" fill-opacity="0.7"/>
+<rect x="298" y="85" width="10" height="10" rx="1.5" fill="#0f766e" fill-opacity="0.43"/>
+<rect x="312" y="85" width="10" height="10" rx="1.5" fill="#0f766e" fill-opacity="0.88"/>
+<rect x="326" y="85" width="10" height="10" rx="1.5" fill="#0f766e" fill-opacity="0.61"/>
+<rect x="340" y="85" width="10" height="10" rx="1.5" fill="#0f766e" fill-opacity="0.34"/>
+<rect x="354" y="85" width="10" height="10" rx="1.5" fill="#0f766e" fill-opacity="0.79"/>
+<rect x="250" y="110" width="120" height="20" rx="3" fill="#e3f3f1" stroke="#0f766e" stroke-width="1.1"/>
+<rect x="256" y="115" width="10" height="10" rx="1.5" fill="#0f766e" fill-opacity="0.79"/>
+<rect x="270" y="115" width="10" height="10" rx="1.5" fill="#0f766e" fill-opacity="0.52"/>
+<rect x="284" y="115" width="10" height="10" rx="1.5" fill="#0f766e" fill-opacity="0.25"/>
+<rect x="298" y="115" width="10" height="10" rx="1.5" fill="#0f766e" fill-opacity="0.7"/>
+<rect x="312" y="115" width="10" height="10" rx="1.5" fill="#0f766e" fill-opacity="0.43"/>
+<rect x="326" y="115" width="10" height="10" rx="1.5" fill="#0f766e" fill-opacity="0.88"/>
+<rect x="340" y="115" width="10" height="10" rx="1.5" fill="#0f766e" fill-opacity="0.61"/>
+<rect x="354" y="115" width="10" height="10" rx="1.5" fill="#0f766e" fill-opacity="0.34"/>
+<rect x="250" y="140" width="120" height="20" rx="3" fill="#f2f4f6"/>
+<rect x="250" y="140" width="120" height="20" rx="3" fill="url(#hatch)" stroke="#8f979f" stroke-width="1"/>
+<text x="310" y="154" font-size="10" text-anchor="middle" fill="#4b535d">empty bin: masked</text>
+<rect x="250" y="170" width="120" height="20" rx="3" fill="#e3f3f1" stroke="#0f766e" stroke-width="1.1"/>
+<rect x="256" y="175" width="10" height="10" rx="1.5" fill="#0f766e" fill-opacity="0.61"/>
+<rect x="270" y="175" width="10" height="10" rx="1.5" fill="#0f766e" fill-opacity="0.34"/>
+<rect x="284" y="175" width="10" height="10" rx="1.5" fill="#0f766e" fill-opacity="0.79"/>
+<rect x="298" y="175" width="10" height="10" rx="1.5" fill="#0f766e" fill-opacity="0.52"/>
+<rect x="312" y="175" width="10" height="10" rx="1.5" fill="#0f766e" fill-opacity="0.25"/>
+<rect x="326" y="175" width="10" height="10" rx="1.5" fill="#0f766e" fill-opacity="0.7"/>
+<rect x="340" y="175" width="10" height="10" rx="1.5" fill="#0f766e" fill-opacity="0.43"/>
+<rect x="354" y="175" width="10" height="10" rx="1.5" fill="#0f766e" fill-opacity="0.88"/>
+<rect x="250" y="200" width="120" height="20" rx="3" fill="#e3f3f1" stroke="#0f766e" stroke-width="1.1"/>
+<rect x="256" y="205" width="10" height="10" rx="1.5" fill="#0f766e" fill-opacity="0.88"/>
+<rect x="270" y="205" width="10" height="10" rx="1.5" fill="#0f766e" fill-opacity="0.61"/>
+<rect x="284" y="205" width="10" height="10" rx="1.5" fill="#0f766e" fill-opacity="0.34"/>
+<rect x="298" y="205" width="10" height="10" rx="1.5" fill="#0f766e" fill-opacity="0.79"/>
+<rect x="312" y="205" width="10" height="10" rx="1.5" fill="#0f766e" fill-opacity="0.52"/>
+<rect x="326" y="205" width="10" height="10" rx="1.5" fill="#0f766e" fill-opacity="0.25"/>
+<rect x="340" y="205" width="10" height="10" rx="1.5" fill="#0f766e" fill-opacity="0.7"/>
+<rect x="354" y="205" width="10" height="10" rx="1.5" fill="#0f766e" fill-opacity="0.43"/>
+<rect x="250" y="230" width="120" height="20" rx="3" fill="#e3f3f1" stroke="#0f766e" stroke-width="1.1"/>
+<rect x="256" y="235" width="10" height="10" rx="1.5" fill="#0f766e" fill-opacity="0.43"/>
+<rect x="270" y="235" width="10" height="10" rx="1.5" fill="#0f766e" fill-opacity="0.88"/>
+<rect x="284" y="235" width="10" height="10" rx="1.5" fill="#0f766e" fill-opacity="0.61"/>
+<rect x="298" y="235" width="10" height="10" rx="1.5" fill="#0f766e" fill-opacity="0.34"/>
+<rect x="312" y="235" width="10" height="10" rx="1.5" fill="#0f766e" fill-opacity="0.79"/>
+<rect x="326" y="235" width="10" height="10" rx="1.5" fill="#0f766e" fill-opacity="0.52"/>
+<rect x="340" y="235" width="10" height="10" rx="1.5" fill="#0f766e" fill-opacity="0.25"/>
+<rect x="354" y="235" width="10" height="10" rx="1.5" fill="#0f766e" fill-opacity="0.7"/>
+<text x="310" y="274" font-size="11" text-anchor="middle" fill="#4b535d" font-family="Menlo, Consolas, 'DejaVu Sans Mono', monospace">(P, 53, 32)</text>
+<text x="310" y="290" font-size="10.5" text-anchor="middle" fill="#4b535d">42 occupied for SpectralEarth</text>
+<path d="M205,364 C232,364 226,215 248,215" fill="none" stroke="#0f766e" stroke-width="1.2" stroke-linejoin="round" stroke-linecap="round" marker-end="url(#ah-teal)"/>
+<text x="410" y="24" font-size="12.5" text-anchor="start" fill="#1f2328" xml:space="preserve" style="white-space:pre" font-weight="700">c  32 learned queries attend</text>
+<rect x="420" y="46" width="150" height="40" rx="6" fill="#f5e9f4" stroke="#8a3b86" stroke-width="1.3"/>
+<text x="495" y="63" font-size="12.5" text-anchor="middle" fill="#1f2328" font-weight="600">queries</text>
+<text x="495" y="78" font-size="10.5" text-anchor="middle" fill="#4b535d" font-family="Menlo, Consolas, 'DejaVu Sans Mono', monospace" xml:space="preserve" style="white-space:pre">(32, 32)  -&gt; Q</text>
+<rect x="420" y="112" width="150" height="40" rx="6" fill="#f5e9f4" stroke="#8a3b86" stroke-width="1.3"/>
+<text x="495" y="129" font-size="12.5" text-anchor="middle" fill="#1f2328" font-weight="600">K, V from bin tokens</text>
+<text x="495" y="144" font-size="10.5" text-anchor="middle" fill="#4b535d" font-family="Menlo, Consolas, 'DejaVu Sans Mono', monospace">(P, 4, 53, 8)</text>
+<line x1="372" y1="132" x2="418" y2="132" stroke="#8a3b86" stroke-width="1.3" stroke-linecap="round" marker-end="url(#ah-plum)"/>
+<rect x="420" y="178" width="150" height="46" rx="6" fill="#f5e9f4" stroke="#8a3b86" stroke-width="1.3"/>
+<text x="495" y="198" font-size="11.5" text-anchor="middle" fill="#1f2328" font-weight="600">softmax(QK^T / sqrt 8) V</text>
+<text x="495" y="213" font-size="10.5" text-anchor="middle" fill="#4b535d" font-family="Menlo, Consolas, 'DejaVu Sans Mono', monospace">empty bins: -inf</text>
+<line x1="495" y1="86" x2="495" y2="110" stroke="#8a3b86" stroke-width="1.3" stroke-linecap="round" marker-end="url(#ah-plum)"/>
+<line x1="495" y1="152" x2="495" y2="176" stroke="#8a3b86" stroke-width="1.3" stroke-linecap="round" marker-end="url(#ah-plum)"/>
+<rect x="420" y="250" width="150" height="40" rx="6" fill="#f5e9f4" stroke="#8a3b86" stroke-width="1.3"/>
+<text x="495" y="267" font-size="11.5" text-anchor="middle" fill="#1f2328" font-weight="600">out proj, Linear(32,1)</text>
+<text x="495" y="282" font-size="10.5" text-anchor="middle" fill="#4b535d" font-family="Menlo, Consolas, 'DejaVu Sans Mono', monospace">(P, 32)</text>
+<line x1="495" y1="224" x2="495" y2="248" stroke="#8a3b86" stroke-width="1.3" stroke-linecap="round" marker-end="url(#ah-plum)"/>
+<circle cx="495" cy="340" r="13" fill="#ffffff" stroke="#1f2328" stroke-width="1.3"/>
+<text x="495" y="345" font-size="17" text-anchor="middle" fill="#1f2328" font-weight="600">+</text>
+<line x1="495" y1="290" x2="495" y2="325" stroke="#8a3b86" stroke-width="1.3" stroke-linecap="round" marker-end="url(#ah-plum)"/>
+<rect x="250" y="404" width="190" height="26" rx="4" fill="#e3f3f1" stroke="#0f766e" stroke-width="1.3"/>
+<text x="345" y="421" font-size="11" text-anchor="middle" fill="#1f2328" xml:space="preserve" style="white-space:pre">x  W(lambda_b),  mean over bands</text>
+<path d="M24,150 L16,150 L16,417 L248,417" fill="none" stroke="#0f766e" stroke-width="1.2" stroke-linejoin="round" stroke-linecap="round" marker-end="url(#ah-teal)"/>
+<path d="M440,417 L470,417 C484,417 488,370 490,354" fill="none" stroke="#0f766e" stroke-width="1.2" stroke-linejoin="round" stroke-linecap="round" marker-end="url(#ah-teal)"/>
+<text x="250" y="456" font-size="12.5" text-anchor="start" fill="#1f2328" xml:space="preserve" style="white-space:pre" font-weight="700">d  Skip path: every valid band reaches the 32 channels directly</text>
+<rect x="650" y="300" width="210" height="80" rx="6" fill="#e9ebf8" stroke="#3a4aa8" stroke-width="1.3"/>
+<text x="755" y="328" font-size="12.5" text-anchor="middle" fill="#1f2328" xml:space="preserve" style="white-space:pre" font-weight="600">z  =  attention + skip</text>
+<text x="755" y="348" font-size="11" text-anchor="middle" fill="#4b535d" font-family="Menlo, Consolas, 'DejaVu Sans Mono', monospace">(B, 32, H, W)</text>
+<text x="755" y="366" font-size="10.5" text-anchor="middle" fill="#4b535d">-&gt; BatchNorm -&gt; SegFormer</text>
+<line x1="508" y1="340" x2="648" y2="340" stroke="#4b535d" stroke-width="1.3" stroke-linecap="round" marker-end="url(#ah-ink2)"/>
+<text x="650" y="74" font-size="11" text-anchor="start" fill="#4b535d">Nothing of shape</text>
+<text x="650" y="90" font-size="11" text-anchor="start" fill="#4b535d">(pixels x 202 x 32) is stored:</text>
+<text x="650" y="112" font-size="10.5" text-anchor="start" fill="#4b535d" font-family="Menlo, Consolas, 'DejaVu Sans Mono', monospace">vals (P,202) @ kmat (202,1696)</text>
+<text x="650" y="128" font-size="10.5" text-anchor="start" fill="#4b535d" font-family="Menlo, Consolas, 'DejaVu Sans Mono', monospace" xml:space="preserve" style="white-space:pre">  = (P, 53, 32)</text>
+<text x="650" y="160" font-size="11" text-anchor="start" fill="#4b535d" font-weight="600">Parameters</text>
+<text x="650" y="178" font-size="10.5" text-anchor="start" fill="#4b535d">k, W networks</text>
+<text x="860" y="178" font-size="10.5" text-anchor="end" fill="#1f2328" font-family="Menlo, Consolas, 'DejaVu Sans Mono', monospace">2 x 4,192</text>
+<text x="650" y="194" font-size="10.5" text-anchor="start" fill="#4b535d">bin bias</text>
+<text x="860" y="194" font-size="10.5" text-anchor="end" fill="#1f2328" font-family="Menlo, Consolas, 'DejaVu Sans Mono', monospace">1,056</text>
+<text x="650" y="210" font-size="10.5" text-anchor="start" fill="#4b535d">queries</text>
+<text x="860" y="210" font-size="10.5" text-anchor="end" fill="#1f2328" font-family="Menlo, Consolas, 'DejaVu Sans Mono', monospace">1,024</text>
+<text x="650" y="226" font-size="10.5" text-anchor="start" fill="#4b535d">Q, K, V, O</text>
+<text x="860" y="226" font-size="10.5" text-anchor="end" fill="#1f2328" font-family="Menlo, Consolas, 'DejaVu Sans Mono', monospace">4,224</text>
+<text x="650" y="242" font-size="10.5" text-anchor="start" fill="#4b535d">to_channel</text>
+<text x="860" y="242" font-size="10.5" text-anchor="end" fill="#1f2328" font-family="Menlo, Consolas, 'DejaVu Sans Mono', monospace">33</text>
+<text x="650" y="258" font-size="10.5" text-anchor="start" fill="#4b535d" font-weight="600">total</text>
+<text x="860" y="258" font-size="10.5" text-anchor="end" fill="#1f2328" font-family="Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-weight="600">14,721</text>
+<line x1="650" y1="262" x2="860" y2="262" stroke="#d5dae0" stroke-width="1" stroke-linecap="round"/>
+</svg>

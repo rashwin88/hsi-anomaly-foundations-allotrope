@@ -97,6 +97,10 @@ def _run_epoch(self, epoch, train_loaders, test_loaders):
 
 Five phases: **train, validate, step the scheduler, log, maybe checkpoint.**
 
+![Figure 28.1 - One epoch of the training loop](figures/28-loop.svg)
+
+*Figure 28.1 - The five phases of an epoch: a training pass with random masking and gradient accumulation, a validation pass, a scheduler step, logging, and a periodic checkpoint. The dashed frame repeats once per epoch.*
+
 ### `model.train()` and `model.eval()`
 
 These do not train or evaluate anything. They flip a flag that changes how

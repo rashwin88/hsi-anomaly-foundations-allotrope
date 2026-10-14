@@ -36,6 +36,10 @@ pixels:
 | answers | `(B*16384, 32, 32)` | |
 | channels | `(B*16384, 32)` -> `(B, 32, 128, 128)` | back to an image |
 
+![Figure 34.1 - The cross-attention compressor](figures/34-cross-comp.svg)
+
+*Figure 34.1 - The per-band cross-attention compressor for one pixel. Each of 202 bands becomes a token; keys and values are projected from the tokens; 32 learned queries, shared by every pixel, attend over them with 4 heads, and each answer becomes one output channel. None of the 5,345 parameters depends on the band count.*
+
 ## Predict the parameter count first
 
 Do this on paper before reading the code. Use `parameters = outputs x inputs + outputs` for
@@ -121,6 +125,17 @@ In the convolution the weight `W[c, b]` is a fixed number. In attention the weig
 alphas to constants and attention collapses back into a (more complicated) fixed weighted
 sum. **The cross-attention compressor is the 1x1 convolution with data-dependent weights** -
 that is the entire idea, and why it answers part 31's first requirement.
+
+## Note: the experiment now uses the reduced stem
+
+This compressor now exists as real code - `SpectralCrossAttentionCompressor` in
+`app/foundation_models/components/spectral_attention.py`, with the same 5,345 parameters - and
+it works. But training it keeps about 19 tensors of shape (pixels x 202 x 32) for the backward
+pass, and on a 48 GB L40S it trained at only about 13 patches per second. The experiment's
+attention variant therefore runs the **reduced stem** of part 40: the same 32 learned queries,
+reading about 42 fixed 40 nm wavelength bins instead of 202 bands, with per-band pieces that
+keep the detail a bin average would lose. Everything in this part still applies to it; part 40
+covers what changes.
 
 ## Common confusions
 

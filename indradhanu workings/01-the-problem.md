@@ -138,6 +138,10 @@ redrawing is the anomaly score.
 
 ---
 
+![Figure 1.1 - Reconstruct, then subtract](figures/01-pipeline.svg)
+
+*Figure 1.1 - The idea behind Indradhanu. Blocks of the observed cube (165 bands) are hidden and the model, trained only on ordinary scenes, redraws them from their surroundings. Subtracting the reconstruction from the observation, band by band, gives a per-pixel error map: where the redrawing is most wrong (amber) is where something unusual is. The amber square stands for an object the model has never seen; it paints ordinary background there instead.*
+
 ## What Indradhanu actually outputs
 
 Not a yes/no. Not a list of anomalies. Not a box drawn around anything.

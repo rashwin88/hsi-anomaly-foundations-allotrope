@@ -35,6 +35,10 @@ That is the classic pyramid design. Early stages know *where* things are but
 little about *what* they are. Late stages know a lot about *what* but have
 almost no spatial precision.
 
+![Figure 16.1 - The four-stage encoder](figures/16-encoder.svg)
+
+*Figure 16.1 - The encoder as a feature pyramid, in the style of a network-architecture diagram. Each patch embedding (arrow) shrinks the grid - by 4 at stage 1, by 2 after - and from stage 2 on widens the channels, producing F1 to F4 at 1/4 to 1/32 of the input resolution with 32, 64, 160 and 256 channels. Tokens are hidden (hatched) only at stage 1, and F1 keeps those holes. Front-face size and depth are compressed for drawing.*
+
 ### Why this matters for anomaly detection specifically
 
 Anomalies come in wildly different sizes:

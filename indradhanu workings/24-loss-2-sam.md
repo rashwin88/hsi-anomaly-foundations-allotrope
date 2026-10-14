@@ -172,6 +172,10 @@ This is exactly why the model needs **both** terms. Neither alone is sufficient:
 
 ---
 
+![Figure 24.1 - L1 against SAM](figures/24-l1-sam.svg)
+
+*Figure 24.1 - Two complementary errors. (a) Treating a spectrum as a vector, SAM is the angle between reconstruction and truth, and L1 the average per-band distance. A reconstruction that is the truth scaled by 2 (amber) has an angle of exactly 0 but a large L1; a reconstruction close in level but slightly rotated (indigo) has a small L1 and a small angle. (b) Part 24's three-band numbers.*
+
 ## Numerical stability: why the code avoids `arccos`
 
 The formula above says `arccos`. The code does not use it. Here is why, and it

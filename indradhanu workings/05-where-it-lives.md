@@ -76,6 +76,10 @@ compare their score maps side by side.
 
 ---
 
+![Figure 5.1 - The shipped Action chain](figures/05-chain.svg)
+
+*Figure 5.1 - Indradhanu's place in the product. Each box is an Action that writes its outputs (monospace) to its own folder for the next Action to read. Indradhanu is not an Action: it is one of the models a user can tick inside anomaly_scoring (indigo), and its score map feeds anomaly_detection_prep, where a human picks the threshold.*
+
 ## The three-layer rule — learn this before writing any code here
 
 | Layer | Path | The rule |

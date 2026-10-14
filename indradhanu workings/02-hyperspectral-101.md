@@ -97,6 +97,10 @@ reason the model in this course is named after a rainbow.
 
 ---
 
+![Figure 2.1 - A hyperspectral cube and one pixel's spectrum](figures/02-cube.svg)
+
+*Figure 2.1 - From photograph to spectrum. (a) A colour photograph stores three bands per pixel. (b) A hyperspectral cube stores one image per wavelength - 165 to 425 of them, depending on the sensor - with shape (C, H, W). (c) Reading one pixel down the band axis gives its spectrum: reflectance against wavelength. The curve is illustrative; the web version of this part plots a real median SpectralEarth spectrum.*
+
 ## What the numbers mean: reflectance
 
 The values in the cube are **surface reflectance**: the fraction of the sunlight

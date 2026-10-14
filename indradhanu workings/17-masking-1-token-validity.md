@@ -161,6 +161,10 @@ Flattened in row-major order:
 token_mask = [1, 0, 1, 0]
 ```
 
+![Figure 17.1 - Token validity](figures/17-token-validity.svg)
+
+*Figure 17.1 - Deciding which tokens are real data, with part 17's 8 x 8 example. (a) The pixel validity mask, split by the stage-1 patch geometry (kernel 4, stride 4) into four blocks. (b) Average pooling gives each block's fraction of valid pixels. (c) A strict threshold of > 0.5 makes the token mask [1, 0, 1, 0]: the exactly-half block counts as invalid.*
+
 ### Note token 3 carefully
 
 Exactly half valid. The test is a **strict greater-than**:

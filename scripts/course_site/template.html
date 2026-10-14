@@ -104,6 +104,21 @@
   .fig .readout { font-family: var(--mono); font-size: 0.8rem; color: var(--ink); background: var(--code-bg); border-radius: 6px; padding: 8px 10px; margin-top: 10px; white-space: pre-wrap; overflow-x: auto; }
   .fig .scroll { overflow-x: auto; }
 
+  /* static journal-style figures (figures/*.svg, inlined by build.py): always a white card, so the
+     drawings keep their own palette in both themes; scroll sideways on a phone rather than shrink */
+  /* wider than the 70ch text column on desktop, centred on it by equal negative margins */
+  .jfig { --figw: max(100%, min(960px, calc(100vw - 290px - 40px)));
+          width: var(--figw); margin: 1.8em calc((100% - var(--figw)) / 2) 2em; font-family: var(--sans); }
+  @media (max-width: 860px) { .jfig { --figw: 100%; } }
+  .jfig-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; border-radius: 10px; }
+  .jfig-card { background: #ffffff; border: 1px solid var(--rule); border-radius: 10px; padding: 12px 10px;
+               min-width: 560px; box-sizing: border-box; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04); }
+  .jfig-card img { display: block; width: 100%; height: auto; max-width: 100%; }
+  .jfig figcaption { font-size: 0.82rem; line-height: 1.5; color: var(--ink-2); margin: 10px 2px 0; text-wrap: pretty; }
+  .jfig figcaption b { color: var(--ink); font-weight: 650; }
+  .jfig-hint { display: none; font-size: 0.72rem; color: var(--muted); margin: 6px 2px 0; }
+  @media (max-width: 620px) { .jfig-hint { display: block; } }
+
   /* landing */
   .hero-strip { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 3px; height: 54px; margin: 22px 0 6px; }
   .hero-strip a { border-radius: 3px; display: block; }
@@ -217,6 +232,31 @@
     });
   }
 
+  // a static figure is "![Figure N.M - title](data:...)" then an italic "*Figure N.M - caption*"
+  // paragraph; turn the pair into one <figure> with the caption underneath
+  function wrapFigures(root) {
+    root.querySelectorAll('.md img[src^="data:image/svg"]').forEach(img => {
+      const p = img.closest("p") || img;
+      const fig = document.createElement("figure"); fig.className = "jfig";
+      const scroll = document.createElement("div"); scroll.className = "jfig-scroll";
+      const card = document.createElement("div"); card.className = "jfig-card";
+      img.loading = "lazy"; img.decoding = "async";
+      card.appendChild(img); scroll.appendChild(card); fig.appendChild(scroll);
+      const next = p.nextElementSibling;
+      const cap = document.createElement("figcaption");
+      if (next && next.tagName === "P" && /^Figure\s+\d+\.\d+/.test(next.textContent.trim())) {
+        const em = next.querySelector("em");
+        cap.innerHTML = (em ? em.innerHTML : next.innerHTML).replace(/^(Figure\s+\d+\.\d+)/, "<b>$1</b>");
+        next.remove();
+      } else {
+        cap.innerHTML = (img.alt || "").replace(/^(Figure\s+\d+\.\d+)/, "<b>$1</b>");
+      }
+      fig.appendChild(cap);
+      fig.insertAdjacentHTML("beforeend", '<p class="jfig-hint">Scroll the figure sideways to see all of it.</p>');
+      p.replaceWith(fig);
+    });
+  }
+
   const article = document.getElementById("article");
   function render(n) {
     if (!byNum[n]) n = 0;
@@ -233,6 +273,7 @@
     const first = article.querySelector(".md > blockquote");
     if (first && /one thing/i.test(first.textContent)) first.classList.add("lede");
     fixLinks(article);
+    wrapFigures(article);
     if (n === 0) landing(article);
     (FIGS[n] || []).forEach(f => insertFigure(f));
 

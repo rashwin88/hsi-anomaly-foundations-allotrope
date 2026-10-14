@@ -140,6 +140,10 @@ grows a 2-pixel collar all the way around it.
 
 ---
 
+![Figure 20.1 - Mask erosion](figures/20-erosion.svg)
+
+*Figure 20.1 - Erosion as a max-pool, with part 20's 1-D example (kernel 5). Flipping the mask makes invalid pixels 1; a stride-1 max-pool grows that region by kernel // 2 = 2 pixels on each side (the amber window contains a 1, so its centre becomes 1); flipping back leaves the valid region shrunk by 2 pixels per edge.*
+
 ## The two very different defaults
 
 This is the part people find confusing, so here it is plainly:

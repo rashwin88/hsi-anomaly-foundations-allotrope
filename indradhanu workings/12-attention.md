@@ -171,6 +171,10 @@ genuinely it.
 
 ---
 
+![Figure 12.1 - Attention, worked](figures/12-attention.svg)
+
+*Figure 12.1 - Part 12's example in four panels. (a) Three 2-number tokens; with identity projections Q = K = V = x. (b) Scaled dot-product scores q . k / sqrt(2). (c) Softmax along each row turns scores into weights that sum to 1 (darker = larger). (d) Each output is the weighted average of the values. Every number matches the hand calculation in the text.*
+
 ## Why divide by the square root
 
 Step 1 has a `* (1 / sqrt(head_dim))` that we have not justified.

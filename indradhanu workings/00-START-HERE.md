@@ -91,12 +91,14 @@ Every part has the same skeleton:
 | 29 | [29-inference.md](29-inference.md) | Running it on a real scene |
 | 30 | [30-scoring-and-the-product.md](30-scoring-and-the-product.md) | Turning errors into an answer |
 
-**Sequel - the next Indradhanu: a smarter spectral bottleneck (31-39)**
+**Sequel - the next Indradhanu: a smarter spectral bottleneck (31-41)**
 
 Written 2026-10-14, after the decision to pretrain the next Indradhanu on SpectralEarth with a
-cross-attention spectral bottleneck. It is a **design studied before it is built**: none of
-parts 31 to 39 describes model code that exists in the repository yet. Assumes all of parts
-01 to 30; leans on 08, 10, 12, 13 and 17 to 21.
+cross-attention spectral bottleneck. Parts 31 to 39 were written as a **design studied before
+it was built**; the modules have since been built (`spectral_attention.py`,
+`spectral_tokens.py`, `spectral_gate.py`, `spectral_reduced.py` in
+`app/foundation_models/components/`), and parts 40 and 41 teach what running them changed.
+Assumes all of parts 01 to 30; leans on 08, 10, 12, 13 and 17 to 21.
 
 | # | File | The one thing it teaches |
 |---|---|---|
@@ -109,13 +111,32 @@ parts 31 to 39 describes model code that exists in the repository yet. Assumes a
 | 37 | [37-the-spectral-decoder.md](37-the-spectral-decoder.md) | Reconstructing any sensor's bands from one set of weights |
 | 38 | [38-trace-and-traps.md](38-trace-and-traps.md) | One pixel start to finish, and the three traps |
 | 39 | [39-per-pixel-gating.md](39-per-pixel-gating.md) | The cheap rival: each pixel sets its own band volumes |
+| 40 | [40-spectral-reduction.md](40-spectral-reduction.md) | Attention over 40 nm wavelength bins, without losing the bands |
+| 41 | [41-scoring-validation.md](41-scoring-validation.md) | Ranking epochs needs a fixed ruler: the ramped-SAM validation trap |
 
-The sequel's numbers were produced by a study prototype written alongside it, not by
-repository code. When the real module is built, re-verify parts 34 to 37: parameter counts
-(5,345 compressor, 6,401 decoder at `d = D = 32`), the cost and memory figures in part 36,
-and the masking result in part 35, and part 39's gate counts. The agreed design, including
+Parts 34 to 39's numbers were first produced by a study prototype and then re-checked against
+the real modules (5,345 compressor and 6,401 decoder parameters at `d = D = 32`; 13,162 gate
+parameters at 202 bands). Part 40's figures - 14,721 and 4,257 parameters, and the L40S
+throughput table measured on 2026-10-14 - are the ones most likely to drift: a change to
+`bin_nm`, `_hyper`'s hidden width, or the encoder will move them. The agreed design, including
 the evaluation plan, is `docs/proposals/spectral-attention-bottleneck.md`; the runs are
 recorded in `research/experiments/indradhanu-se-pretrain/`.
+
+## Figures
+
+Most parts carry one or more numbered figures (Figure 16.1 is the first figure of part 16).
+They are SVG files in `figures/`, drawn in one consistent visual language so a colour means
+the same thing everywhere:
+
+| colour | means |
+|---|---|
+| teal | spectral - bands, spectra, the compressor and decompressor |
+| indigo | spatial - tokens, feature maps, the SegFormer encoder and decoder |
+| plum | attention - queries, keys, values, softmax weights |
+| amber | loss and error - residuals, scores, L1, SAM |
+| grey hatching | masked, hidden, invalid or dead |
+
+Tensor shapes are written in monospace, like `(B, 32, H, W)`, matching part 07.
 
 ## How to actually study this
 

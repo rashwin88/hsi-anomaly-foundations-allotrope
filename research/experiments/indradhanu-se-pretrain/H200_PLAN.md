@@ -92,6 +92,12 @@ well rebuilds anomalies too. Keep two checkpoints: best validation loss and best
 
 ## 3. Fine-tuning strategy
 
+**Batching (decided 2026-10-14):** pre-training uses single-sensor batches only (SpectralEarth,
+202 bands). Fine-tuning may mix sensors in a batch; the trainer can align every sample onto one
+band list by wavelength (`band_list_path`, built 2026-10-14), and what remains open is the
+label-key policy for mixed batches (EnMAP samples carry `label_*`, SpectralEarth/PRISMA do not) -
+decided with the segmentation head.
+
 **F1 - EnMAP + PRISMA** from P1's best-AUC checkpoint.
 - **Data:** EnMAP shards (trip 1), PRISMA shards (trip 2), plus **20% SpectralEarth replay** in
   every batch so the model does not forget the global distribution. The 4 benchmark scenes are

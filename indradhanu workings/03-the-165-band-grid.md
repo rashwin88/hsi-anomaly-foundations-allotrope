@@ -188,6 +188,10 @@ called `spectral_family_order`.
 
 ---
 
+![Figure 3.1 - Building the 165-band grid](figures/03-grid.svg)
+
+*Figure 3.1 - The common grid, drawn to scale. A ladder of 200 wavelengths every 10 nm from 460 to 2450 nm (ticks) loses the rungs inside four atmospheric absorption windows (hatched; 6 + 2 + 11 + 16 = 35 rungs, grey), leaving 165 bands (teal) in five spectral families of 46, 16, 19, 34 and 50 bands.*
+
 ## Two design questions you should be able to answer
 
 ### Why 10 nm steps and not 5, for more detail?

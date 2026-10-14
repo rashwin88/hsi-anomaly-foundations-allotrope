@@ -63,6 +63,10 @@ spectrum to 32 numbers and expands back to one score per band. That is the "MLP"
 > a row of faders in front of the desk. The mixing desk never changes; each song - here,
 > each pixel - sets its own faders before the mix.
 
+![Figure 39.1 - Per-pixel gating](figures/39-gate.svg)
+
+*Figure 39.1 - Variant B. A small network reads each pixel's own spectrum and emits one score per band; sigmoid turns the scores into gates between 0 and 1, the bands are scaled by them, and today's fixed 1x1 compressor mixes the result. Each pixel therefore gets the recipe W . diag(g) - today's W with rescaled columns - at three times today's arithmetic.*
+
 ## Worked example, by hand
 
 Part 10's pixel and recipe:
@@ -206,6 +210,5 @@ amplify it without limit; sigmoid keeps each gate between "off" and "as is".
 
 ---
 
-That is the sequel so far. The design these parts teach is written up as an accepted
-proposal in `docs/proposals/spectral-attention-bottleneck.md`; the runs that test it are
-recorded in `research/experiments/indradhanu-se-pretrain/`.
+**Next:** part 40 - spectral reduction: attention over wavelength bins without losing the
+bands.

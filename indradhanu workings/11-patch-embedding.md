@@ -190,6 +190,10 @@ continuity benefit.
 
 ---
 
+![Figure 11.1 - Patch embedding](figures/11-patch-embed.svg)
+
+*Figure 11.1 - Turning pixels into tokens. (a) At stage 1 a Conv2d with kernel 4 and stride 4 summarises each 4 x 4 block of the 32-channel input as one 32-number token (amber: one block and its token), giving a 32 x 32 token grid that is flattened to a sequence of 1,024 tokens. (b) Stage 1's windows tile exactly, so each pixel feeds one token - essential for hiding; stages 2 to 4 use kernel 3, stride 2, padding 1, whose windows overlap by one.*
+
 ## Padding, and the size arithmetic
 
 **Padding** means adding a border of extra values around the image before

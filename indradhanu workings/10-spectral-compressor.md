@@ -63,6 +63,10 @@ in plain words:
 
 ---
 
+![Figure 10.1 - The spectral compressor and decompressor](figures/10-compressor.svg)
+
+*Figure 10.1 - The spectral bottleneck around the SegFormer. A 1x1 convolution with BatchNorm mixes each pixel's 165 normalised bands into 32 channels (5,376 parameters); the whole spatial model runs on those 32; a second 1x1 convolution, without normalisation, expands them back to 165 (5,445 parameters).*
+
 ## The code, both halves
 
 ```python

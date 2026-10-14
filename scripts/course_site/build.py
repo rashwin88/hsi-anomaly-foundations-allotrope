@@ -17,14 +17,21 @@ the HTML itself is never committed. Republish to the same URL after a rebuild.
   indradhanu  https://claude.ai/artifact/5NcTMpErXsgJ6AdKVyiQHn
   anomaly     https://claude.ai/artifact/YJd3G3YiPr6EK2J8z5LCsZ
 
-Adding a figure: write a `fig<Name>(host)` function in `template.html` and list it under the
-course's key in `FIGSETS` against the part number. It is inserted after that part's
-"one thing this part teaches" blockquote. `se_spectrum.json` is real data - the median and
-10th/90th percentile reflectance of 128,000 SpectralEarth pixels (500 patches x 256), from
-`scripts/spectralearth_sanity.py`.
+Two kinds of figure:
+  - Static: an SVG in the course folder's `figures/`, referenced from the Markdown as
+    `![Figure 16.1 - title](figures/16-encoder.svg)` followed by an italic `*Figure 16.1 - ...*`
+    caption paragraph, so it also renders on GitHub. The build inlines each one as a data: URI
+    (the page is a single file and cannot load relative paths); the template wraps it in a
+    white card with the caption underneath.
+  - Interactive: write a `fig<Name>(host)` function in `template.html` and list it under the
+    course's key in `FIGSETS` against the part number. It is inserted after that part's
+    "one thing this part teaches" blockquote.
+`se_spectrum.json` is real data - the median and 10th/90th percentile reflectance of 128,000
+SpectralEarth pixels (500 patches x 256), from `scripts/spectralearth_sanity.py`.
 """
 
 import argparse
+import base64
 import json
 import re
 from pathlib import Path
@@ -40,7 +47,7 @@ COURSES = {
         "sections": [["Start", 0, 0], ["Background - what and why", 1, 5], ["Foundations", 6, 8],
                      ["The machine, piece by piece", 9, 22], ["Training and running it", 23, 30],
                      ["Sequel - the next Indradhanu", 31, 99]],
-        "notes": {"31": "A design studied before it is built."},
+        "notes": {"31": "Designed, then built and measured (parts 40-41)."},
     },
     "anomaly": {
         "folder": "docs/training/anomaly-detection", "index": "README.md", "out": "anomaly_course.html",
@@ -53,13 +60,27 @@ COURSES = {
 }
 
 
+FIGURE_LINK = re.compile(r"\]\((figures/[^)\s]+\.svg)\)")
+
+
+def inline_figures(md: str, folder: Path) -> str:
+    """Rewrite `](figures/x.svg)` image links to base64 data: URIs. Raises FileNotFoundError
+    naming the part's missing figure, rather than publishing a page with a broken image."""
+    def to_data_uri(m: re.Match) -> str:
+        path = folder / m.group(1)
+        if not path.is_file():
+            raise FileNotFoundError(f"figure referenced but missing: {path}")
+        return "](data:image/svg+xml;base64," + base64.b64encode(path.read_bytes()).decode("ascii") + ")"
+    return FIGURE_LINK.sub(to_data_uri, md)
+
+
 def load_parts(course: dict) -> list[dict]:
     src = REPO / course["folder"]
     files = [(0, src / course["index"])] if course["index"] else []
     files += [(int(f.name[:2]), f) for f in sorted(src.glob("[0-9][0-9]-*.md"))]
     parts = []
     for num, f in files:
-        md = f.read_text(encoding="utf-8")
+        md = inline_figures(f.read_text(encoding="utf-8"), src)
         # "# 38 - Title", "# Part 1 - Title" -> "Title"
         title = re.sub(r"^#\s*(Part\s+)?(\d+\s*[·\-]\s*)?", "", md.splitlines()[0]).strip()
         parts.append({"num": num, "title": "Start here" if num == 0 else title, "md": md})

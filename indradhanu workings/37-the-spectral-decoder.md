@@ -46,6 +46,10 @@ Why do the channel tokens need a learned identity, when band tokens used a wavel
 Channels have no wavelength. Channel 7 is "whatever the compressor's 7th question measured",
 so its tag must be learned.
 
+![Figure 37.1 - The cross-attention spectral decoder](figures/37-spec-decoder.svg)
+
+*Figure 37.1 - The decoder turned around. The pixel's 32 latent channels, each stretched and given a learned identity, supply keys and values; every requested wavelength becomes a query through its tag. Attention and a final Linear(32, 1) produce one reflectance per requested wavelength, so the same 6,401 parameters reconstruct any band list.*
+
 ## Predict the parameter count
 
 ```
@@ -97,6 +101,17 @@ native bands nothing about that changes, except which bands count:
 The spatial masking of parts 17 to 19 is untouched: which *pixels* are hidden and must be
 predicted from neighbours is the encoder's business, and still decides where the loss is
 taken.
+
+## Note: the experiment now uses a linear per-band decoder
+
+This decoder now exists as `SpectralCrossAttentionDecoder` in
+`app/foundation_models/components/spectral_attention.py` (6,401 parameters, as predicted). The
+experiment's attention variant, however, now uses the reduced stem of part 40, whose decoder
+drops the attention entirely: each requested wavelength computes a 32-number weight row and a
+bias, and the band's value is that row dotted with the pixel's 32 channels. It keeps this
+part's key property - one set of weights for any band list - for 4,257 parameters and about
+6,464 multiply-adds per pixel instead of about 693,568, and stores no per-band intermediates
+for the backward pass. Part 40 works it by hand.
 
 ## Common confusions
 

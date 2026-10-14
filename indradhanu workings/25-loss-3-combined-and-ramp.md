@@ -110,6 +110,10 @@ Straight line for 10 epochs, then constant for the remaining 190.
 
 ---
 
+![Figure 25.1 - The SAM weight ramp](figures/25-ramp.svg)
+
+*Figure 25.1 - The weight on SAM rises linearly from 0 at epoch index 0 to its final 0.5 at epoch index 10 and then stays flat, so L1 leads early training and the angle term is phased in (v0.2.0 configuration).*
+
 ## Worked example of the combined number
 
 Take the configuration's own epoch-100 baseline: `L1 = 0.010`,

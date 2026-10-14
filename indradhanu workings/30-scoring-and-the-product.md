@@ -101,6 +101,10 @@ score = 0.5 * 0.50 + 0.5 * 0.25
 The weight is exposed per-Action as `sam_l1_alpha`, defaulting to 0.5. Raise it
 to weight brightness errors more; lower it to weight spectral shape more.
 
+![Figure 30.1 - From residual to score](figures/30-scoring.svg)
+
+*Figure 30.1 - The combined scoring method. Per-pixel L1 and SAM maps are each divided by their maximum over the scene's valid pixels, blended with weight 0.5 (sam_l1_alpha), and passed on as the score map; a human chooses the threshold in the next Action.*
+
 ### Gotcha: max-normalisation is fragile
 
 Read `_normalise` carefully:

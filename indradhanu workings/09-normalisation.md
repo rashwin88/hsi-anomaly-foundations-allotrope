@@ -58,6 +58,10 @@ from.
 
 ---
 
+![Figure 9.1 - Per-band z-score normalisation](figures/09-normalise.svg)
+
+*Figure 9.1 - Why each band is normalised separately. (a) Raw reflectance puts bands on very different scales - a dim blue band and a bright near-infrared band barely overlap. (b) Subtracting each band's corpus mean and dividing by its standard deviation puts every band on one scale, centred at 0 with spread 1. Distributions are illustrative.*
+
 ## The code
 
 ```python

@@ -142,6 +142,18 @@ Two things the arithmetic above did not predict:
 End to end the cross-attention model is about **78 times slower** than today's, not 163: the
 shared SegFormer costs the same in all three, and dilutes the difference.
 
+![Figure 36.1 - Training memory of the spectral stem](figures/36-activations.svg)
+
+*Figure 36.1 - Why training, not inference, hits the wall. (a) For backpropagation the per-band stem keeps about 19 intermediates of shape (16,384 pixels, 202 bands, 32), 202 MiB each in bf16: about 3.75 GiB per 128 x 128 patch, matching the measured 3.7 GiB. (b) The reduced stem of part 40 never builds a band-by-32 tensor; its largest per-pixel tensor has 53 bin slots, 53 MiB.*
+
+### Measured again on a 48 GB card
+
+The same comparison was repeated on an AWS L40S (48 GB) on 2026-10-14, with the per-band stem
+at batches 4 to 32 and a fourth stem added. The per-band stem trained at 13.5 patches per
+second at batch 4 and ran out of memory at batch 32; the **reduced stem** of part 40 reached
+80.0 patches per second at batch 8, about six times faster, with about a quarter of the memory
+per added patch. The full table, and the arithmetic that reads it, is in part 40.
+
 ## Common confusions
 
 **"Same parameters, so same speed?"** No. Parameters are stored once; arithmetic and

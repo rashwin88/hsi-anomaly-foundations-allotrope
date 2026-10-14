@@ -1,0 +1,128 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 290" font-family="Helvetica, Arial, sans-serif" role="img" aria-label="Reconstruct, then subtract: the whole idea of Indradhanu">
+<title>Reconstruct, then subtract: the whole idea of Indradhanu</title>
+<defs><marker id="ah-ink" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0.8 L9,5 L0,9.2 L2.2,5 Z" fill="#1f2328"/></marker><marker id="ah-ink2" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0.8 L9,5 L0,9.2 L2.2,5 Z" fill="#4b535d"/></marker><marker id="ah-teal" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0.8 L9,5 L0,9.2 L2.2,5 Z" fill="#0f766e"/></marker><marker id="ah-indigo" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0.8 L9,5 L0,9.2 L2.2,5 Z" fill="#3a4aa8"/></marker><marker id="ah-plum" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0.8 L9,5 L0,9.2 L2.2,5 Z" fill="#8a3b86"/></marker><marker id="ah-amber" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0.8 L9,5 L0,9.2 L2.2,5 Z" fill="#b45f06"/></marker><marker id="ah-grey" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0.8 L9,5 L0,9.2 L2.2,5 Z" fill="#8f979f"/></marker><marker id="ah-muted" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0.8 L9,5 L0,9.2 L2.2,5 Z" fill="#7d858f"/></marker><pattern id="hatch" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="6" stroke="#8f979f" stroke-width="1.1"/></pattern></defs>
+<rect x="0" y="0" width="880" height="290" fill="#ffffff"/>
+<path d="M30,90 L60,68 L170,68 L140,90 Z" fill="#7cc3bb" stroke="#0f766e" stroke-width="1" stroke-linejoin="round" stroke-linecap="round" fill-opacity="0.55"/>
+<path d="M140,90 L170,68 L170,178 L140,200 Z" fill="#7cc3bb" stroke="#0f766e" stroke-width="1" stroke-linejoin="round" stroke-linecap="round" fill-opacity="0.85"/>
+<rect x="30" y="90" width="110" height="110" rx="0" fill="#e3f3f1" stroke="#0f766e" stroke-width="1.1"/>
+<line x1="33.75" y1="87.25" x2="143.75" y2="87.25" stroke="#0f766e" stroke-width="0.5" stroke-linecap="round"/>
+<line x1="143.75" y1="87.25" x2="143.75" y2="197.25" stroke="#0f766e" stroke-width="0.5" stroke-linecap="round"/>
+<line x1="37.5" y1="84.5" x2="147.5" y2="84.5" stroke="#0f766e" stroke-width="0.5" stroke-linecap="round"/>
+<line x1="147.5" y1="84.5" x2="147.5" y2="194.5" stroke="#0f766e" stroke-width="0.5" stroke-linecap="round"/>
+<line x1="41.25" y1="81.75" x2="151.25" y2="81.75" stroke="#0f766e" stroke-width="0.5" stroke-linecap="round"/>
+<line x1="151.25" y1="81.75" x2="151.25" y2="191.75" stroke="#0f766e" stroke-width="0.5" stroke-linecap="round"/>
+<line x1="45" y1="79" x2="155" y2="79" stroke="#0f766e" stroke-width="0.5" stroke-linecap="round"/>
+<line x1="155" y1="79" x2="155" y2="189" stroke="#0f766e" stroke-width="0.5" stroke-linecap="round"/>
+<line x1="48.75" y1="76.25" x2="158.75" y2="76.25" stroke="#0f766e" stroke-width="0.5" stroke-linecap="round"/>
+<line x1="158.75" y1="76.25" x2="158.75" y2="186.25" stroke="#0f766e" stroke-width="0.5" stroke-linecap="round"/>
+<line x1="52.5" y1="73.5" x2="162.5" y2="73.5" stroke="#0f766e" stroke-width="0.5" stroke-linecap="round"/>
+<line x1="162.5" y1="73.5" x2="162.5" y2="183.5" stroke="#0f766e" stroke-width="0.5" stroke-linecap="round"/>
+<line x1="56.25" y1="70.75" x2="166.25" y2="70.75" stroke="#0f766e" stroke-width="0.5" stroke-linecap="round"/>
+<line x1="166.25" y1="70.75" x2="166.25" y2="180.75" stroke="#0f766e" stroke-width="0.5" stroke-linecap="round"/>
+<text x="100" y="218" font-size="12" text-anchor="middle" fill="#1f2328" font-weight="600">observed scene x</text>
+<text x="100" y="233" font-size="11" text-anchor="middle" fill="#4b535d" font-family="Menlo, Consolas, 'DejaVu Sans Mono', monospace">(165, H, W)</text>
+<rect x="92" y="128" width="14" height="14" rx="2" fill="#b45f06"/>
+<line x1="190" y1="145" x2="250" y2="145" stroke="#4b535d" stroke-width="1.3" stroke-linecap="round" marker-end="url(#ah-ink2)"/>
+<text x="220" y="135" font-size="11" text-anchor="middle" fill="#4b535d">hide</text>
+<rect x="252" y="95" width="170" height="100" rx="6" fill="#e9ebf8" stroke="#3a4aa8" stroke-width="1.3"/>
+<text x="337" y="128" font-size="14" text-anchor="middle" fill="#1f2328" font-weight="700">Indradhanu</text>
+<text x="337" y="148" font-size="11" text-anchor="middle" fill="#4b535d">redraws each hidden block</text>
+<text x="337" y="162" font-size="11" text-anchor="middle" fill="#4b535d">from its surroundings</text>
+<text x="337" y="180" font-size="10.5" text-anchor="middle" fill="#7d858f" font-style="italic">trained on ordinary scenes</text>
+<line x1="424" y1="145" x2="478" y2="145" stroke="#4b535d" stroke-width="1.3" stroke-linecap="round" marker-end="url(#ah-ink2)"/>
+<path d="M482,90 L512,68 L622,68 L592,90 Z" fill="#7cc3bb" stroke="#0f766e" stroke-width="1" stroke-linejoin="round" stroke-linecap="round" fill-opacity="0.55"/>
+<path d="M592,90 L622,68 L622,178 L592,200 Z" fill="#7cc3bb" stroke="#0f766e" stroke-width="1" stroke-linejoin="round" stroke-linecap="round" fill-opacity="0.85"/>
+<rect x="482" y="90" width="110" height="110" rx="0" fill="#e3f3f1" stroke="#0f766e" stroke-width="1.1"/>
+<line x1="485.75" y1="87.25" x2="595.75" y2="87.25" stroke="#0f766e" stroke-width="0.5" stroke-linecap="round"/>
+<line x1="595.75" y1="87.25" x2="595.75" y2="197.25" stroke="#0f766e" stroke-width="0.5" stroke-linecap="round"/>
+<line x1="489.5" y1="84.5" x2="599.5" y2="84.5" stroke="#0f766e" stroke-width="0.5" stroke-linecap="round"/>
+<line x1="599.5" y1="84.5" x2="599.5" y2="194.5" stroke="#0f766e" stroke-width="0.5" stroke-linecap="round"/>
+<line x1="493.25" y1="81.75" x2="603.25" y2="81.75" stroke="#0f766e" stroke-width="0.5" stroke-linecap="round"/>
+<line x1="603.25" y1="81.75" x2="603.25" y2="191.75" stroke="#0f766e" stroke-width="0.5" stroke-linecap="round"/>
+<line x1="497" y1="79" x2="607" y2="79" stroke="#0f766e" stroke-width="0.5" stroke-linecap="round"/>
+<line x1="607" y1="79" x2="607" y2="189" stroke="#0f766e" stroke-width="0.5" stroke-linecap="round"/>
+<line x1="500.75" y1="76.25" x2="610.75" y2="76.25" stroke="#0f766e" stroke-width="0.5" stroke-linecap="round"/>
+<line x1="610.75" y1="76.25" x2="610.75" y2="186.25" stroke="#0f766e" stroke-width="0.5" stroke-linecap="round"/>
+<line x1="504.5" y1="73.5" x2="614.5" y2="73.5" stroke="#0f766e" stroke-width="0.5" stroke-linecap="round"/>
+<line x1="614.5" y1="73.5" x2="614.5" y2="183.5" stroke="#0f766e" stroke-width="0.5" stroke-linecap="round"/>
+<line x1="508.25" y1="70.75" x2="618.25" y2="70.75" stroke="#0f766e" stroke-width="0.5" stroke-linecap="round"/>
+<line x1="618.25" y1="70.75" x2="618.25" y2="180.75" stroke="#0f766e" stroke-width="0.5" stroke-linecap="round"/>
+<text x="552" y="218" font-size="12" text-anchor="middle" fill="#1f2328" font-weight="600">reconstruction x_hat</text>
+<text x="552" y="233" font-size="11" text-anchor="middle" fill="#4b535d" font-family="Menlo, Consolas, 'DejaVu Sans Mono', monospace">(165, H, W)</text>
+<rect x="544" y="128" width="14" height="14" rx="2" fill="#7cc3bb"/>
+<circle cx="668" cy="145" r="15" fill="#ffffff" stroke="#1f2328" stroke-width="1.3"/>
+<text x="668" y="151" font-size="20" text-anchor="middle" fill="#1f2328" font-weight="600">-</text>
+<line x1="640" y1="145" x2="651" y2="145" stroke="#4b535d" stroke-width="1.3" stroke-linecap="round" marker-end="url(#ah-ink2)"/>
+<path d="M85,246 C85,276 200,280 380,280 L640,280 C668,280 668,240 668,162" fill="none" stroke="#0f766e" stroke-width="1.2" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="4 3" marker-end="url(#ah-teal)"/>
+<text x="380" y="274" font-size="10.5" text-anchor="middle" fill="#0f766e">x is compared with x_hat, band by band</text>
+<line x1="685" y1="145" x2="712" y2="145" stroke="#b45f06" stroke-width="1.3" stroke-linecap="round" marker-end="url(#ah-amber)"/>
+<rect x="716" y="85" width="14" height="14" rx="1" fill="#b45f06" fill-opacity="0.122834"/>
+<rect x="731" y="85" width="14" height="14" rx="1" fill="#b45f06" fill-opacity="0.177961"/>
+<rect x="746" y="85" width="14" height="14" rx="1" fill="#b45f06" fill-opacity="0.146592"/>
+<rect x="761" y="85" width="14" height="14" rx="1" fill="#b45f06" fill-opacity="0.188706"/>
+<rect x="776" y="85" width="14" height="14" rx="1" fill="#b45f06" fill-opacity="0.19263"/>
+<rect x="791" y="85" width="14" height="14" rx="1" fill="#b45f06" fill-opacity="0.0917952"/>
+<rect x="806" y="85" width="14" height="14" rx="1" fill="#b45f06" fill-opacity="0.0823702"/>
+<rect x="821" y="85" width="14" height="14" rx="1" fill="#b45f06" fill-opacity="0.230744"/>
+<rect x="716" y="100" width="14" height="14" rx="1" fill="#b45f06" fill-opacity="0.126684"/>
+<rect x="731" y="100" width="14" height="14" rx="1" fill="#b45f06" fill-opacity="0.12218"/>
+<rect x="746" y="100" width="14" height="14" rx="1" fill="#b45f06" fill-opacity="0.259216"/>
+<rect x="761" y="100" width="14" height="14" rx="1" fill="#b45f06" fill-opacity="0.164647"/>
+<rect x="776" y="100" width="14" height="14" rx="1" fill="#b45f06" fill-opacity="0.230563"/>
+<rect x="791" y="100" width="14" height="14" rx="1" fill="#b45f06" fill-opacity="0.165744"/>
+<rect x="806" y="100" width="14" height="14" rx="1" fill="#b45f06" fill-opacity="0.195032"/>
+<rect x="821" y="100" width="14" height="14" rx="1" fill="#b45f06" fill-opacity="0.107111"/>
+<rect x="716" y="115" width="14" height="14" rx="1" fill="#b45f06" fill-opacity="0.194275"/>
+<rect x="731" y="115" width="14" height="14" rx="1" fill="#b45f06" fill-opacity="0.236248"/>
+<rect x="746" y="115" width="14" height="14" rx="1" fill="#b45f06" fill-opacity="0.174173"/>
+<rect x="761" y="115" width="14" height="14" rx="1" fill="#b45f06" fill-opacity="0.213425"/>
+<rect x="776" y="115" width="14" height="14" rx="1" fill="#b45f06" fill-opacity="0.95"/>
+<rect x="791" y="115" width="14" height="14" rx="1" fill="#b45f06" fill-opacity="0.6"/>
+<rect x="806" y="115" width="14" height="14" rx="1" fill="#b45f06" fill-opacity="0.216481"/>
+<rect x="821" y="115" width="14" height="14" rx="1" fill="#b45f06" fill-opacity="0.186398"/>
+<rect x="716" y="130" width="14" height="14" rx="1" fill="#b45f06" fill-opacity="0.134228"/>
+<rect x="731" y="130" width="14" height="14" rx="1" fill="#b45f06" fill-opacity="0.0855821"/>
+<rect x="746" y="130" width="14" height="14" rx="1" fill="#b45f06" fill-opacity="0.235795"/>
+<rect x="761" y="130" width="14" height="14" rx="1" fill="#b45f06" fill-opacity="0.165095"/>
+<rect x="776" y="130" width="14" height="14" rx="1" fill="#b45f06" fill-opacity="0.55"/>
+<rect x="791" y="130" width="14" height="14" rx="1" fill="#b45f06" fill-opacity="0.238186"/>
+<rect x="806" y="130" width="14" height="14" rx="1" fill="#b45f06" fill-opacity="0.208543"/>
+<rect x="821" y="130" width="14" height="14" rx="1" fill="#b45f06" fill-opacity="0.245798"/>
+<rect x="716" y="145" width="14" height="14" rx="1" fill="#b45f06" fill-opacity="0.151093"/>
+<rect x="731" y="145" width="14" height="14" rx="1" fill="#b45f06" fill-opacity="0.224164"/>
+<rect x="746" y="145" width="14" height="14" rx="1" fill="#b45f06" fill-opacity="0.160032"/>
+<rect x="761" y="145" width="14" height="14" rx="1" fill="#b45f06" fill-opacity="0.248406"/>
+<rect x="776" y="145" width="14" height="14" rx="1" fill="#b45f06" fill-opacity="0.238196"/>
+<rect x="791" y="145" width="14" height="14" rx="1" fill="#b45f06" fill-opacity="0.0975418"/>
+<rect x="806" y="145" width="14" height="14" rx="1" fill="#b45f06" fill-opacity="0.104474"/>
+<rect x="821" y="145" width="14" height="14" rx="1" fill="#b45f06" fill-opacity="0.119058"/>
+<rect x="716" y="160" width="14" height="14" rx="1" fill="#b45f06" fill-opacity="0.253786"/>
+<rect x="731" y="160" width="14" height="14" rx="1" fill="#b45f06" fill-opacity="0.158509"/>
+<rect x="746" y="160" width="14" height="14" rx="1" fill="#b45f06" fill-opacity="0.192797"/>
+<rect x="761" y="160" width="14" height="14" rx="1" fill="#b45f06" fill-opacity="0.134185"/>
+<rect x="776" y="160" width="14" height="14" rx="1" fill="#b45f06" fill-opacity="0.171304"/>
+<rect x="791" y="160" width="14" height="14" rx="1" fill="#b45f06" fill-opacity="0.149456"/>
+<rect x="806" y="160" width="14" height="14" rx="1" fill="#b45f06" fill-opacity="0.143164"/>
+<rect x="821" y="160" width="14" height="14" rx="1" fill="#b45f06" fill-opacity="0.185313"/>
+<rect x="716" y="175" width="14" height="14" rx="1" fill="#b45f06" fill-opacity="0.185165"/>
+<rect x="731" y="175" width="14" height="14" rx="1" fill="#b45f06" fill-opacity="0.242756"/>
+<rect x="746" y="175" width="14" height="14" rx="1" fill="#b45f06" fill-opacity="0.202757"/>
+<rect x="761" y="175" width="14" height="14" rx="1" fill="#b45f06" fill-opacity="0.24721"/>
+<rect x="776" y="175" width="14" height="14" rx="1" fill="#b45f06" fill-opacity="0.234152"/>
+<rect x="791" y="175" width="14" height="14" rx="1" fill="#b45f06" fill-opacity="0.258378"/>
+<rect x="806" y="175" width="14" height="14" rx="1" fill="#b45f06" fill-opacity="0.200829"/>
+<rect x="821" y="175" width="14" height="14" rx="1" fill="#b45f06" fill-opacity="0.109358"/>
+<rect x="716" y="190" width="14" height="14" rx="1" fill="#b45f06" fill-opacity="0.234915"/>
+<rect x="731" y="190" width="14" height="14" rx="1" fill="#b45f06" fill-opacity="0.253634"/>
+<rect x="746" y="190" width="14" height="14" rx="1" fill="#b45f06" fill-opacity="0.242845"/>
+<rect x="761" y="190" width="14" height="14" rx="1" fill="#b45f06" fill-opacity="0.182439"/>
+<rect x="776" y="190" width="14" height="14" rx="1" fill="#b45f06" fill-opacity="0.208487"/>
+<rect x="791" y="190" width="14" height="14" rx="1" fill="#b45f06" fill-opacity="0.118002"/>
+<rect x="806" y="190" width="14" height="14" rx="1" fill="#b45f06" fill-opacity="0.229689"/>
+<rect x="821" y="190" width="14" height="14" rx="1" fill="#b45f06" fill-opacity="0.183236"/>
+<rect x="715" y="84" width="121" height="121" rx="2" fill="none" stroke="#d5dae0" stroke-width="1"/>
+<text x="776" y="222" font-size="12" text-anchor="middle" fill="#1f2328" font-weight="600">anomaly score</text>
+<text x="776" y="237" font-size="11" text-anchor="middle" fill="#4b535d" font-family="Menlo, Consolas, 'DejaVu Sans Mono', monospace">(H, W)</text>
+<text x="30" y="24" font-size="12.5" text-anchor="start" fill="#1f2328" font-weight="600">Where the redrawing is most wrong is where something unusual is.</text>
+<text x="30" y="42" font-size="11" text-anchor="start" fill="#4b535d">The amber square marks an object the model has never seen; it paints the ordinary background instead.</text>
+</svg>

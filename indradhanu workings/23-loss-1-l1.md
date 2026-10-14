@@ -121,6 +121,10 @@ Only A counts.
 
 ---
 
+![Figure 23.1 - The loss mask](figures/23-loss-mask.svg)
+
+*Figure 23.1 - Which pixels are graded. The pixel prediction mask (hidden tokens, amber) is multiplied by the eroded validity mask (indigo; the cloud and its collar hatched). Multiplying 0/1 masks is a logical AND, so only pixels that were hidden, valid and away from invalid regions enter the loss. Right: the L1 term for one graded pixel, from part 23.*
+
 ## From token grid to pixel grid
 
 `pred_mask` is `(B, N)` — one flag per token on a 32x32 grid. The loss lives on

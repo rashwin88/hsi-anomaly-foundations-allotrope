@@ -187,6 +187,10 @@ minutes and it is the fastest way to make the trick stick.
 
 ---
 
+![Figure 18.1 - Choosing prediction targets](figures/18-targets.svg)
+
+*Figure 18.1 - Part 18's worked example as one picture. Random priorities are drawn for six tokens; invalid tokens (hatched) get +2 so they sort to the back. After an ascending sort the first int(4 x 0.5) = 2 positions (amber) are flagged and scattered back to their original places: tokens 0 and 4 are hidden, invalid tokens are never chosen, and keep_mask is the exact complement of pred_mask.*
+
 ## Choosing the mask ratio
 
 | Configuration | `mask_ratio` |

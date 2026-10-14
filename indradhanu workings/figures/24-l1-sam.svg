@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 330" font-family="Helvetica, Arial, sans-serif" role="img" aria-label="L1 and SAM measure different things: brightness and spectral shape">
+<title>L1 and SAM measure different things: brightness and spectral shape</title>
+<defs><marker id="ah-ink" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0.8 L9,5 L0,9.2 L2.2,5 Z" fill="#1f2328"/></marker><marker id="ah-ink2" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0.8 L9,5 L0,9.2 L2.2,5 Z" fill="#4b535d"/></marker><marker id="ah-teal" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0.8 L9,5 L0,9.2 L2.2,5 Z" fill="#0f766e"/></marker><marker id="ah-indigo" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0.8 L9,5 L0,9.2 L2.2,5 Z" fill="#3a4aa8"/></marker><marker id="ah-plum" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0.8 L9,5 L0,9.2 L2.2,5 Z" fill="#8a3b86"/></marker><marker id="ah-amber" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0.8 L9,5 L0,9.2 L2.2,5 Z" fill="#b45f06"/></marker><marker id="ah-grey" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0.8 L9,5 L0,9.2 L2.2,5 Z" fill="#8f979f"/></marker><marker id="ah-muted" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0.8 L9,5 L0,9.2 L2.2,5 Z" fill="#7d858f"/></marker><pattern id="hatch" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="6" stroke="#8f979f" stroke-width="1.1"/></pattern></defs>
+<rect x="0" y="0" width="900" height="330" fill="#ffffff"/>
+<text x="20" y="26" font-size="12.5" text-anchor="start" fill="#1f2328" xml:space="preserve" style="white-space:pre" font-weight="700">a  Two bands of a spectrum, as vectors</text>
+<line x1="70" y1="280" x2="410" y2="280" stroke="#4b535d" stroke-width="1.2" stroke-linecap="round" marker-end="url(#ah-ink2)"/>
+<line x1="70" y1="280" x2="70" y2="35" stroke="#4b535d" stroke-width="1.2" stroke-linecap="round" marker-end="url(#ah-ink2)"/>
+<text x="410" y="298" font-size="11" text-anchor="end" fill="#4b535d">band 1</text>
+<text x="62" y="42" font-size="11" text-anchor="end" fill="#4b535d">band 2</text>
+<line x1="70" y1="280" x2="194.8" y2="72" stroke="#b45f06" stroke-width="1.6" stroke-linecap="round" marker-end="url(#ah-amber)"/>
+<text x="202.8" y="74" font-size="11.5" text-anchor="start" fill="#b45f06" font-weight="600">2 x truth: angle 0, L1 large</text>
+<line x1="70" y1="280" x2="132.4" y2="176" stroke="#0f766e" stroke-width="2.6" stroke-linecap="round" marker-end="url(#ah-teal)"/>
+<text x="124.4" y="172" font-size="11.5" text-anchor="end" fill="#0f766e" font-weight="600">truth x</text>
+<line x1="70" y1="280" x2="158.4" y2="186.4" stroke="#3a4aa8" stroke-width="2" stroke-linecap="round" marker-end="url(#ah-indigo)"/>
+<text x="166.4" y="190.4" font-size="11.5" text-anchor="start" fill="#3a4aa8" font-weight="600">recon A: small angle</text>
+<path d="M113.9,233.5 A64,64 0 0 0 102.9,225.1" fill="none" stroke="#8a3b86" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"/>
+<text x="117.119" y="221.841" font-size="11" text-anchor="start" fill="#8a3b86" font-weight="600">SAM</text>
+<text x="20" y="316" font-size="10" text-anchor="start" fill="#7d858f" font-style="italic">Schematic, two bands; the numbers on the right are part 24's three-band example.</text>
+<text x="450" y="26" font-size="12.5" text-anchor="start" fill="#1f2328" xml:space="preserve" style="white-space:pre" font-weight="700">b  Part 24's numbers, three bands</text>
+<text x="450" y="64" font-size="11" text-anchor="start" fill="#1f2328" font-weight="600">reconstruction</text>
+<text x="745" y="64" font-size="11" text-anchor="end" fill="#b45f06" font-family="Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-weight="600">L1</text>
+<text x="765" y="64" font-size="11" text-anchor="start" fill="#8a3b86" font-family="Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-weight="600">SAM</text>
+<text x="450" y="90" font-size="11" text-anchor="start" fill="#1f2328" font-family="Menlo, Consolas, 'DejaVu Sans Mono', monospace">A = [0.120, 0.180, 0.330]</text>
+<text x="745" y="90" font-size="11" text-anchor="end" fill="#b45f06" font-family="Menlo, Consolas, 'DejaVu Sans Mono', monospace">0.0233</text>
+<text x="765" y="90" font-size="11" text-anchor="start" fill="#8a3b86" font-family="Menlo, Consolas, 'DejaVu Sans Mono', monospace">0.0935 rad</text>
+<text x="450" y="116" font-size="11" text-anchor="start" fill="#1f2328" font-family="Menlo, Consolas, 'DejaVu Sans Mono', monospace">2 x truth = [0.2, 0.4, 0.6]</text>
+<text x="745" y="116" font-size="11" text-anchor="end" fill="#b45f06" font-family="Menlo, Consolas, 'DejaVu Sans Mono', monospace">0.200</text>
+<text x="765" y="116" font-size="11" text-anchor="start" fill="#8a3b86" font-family="Menlo, Consolas, 'DejaVu Sans Mono', monospace">0 exactly</text>
+<text x="450" y="146" font-size="11" text-anchor="start" fill="#0f766e" font-family="Menlo, Consolas, 'DejaVu Sans Mono', monospace">truth x = [0.100, 0.200, 0.300]</text>
+<text x="450" y="180" font-size="11" text-anchor="start" fill="#4b535d">L1: mean absolute difference per band - it sees brightness.</text>
+<text x="450" y="198" font-size="11" text-anchor="start" fill="#4b535d">SAM: the angle between the vectors - scaling a spectrum</text>
+<text x="450" y="216" font-size="11" text-anchor="start" fill="#4b535d">(shadow, haze, a brighter cloud) does not change it.</text>
+<text x="450" y="248" font-size="11.5" text-anchor="start" fill="#1f2328" font-family="Menlo, Consolas, 'DejaVu Sans Mono', monospace">SAM = arccos( x . x_hat / (|x| |x_hat|) )</text>
+<text x="450" y="278" font-size="11" text-anchor="start" fill="#4b535d">The loss uses both, so the model must get the level</text>
+<text x="450" y="294" font-size="11" text-anchor="start" fill="#4b535d">and the shape right.</text>
+</svg>

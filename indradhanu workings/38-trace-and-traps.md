@@ -32,6 +32,10 @@ Rows 8 to 10 are the existing model, untouched. **The new parts run strictly ins
 pixel; everything that moves information between pixels is the old, tested machinery.** That
 separation is what makes the next trap answerable.
 
+![Figure 38.1 - The next Indradhanu, end to end](figures/38-trace.svg)
+
+*Figure 38.1 - The trace in one row. The new spectral parts (plum) and wavelength normalisation work strictly inside each pixel; hiding, encoder and decoder are the unchanged spatial model; the loss counts valid bands only. Because hidden pixels are removed before any spatial attention, a pixel cannot rebuild its own spectrum.*
+
 ## Trap 1 - a pixel must never rebuild its own spectrum
 
 Part 06 and part 11's masking rest on one rule: a hidden pixel is reconstructed from its

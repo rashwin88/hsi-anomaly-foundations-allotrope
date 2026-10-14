@@ -105,6 +105,10 @@ The settings `stride=1, padding=1` keep the grid exactly the same size.
 
 ---
 
+![Figure 14.1 - Mix-FFN](figures/14-mixffn.svg)
+
+*Figure 14.1 - The feed-forward half of a block. Tokens are expanded fourfold, reshaped back to their grid, mixed with their eight neighbours by a depthwise 3 x 3 convolution (one private filter per channel), passed through GELU and projected back. The depthwise convolution is what gives the model a sense of position, and costs 115 times fewer parameters than an ordinary 3 x 3 convolution at 128 channels.*
+
 ## GELU
 
 The nonlinearity used here is GELU — Gaussian Error Linear Unit.

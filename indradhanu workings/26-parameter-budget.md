@@ -299,6 +299,10 @@ Adding it up carefully:
 
 ---
 
+![Figure 26.1 - Where the parameters live](figures/26-params.svg)
+
+*Figure 26.1 - Indradhanu's 5,506,629 parameters by component, bar widths to scale. The SegFormer blocks (51.4%) and decoder (39.3%) carry almost the whole budget; the spectral compressor and decompressor together are 0.2%.*
+
 ## But the manifest says 5,507,354 — where do the extra 725 come from?
 
 ```json

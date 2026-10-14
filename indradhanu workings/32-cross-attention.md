@@ -129,6 +129,10 @@ cross:   32 x 202 =  6,464 scores per pixel, per head
 
 Part 36 turns that difference into gigabytes.
 
+![Figure 32.1 - Self against cross-attention](figures/32-self-cross.svg)
+
+*Figure 32.1 - Where the questions come from, and what it costs. (a) In self-attention the band tokens produce queries, keys and values. (b) In cross-attention an outside set of D queries reads the tokens' keys and values. Right: score matrices for one pixel and head with 202 bands, drawn to scale: 40,804 against 6,464 scores, and a fixed number of outputs.*
+
 ## Common confusions
 
 **"If the queries are fixed, isn't this the fixed recipe of part 31 again?"** No. In part 31

@@ -187,6 +187,10 @@ reflectance units.
 
 ---
 
+![Figure 22.1 - One batch through forward()](figures/22-forward.svg)
+
+*Figure 22.1 - The seven steps of forward() for a batch of four 128 x 128 patches, with the part that teaches each. Spectral steps are teal, spatial steps indigo. Step 4 expands into the four encoder stages (hiding happens at stage 1 only). The model stops at the reconstruction; the trainer computes the loss (amber) in raw reflectance.*
+
 ## The shape story, on one line
 
 ```

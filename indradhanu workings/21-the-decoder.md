@@ -133,6 +133,10 @@ sub-pixel of a 4x4 block. Then `pixel_shuffle` rearranges channels into space.
 
 ---
 
+![Figure 21.1 - The decoder](figures/21-decoder.svg)
+
+*Figure 21.1 - The all-MLP decoder. The four encoder maps are projected to 256 channels by 1x1 convolutions, resized to F1's 32 x 32, concatenated to 1,024 channels, fused and refined, and expanded to 512 = 32 x 4 x 4 channels. PixelShuffle(4) then rearranges each group of 16 channels into a 4 x 4 block of pixels (inset, with r = 2), returning (B, 32, 128, 128) without any arithmetic.*
+
 ## PixelShuffle, worked
 
 `pixel_shuffle(x, r)` turns `(B, C*r*r, H, W)` into `(B, C, H*r, W*r)`. It moves

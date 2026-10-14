@@ -24,6 +24,10 @@ had. Then normalise, think, maybe drop some, add it to what we had."*
 
 ---
 
+![Figure 15.1 - The SegFormer block](figures/15-block.svg)
+
+*Figure 15.1 - One SegFormer block. Each of the two sublayers - efficient self-attention (plum) and Mix-FFN (indigo) - normalises its input first (pre-norm), transforms it, applies dropout and adds the result back to its input through a residual connection. The shape (B, N, C) is unchanged; each encoder stage stacks two blocks.*
+
 ## Piece 1: the residual connection
 
 Notice that we write `x = x + f(x)`, not `x = f(x)`.

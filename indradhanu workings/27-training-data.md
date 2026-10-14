@@ -31,6 +31,10 @@ Each stage has one job. Below, each in turn.
 
 ---
 
+![Figure 27.1 - From scene to batches](figures/27-data.svg)
+
+*Figure 27.1 - The training-data pipeline, one job per stage. A raw scene becomes a 165-band vendable; PatchPlanGenerator decides where to cut 128 x 128 patches (stride 64 in training, so neighbours overlap by half, the last snapping to the scene edge); the patcher cuts them; they are packed into .tar shards on S3 and streamed by the DataLoader as batches.*
+
 ## Deciding where to cut
 
 **Source:**
