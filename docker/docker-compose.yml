@@ -223,8 +223,35 @@ services:
       # binds *:3000 ahead of Docker's 127.0.0.1:3000 and wins the route
       # on localhost. Open http://localhost:3010 in the browser.
       - "127.0.0.1:3010:80"
+    environment:
+      # Key nginx adds to read-only /inventory-api/ requests (nginx.conf).
+      # Blank → the Inventory page shows "unavailable"; nothing else changes.
+      INVENTORY_UI_KEY: ${INVENTORY_UI_KEY:-}
     depends_on:
       - api
+    restart: unless-stopped
+
+  inventory:
+    # Raw-dataset inventory api (backend/allotrope_inventory). Independent of
+    # the rest of the stack: its database is Supabase, its storage is
+    # s3://allotrope-raw-inventory-india, and nothing here depends on it.
+    # Opt-in so a missing env file never blocks the main stack:
+    #   docker compose -f docker/docker-compose.yml --profile inventory up -d inventory
+    profiles: ["inventory"]
+    build:
+      context: ..
+      dockerfile: backend/Dockerfile.inventory
+    container_name: allotrope_inventory
+    env_file:
+      # INVENTORY_DB_*, INVENTORY_API_KEYS, and AWS_ACCESS_KEY_ID /
+      # AWS_SECRET_ACCESS_KEY for an identity that can write the bucket.
+      - path: ../backend/.env.inventory
+        required: false
+    environment:
+      # The env file names a local CLI profile; containers use key env vars.
+      INVENTORY_AWS_PROFILE: ""
+    ports:
+      - "127.0.0.1:8020:8020"
     restart: unless-stopped
 
 volumes:

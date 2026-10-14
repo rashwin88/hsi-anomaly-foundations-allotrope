@@ -64,6 +64,12 @@ restores an empty optimizer state. (Noted in the old checkpoint inventory; still
 `VendableThermalDataset`, which has no such field and no `extra="allow"` — Pydantic v2
 discards it. The intended guard against treating raw DN as °C is therefore not in effect.
 
+**8. Scene search strips `_` and `%` instead of escaping them.** `list_scenes` in
+`backend/allotrope/api/scenes.py` removes both characters from `q` before the `ILIKE`, so
+any search containing an underscore — which is every PRISMA/EnMAP product id
+(`PRS_L2D_STD_…`) — becomes a different string and matches nothing. Fix: escape them and
+pass `escape="\\"`, as `allotrope_inventory/api/datasets.py` does.
+
 ## Deliberate limitations in segmentation sharding
 
 Added 2026-08-25 with the `enmap_seg` lane. All known and accepted, not defects. Design
@@ -84,6 +90,56 @@ rationale in `docs/lld/segmentation-sharding.md`.
   per-band masking open. Dropping it to a 2D mask saves a further ~33%.
 - **A float16 shard must be cast to float32 by its trainer.** The models are fp32.
   Segmentation shards store float16; the reconstruction lane still stores float32.
+
+## Raw-dataset inventory — deliberate limitations
+
+Added 2026-10-13 with `backend/allotrope_inventory/`. Design rationale in
+[`lld/inventory.md`](lld/inventory.md).
+
+- **No automated tests.** Every path was exercised by hand against live S3 and Supabase on
+  2026-10-13/14 (upload, resume, checksum rejection, server-side import with provider MD5s,
+  bulk registration, unpack, retire, the UI proxy), but nothing re-runs it. A harness was
+  scoped — moto in server mode plus a throwaway PostGIS container — and dropped.
+- **Registration fields are immutable.** Metadata, footprint, acquisition time and kind are
+  set at `POST /datasets`; there is no `PATCH`. `ingest` / `import-s3` warn when a resume
+  passes different values. This is why scenes imported from file names carry no footprint.
+- **The whole-file SHA-256 of a multipart file is client-declared.** S3 cannot compute one
+  for a multipart object; integrity rests on per-part checks. Bulk-registered (single-PUT)
+  files don't have this gap.
+- **Not built yet:** a Google Drive source, `rebuild-index` from the manifests, and per-patch
+  metadata for SpectralEarth (the patches carry no georeference or date).
+- **Presigned URLs die with the credentials that signed them.** On EC2 the inventory signs
+  with the instance role's temporary credentials (rotated every few hours), so a URL can
+  expire well before its 24 h `ExpiresIn`. Uploads that outlive it fail with 403; re-running
+  `ingest` (resume) issues fresh URLs. Same for `/download`.
+- **Re-running an interrupted `unpack-archive` re-reads the whole archive** — a `.tar.gz`
+  cannot be seeked — though members already registered aren't uploaded again. About 3.9 h
+  for SpectralEarth.
+- **Orphaned multipart uploads** from a request that fails after `start_upload` but before
+  commit are left to the bucket's 7-day abort rule.
+- **Writes are CLI-only from outside the box.** Port 8020 binds to localhost; the public
+  route `/inventory-api/` is GET-only behind the app login. Remote scripts need either SSM
+  or a future API-key route through Caddy.
+
+## SpectralEarth — known gaps
+
+Added 2026-10-14 with `app/utils/spectralearth/`. Rationale in
+[`lld/spectralearth.md`](lld/spectralearth.md).
+
+- **No cloud screening yet.** SpectralEarth ships no quality layers, and DLR filtered
+  clouds only per source scene (< ~10%, by eye), so some patches are partly or mostly
+  cloud. The `ScreenChain` slot exists; a cloud screen is unbuilt and must first be shown
+  to work without the 1380 nm band SpectralEarth dropped. Until then, cloud enters training
+  as "normal" surface.
+- **No georeference, date or source-scene id per patch** — patches can be found by site
+  and patch id only. Searching by place or time needs a DLR metadata table we don't have.
+- **Too slow to train straight from S3** (18 samples/s through a DataLoader). Training
+  needs the collection on local NVMe via the source's cache, or shards.
+- **The band table rests on a drop list from related literature** (HySpecNet), stated but
+  not enumerated in the SpectralEarth paper. Three independent checks agree with it (see
+  the LLD); a DLR-published band list would settle it.
+- **`common_grid_pipeline.py` duplicates the EnMAP builder's step order** rather than the
+  builder calling it. A change to either must be mirrored in the other.
 
 ## Config knobs that do nothing
 
@@ -132,6 +188,10 @@ Declared, set in real configs, never read by any code:
   `.claude/*` + a negation). **Audit the rest of `.gitignore` for unanchored directory
   patterns** — this file was assembled from the standard Python template, which assumes a
   single-language repo, and this one has three.
+- **`python -m allotrope.cli --help` likely crashes in the api image.** It runs typer
+  0.13.1 against click 8.4.2; typer 0.13 calls `Parameter.make_metavar()` without the `ctx`
+  click 8.2 made mandatory. The commands themselves run — only the help/options panel
+  breaks. Pin `click<8.2` (the inventory CLI pins `click==8.1.8`) or bump typer.
 - **A leaked Docker Desktop WSL forwarder can squat the published ports** (`wslrelay.exe`
   holding 3010/8010/5432 with no containers running), so `up` fails with "ports are not
   available". Restart Docker Desktop to clear it.

@@ -276,3 +276,6 @@ cookies.txt
 coverage.xml
 *.zip
 
+
+# Inventory service secrets (Supabase password, API keys)
+backend/.env.inventory

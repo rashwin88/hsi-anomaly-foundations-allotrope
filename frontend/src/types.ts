@@ -374,3 +374,108 @@ export interface CreateActionPayload {
   configuration: Record<string, unknown>;
   action_template_id?: string;
 }
+
+// --- Raw-dataset inventory (backend/allotrope_inventory) -------------
+// A separate service reached through nginx at /inventory-api/ (read-only).
+
+export type InventoryStatus = "pending" | "available" | "failed" | "retired";
+
+/** scene: one acquisition · archive: a packaged delivery kept as-is ·
+ *  collection: many small items unpacked from an archive (e.g. patches). */
+export type InventoryKind = "scene" | "archive" | "collection";
+
+/** GeoJSON geometry, EPSG:4326 lon/lat. Only Polygon/MultiPolygon are drawn. */
+export interface GeoJsonGeometry {
+  type: string;
+  coordinates: unknown;
+}
+
+export interface InventoryDataset {
+  id: string;                     // ds_<uuid>
+  sensor_type: string;
+  sensor_scene_id: string;
+  processing_level: string;
+  status: InventoryStatus;
+  kind: InventoryKind;
+  acquisition_at: string | null;
+  footprint: GeoJsonGeometry | null;
+  s3_uri: string;
+  metadata: Record<string, unknown>;
+  tags: string[];
+  created_at: string;
+  created_by: string;
+  finalized_at: string | null;
+}
+
+export interface InventoryDatasetFile {
+  relative_path: string;
+  size_bytes: number;
+  sha256: string;
+  uploaded: boolean;
+  s3_version_id: string | null;
+}
+
+export interface InventorySource {
+  source_uri: string;
+  relative_path: string | null;
+  note: string | null;
+  fetched_by: string;
+  fetched_at: string;
+}
+
+/** Files are paged separately (a collection can hold ~500k). */
+export interface InventoryDatasetDetail extends InventoryDataset {
+  file_count: number;
+  uploading_count: number;
+  total_bytes: number;
+  sources: InventorySource[];
+}
+
+export interface InventoryFilesPage {
+  items: InventoryDatasetFile[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+export interface InventoryDatasetsPage {
+  items: InventoryDataset[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+export interface InventoryEvent {
+  kind: string;
+  actor: string;
+  payload: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface InventoryStatsCell {
+  sensor_type: string;
+  status: InventoryStatus;
+  datasets: number;
+  bytes: number;
+}
+
+export interface InventoryStats {
+  datasets: number;
+  bytes: number;
+  tags: number;
+  cells: InventoryStatsCell[];
+}
+
+export interface InventorySensor {
+  slug: string;
+  name: string;
+  family: string;
+  description: string | null;
+  created_at: string;
+}
+
+export interface InventoryTag {
+  name: string;
+  description: string | null;
+  dataset_count: number;
+}

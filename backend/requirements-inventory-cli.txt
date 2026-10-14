@@ -1,0 +1,14 @@
+# Allotrope inventory CLI — client-side dependencies only.
+#
+# The CLI talks HTTP to the inventory api and PUTs bytes straight to S3
+# presigned URLs; it never imports the server's DB or AWS code.
+#   pip install -r backend/requirements-inventory-cli.txt
+#   python -m allotrope_inventory.cli --help     (run from backend/)
+
+httpx==0.28.1
+# Lockstep with requirements.txt.
+typer==0.13.1
+# typer 0.13 breaks on click 8.2+ (`make_metavar() missing … 'ctx'` on --help).
+click==8.1.8
+# boto3: `import-s3` only (reads the source bucket). Lockstep with requirements-inventory.txt.
+boto3==1.42.53

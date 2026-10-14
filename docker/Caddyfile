@@ -1,0 +1,15 @@
+# Public entry point on the EC2 box (docker-compose.prod.yml).
+# TLS is automatic for {$SITE_ADDRESS}; port 80 redirects to 443.
+
+{$SITE_ADDRESS} {
+	encode gzip
+
+	# Scene onboarding streams multi-GB uploads through here to nginx and
+	# the api — no body-size cap, and long timeouts to match nginx's 30 min.
+	reverse_proxy frontend:80 {
+		transport http {
+			read_timeout 30m
+			write_timeout 30m
+		}
+	}
+}

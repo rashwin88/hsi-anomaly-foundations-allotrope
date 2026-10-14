@@ -114,6 +114,82 @@ Paths are always stored **relative**; two volumes hold the bytes.
 Deleting a project is one `rm -rf projects/<pid>/` — the layout is designed so there are no
 orphans.
 
+
+## The raw-dataset inventory — a third, separate service
+
+`backend/allotrope_inventory/` is **not** part of the api/worker pair. It shares no code,
+no database and no volume with them, and nothing in the main stack depends on it. It is the
+catalogue of raw data we hold, and the bytes live in **`s3://allotrope-raw-inventory-india`**
+(Prod account, ap-south-1). Inventory only: no sharding, no vendables, no processing.
+
+| | |
+|---|---|
+| Database | **Supabase** Postgres 17 + PostGIS (Mumbai), via the *session pooler* — the direct host is IPv6-only |
+| Migrations | `backend/alembic_inventory/`, run with `alembic -c alembic-inventory.ini upgrade head` (the prod container runs this on start) |
+| Auth | `X-Inventory-Key` header; keys are `name:key` pairs in `INVENTORY_API_KEYS`, and the name is the actor in every audit row |
+| Config | `INVENTORY_*` env vars; local runs read `backend/.env.inventory` (gitignored); prod reads SSM Parameter Store |
+| Port | 8020, bound to 127.0.0.1. The browser reaches a **read-only** slice through nginx at `/inventory-api/` |
+
+**Every dataset has a `kind`**, and filters keep them apart:
+
+| kind | What one row is | Example |
+|---|---|---|
+| `scene` | one acquisition, as the provider delivered it | a PRISMA `.he5`, an EnMAP scene folder |
+| `archive` | a packaged delivery kept as shipped | the 9-part SpectralEarth `.tar.gz` (now retired) |
+| `collection` | many small items unpacked from an archive, each its own file | `SPECTRAL_EARTH_PATCHES`: 539,755 patches |
+
+Statuses: `pending` → `available` (or `failed`); `retired` once a dataset's payload is
+deleted — its row, file list, manifests and audit trail stay as the record.
+
+**API.** All under the service root; ids are `ds_<uuid>`.
+
+| Method | Path | Does |
+|---|---|---|
+| GET / POST | `/sensors` | list / add a sensor (slugs match `scenes.sensor_type`) |
+| POST | `/datasets` | register → `pending`, fixes its S3 prefix; body carries `kind` (default `scene`) |
+| GET | `/datasets` | filter by `sensor_type`, `processing_level`, `status`, `kind`, `tag` (repeat = AND), `q`, `bbox`, `acquired_from/to` |
+| GET | `/datasets/{id}` | row + tags + **file counts and bytes** + sources (no file list — see `/files`) |
+| GET | `/datasets/{id}/files` | the files, paged (`limit` ≤ 1000) and searchable by path (`q`, e.g. a site id) |
+| GET | `/datasets/{id}/events` | audit trail, oldest first |
+| POST | `/datasets/{id}/uploads` | declare files → presigned multipart part URLs; **re-call to resume** |
+| POST | `/datasets/{id}/imports` | copy one object in from another S3 bucket **server-side**; resumable |
+| POST | `/datasets/{id}/files/bulk` | register ≤ 5,000 already-stored single-PUT files, each verified by HEAD |
+| POST | `/datasets/{id}/finalize` | complete + verify open uploads, write the manifests → `available` |
+| POST | `/datasets/{id}/retire` | delete the payload (every version), keep the record; `confirm` must repeat the scene id |
+| GET | `/datasets/{id}/download` | version-pinned presigned GETs |
+| PUT / DELETE | `/datasets/{id}/tags/{tag}` | idempotent; tag is `name` or `key:value` |
+| GET | `/tags`, `/stats` | tags with usage counts; counts and bytes by sensor × status |
+
+**Bucket layout.** `<sensor>/<level>/ds_<uuid>/payload/<original paths>`, plus
+`manifest.json` (the summary) and `files.jsonl.gz` (one line per file) beside it. Those
+two are the record of truth; the database is an index rebuildable from the bucket. Why,
+and how integrity is enforced at every step: [`lld/inventory.md`](lld/inventory.md).
+
+**CLI** — talks HTTP, plus boto3 for the S3 commands. Run from `backend/` with
+`INVENTORY_URL` and `INVENTORY_KEY` set (on the prod box: `/opt/inv-cli/bin/python`,
+key from `/allotrope/prod/inventory_api_keys`):
+
+```bash
+# a delivery on local disk (or pulled from Drive) — presigned multipart upload
+python -m allotrope_inventory.cli ingest ./PRS_L2D_…/ --sensor prisma --level L2D \
+    --scene-id PRS_L2D_STD_… --acquired-at 2025-03-01T05:12:00Z --footprint fp.geojson \
+    --meta cloud_cover_pct=3.2 --source gdrive://<id> --tag site:jharia
+
+# objects already in S3 — hashed in place, provider .md5s checked, copied server-side
+python -m allotrope_inventory.cli import-s3 s3://bucket/prefix/ --sensor enmap \
+    --level SpectralEarth --kind archive --scene-id SPECTRAL_EARTH --tag provider:dlr
+
+# an archive dataset → a collection, one verified object per member
+python -m allotrope_inventory.cli unpack-archive ds_<archive> --scene-id SPECTRAL_EARTH_PATCHES
+
+python -m allotrope_inventory.cli ls --kind scene --sensor prisma --bbox 86,23,87,24
+python -m allotrope_inventory.cli download ds_<uuid> ./out/
+```
+
+Every write command is resumable: re-run the same command after an interruption and only
+the missing work is done. Registration fields (metadata, footprint, acquisition time) are
+fixed at first registration; there is no `PATCH` yet.
+
 ---
 
 **Next:** [7. Frontend](07-frontend.md) · [5. Detectors](05-detectors.md)

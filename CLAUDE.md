@@ -67,6 +67,8 @@ There are **zero `TODO`/`FIXME` markers by policy**. Unfinished work is tracked 
 - **`app/`** — portable science. numpy/torch/rasterio only. **No DB, no FastAPI imports.**
 - **`backend/allotrope/`** — shared by api and worker (routers, ORM, auth, action registry).
 - **`backend/allotrope_worker/`** — worker only (claim loop, heartbeat, reaper, handlers).
+- **`backend/allotrope_inventory/`** — separate raw-dataset inventory service (Supabase +
+  `s3://allotrope-raw-inventory-india`). Shares nothing with the two above. See `docs/lld/inventory.md`.
 
 Action-type modules must **not** import `app.*`, torch or rasterio at module top level — only
 inside `run()`/`summarize()`/`preview()`. That's what the `_<kind>_run.py` files are for: they
