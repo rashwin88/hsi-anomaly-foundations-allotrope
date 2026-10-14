@@ -45,8 +45,10 @@ Per sample: `pixels.npy` int16 (224, 128, 128) (x 0.0001 = reflectance, -32768 =
 and aerosol, sun elevation/azimuth, scene cover %, tile row/col, centre lon/lat, CRS, affine.
 
 Plan of the full run (2026-10-14): 210 scenes, 66 datatakes; test 6 datatakes / 13 scenes, train
-197 scenes; ~66-78 tiles per scene, ~0.5 GB of tiles per scene. Final counts and sha256s are in
-`native-v1/manifest.json`.
+197 scenes; ~66-78 tiles per scene, ~0.5 GB of tiles per scene. Finished 2026-10-14 15:11 UTC:
+train 97 shards / 14,542 tiles / 100.9 GiB, test 7 shards / 950 tiles / 6.6 GiB; stats over 227
+distinct wavelengths (224 per scene, plus the renumbered scenes' shifted SWIR bands). Every
+shard's sha256 is in `native-v1/manifest.json`.
 
 ## Invariants
 

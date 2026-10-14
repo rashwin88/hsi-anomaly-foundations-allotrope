@@ -44,4 +44,18 @@ path and decoder keep band-level detail, attention runs over 40 nm bins.
 
 ## Observations
 
+**Epoch-5 checkpoint on the PRISMA bench (2026-10-14, `scripts/evaluate_prisma_bench.py`).**
+Combined ROC-AUC set1-4 / mean: native bands 0.263 / 0.781 / 0.725 / 0.741 / 0.628, se202
+0.442 / 0.720 / 0.699 / 0.602 / 0.616; v0.2.0 in the same run 0.712 / 0.686 / 0.730 / 0.521 / 0.662.
+Already ahead on set2 and set4; inference ~48 s per scene vs ~5 s for v0.2.0 (laptop GPU).
+
+**Set1 is below chance because E004 cannot reconstruct water.** 75% of set1's valid pixels are
+water (NIR 860 nm < 0.03); 599 of its 638 anomaly pixels are on land. Mean L1 on water is 0.047
+for E004 vs 0.0046 for v0.2.0 - 10x worse, worst in the NIR (0.105 error on reflectance below
+0.03, i.e. it paints a land-like red edge over water). So 93% of E004's top-1% pixels are water
+and the real anomalies rank below them. Not PRISMA as such: sets 2-4 are PRISMA too. Likely
+cause: SpectralEarth is land-dominated, so water is out of distribution after pretraining.
+Expected to be fixed by fine-tuning on the EnMAP native shards (which contain water, labelled in
+`label_classes`); worth re-checking at a later pretraining epoch first.
+
 ## Next
