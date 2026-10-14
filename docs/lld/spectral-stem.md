@@ -1,10 +1,11 @@
 # Spectral stem (SpectralEarth pretraining variants)
 
 **Purpose** - one SegFormer MAE whose spectral stem can be swapped between today's 1x1
-compressor (A), a per-pixel gate (B) and cross-attention over wavelength-tagged band tokens
-(C), so the SpectralEarth pretraining experiment changes the stem and nothing else. Design and
-decision rule: `docs/proposals/spectral-attention-bottleneck.md`; runs:
-`research/experiments/indradhanu-se-pretrain/`; taught in `indradhanu workings/31`-`39`.
+compressor (A), a per-pixel gate (B), cross-attention over wavelength-tagged band tokens (C) and
+reduced attention over wavelength bins (C', the variant now carried forward), so the SpectralEarth
+pretraining experiment changes the stem and nothing else. Design and decision rule:
+`docs/proposals/spectral-attention-bottleneck.md`; runs: `research/experiments/indradhanu-se-pretrain/`;
+taught in `indradhanu workings/31`-`41`.
 
 ## Interfaces
 
@@ -15,30 +16,41 @@ WavelengthStats(wl, mean, std).at(wl) / .normalize(x, wl) / .denormalize(x, wl) 
 SpectralCrossAttentionCompressor(D=32, d=32, heads=4)(x, wl, band_valid) -> (B, D, H, W)   # spectral_attention.py
 SpectralCrossAttentionDecoder(D=32, d=32, heads=4)(z, wl) -> (B, N, H, W)
 SpectralGate(bands, hidden=32)(x) -> x * sigmoid(MLP(x))               # spectral_gate.py
+SpectralReducedCompressor(D=32, d=32, heads=4, bin_nm=40)(x, wl, band_valid) -> (B, D, H, W)  # spectral_reduced.py
+WavelengthLinearDecoder(D=32)(z, wl) -> (B, N, H, W)
 SpectralStemSegFormerMAE(stem, stats_wavelengths_nm, stats_mean, stats_std, bands=202, ...)
     (x, wavelengths_nm, band_valid=None, keep_mask=None) -> (B, N, H, W) reflectance
 
 # app/foundation_models/trainers/spectral_stem_mae_trainer.py
 SpectralStemMAETrainer                    # registered for foundation_model_name "spectral_stem_mae"
+decode_i16dz_member(key, data)            # webdataset decoder for compressed pixels (app/utils/shard_codec.py)
+align_sample(sample, target_nm)           # loader-worker transform onto a band list (app/utils/band_alignment.py)
+# app/abstract_classes/foundation_trainer.py - two hooks, identity/empty by default
+FoundationTrainer._sample_decoders() -> list      # extra webdataset decoders, run in the workers
+FoundationTrainer._sample_transform() -> callable # per-sample transform after decoding, in the workers
 # app/foundation_models/pixel_stats.py
 resolve_wavelength_stats(path) -> (wavelengths_nm, mean, std)
 ```
 
 Config: `model_config.model_type = "spectral_stem_mae"` (`SpectralStemMAEConfig`, a subclass
 of `HyperspectralSegFormerMAEConfig`) adds `stem`, `bands`, `token_dim`, `attention_heads`,
-`gate_hidden`, `metrics_csv`, and the run controls below (`amp_bf16`, `early_stop_patience`,
+`gate_hidden`, `bin_nm` (reduced_attention), `band_list_path` (align every sample onto the
+wavelengths in that JSON, e.g. a shard set's stats.json), `metrics_csv`, and the run controls below (`amp_bf16`, `early_stop_patience`,
 `early_stop_min_delta`, `early_stop_min_epochs`, `checkpoint_s3_uri`, `auto_resume`). `data.pixel_stats_path` must be a wavelength stats file (the
 shards' `stats.json`). Example configs: `research/experiments/indradhanu-se-pretrain/S01-laptop-smoke/`.
 
 ## Data flow
 
 ```
-shard sample  pixels.npy int16 (202,128,128), wavelengths.npy (202,)
+shard sample  pixels.npy or pixels.i16dz (compressed, decoded in the workers) int16 (N,128,128),
+              wavelengths.npy (N,); with band_list_path, aligned onto that list in the workers
   -> _decode_batch    reflectance = raw x 0.0001; band_valid = raw != -32768;
                       pixel mask = any band valid; identical wavelength rows collapse to (N,)
   -> model            WavelengthStats.normalize -> dead voxels := 0 -> stem in -> BatchNorm2d(32)
                       -> SegFormer encoder (token removal) / decoder -> stem out -> denormalize
   -> loss             L1 + lambda(t) * SAM on hidden x eroded pixels x valid bands
+  -> validation score L1 + sam_weight * SAM (full weight, not the ramp) - ranks epochs for
+                      early stop and best.pt; tagged VAL_SCORE = "l1+full_sam" in checkpoints
   -> metrics.csv      one row per epoch (train/val L1 and SAM deg, lr, patches/s, peak GPU GB)
 ```
 
@@ -64,6 +76,32 @@ Verified on the laptop GPU (`S01-laptop-smoke/resume_test*.py`): stops at the ri
 a run killed after epoch 2 and resumed from S3 reproduces the uninterrupted run's lr
 sequence exactly.
 
+## The reduced stem (C')
+
+Attention over fixed 40 nm wavelength bins from 400 nm (53 bins; 42 occupied by SpectralEarth's
+202 bands) instead of per band, with three parts that keep band-level detail:
+1. bin token = mean over the bin's valid bands of `v_b * k(lambda_b)` - a learned weight vector per
+   band, so ~5 bands map into 32 numbers one-to-one (a shared weight would keep only the bin sum);
+2. a per-band skip path `mean_b(v_b * W(lambda_b))` straight to the 32 channels;
+3. a per-band decoder `U(lambda_n) . z + c(lambda_n)`, no attention.
+`k`, `W`, `U` are small networks (Linear 32->64, GELU, Linear) of the wavelength encoding.
+Everything is matrix products over the band axis; nothing of shape (pixels x bands x 32) is kept.
+Takes **one band list per batch** (`(N,)` wavelengths) and refuses per-sample lists - use
+`band_list_path` when samples differ (EnMAP's 5 differently-numbered scenes, mixed sensors).
+
+Measured 2026-10-14 on the L40S (one training step, bf16, real encoder, patches/s and GiB peak):
+
+| stem | b4 | b8 | b16 | b32 |
+|---|---|---|---|---|
+| linear | 140.8 / 0.4 | 270.6 / 0.8 | 506.7 / 1.4 | 780.5 / 2.8 |
+| gate | 138.1 / 0.5 | 260.2 / 1.0 | 449.3 / 1.9 | 612.2 / 3.7 |
+| cross_attention | 13.5 / 11.3 | 12.2 / 18.3 | 10.2 / 32.4 | OOM |
+| reduced_attention | 70.6 / 3.8 | **80.0 / 5.4** | 69.9 / 8.5 | 48.6 / 14.6 |
+
+~2.6x fewer multiply-adds than per-band attention, ~6x faster: the gain is mostly memory traffic
+(not storing and re-reading the per-band activations). In a full epoch (E004, batch 8, 6 workers,
+two-pass validation) it runs at ~55 patches/s, 9.2 min per 30,000 patches.
+
 ## Invariants
 
 1. **Only the stem differs between variants.** Normalisation, the BatchNorm, encoder, decoder,
@@ -87,6 +125,9 @@ sequence exactly.
 | more than 65,535 pixel rows in one fused-attention call on CUDA | `invalid configuration argument` - prevented by chunking at `SDPA_MAX_ROWS = 32,768` |
 | C at too large a batch | CUDA OOM; on Windows, silent spill to shared memory and a ~10x slowdown first |
 | early stop / auto-resume / S3 upload with `save_every_n_epochs` != 1 | config `ValueError` at load |
+| reduced stem given per-sample wavelengths `(B, N)` | `ValueError` - align with `band_list_path` |
+| `band_list_path` target band missing from a sample | that band becomes nodata (masked), not zero |
+| resume from a checkpoint scored the old way (ramped SAM) | early-stop state ignored, logged; weights/optimizer/scheduler still restored |
 | no AWS credentials on the training host with `checkpoint_s3_uri` set | `NoCredentialsError` at the first checkpoint - the run dies at epoch 1, not hours in |
 
 ## Decisions
@@ -103,4 +144,13 @@ sequence exactly.
   compressor (~2x; the per-band decoder is the other half of the cost - S01 section 3). Not
   tried: `d = 16`, recomputing the stem in the backward pass. These are the levers if cost
   becomes the limit.
+- **Per-band cross-attention (C) superseded by reduced attention (C') on 2026-10-14**: E003 ran 3
+  epochs at 13.5 patches/s (41 min/epoch); C' runs ~6x faster per step at batch 8. Accepted that
+  attention now looks at bins - detail is kept by fixes 1-3, not by attention resolution.
+- **Validation at full SAM weight.** The ramped weight (0 -> 0.5 over 10 epochs) made epoch 1
+  unbeatable, so early stop would have fired at the first allowed epoch whatever the model did
+  (found live in E003; the same flaw cost the October H200 trial its final checkpoint).
+- **Alignment by wavelength in the workers, not resampling.** A band a sample lacks becomes nodata,
+  which every wavelength stem already masks exactly. Pre-training batches are single-sensor
+  (SpectralEarth); mixing is for fine-tuning only, and the label-key policy for mixed batches is open.
 - **Rejected:** band masking for pretraining (spectral self-completion leak).

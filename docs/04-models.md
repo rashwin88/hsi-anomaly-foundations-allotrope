@@ -83,7 +83,9 @@ and swaps the stem: today's 1×1 compressor, a per-pixel gate, or cross-attentio
 tokens tagged with their wavelength, which takes any band list and skips dead bands exactly.
 Normalisation is a curve over wavelength (`WavelengthStats`), not per band position. It is
 the subject of the SpectralEarth pretraining experiment and is not wired into inference -
-see [docs/lld/spectral-stem.md](lld/spectral-stem.md).
+see [docs/lld/spectral-stem.md](lld/spectral-stem.md). The variant carried forward is
+`reduced_attention`: attention over 40 nm wavelength bins plus per-band skip and output paths,
+~6x faster than per-band attention at equal detail (measured on an L40S, 2026-10-14).
 
 Its loss is `L1 + λ(t)·SAM`, with λ **ramped in** over the first ~10–20 epochs — SAM's
 gradient is unstable early when reconstructions are near-random.

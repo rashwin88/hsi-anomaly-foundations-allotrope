@@ -111,7 +111,20 @@ into WebDataset tars for the trainer's `hot_storage` path.
   derived training data, and `manifest.json` (collection, split, seed, every shard's sha256)
   is their record.
 - **Permissions:** the prod box role `allotrope-prod-ec2` may list, read and write
-  `patches/spectralearth/*` in that bucket (statements `TrainingShardsList`/`Write`).
+  `patches/spectralearth/*` and `patches/enmap/*` in that bucket (statements
+  `TrainingShardsList`/`Write`); the GPU training role `allotrope-gpu-train` reads
+  `patches/spectralearth/*` and writes `experiments/indradhanu-se-pretrain/*`.
+
+## Compressed shards (`se-v1z`)
+
+For shipping off AWS (S3 egress $0.109/GB) and for disk-bound readers, a copy of the first 1,000
+train and 20 test shards is re-encoded with `app/utils/shard_codec.py`: each pixel stored as its
+difference from the previous band (int16, wrapping), then zstd-3, as member `pixels.i16dz`.
+Exact (round trip and training loss identical to raw), 1.89-1.91x smaller (1,000 shards: 486.6 GiB
+vs ~925 GiB), decode ~300 MiB/s per core. `scripts/recompress_shards.py` runs on the prod box (S3 ->
+EC2 -> S3 in-region), checks each source shard's sha256 against the source manifest first, and
+writes `se-v1z/manifest.json` with both sha256s. The spectral-stem trainer decodes `.i16dz` in the
+DataLoader workers (`_sample_decoders`).
 
 ## Numbers (measured 2026-10-14)
 

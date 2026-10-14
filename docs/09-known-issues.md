@@ -133,13 +133,29 @@ Added 2026-10-14 with `app/utils/spectralearth/`. Rationale in
   as "normal" surface.
 - **No georeference, date or source-scene id per patch** — patches can be found by site
   and patch id only. Searching by place or time needs a DLR metadata table we don't have.
-- **Too slow to train straight from S3** (18 samples/s through a DataLoader). Training
-  needs the collection on local NVMe via the source's cache, or shards.
 - **The band table rests on a drop list from related literature** (HySpecNet), stated but
   not enumerated in the SpectralEarth paper. Three independent checks agree with it (see
   the LLD); a DLR-published band list would settle it.
 - **`common_grid_pipeline.py` duplicates the EnMAP builder's step order** rather than the
   builder calling it. A change to either must be mirrored in the other.
+
+## Spectral-stem pretraining and fine-tuning — open gaps
+
+Added 2026-10-14 with the `spectral_stem_mae` trainer and the EnMAP native shards. Rationale in
+[`lld/spectral-stem.md`](lld/spectral-stem.md) and [`lld/enmap-shards.md`](lld/enmap-shards.md).
+
+- **No PRISMA evaluation for `spectral_stem_mae` checkpoints yet.** The A/B/C decision rule needs
+  ROC-AUC on the 4 labelled PRISMA scenes; the existing scoring path loads only today's
+  Indradhanu. Until it exists, runs are compared on reconstruction alone.
+- **Mixed-sensor batches have no label-key policy.** `band_list_path` aligns bands, but EnMAP
+  samples carry `label_*`/`meta.json` and SpectralEarth/PRISMA samples do not, so default
+  collation fails on a mixed batch. Pre-training is single-sensor; this blocks only mixed
+  fine-tuning.
+- **The loss does not use the EnMAP cloud labels yet.** Fine-tuning on EnMAP as-is would teach
+  cloud as normal surface; screening cloudy pixels out of the loss (except on the high, dry
+  plateau scenes whose cirrus/cloud labels are false) is unbuilt.
+- **No PRISMA shards.** PRISMA L2D (223 scenes, in the inventory) needs its own native-band
+  reader before it can be sharded.
 
 ## Config knobs that do nothing
 

@@ -1,7 +1,10 @@
 # Spectral attention bottleneck
 
-**Status:** accepted design; **components and training wiring built** (2026-10-14,
-`docs/lld/spectral-stem.md`), experiment not yet run. Agreed 2026-10-14; supersedes the 2026-08-24
+**Status:** accepted design; built and running (2026-10-14, `docs/lld/spectral-stem.md`).
+Decisions 1 and 3 were revised after measurement: C is now `reduced_attention` - attention over
+40 nm bins with per-band skip and decoder paths - because per-band attention ran at 13.5
+patches/s (E003, superseded) against 80 for the reduced stem. Validation is scored at full SAM
+weight. Runs: E004 (C'), then E001 (A), E002 (B). Agreed 2026-10-14; supersedes the 2026-08-24
 version of this file (recoverable from git). Delete this file once the work is built and its
 decisions are written into the numbered docs and an LLD, per `docs/proposals/README.md`.
 **Scope:** the spectral stem of the next Indradhanu, its SpectralEarth pretraining data, and

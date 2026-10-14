@@ -243,6 +243,20 @@ DataLoader, 37 patches/s with 32 fetch threads (EC2, same region). Put the colle
 local NVMe through the source's cache, or shard it. A native batch of 32 is ~424 MB, so
 loader containers need a large `--shm-size`.
 
+**Shards.** Training reads WebDataset shards of 150 patches, not single objects:
+`patches/spectralearth/se-v1/{train,test}/` (3,419 + 180 shards, raw int16) and a compressed copy
+of the first 1,000 + 20 (`se-v1z`, band-delta + zstd, 1.9x smaller, exact). `stats.json` beside
+them is the wavelength-normalisation curve. See `docs/lld/spectralearth.md`.
+
+## EnMAP at native bands - fine-tuning and cloud/water labels
+
+`scripts/shard_enmap.py` turns the 210 EnMAP L2A scenes in the inventory into shards at **native
+bands** (all 224, each scene's own wavelengths - no resampling, no 165-band grid) with the six
+provider quality layers as `label_*.npy` and per-tile facts (`meta.json`: centre lat/lon, elevation,
+water vapour, sun angles, cover %). Split by datatake, stratified on cloud. Output
+`patches/enmap/native-v1/`. Bands are matched by wavelength because 5 scenes number them
+differently. See `docs/lld/enmap-shards.md`.
+
 Health check after changes, or before a training run, on the EC2 box:
 `scripts/spectralearth_sanity.py <collection uri> --n 500` — value ranges, nodata, sites,
 loader speed, a percentile spectrum (the red edge must sit at 700–750 nm) and RGB previews.

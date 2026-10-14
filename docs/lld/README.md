@@ -20,7 +20,8 @@ adding another.
 | `segmentation-sharding.md` | the `enmap_seg` lane that attaches provider labels to shards |
 | `inventory.md` | the raw-dataset inventory: checksum chain, manifest-as-truth, Supabase lockout |
 | `spectralearth.md` | SpectralEarth patches: the derived band table, split by site, native vs common-grid loading, shards |
-| `spectral-stem.md` | the swappable spectral stem (linear / gate / cross-attention) for SpectralEarth pretraining |
+| `spectral-stem.md` | the swappable spectral stem (linear / gate / cross-attention / reduced attention), loader hooks, band alignment |
+| `enmap-shards.md` | EnMAP L2A at native bands with quality labels, from the inventory, for fine-tuning and a cloud/water head |
 
 ## How these are written
 
