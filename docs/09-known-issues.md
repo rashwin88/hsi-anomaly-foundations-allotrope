@@ -70,6 +70,22 @@ any search containing an underscore — which is every PRISMA/EnMAP product id
 (`PRS_L2D_STD_…`) — becomes a different string and matches nothing. Fix: escape them and
 pass `escape="\\"`, as `allotrope_inventory/api/datasets.py` does.
 
+**9. The splib07 slim bundle drops most man-made spectra.** `scripts/curate_splib07.py` keeps
+ASD-instrument files only and skips Beckman (BECK) spectra, on the claim that their
+200-3000 nm range does not overlap our sensors. It does. Most USGS man-made spectra (plastics,
+fabrics, roofing, oil) were measured on the Beckman, so `data/splib07_slim` has 3 usable
+man-made entries out of 519, and `spectral_library_match` can rarely name a man-made material.
+Its "artificial" chapter is mostly paint pigments and lab chemicals. `data/family_library`
+(see [`lld/spectral-family-match.md`](lld/spectral-family-match.md)) carries them for family
+matching; the SAM library itself is unchanged.
+
+**10. `gaussian_resample_to_target` silently drops bands for ~10 nm sources.** It returns NaN
+for any target band with fewer than 3 source samples inside its window. That is fine for 1 nm
+library spectra. But it dropped 42 of 165 bands when resampling classic AVIRIS (~10 nm)
+imagery onto the common grid. Any image resampled with it from a ~10 nm sensor loses bands
+without an error. Densify the source first (as `scripts/curate_family_library.py` and step 1
+of the man-made library experiments do), or lower `min_lib_points_per_band` for images.
+
 ## Deliberate limitations in segmentation sharding
 
 Added 2026-08-25 with the `enmap_seg` lane. All known and accepted, not defects. Design
@@ -138,6 +154,28 @@ Added 2026-10-14 with `app/utils/spectralearth/`. Rationale in
   the LLD); a DLR-published band list would settle it.
 - **`common_grid_pipeline.py` duplicates the EnMAP builder's step order** rather than the
   builder calling it. A change to either must be mirrored in the other.
+
+## Spectral family matching — open gaps
+
+Added 2026-10-15 with `app/spectral_match/family_match.py` and `data/family_library`.
+Rationale and results in [`lld/spectral-family-match.md`](lld/spectral-family-match.md).
+
+- **Not wired into `spectral_library_match` yet.** The module, library and tests are ready;
+  the LLD gives the integration steps.
+- **Radiometric scale unverified.** The method scores pixel minus local background, so pixels
+  must be 0-1 surface reflectance like the library; SAM never needed this. Confirm that the
+  onboarding vendable's `normalized_hyperspectral_cube` is reflectance for each sensor before
+  wiring. A PRISMA band-filtered vendable sampled during this work had medians of 0.001-0.09.
+  `match_families` logs a warning when the median is outside 0.005-1.5.
+- **It names materials; it does not filter false alarms.** Ordinary pixels get a man-made
+  name at most alpha (5 %) of the time, but false alarms are not ordinary. On the 4 PRISMA
+  ground-truth scenes, 9-24 % of false-alarm pixels got a man-made name, and they outnumber
+  real targets ~50 to 1. The UI must present the result as a likely material, not as
+  evidence that a pixel is man-made.
+- **Small evidence base on real targets.** Named-target rates were 38-47 % in 2 of the 4
+  PRISMA scenes and 14-15 % in the other 2, plus 5 deployed sheets at Gudalur.
+- **Fill is not reported.** No estimator recovered fill on real deployed materials without an
+  in-scene or field spectrum of the material.
 
 ## Spectral-stem pretraining and fine-tuning — open gaps
 

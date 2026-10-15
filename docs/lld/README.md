@@ -22,6 +22,7 @@ adding another.
 | `spectralearth.md` | SpectralEarth patches: the derived band table, split by site, native vs common-grid loading, shards |
 | `spectral-stem.md` | the swappable spectral stem (linear / gate / cross-attention / reduced attention), loader hooks, band alignment |
 | `enmap-shards.md` | EnMAP L2A at native bands with quality labels, from the inventory, for fine-tuning and a cloud/water head |
+| `spectral-family-match.md` | naming the material family of 30 m anomaly pixels: family library, Simplex ACE, calibration and the alpha / p\* bar, evaluation, integration recipe |
 
 ## How these are written
 
