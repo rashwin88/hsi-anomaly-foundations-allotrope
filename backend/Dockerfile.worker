@@ -63,6 +63,11 @@ COPY app ./app
 # and rebuild this image whenever the splib07 version is bumped.
 COPY data/splib07_slim /srv/splib07_slim
 
+# Family library (~9 MB): USGS + ECOSTRESS man-made / natural spectra tagged by family, same
+# layout as splib07_slim, for app/spectral_match/family_match.py. Rebuild with
+# scripts/curate_family_library.py.
+COPY data/family_library /srv/family_library
+
 # Shared allotrope package + worker code. Last because it changes most.
 COPY backend/allotrope ./allotrope
 COPY backend/allotrope_worker ./allotrope_worker

@@ -1,0 +1,4141 @@
+{
+  "version": "family_v1",
+  "wavelengths_file": "wavelengths_asd_nm.txt",
+  "fwhm_files": {
+    "ASDFR": "fwhm/ASDFR.txt"
+  },
+  "wavelength_unit": "nm",
+  "n_entries": 411,
+  "n_channels": 2151,
+  "per_chapter_counts": {
+    "manmade.building": 11,
+    "manmade.glass": 1,
+    "manmade.metal": 13,
+    "manmade.oil": 40,
+    "manmade.paint": 8,
+    "manmade.pavement": 15,
+    "manmade.plastic": 39,
+    "manmade.roofing": 27,
+    "manmade.textile": 14,
+    "manmade.wood_paper": 8,
+    "natural.mineral": 40,
+    "natural.npv": 40,
+    "natural.rock": 40,
+    "natural.snow_ice": 20,
+    "natural.soil": 40,
+    "natural.vegetation": 40,
+    "natural.water": 15
+  },
+  "entries": [
+    {
+      "name": "usgs:s07_ASD_Water+Montmor_SWy-2+16.5g-l_ASDFRa_AREF.txt",
+      "material": "Water+Montmor SWy-2+16.5g/l  ASDFRa AREF",
+      "chapter": "natural.water",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.water/usgs_s07_ASD_Water+Montmor_SWy-2+16.5g-l_ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "natural",
+      "family": "water"
+    },
+    {
+      "name": "usgs:s07_ASD_Water+Montmor_SWy-2+5.01g-l_ASDFRa_AREF.txt",
+      "material": "Water+Montmor SWy-2+5.01g/l  ASDFRa AREF",
+      "chapter": "natural.water",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.water/usgs_s07_ASD_Water+Montmor_SWy-2+5.01g-l_ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "natural",
+      "family": "water"
+    },
+    {
+      "name": "usgs:s07_ASD_Seawater_Coast_Chl_SW1_BECKa_AREF.txt",
+      "material": "Seawater_Coast_Chl SW1        BECKa AREF",
+      "chapter": "natural.water",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.water/usgs_s07_ASD_Seawater_Coast_Chl_SW1_BECKa_AREF.txt",
+      "source": "usgs",
+      "group": "natural",
+      "family": "water"
+    },
+    {
+      "name": "usgs:s07_ASD_Melting_snow_mSnw03_ASDFRa_AREF.txt",
+      "material": "Melting_snow mSnw03          ASDFRa AREF",
+      "chapter": "natural.snow_ice",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.snow_ice/usgs_s07_ASD_Melting_snow_mSnw03_ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "natural",
+      "family": "snow_ice"
+    },
+    {
+      "name": "usgs:s07_ASD_Seawater_Open_Ocean_SW2_lwch_BECKa_AREF.txt",
+      "material": "Seawater_Open_Ocean SW2 lwch  BECKa AREF",
+      "chapter": "natural.water",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.water/usgs_s07_ASD_Seawater_Open_Ocean_SW2_lwch_BECKa_AREF.txt",
+      "source": "usgs",
+      "group": "natural",
+      "family": "water"
+    },
+    {
+      "name": "usgs:s07_ASD_Melting_snow_mSnw16_(slush)_ASDFRa_AREF.txt",
+      "material": "Melting_snow mSnw16 (slush)  ASDFRa AREF",
+      "chapter": "natural.snow_ice",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.snow_ice/usgs_s07_ASD_Melting_snow_mSnw16__slush__ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "natural",
+      "family": "snow_ice"
+    },
+    {
+      "name": "usgs:s07_ASD_Melting_snow_mSnw09+0.5_veg_ASDFRa_AREF.txt",
+      "material": "Melting_snow mSnw09+0.5_veg  ASDFRa AREF",
+      "chapter": "natural.snow_ice",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.snow_ice/usgs_s07_ASD_Melting_snow_mSnw09+0.5_veg_ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "natural",
+      "family": "snow_ice"
+    },
+    {
+      "name": "usgs:s07_ASD_Melting_snow_mSnw12_(slush)_ASDFRa_AREF.txt",
+      "material": "Melting_snow mSnw12 (slush)  ASDFRa AREF",
+      "chapter": "natural.snow_ice",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.snow_ice/usgs_s07_ASD_Melting_snow_mSnw12__slush__ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "natural",
+      "family": "snow_ice"
+    },
+    {
+      "name": "usgs:s07_ASD_Melting_snow_mSnw01a_ASDFRa_AREF.txt",
+      "material": "Melting_snow mSnw01a         ASDFRa AREF",
+      "chapter": "natural.snow_ice",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.snow_ice/usgs_s07_ASD_Melting_snow_mSnw01a_ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "natural",
+      "family": "snow_ice"
+    },
+    {
+      "name": "usgs:s07_ASD_Melting_snow_mSnw08_ASDFRa_AREF.txt",
+      "material": "Melting_snow mSnw08          ASDFRa AREF",
+      "chapter": "natural.snow_ice",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.snow_ice/usgs_s07_ASD_Melting_snow_mSnw08_ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "natural",
+      "family": "snow_ice"
+    },
+    {
+      "name": "usgs:s07_ASD_Melting_snow_mSnw14_(slush)_ASDFRa_AREF.txt",
+      "material": "Melting_snow mSnw14 (slush)  ASDFRa AREF",
+      "chapter": "natural.snow_ice",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.snow_ice/usgs_s07_ASD_Melting_snow_mSnw14__slush__ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "natural",
+      "family": "snow_ice"
+    },
+    {
+      "name": "usgs:s07_ASD_Melting_snow_mSnw08+0.5_veg_ASDFRa_AREF.txt",
+      "material": "Melting_snow mSnw08+0.5_veg  ASDFRa AREF",
+      "chapter": "natural.snow_ice",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.snow_ice/usgs_s07_ASD_Melting_snow_mSnw08+0.5_veg_ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "natural",
+      "family": "snow_ice"
+    },
+    {
+      "name": "usgs:s07_ASD_Melting_snow_mSnw16+0.25_veg_ASDFRa_AREF.txt",
+      "material": "Melting_snow mSnw16+0.25_veg ASDFRa AREF",
+      "chapter": "natural.snow_ice",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.snow_ice/usgs_s07_ASD_Melting_snow_mSnw16+0.25_veg_ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "natural",
+      "family": "snow_ice"
+    },
+    {
+      "name": "usgs:s07_ASD_Sand_DWO-3-DEL2ar2_wet_noOil_ASDFRa_AREF.txt",
+      "material": "Sand DWO-3-DEL2ar2 wet noOil ASDFRa AREF",
+      "chapter": "natural.soil",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.soil/usgs_s07_ASD_Sand_DWO-3-DEL2ar2_wet_noOil_ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "natural",
+      "family": "soil"
+    },
+    {
+      "name": "usgs:s07_ASD_Melting_snow_mSnw09_(slush)_ASDFRa_AREF.txt",
+      "material": "Melting_snow mSnw09 (slush)  ASDFRa AREF",
+      "chapter": "natural.snow_ice",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.snow_ice/usgs_s07_ASD_Melting_snow_mSnw09__slush__ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "natural",
+      "family": "snow_ice"
+    },
+    {
+      "name": "usgs:s07_ASD_Melting_snow_mSnw04_ASDFRa_AREF.txt",
+      "material": "Melting_snow mSnw04          ASDFRa AREF",
+      "chapter": "natural.snow_ice",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.snow_ice/usgs_s07_ASD_Melting_snow_mSnw04_ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "natural",
+      "family": "snow_ice"
+    },
+    {
+      "name": "usgs:s07_ASD_Sand_DWO-3-DEL2b_wet_no_oil_ASDFRa_AREF.txt",
+      "material": "Sand DWO-3-DEL2b wet  no oil ASDFRa AREF",
+      "chapter": "natural.soil",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.soil/usgs_s07_ASD_Sand_DWO-3-DEL2b_wet_no_oil_ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "natural",
+      "family": "soil"
+    },
+    {
+      "name": "usgs:s07_ASD_Sand_GrndIsle1_no_oil_ASDFRa_AREF.txt",
+      "material": "Sand GrndIsle1        no oil ASDFRa AREF",
+      "chapter": "natural.soil",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.soil/usgs_s07_ASD_Sand_GrndIsle1_no_oil_ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "natural",
+      "family": "soil"
+    },
+    {
+      "name": "usgs:s07_ASD_Water+Montmor_SWy-2+1.67g-l_ASDFRa_AREF.txt",
+      "material": "Water+Montmor SWy-2+1.67g/l  ASDFRa AREF",
+      "chapter": "natural.water",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.water/usgs_s07_ASD_Water+Montmor_SWy-2+1.67g-l_ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "natural",
+      "family": "water"
+    },
+    {
+      "name": "usgs:s07_ASD_Melting_snow_mSnw01a+0.5_veg_ASDFRa_AREF.txt",
+      "material": "Melting_snow mSnw01a+0.5_veg ASDFRa AREF",
+      "chapter": "natural.snow_ice",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.snow_ice/usgs_s07_ASD_Melting_snow_mSnw01a+0.5_veg_ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "natural",
+      "family": "snow_ice"
+    },
+    {
+      "name": "usgs:s07_ASD_Melting_snow_mSnw05_ASDFRa_AREF.txt",
+      "material": "Melting_snow mSnw05          ASDFRa AREF",
+      "chapter": "natural.snow_ice",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.snow_ice/usgs_s07_ASD_Melting_snow_mSnw05_ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "natural",
+      "family": "snow_ice"
+    },
+    {
+      "name": "usgs:s07_ASD_Phlogopite_Sand_Mix_BR93-20_BECKa_AREF.txt",
+      "material": "Phlogopite_Sand_Mix BR93-20   BECKa AREF",
+      "chapter": "natural.soil",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.soil/usgs_s07_ASD_Phlogopite_Sand_Mix_BR93-20_BECKa_AREF.txt",
+      "source": "usgs",
+      "group": "natural",
+      "family": "soil"
+    },
+    {
+      "name": "usgs:s07_ASD_Sand_DWO-3-DEL2c_no_vis.oil_ASDFRa_AREF.txt",
+      "material": "Sand DWO-3-DEL2c  no vis.oil ASDFRa AREF",
+      "chapter": "natural.soil",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.soil/usgs_s07_ASD_Sand_DWO-3-DEL2c_no_vis.oil_ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "natural",
+      "family": "soil"
+    },
+    {
+      "name": "usgs:s07_ASD_Sand_GrndIsle2_no_visibl_oil_ASDFRa_AREF.txt",
+      "material": "Sand GrndIsle2 no visibl oil ASDFRa AREF",
+      "chapter": "natural.soil",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.soil/usgs_s07_ASD_Sand_GrndIsle2_no_visibl_oil_ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "natural",
+      "family": "soil"
+    },
+    {
+      "name": "usgs:s07_ASD_Sand_DWO-3-DEL2d_wet_no_oil_ASDFRa_AREF.txt",
+      "material": "Sand DWO-3-DEL2d wet  no oil ASDFRa AREF",
+      "chapter": "natural.soil",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.soil/usgs_s07_ASD_Sand_DWO-3-DEL2d_wet_no_oil_ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "natural",
+      "family": "soil"
+    },
+    {
+      "name": "usgs:s07_ASD_Water+Montmor_SWy-2+0.50g-l_ASDFRa_AREF.txt",
+      "material": "Water+Montmor SWy-2+0.50g/l  ASDFRa AREF",
+      "chapter": "natural.water",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.water/usgs_s07_ASD_Water+Montmor_SWy-2+0.50g-l_ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "natural",
+      "family": "water"
+    },
+    {
+      "name": "usgs:s07_ASD_Kalun+kaol+gth_mv2-ar3_ASDFRb_AREF.txt",
+      "material": "Kalun+kaol+gth mv2-ar3       ASDFRb AREF",
+      "chapter": "natural.mineral",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.mineral/usgs_s07_ASD_Kalun+kaol+gth_mv2-ar3_ASDFRb_AREF.txt",
+      "source": "usgs",
+      "group": "natural",
+      "family": "mineral"
+    },
+    {
+      "name": "usgs:s07_ASD_Melting_snow_mSnw15_(slush)_ASDFRa_AREF.txt",
+      "material": "Melting_snow mSnw15 (slush)  ASDFRa AREF",
+      "chapter": "natural.snow_ice",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.snow_ice/usgs_s07_ASD_Melting_snow_mSnw15__slush__ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "natural",
+      "family": "snow_ice"
+    },
+    {
+      "name": "usgs:s07_ASD_Melting_snow_mSnw16+0.5_veg_ASDFRa_AREF.txt",
+      "material": "Melting_snow mSnw16+0.5_veg  ASDFRa AREF",
+      "chapter": "natural.snow_ice",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.snow_ice/usgs_s07_ASD_Melting_snow_mSnw16+0.5_veg_ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "natural",
+      "family": "snow_ice"
+    },
+    {
+      "name": "usgs:s07_ASD_Sand_DWO-3-DEL2a_no_vis.oil_ASDFRa_AREF.txt",
+      "material": "Sand DWO-3-DEL2a  no vis.oil ASDFRa AREF",
+      "chapter": "natural.soil",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.soil/usgs_s07_ASD_Sand_DWO-3-DEL2a_no_vis.oil_ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "natural",
+      "family": "soil"
+    },
+    {
+      "name": "usgs:s07_ASD_Stonewall_Playa_CU93-52A_a11_BECKa_AREF.txt",
+      "material": "Stonewall_Playa CU93-52A a11  BECKa AREF",
+      "chapter": "natural.soil",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.soil/usgs_s07_ASD_Stonewall_Playa_CU93-52A_a11_BECKa_AREF.txt",
+      "source": "usgs",
+      "group": "natural",
+      "family": "soil"
+    },
+    {
+      "name": "usgs:s07_ASD_Hematite_Coatd_Qtzt_BR93-25C_BECKa_AREF.txt",
+      "material": "Hematite_Coatd_Qtzt BR93-25C  BECKa AREF",
+      "chapter": "natural.mineral",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.mineral/usgs_s07_ASD_Hematite_Coatd_Qtzt_BR93-25C_BECKa_AREF.txt",
+      "source": "usgs",
+      "group": "natural",
+      "family": "mineral"
+    },
+    {
+      "name": "usgs:s07_ASD_ClinozoisiteEpidote_HS299.6_ASDFRb_AREF.txt",
+      "material": "ClinozoisiteEpidote HS299.6  ASDFRb AREF",
+      "chapter": "natural.mineral",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.mineral/usgs_s07_ASD_ClinozoisiteEpidote_HS299.6_ASDFRb_AREF.txt",
+      "source": "usgs",
+      "group": "natural",
+      "family": "mineral"
+    },
+    {
+      "name": "usgs:s07_ASD_Chlorite+Muscovite_CU93-65A_ASDNGa_AREF.txt",
+      "material": "Chlorite+Muscovite CU93-65A  ASDNGa AREF",
+      "chapter": "natural.mineral",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.mineral/usgs_s07_ASD_Chlorite+Muscovite_CU93-65A_ASDNGa_AREF.txt",
+      "source": "usgs",
+      "group": "natural",
+      "family": "mineral"
+    },
+    {
+      "name": "usgs:s07_ASD_Sand_DWO-3-DEL2ar1_no_oil_ASDFRa_AREF.txt",
+      "material": "Sand DWO-3-DEL2ar1    no oil ASDFRa AREF",
+      "chapter": "natural.soil",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.soil/usgs_s07_ASD_Sand_DWO-3-DEL2ar1_no_oil_ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "natural",
+      "family": "soil"
+    },
+    {
+      "name": "usgs:s07_ASD_Xenotime+Monazite_REE_WS384_ASDFRa_AREF.txt",
+      "material": "Xenotime+Monazite_REE WS384  ASDFRa AREF",
+      "chapter": "natural.mineral",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.mineral/usgs_s07_ASD_Xenotime+Monazite_REE_WS384_ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "natural",
+      "family": "mineral"
+    },
+    {
+      "name": "usgs:s07_ASD_BurnArea_Traverse_WRF00-01_ASDFRb_AREF.txt",
+      "material": "BurnArea_Traverse WRF00-01   ASDFRb AREF",
+      "chapter": "natural.soil",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.soil/usgs_s07_ASD_BurnArea_Traverse_WRF00-01_ASDFRb_AREF.txt",
+      "source": "usgs",
+      "group": "natural",
+      "family": "soil"
+    },
+    {
+      "name": "usgs:s07_ASD_BurnArea_TopSurface_WRF00-02_ASDFRb_AREF.txt",
+      "material": "BurnArea_TopSurface WRF00-02 ASDFRb AREF",
+      "chapter": "natural.soil",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.soil/usgs_s07_ASD_BurnArea_TopSurface_WRF00-02_ASDFRb_AREF.txt",
+      "source": "usgs",
+      "group": "natural",
+      "family": "soil"
+    },
+    {
+      "name": "usgs:s07_ASD_Melting_snow_mSnw03+0.5_veg_ASDFRa_AREF.txt",
+      "material": "Melting_snow mSnw03+0.5_veg  ASDFRa AREF",
+      "chapter": "natural.snow_ice",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.snow_ice/usgs_s07_ASD_Melting_snow_mSnw03+0.5_veg_ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "natural",
+      "family": "snow_ice"
+    },
+    {
+      "name": "usgs:s07_ASD_Zoisite_HS347.4B_ASDFRb_AREF.txt",
+      "material": "Zoisite HS347.4B             ASDFRb AREF",
+      "chapter": "natural.mineral",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.mineral/usgs_s07_ASD_Zoisite_HS347.4B_ASDFRb_AREF.txt",
+      "source": "usgs",
+      "group": "natural",
+      "family": "mineral"
+    },
+    {
+      "name": "usgs:s07_ASD_Stilbite_HS482.6_Zeolite_ASDFRb_AREF.txt",
+      "material": "Stilbite HS482.6  Zeolite    ASDFRb AREF",
+      "chapter": "natural.mineral",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.mineral/usgs_s07_ASD_Stilbite_HS482.6_Zeolite_ASDFRb_AREF.txt",
+      "source": "usgs",
+      "group": "natural",
+      "family": "mineral"
+    },
+    {
+      "name": "usgs:s07_ASD_Stilbite_HS482.3B_Zeolite_ASDFRb_AREF.txt",
+      "material": "Stilbite HS482.3B Zeolite    ASDFRb AREF",
+      "chapter": "natural.mineral",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.mineral/usgs_s07_ASD_Stilbite_HS482.3B_Zeolite_ASDFRb_AREF.txt",
+      "source": "usgs",
+      "group": "natural",
+      "family": "mineral"
+    },
+    {
+      "name": "usgs:s07_ASD_Siderite_HS271.3B_ASDNGa_AREF.txt",
+      "material": "Siderite HS271.3B            ASDNGa AREF",
+      "chapter": "natural.mineral",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.mineral/usgs_s07_ASD_Siderite_HS271.3B_ASDNGa_AREF.txt",
+      "source": "usgs",
+      "group": "natural",
+      "family": "mineral"
+    },
+    {
+      "name": "usgs:s07_ASD_Smaragdite_HS290.4B_Amphibol_ASDFRb_AREF.txt",
+      "material": "Smaragdite HS290.4B Amphibol ASDFRb AREF",
+      "chapter": "natural.mineral",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.mineral/usgs_s07_ASD_Smaragdite_HS290.4B_Amphibol_ASDFRb_AREF.txt",
+      "source": "usgs",
+      "group": "natural",
+      "family": "mineral"
+    },
+    {
+      "name": "usgs:s07_ASD_Smaragdite_HS290.6_Amphibol_ASDFRb_AREF.txt",
+      "material": "Smaragdite HS290.6  Amphibol ASDFRb AREF",
+      "chapter": "natural.mineral",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.mineral/usgs_s07_ASD_Smaragdite_HS290.6_Amphibol_ASDFRb_AREF.txt",
+      "source": "usgs",
+      "group": "natural",
+      "family": "mineral"
+    },
+    {
+      "name": "usgs:s07_ASD_Serpentine_HS8.6_ASDFRc_AREF.txt",
+      "material": "Serpentine HS8.6             ASDFRc AREF",
+      "chapter": "natural.mineral",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.mineral/usgs_s07_ASD_Serpentine_HS8.6_ASDFRc_AREF.txt",
+      "source": "usgs",
+      "group": "natural",
+      "family": "mineral"
+    },
+    {
+      "name": "usgs:s07_ASD_Wood_Beam_GDS363_Nw_Pine_2X4_ASDFRa_AREF.txt",
+      "material": "Wood_Beam GDS363 Nw Pine 2X4 ASDFRa AREF",
+      "chapter": "manmade.wood_paper",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/manmade.wood_paper/usgs_s07_ASD_Wood_Beam_GDS363_Nw_Pine_2X4_ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "manmade",
+      "family": "wood_paper"
+    },
+    {
+      "name": "usgs:s07_ASD_Sheet_Metal_GDS352_crg_Galvn_ASDFRa_AREF.txt",
+      "material": "Sheet_Metal GDS352 crg Galvn ASDFRa AREF",
+      "chapter": "manmade.metal",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/manmade.metal/usgs_s07_ASD_Sheet_Metal_GDS352_crg_Galvn_ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "manmade",
+      "family": "metal"
+    },
+    {
+      "name": "usgs:s07_ASD_Tar_Paper_GDS285B_Weath_Blk_ASDFRa_AREF.txt",
+      "material": "Tar_Paper GDS285B Weath Blk  ASDFRa AREF",
+      "chapter": "manmade.roofing",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/manmade.roofing/usgs_s07_ASD_Tar_Paper_GDS285B_Weath_Blk_ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "manmade",
+      "family": "roofing"
+    },
+    {
+      "name": "usgs:s07_ASD_Tar_Paper_GDS285A_New_Blk_ASDFRa_AREF.txt",
+      "material": "Tar_Paper GDS285A New Blk    ASDFRa AREF",
+      "chapter": "manmade.roofing",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/manmade.roofing/usgs_s07_ASD_Tar_Paper_GDS285A_New_Blk_ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "manmade",
+      "family": "roofing"
+    },
+    {
+      "name": "usgs:s07_ASD_Terrycloth_Fabric_GDS537_Yel_ASDFRa_AREF.txt",
+      "material": "Terrycloth_Fabric GDS537 Yel ASDFRa AREF",
+      "chapter": "manmade.textile",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/manmade.textile/usgs_s07_ASD_Terrycloth_Fabric_GDS537_Yel_ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "manmade",
+      "family": "textile"
+    },
+    {
+      "name": "usgs:s07_ASD_Polyester_Pile_GDS434_Blk_ASDFRa_AREF.txt",
+      "material": "Polyester_Pile GDS434 Blk    ASDFRa AREF",
+      "chapter": "manmade.textile",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/manmade.textile/usgs_s07_ASD_Polyester_Pile_GDS434_Blk_ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "manmade",
+      "family": "textile"
+    },
+    {
+      "name": "usgs:s07_ASD_Polyester_Pile_GDS435_DkGrn_ASDFRa_AREF.txt",
+      "material": "Polyester_Pile GDS435 DkGrn  ASDFRa AREF",
+      "chapter": "manmade.textile",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/manmade.textile/usgs_s07_ASD_Polyester_Pile_GDS435_DkGrn_ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "manmade",
+      "family": "textile"
+    },
+    {
+      "name": "usgs:s07_ASD_Plastic_Vinyl_GDS398_Red_Toy_ASDFRa_AREF.txt",
+      "material": "Plastic_Vinyl GDS398 Red Toy ASDFRa AREF",
+      "chapter": "manmade.plastic",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/manmade.plastic/usgs_s07_ASD_Plastic_Vinyl_GDS398_Red_Toy_ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "manmade",
+      "family": "plastic"
+    },
+    {
+      "name": "usgs:s07_ASD_Plastic_Vinyl_GDS397_Cl0.4mm_ASDFRa_AREF.txt",
+      "material": "Plastic_Vinyl GDS397 Cl0.4mm ASDFRa AREF",
+      "chapter": "manmade.plastic",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/manmade.plastic/usgs_s07_ASD_Plastic_Vinyl_GDS397_Cl0.4mm_ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "manmade",
+      "family": "plastic"
+    },
+    {
+      "name": "usgs:s07_ASD_Plywood_GDS365_Fresh_Pine_ASDFRa_AREF.txt",
+      "material": "Plywood GDS365 Fresh Pine    ASDFRa AREF",
+      "chapter": "manmade.wood_paper",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/manmade.wood_paper/usgs_s07_ASD_Plywood_GDS365_Fresh_Pine_ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "manmade",
+      "family": "wood_paper"
+    },
+    {
+      "name": "usgs:s07_ASD_Rusted_Tin_Can_GDS378_MV99-6_ASDFRa_AREF.txt",
+      "material": "Rusted_Tin_Can GDS378 MV99-6 ASDFRa AREF",
+      "chapter": "manmade.metal",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/manmade.metal/usgs_s07_ASD_Rusted_Tin_Can_GDS378_MV99-6_ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "manmade",
+      "family": "metal"
+    },
+    {
+      "name": "usgs:s07_ASD_Plastic_Vinyl_GDS395_Clr1mm_ASDFRa_AREF.txt",
+      "material": "Plastic_Vinyl GDS395 Clr1mm  ASDFRa AREF",
+      "chapter": "manmade.plastic",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/manmade.plastic/usgs_s07_ASD_Plastic_Vinyl_GDS395_Clr1mm_ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "manmade",
+      "family": "plastic"
+    },
+    {
+      "name": "usgs:s07_ASD_Roofing_Felt_GDS377_Black_ASDFRa_AREF.txt",
+      "material": "Roofing_Felt GDS377 Black    ASDFRa AREF",
+      "chapter": "manmade.roofing",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/manmade.roofing/usgs_s07_ASD_Roofing_Felt_GDS377_Black_ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "manmade",
+      "family": "roofing"
+    },
+    {
+      "name": "usgs:s07_ASD_Polyester_Webbing_GDS429_Blk_ASDFRa_AREF.txt",
+      "material": "Polyester_Webbing GDS429 Blk ASDFRa AREF",
+      "chapter": "manmade.textile",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/manmade.textile/usgs_s07_ASD_Polyester_Webbing_GDS429_Blk_ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "manmade",
+      "family": "textile"
+    },
+    {
+      "name": "usgs:s07_ASD_Plastic_Vinyl_GDS396_Clr1mm_ASDFRa_AREF.txt",
+      "material": "Plastic_Vinyl GDS396 Clr1mm  ASDFRa AREF",
+      "chapter": "manmade.plastic",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/manmade.plastic/usgs_s07_ASD_Plastic_Vinyl_GDS396_Clr1mm_ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "manmade",
+      "family": "plastic"
+    },
+    {
+      "name": "usgs:s07_ASD_Plastic_HDPE_GDS392_WhTransl_ASDFRa_AREF.txt",
+      "material": "Plastic_HDPE GDS392 WhTransl ASDFRa AREF",
+      "chapter": "manmade.plastic",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/manmade.plastic/usgs_s07_ASD_Plastic_HDPE_GDS392_WhTransl_ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "manmade",
+      "family": "plastic"
+    },
+    {
+      "name": "usgs:s07_ASD_Plastic_Tarp_GDS339_Green_ASDFRa_AREF.txt",
+      "material": "Plastic_Tarp GDS339 Green    ASDFRa AREF",
+      "chapter": "manmade.plastic",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/manmade.plastic/usgs_s07_ASD_Plastic_Tarp_GDS339_Green_ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "manmade",
+      "family": "plastic"
+    },
+    {
+      "name": "usgs:s07_ASD_Plastic_PETE_GDS380_Clear_ASDFRa_AREF.txt",
+      "material": "Plastic_PETE GDS380 Clear    ASDFRa AREF",
+      "chapter": "manmade.plastic",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/manmade.plastic/usgs_s07_ASD_Plastic_PETE_GDS380_Clear_ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "manmade",
+      "family": "plastic"
+    },
+    {
+      "name": "usgs:s07_ASD_Plastic_HDPE_GDS390_Transpar_ASDFRa_AREF.txt",
+      "material": "Plastic_HDPE GDS390 Transpar ASDFRa AREF",
+      "chapter": "manmade.plastic",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/manmade.plastic/usgs_s07_ASD_Plastic_HDPE_GDS390_Transpar_ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "manmade",
+      "family": "plastic"
+    },
+    {
+      "name": "usgs:s07_ASD_Plastic_LDPE_GDS405_Black_ASDFRa_AREF.txt",
+      "material": "Plastic_LDPE GDS405 Black    ASDFRa AREF",
+      "chapter": "manmade.plastic",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/manmade.plastic/usgs_s07_ASD_Plastic_LDPE_GDS405_Black_ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "manmade",
+      "family": "plastic"
+    },
+    {
+      "name": "usgs:s07_ASD_Plastic_Pipe_GDS342_Black_ASDFRa_AREF.txt",
+      "material": "Plastic_Pipe GDS342 Black    ASDFRa AREF",
+      "chapter": "manmade.plastic",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/manmade.plastic/usgs_s07_ASD_Plastic_Pipe_GDS342_Black_ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "manmade",
+      "family": "plastic"
+    },
+    {
+      "name": "usgs:s07_ASD_Plastic_PETE_GDS383_Clrbluis_ASDFRa_AREF.txt",
+      "material": "Plastic_PETE GDS383 Clrbluis ASDFRa AREF",
+      "chapter": "manmade.plastic",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/manmade.plastic/usgs_s07_ASD_Plastic_PETE_GDS383_Clrbluis_ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "manmade",
+      "family": "plastic"
+    },
+    {
+      "name": "usgs:s07_ASD_Plastic_HDPE_GDS384_Wht_Opaq_ASDFRa_AREF.txt",
+      "material": "Plastic_HDPE GDS384 Wht Opaq ASDFRa AREF",
+      "chapter": "manmade.plastic",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/manmade.plastic/usgs_s07_ASD_Plastic_HDPE_GDS384_Wht_Opaq_ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "manmade",
+      "family": "plastic"
+    },
+    {
+      "name": "usgs:s07_ASD_Plastic_HDPE_GDS385_WhTransl_ASDFRa_AREF.txt",
+      "material": "Plastic_HDPE GDS385 WhTransl ASDFRa AREF",
+      "chapter": "manmade.plastic",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/manmade.plastic/usgs_s07_ASD_Plastic_HDPE_GDS385_WhTransl_ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "manmade",
+      "family": "plastic"
+    },
+    {
+      "name": "usgs:s07_ASD_Plastic_HDPE_GDS373_Grey_Bag_ASDFRa_AREF.txt",
+      "material": "Plastic_HDPE GDS373 Grey Bag ASDFRa AREF",
+      "chapter": "manmade.plastic",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/manmade.plastic/usgs_s07_ASD_Plastic_HDPE_GDS373_Grey_Bag_ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "manmade",
+      "family": "plastic"
+    },
+    {
+      "name": "usgs:s07_ASD_Plastic_PETE_GDS382_Black_ASDFRa_AREF.txt",
+      "material": "Plastic_PETE GDS382 Black    ASDFRa AREF",
+      "chapter": "manmade.plastic",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/manmade.plastic/usgs_s07_ASD_Plastic_PETE_GDS382_Black_ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "manmade",
+      "family": "plastic"
+    },
+    {
+      "name": "usgs:s07_ASD_Plastic_Pipe_GDS344_Blue_ASDFRa_AREF.txt",
+      "material": "Plastic_Pipe GDS344 Blue     ASDFRa AREF",
+      "chapter": "manmade.plastic",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/manmade.plastic/usgs_s07_ASD_Plastic_Pipe_GDS344_Blue_ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "manmade",
+      "family": "plastic"
+    },
+    {
+      "name": "usgs:s07_ASD_Plastic_LDPE_GDS406_WhTrnslu_ASDFRa_AREF.txt",
+      "material": "Plastic_LDPE GDS406 WhTrnslu ASDFRa AREF",
+      "chapter": "manmade.plastic",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/manmade.plastic/usgs_s07_ASD_Plastic_LDPE_GDS406_WhTrnslu_ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "manmade",
+      "family": "plastic"
+    },
+    {
+      "name": "usgs:s07_ASD_Plastic_HDPE_GDS394_LgryTrns_ASDFRa_AREF.txt",
+      "material": "Plastic_HDPE GDS394 LgryTrns ASDFRa AREF",
+      "chapter": "manmade.plastic",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/manmade.plastic/usgs_s07_ASD_Plastic_HDPE_GDS394_LgryTrns_ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "manmade",
+      "family": "plastic"
+    },
+    {
+      "name": "usgs:s07_ASD_Plastic_HDPE_GDS389_WhTransl_ASDFRa_AREF.txt",
+      "material": "Plastic_HDPE GDS389 WhTransl ASDFRa AREF",
+      "chapter": "manmade.plastic",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/manmade.plastic/usgs_s07_ASD_Plastic_HDPE_GDS389_WhTransl_ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "manmade",
+      "family": "plastic"
+    },
+    {
+      "name": "usgs:s07_ASD_Plastic_Tarp_GDS340_Blu_Wovn_ASDFRa_AREF.txt",
+      "material": "Plastic_Tarp GDS340 Blu_Wovn ASDFRa AREF",
+      "chapter": "manmade.plastic",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/manmade.plastic/usgs_s07_ASD_Plastic_Tarp_GDS340_Blu_Wovn_ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "manmade",
+      "family": "plastic"
+    },
+    {
+      "name": "usgs:s07_ASD_Plastic_LDPE_GDS404_WhTrnslu_ASDFRa_AREF.txt",
+      "material": "Plastic_LDPE GDS404 WhTrnslu ASDFRa AREF",
+      "chapter": "manmade.plastic",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/manmade.plastic/usgs_s07_ASD_Plastic_LDPE_GDS404_WhTrnslu_ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "manmade",
+      "family": "plastic"
+    },
+    {
+      "name": "usgs:s07_ASD_Plastic_HDPE_GDS387_WhTransl_ASDFRa_AREF.txt",
+      "material": "Plastic_HDPE GDS387 WhTransl ASDFRa AREF",
+      "chapter": "manmade.plastic",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/manmade.plastic/usgs_s07_ASD_Plastic_HDPE_GDS387_WhTransl_ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "manmade",
+      "family": "plastic"
+    },
+    {
+      "name": "usgs:s07_ASD_Oil92_Water08_DWH10-3_1.85mm_ASDHRa_AREF.txt",
+      "material": "Oil92_Water08 DWH10-3 1.85mm ASDHRa AREF",
+      "chapter": "manmade.oil",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/manmade.oil/usgs_s07_ASD_Oil92_Water08_DWH10-3_1.85mm_ASDHRa_AREF.txt",
+      "source": "usgs",
+      "group": "manmade",
+      "family": "oil"
+    },
+    {
+      "name": "usgs:s07_ASD_Painted_Aluminum_GDS333_LgGr_ASDFRa_AREF.txt",
+      "material": "Painted_Aluminum GDS333 LgGr ASDFRa AREF",
+      "chapter": "manmade.metal",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/manmade.metal/usgs_s07_ASD_Painted_Aluminum_GDS333_LgGr_ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "manmade",
+      "family": "metal"
+    },
+    {
+      "name": "usgs:s07_ASD_Plastic_HDPE_GDS400_WhTrnslu_ASDFRa_AREF.txt",
+      "material": "Plastic_HDPE GDS400 WhTrnslu ASDFRa AREF",
+      "chapter": "manmade.plastic",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/manmade.plastic/usgs_s07_ASD_Plastic_HDPE_GDS400_WhTrnslu_ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "manmade",
+      "family": "plastic"
+    },
+    {
+      "name": "usgs:s07_ASD_Plastic_HDPE_GDS391_Blu-Grn_ASDFRa_AREF.txt",
+      "material": "Plastic_HDPE GDS391 Blu-Grn  ASDFRa AREF",
+      "chapter": "manmade.plastic",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/manmade.plastic/usgs_s07_ASD_Plastic_HDPE_GDS391_Blu-Grn_ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "manmade",
+      "family": "plastic"
+    },
+    {
+      "name": "usgs:s07_ASD_Plastic_HDPE_GDS351_BlkSheet_ASDFRa_AREF.txt",
+      "material": "Plastic_HDPE GDS351 BlkSheet ASDFRa AREF",
+      "chapter": "manmade.plastic",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/manmade.plastic/usgs_s07_ASD_Plastic_HDPE_GDS351_BlkSheet_ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "manmade",
+      "family": "plastic"
+    },
+    {
+      "name": "usgs:s07_ASD_Plastic_ABS_GDS341_BlackPipe_ASDFRa_AREF.txt",
+      "material": "Plastic_ABS GDS341 BlackPipe ASDFRa AREF",
+      "chapter": "manmade.plastic",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/manmade.plastic/usgs_s07_ASD_Plastic_ABS_GDS341_BlackPipe_ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "manmade",
+      "family": "plastic"
+    },
+    {
+      "name": "usgs:s07_ASD_Oil40_Water60_DWH10-3_8_mm_ASDHRa_AREF.txt",
+      "material": "Oil40_Water60 DWH10-3 8 mm   ASDHRa AREF",
+      "chapter": "manmade.oil",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/manmade.oil/usgs_s07_ASD_Oil40_Water60_DWH10-3_8_mm_ASDHRa_AREF.txt",
+      "source": "usgs",
+      "group": "manmade",
+      "family": "oil"
+    },
+    {
+      "name": "usgs:s07_ASD_Plastic_HDPE_GDS386_Yelopaqu_ASDFRa_AREF.txt",
+      "material": "Plastic_HDPE GDS386 Yelopaqu ASDFRa AREF",
+      "chapter": "manmade.plastic",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/manmade.plastic/usgs_s07_ASD_Plastic_HDPE_GDS386_Yelopaqu_ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "manmade",
+      "family": "plastic"
+    },
+    {
+      "name": "usgs:s07_ASD_Oil_Water_Benzene10_DWH10-3_ASDHRa_AREF.txt",
+      "material": "Oil_Water_Benzene10 DWH10-3  ASDHRa AREF",
+      "chapter": "manmade.oil",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/manmade.oil/usgs_s07_ASD_Oil_Water_Benzene10_DWH10-3_ASDHRa_AREF.txt",
+      "source": "usgs",
+      "group": "manmade",
+      "family": "oil"
+    },
+    {
+      "name": "usgs:s07_ASD_Paper_Cotton_Bond_PAPR1_100__ASDFRa_AREF.txt",
+      "material": "Paper_Cotton_Bond PAPR1 100% ASDFRa AREF",
+      "chapter": "manmade.wood_paper",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/manmade.wood_paper/usgs_s07_ASD_Paper_Cotton_Bond_PAPR1_100__ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "manmade",
+      "family": "wood_paper"
+    },
+    {
+      "name": "usgs:s07_ASD_Oil60_Water40_DWH10-3_8_mm_ASDHRa_AREF.txt",
+      "material": "Oil60_Water40 DWH10-3 8 mm   ASDHRa AREF",
+      "chapter": "manmade.oil",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/manmade.oil/usgs_s07_ASD_Oil60_Water40_DWH10-3_8_mm_ASDHRa_AREF.txt",
+      "source": "usgs",
+      "group": "manmade",
+      "family": "oil"
+    },
+    {
+      "name": "usgs:s07_ASD_Oil60_Water40_DWH10-3_0.5_mm_ASDHRa_AREF.txt",
+      "material": "Oil60_Water40 DWH10-3 0.5 mm ASDHRa AREF",
+      "chapter": "manmade.oil",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/manmade.oil/usgs_s07_ASD_Oil60_Water40_DWH10-3_0.5_mm_ASDHRa_AREF.txt",
+      "source": "usgs",
+      "group": "manmade",
+      "family": "oil"
+    },
+    {
+      "name": "usgs:s07_ASD_Plastic_GGA-54_Grnhouse_Roof_BECKa_AREF.txt",
+      "material": "Plastic GGA-54 Grnhouse Roof  BECKa AREF",
+      "chapter": "manmade.plastic",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/manmade.plastic/usgs_s07_ASD_Plastic_GGA-54_Grnhouse_Roof_BECKa_AREF.txt",
+      "source": "usgs",
+      "group": "manmade",
+      "family": "plastic"
+    },
+    {
+      "name": "usgs:s07_ASD_Oil92_Water08_DWH10-3_0.5_mm_ASDHRa_AREF.txt",
+      "material": "Oil92_Water08 DWH10-3 0.5 mm ASDHRa AREF",
+      "chapter": "manmade.oil",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/manmade.oil/usgs_s07_ASD_Oil92_Water08_DWH10-3_0.5_mm_ASDHRa_AREF.txt",
+      "source": "usgs",
+      "group": "manmade",
+      "family": "oil"
+    },
+    {
+      "name": "usgs:s07_ASD_Oil75_Water25_DWH10-3_8_mm_ASDHRa_AREF.txt",
+      "material": "Oil75_Water25 DWH10-3 8 mm   ASDHRa AREF",
+      "chapter": "manmade.oil",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/manmade.oil/usgs_s07_ASD_Oil75_Water25_DWH10-3_8_mm_ASDHRa_AREF.txt",
+      "source": "usgs",
+      "group": "manmade",
+      "family": "oil"
+    },
+    {
+      "name": "usgs:s07_ASD_Strand_Board_GDS362_Oriented_ASDFRa_AREF.txt",
+      "material": "Strand_Board GDS362 Oriented ASDFRa AREF",
+      "chapter": "manmade.wood_paper",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/manmade.wood_paper/usgs_s07_ASD_Strand_Board_GDS362_Oriented_ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "manmade",
+      "family": "wood_paper"
+    },
+    {
+      "name": "usgs:s07_ASD_Plastic_Visqueen_GDS370_Clr_ASDFRa_AREF.txt",
+      "material": "Plastic_Visqueen GDS370 Clr  ASDFRa AREF",
+      "chapter": "manmade.plastic",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/manmade.plastic/usgs_s07_ASD_Plastic_Visqueen_GDS370_Clr_ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "manmade",
+      "family": "plastic"
+    },
+    {
+      "name": "usgs:s07_ASD_Oil92_Water08_DWH10-3_0.05mm_ASDHRa_AREF.txt",
+      "material": "Oil92_Water08 DWH10-3 0.05mm ASDHRa AREF",
+      "chapter": "manmade.oil",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/manmade.oil/usgs_s07_ASD_Oil92_Water08_DWH10-3_0.05mm_ASDHRa_AREF.txt",
+      "source": "usgs",
+      "group": "manmade",
+      "family": "oil"
+    },
+    {
+      "name": "usgs:s07_ASD_Polystyrene_GDS345_BluInsul_ASDFRa_AREF.txt",
+      "material": "Polystyrene GDS345 BluInsul  ASDFRa AREF",
+      "chapter": "manmade.plastic",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/manmade.plastic/usgs_s07_ASD_Polystyrene_GDS345_BluInsul_ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "manmade",
+      "family": "plastic"
+    },
+    {
+      "name": "usgs:s07_ASD_Plastic_PVC_GDS338_White_ASDFRa_AREF.txt",
+      "material": "Plastic_PVC GDS338 White     ASDFRa AREF",
+      "chapter": "manmade.plastic",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/manmade.plastic/usgs_s07_ASD_Plastic_PVC_GDS338_White_ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "manmade",
+      "family": "plastic"
+    },
+    {
+      "name": "usgs:s07_ASD_Oil92_Water08_DWH10-3_0.1_mm_ASDHRa_AREF.txt",
+      "material": "Oil92_Water08 DWH10-3 0.1 mm ASDHRa AREF",
+      "chapter": "manmade.oil",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/manmade.oil/usgs_s07_ASD_Oil92_Water08_DWH10-3_0.1_mm_ASDHRa_AREF.txt",
+      "source": "usgs",
+      "group": "manmade",
+      "family": "oil"
+    },
+    {
+      "name": "usgs:s07_ASD_OiledMarshPlant_DWO-2-BAT-09_ASDFRa_AREF.txt",
+      "material": "OiledMarshPlant DWO-2-BAT-09 ASDFRa AREF",
+      "chapter": "manmade.oil",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/manmade.oil/usgs_s07_ASD_OiledMarshPlant_DWO-2-BAT-09_ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "manmade",
+      "family": "oil"
+    },
+    {
+      "name": "usgs:s07_ASD_Oil_Water_Benzene17_DWH10-3_ASDHRa_AREF.txt",
+      "material": "Oil_Water_Benzene17 DWH10-3  ASDHRa AREF",
+      "chapter": "manmade.oil",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/manmade.oil/usgs_s07_ASD_Oil_Water_Benzene17_DWH10-3_ASDHRa_AREF.txt",
+      "source": "usgs",
+      "group": "manmade",
+      "family": "oil"
+    },
+    {
+      "name": "usgs:s07_ASD_Oil60_Water40_DWH10-3_1.85mm_ASDHRa_AREF.txt",
+      "material": "Oil60_Water40 DWH10-3 1.85mm ASDHRa AREF",
+      "chapter": "manmade.oil",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/manmade.oil/usgs_s07_ASD_Oil60_Water40_DWH10-3_1.85mm_ASDHRa_AREF.txt",
+      "source": "usgs",
+      "group": "manmade",
+      "family": "oil"
+    },
+    {
+      "name": "usgs:s07_ASD_Oil60_Water40_DWH10-3_.025mm_ASDHRa_AREF.txt",
+      "material": "Oil60_Water40 DWH10-3 .025mm ASDHRa AREF",
+      "chapter": "manmade.oil",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/manmade.oil/usgs_s07_ASD_Oil60_Water40_DWH10-3_.025mm_ASDHRa_AREF.txt",
+      "source": "usgs",
+      "group": "manmade",
+      "family": "oil"
+    },
+    {
+      "name": "usgs:s07_ASD_Particle_Board_GDS364_Fn_Gr_ASDFRa_AREF.txt",
+      "material": "Particle_Board GDS364 Fn Gr  ASDFRa AREF",
+      "chapter": "manmade.wood_paper",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/manmade.wood_paper/usgs_s07_ASD_Particle_Board_GDS364_Fn_Gr_ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "manmade",
+      "family": "wood_paper"
+    },
+    {
+      "name": "usgs:s07_ASD_Oil40_Water60_DWH10-3_4_mm_ASDHRa_AREF.txt",
+      "material": "Oil40_Water60 DWH10-3 4 mm   ASDHRa AREF",
+      "chapter": "manmade.oil",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/manmade.oil/usgs_s07_ASD_Oil40_Water60_DWH10-3_4_mm_ASDHRa_AREF.txt",
+      "source": "usgs",
+      "group": "manmade",
+      "family": "oil"
+    },
+    {
+      "name": "usgs:s07_ASD_Oil60_Water40_DWH10-3_0.1_mm_ASDHRa_AREF.txt",
+      "material": "Oil60_Water40 DWH10-3 0.1 mm ASDHRa AREF",
+      "chapter": "manmade.oil",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/manmade.oil/usgs_s07_ASD_Oil60_Water40_DWH10-3_0.1_mm_ASDHRa_AREF.txt",
+      "source": "usgs",
+      "group": "manmade",
+      "family": "oil"
+    },
+    {
+      "name": "usgs:s07_ASD_Oil40_Water60_DWH10-3_0.5_mm_ASDHRa_AREF.txt",
+      "material": "Oil40_Water60 DWH10-3 0.5 mm ASDHRa AREF",
+      "chapter": "manmade.oil",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/manmade.oil/usgs_s07_ASD_Oil40_Water60_DWH10-3_0.5_mm_ASDHRa_AREF.txt",
+      "source": "usgs",
+      "group": "manmade",
+      "family": "oil"
+    },
+    {
+      "name": "usgs:s07_ASD_Oil23_Water77_DWH10-3_0.05mm_ASDHRa_AREF.txt",
+      "material": "Oil23_Water77 DWH10-3 0.05mm ASDHRa AREF",
+      "chapter": "manmade.oil",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/manmade.oil/usgs_s07_ASD_Oil23_Water77_DWH10-3_0.05mm_ASDHRa_AREF.txt",
+      "source": "usgs",
+      "group": "manmade",
+      "family": "oil"
+    },
+    {
+      "name": "usgs:s07_ASD_Plastic_LDPE_GDS401_Clr_film_ASDFRa_AREF.txt",
+      "material": "Plastic_LDPE GDS401 Clr film ASDFRa AREF",
+      "chapter": "manmade.plastic",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/manmade.plastic/usgs_s07_ASD_Plastic_LDPE_GDS401_Clr_film_ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "manmade",
+      "family": "plastic"
+    },
+    {
+      "name": "usgs:s07_ASD_OiledMarshPlant_DWO-2-DEL-04_ASDFRa_AREF.txt",
+      "material": "OiledMarshPlant DWO-2-DEL-04 ASDFRa AREF",
+      "chapter": "manmade.oil",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/manmade.oil/usgs_s07_ASD_OiledMarshPlant_DWO-2-DEL-04_ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "manmade",
+      "family": "oil"
+    },
+    {
+      "name": "usgs:s07_ASD_Oil23_Water77_DWH10-3_.025mm_ASDHRa_AREF.txt",
+      "material": "Oil23_Water77 DWH10-3 .025mm ASDHRa AREF",
+      "chapter": "manmade.oil",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/manmade.oil/usgs_s07_ASD_Oil23_Water77_DWH10-3_.025mm_ASDHRa_AREF.txt",
+      "source": "usgs",
+      "group": "manmade",
+      "family": "oil"
+    },
+    {
+      "name": "usgs:s07_ASD_Oil60_Water40_DWH10-3_4_mm_ASDHRa_AREF.txt",
+      "material": "Oil60_Water40 DWH10-3 4 mm   ASDHRa AREF",
+      "chapter": "manmade.oil",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/manmade.oil/usgs_s07_ASD_Oil60_Water40_DWH10-3_4_mm_ASDHRa_AREF.txt",
+      "source": "usgs",
+      "group": "manmade",
+      "family": "oil"
+    },
+    {
+      "name": "usgs:s07_ASD_Oil40_Water60_DWH10-3_0.05mm_ASDHRa_AREF.txt",
+      "material": "Oil40_Water60 DWH10-3 0.05mm ASDHRa AREF",
+      "chapter": "manmade.oil",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/manmade.oil/usgs_s07_ASD_Oil40_Water60_DWH10-3_0.05mm_ASDHRa_AREF.txt",
+      "source": "usgs",
+      "group": "manmade",
+      "family": "oil"
+    },
+    {
+      "name": "usgs:s07_ASD_Oil01_Water99_DWH10-3_28mm_ASDHRb_AREF.txt",
+      "material": "Oil01_Water99 DWH10-3 28mm   ASDHRb AREF",
+      "chapter": "manmade.oil",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/manmade.oil/usgs_s07_ASD_Oil01_Water99_DWH10-3_28mm_ASDHRb_AREF.txt",
+      "source": "usgs",
+      "group": "manmade",
+      "family": "oil"
+    },
+    {
+      "name": "usgs:s07_ASD_Oiled_sand_area_GrndIsle_ASDFRa_AREF.txt",
+      "material": "Oiled_sand_area     GrndIsle ASDFRa AREF",
+      "chapter": "manmade.oil",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/manmade.oil/usgs_s07_ASD_Oiled_sand_area_GrndIsle_ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "manmade",
+      "family": "oil"
+    },
+    {
+      "name": "usgs:s07_ASD_Oil23_Water77_DWH10-3_0.5_mm_ASDHRa_AREF.txt",
+      "material": "Oil23_Water77 DWH10-3 0.5 mm ASDHRa AREF",
+      "chapter": "manmade.oil",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/manmade.oil/usgs_s07_ASD_Oil23_Water77_DWH10-3_0.5_mm_ASDHRa_AREF.txt",
+      "source": "usgs",
+      "group": "manmade",
+      "family": "oil"
+    },
+    {
+      "name": "usgs:s07_ASD_Nylon_Fabric_GDS436_BlkCoatd_ASDFRa_AREF.txt",
+      "material": "Nylon_Fabric GDS436 BlkCoatd ASDFRa AREF",
+      "chapter": "manmade.textile",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/manmade.textile/usgs_s07_ASD_Nylon_Fabric_GDS436_BlkCoatd_ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "manmade",
+      "family": "textile"
+    },
+    {
+      "name": "usgs:s07_ASD_Oiled_sand_brown_GrndIsle_ASDFRa_AREF.txt",
+      "material": "Oiled_sand_brown    GrndIsle ASDFRa AREF",
+      "chapter": "manmade.oil",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/manmade.oil/usgs_s07_ASD_Oiled_sand_brown_GrndIsle_ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "manmade",
+      "family": "oil"
+    },
+    {
+      "name": "usgs:s07_ASD_Plastic_PETE_GDS381_Clr-prpl_ASDFRa_AREF.txt",
+      "material": "Plastic_PETE GDS381 Clr-prpl ASDFRa AREF",
+      "chapter": "manmade.plastic",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/manmade.plastic/usgs_s07_ASD_Plastic_PETE_GDS381_Clr-prpl_ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "manmade",
+      "family": "plastic"
+    },
+    {
+      "name": "usgs:s07_ASD_OiledMarshPlant_DWO-2-BAT-08_ASDFRa_AREF.txt",
+      "material": "OiledMarshPlant DWO-2-BAT-08 ASDFRa AREF",
+      "chapter": "manmade.oil",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/manmade.oil/usgs_s07_ASD_OiledMarshPlant_DWO-2-BAT-08_ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "manmade",
+      "family": "oil"
+    },
+    {
+      "name": "usgs:s07_ASD_Oiled_sand_dark_GrndIsle_ASDFRa_AREF.txt",
+      "material": "Oiled_sand_dark     GrndIsle ASDFRa AREF",
+      "chapter": "manmade.oil",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/manmade.oil/usgs_s07_ASD_Oiled_sand_dark_GrndIsle_ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "manmade",
+      "family": "oil"
+    },
+    {
+      "name": "usgs:s07_ASD_Plastic_Vinyl_GDS372_White_ASDFRa_AREF.txt",
+      "material": "Plastic_Vinyl GDS372 White   ASDFRa AREF",
+      "chapter": "manmade.plastic",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/manmade.plastic/usgs_s07_ASD_Plastic_Vinyl_GDS372_White_ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "manmade",
+      "family": "plastic"
+    },
+    {
+      "name": "usgs:s07_ASD_Plastic_Tyvek_GDS369_White_ASDFRa_AREF.txt",
+      "material": "Plastic_Tyvek GDS369 White   ASDFRa AREF",
+      "chapter": "manmade.plastic",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/manmade.plastic/usgs_s07_ASD_Plastic_Tyvek_GDS369_White_ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "manmade",
+      "family": "plastic"
+    },
+    {
+      "name": "usgs:s07_ASD_Oil01_Water99_DWH10-3_foam_ASDHRb_AREF.txt",
+      "material": "Oil01_Water99 DWH10-3 foam   ASDHRb AREF",
+      "chapter": "manmade.oil",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/manmade.oil/usgs_s07_ASD_Oil01_Water99_DWH10-3_foam_ASDHRb_AREF.txt",
+      "source": "usgs",
+      "group": "manmade",
+      "family": "oil"
+    },
+    {
+      "name": "usgs:s07_ASD_Oil40_Water60_DWH10-3_0.1_mm_ASDHRa_AREF.txt",
+      "material": "Oil40_Water60 DWH10-3 0.1 mm ASDHRa AREF",
+      "chapter": "manmade.oil",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/manmade.oil/usgs_s07_ASD_Oil40_Water60_DWH10-3_0.1_mm_ASDHRa_AREF.txt",
+      "source": "usgs",
+      "group": "manmade",
+      "family": "oil"
+    },
+    {
+      "name": "usgs:s07_ASD_Nylon_Carpet_GDS535_LtBrown_ASDFRa_AREF.txt",
+      "material": "Nylon_Carpet GDS535 LtBrown  ASDFRa AREF",
+      "chapter": "manmade.textile",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/manmade.textile/usgs_s07_ASD_Nylon_Carpet_GDS535_LtBrown_ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "manmade",
+      "family": "textile"
+    },
+    {
+      "name": "usgs:s07_ASD_Nylon_Webbing_GDS438_Flr_Yel_ASDFRa_AREF.txt",
+      "material": "Nylon_Webbing GDS438 Flr Yel ASDFRa AREF",
+      "chapter": "manmade.textile",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/manmade.textile/usgs_s07_ASD_Nylon_Webbing_GDS438_Flr_Yel_ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "manmade",
+      "family": "textile"
+    },
+    {
+      "name": "usgs:s07_ASD_Oiled_S.altern._DWO-3-BAT-06_ASDFRa_AREF.txt",
+      "material": "Oiled_S.altern. DWO-3-BAT-06 ASDFRa AREF",
+      "chapter": "manmade.oil",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/manmade.oil/usgs_s07_ASD_Oiled_S.altern._DWO-3-BAT-06_ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "manmade",
+      "family": "oil"
+    },
+    {
+      "name": "usgs:s07_ASD_Nylon_Carpet_GDS536_Gry_Pile_ASDFRa_AREF.txt",
+      "material": "Nylon_Carpet GDS536 Gry Pile ASDFRa AREF",
+      "chapter": "manmade.textile",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/manmade.textile/usgs_s07_ASD_Nylon_Carpet_GDS536_Gry_Pile_ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "manmade",
+      "family": "textile"
+    },
+    {
+      "name": "usgs:s07_ASD_Nylon_Fabric_GDS433_Blu_RpSt_ASDFRa_AREF.txt",
+      "material": "Nylon_Fabric GDS433 Blu RpSt ASDFRa AREF",
+      "chapter": "manmade.textile",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/manmade.textile/usgs_s07_ASD_Nylon_Fabric_GDS433_Blu_RpSt_ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "manmade",
+      "family": "textile"
+    },
+    {
+      "name": "usgs:s07_ASD_Oil_waterEmuls._DWO-3-BAT-09_ASDFRa_AREF.txt",
+      "material": "Oil_waterEmuls. DWO-3-BAT-09 ASDFRa AREF",
+      "chapter": "manmade.oil",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/manmade.oil/usgs_s07_ASD_Oil_waterEmuls._DWO-3-BAT-09_ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "manmade",
+      "family": "oil"
+    },
+    {
+      "name": "usgs:s07_ASD_Oiled_marsh_dry_DWO-3-BAT-09_ASDFRa_AREF.txt",
+      "material": "Oiled_marsh_dry DWO-3-BAT-09 ASDFRa AREF",
+      "chapter": "manmade.oil",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/manmade.oil/usgs_s07_ASD_Oiled_marsh_dry_DWO-3-BAT-09_ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "manmade",
+      "family": "oil"
+    },
+    {
+      "name": "usgs:s07_ASD_Plastic_PETE_GDS379_TrnslBrn_ASDFRa_AREF.txt",
+      "material": "Plastic_PETE GDS379 TrnslBrn ASDFRa AREF",
+      "chapter": "manmade.plastic",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/manmade.plastic/usgs_s07_ASD_Plastic_PETE_GDS379_TrnslBrn_ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "manmade",
+      "family": "plastic"
+    },
+    {
+      "name": "usgs:s07_ASD_Nylon_Fabric_GDS431_Red_RpSt_ASDFRa_AREF.txt",
+      "material": "Nylon_Fabric GDS431 Red RpSt ASDFRa AREF",
+      "chapter": "manmade.textile",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/manmade.textile/usgs_s07_ASD_Nylon_Fabric_GDS431_Red_RpSt_ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "manmade",
+      "family": "textile"
+    },
+    {
+      "name": "usgs:s07_ASD_Nylon_Webbing_GDS428_OlvDrab_ASDFRa_AREF.txt",
+      "material": "Nylon_Webbing GDS428 OlvDrab ASDFRa AREF",
+      "chapter": "manmade.textile",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/manmade.textile/usgs_s07_ASD_Nylon_Webbing_GDS428_OlvDrab_ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "manmade",
+      "family": "textile"
+    },
+    {
+      "name": "usgs:s07_ASD_Oiled_marsh_DWO-3-BAT-06_ASDFRa_AREF.txt",
+      "material": "Oiled_marsh DWO-3-BAT-06     ASDFRa AREF",
+      "chapter": "manmade.oil",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/manmade.oil/usgs_s07_ASD_Oiled_marsh_DWO-3-BAT-06_ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "manmade",
+      "family": "oil"
+    },
+    {
+      "name": "usgs:s07_ASD_Oil92_Water08_DWH10-3_4_mm_ASDHRa_AREF.txt",
+      "material": "Oil92_Water08 DWH10-3 4 mm   ASDHRa AREF",
+      "chapter": "manmade.oil",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/manmade.oil/usgs_s07_ASD_Oil92_Water08_DWH10-3_4_mm_ASDHRa_AREF.txt",
+      "source": "usgs",
+      "group": "manmade",
+      "family": "oil"
+    },
+    {
+      "name": "usgs:s07_ASD_Oiled_P.austral._DWO-3-DEL-1_ASDFRa_AREF.txt",
+      "material": "Oiled_P.austral. DWO-3-DEL-1 ASDFRa AREF",
+      "chapter": "manmade.oil",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/manmade.oil/usgs_s07_ASD_Oiled_P.austral._DWO-3-DEL-1_ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "manmade",
+      "family": "oil"
+    },
+    {
+      "name": "usgs:s07_ASD_Oil60_Water40_DWH10-3_0.05mm_ASDHRa_AREF.txt",
+      "material": "Oil60_Water40 DWH10-3 0.05mm ASDHRa AREF",
+      "chapter": "manmade.oil",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/manmade.oil/usgs_s07_ASD_Oil60_Water40_DWH10-3_0.05mm_ASDHRa_AREF.txt",
+      "source": "usgs",
+      "group": "manmade",
+      "family": "oil"
+    },
+    {
+      "name": "usgs:s07_ASD_Plastic_HDPE_GDS393_GlosWhTr_ASDFRa_AREF.txt",
+      "material": "Plastic_HDPE GDS393 GlosWhTr ASDFRa AREF",
+      "chapter": "manmade.plastic",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/manmade.plastic/usgs_s07_ASD_Plastic_HDPE_GDS393_GlosWhTr_ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "manmade",
+      "family": "plastic"
+    },
+    {
+      "name": "usgs:s07_ASD_Oiled_marsh_DWO-3-BAT-09_ASDFRa_AREF.txt",
+      "material": "Oiled_marsh DWO-3-BAT-09     ASDFRa AREF",
+      "chapter": "manmade.oil",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/manmade.oil/usgs_s07_ASD_Oiled_marsh_DWO-3-BAT-09_ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "manmade",
+      "family": "oil"
+    },
+    {
+      "name": "usgs:s07_ASD_Fiberglass_GDS337_Grn_Roofng_ASDFRa_AREF.txt",
+      "material": "Fiberglass GDS337 Grn Roofng ASDFRa AREF",
+      "chapter": "manmade.roofing",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/manmade.roofing/usgs_s07_ASD_Fiberglass_GDS337_Grn_Roofng_ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "manmade",
+      "family": "roofing"
+    },
+    {
+      "name": "usgs:s07_ASD_Fiberglass_GDS335_Wh_Roofing_ASDFRa_AREF.txt",
+      "material": "Fiberglass GDS335 Wh Roofing ASDFRa AREF",
+      "chapter": "manmade.roofing",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/manmade.roofing/usgs_s07_ASD_Fiberglass_GDS335_Wh_Roofing_ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "manmade",
+      "family": "roofing"
+    },
+    {
+      "name": "usgs:s07_ASD_Plastic_LDPE_GDS402_Clr_film_ASDFRa_AREF.txt",
+      "material": "Plastic_LDPE GDS402 Clr film ASDFRa AREF",
+      "chapter": "manmade.plastic",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/manmade.plastic/usgs_s07_ASD_Plastic_LDPE_GDS402_Clr_film_ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "manmade",
+      "family": "plastic"
+    },
+    {
+      "name": "usgs:s07_ASD_Fiberglass_GDS374_Pnk_Insul_ASDFRa_AREF.txt",
+      "material": "Fiberglass GDS374 Pnk Insul  ASDFRa AREF",
+      "chapter": "manmade.plastic",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/manmade.plastic/usgs_s07_ASD_Fiberglass_GDS374_Pnk_Insul_ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "manmade",
+      "family": "plastic"
+    },
+    {
+      "name": "usgs:s07_ASD_Oil23_Water77_DWH10-3_4_mm_ASDHRa_AREF.txt",
+      "material": "Oil23_Water77 DWH10-3 4 mm   ASDHRa AREF",
+      "chapter": "manmade.oil",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/manmade.oil/usgs_s07_ASD_Oil23_Water77_DWH10-3_4_mm_ASDHRa_AREF.txt",
+      "source": "usgs",
+      "group": "manmade",
+      "family": "oil"
+    },
+    {
+      "name": "usgs:s07_ASD_Oil_BlackPoolonBeach_DWO-06b_ASDFRa_AREF.txt",
+      "material": "Oil_BlackPoolonBeach DWO-06b ASDFRa AREF",
+      "chapter": "manmade.oil",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/manmade.oil/usgs_s07_ASD_Oil_BlackPoolonBeach_DWO-06b_ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "manmade",
+      "family": "oil"
+    },
+    {
+      "name": "usgs:s07_ASD_GalvanizedSheetMetal_GDS334_ASDFRa_AREF.txt",
+      "material": "GalvanizedSheetMetal GDS334  ASDFRa AREF",
+      "chapter": "manmade.metal",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/manmade.metal/usgs_s07_ASD_GalvanizedSheetMetal_GDS334_ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "manmade",
+      "family": "metal"
+    },
+    {
+      "name": "usgs:s07_ASD_Fiberglass_GDS399_Clear_Roof_ASDFRa_AREF.txt",
+      "material": "Fiberglass GDS399 Clear Roof ASDFRa AREF",
+      "chapter": "manmade.roofing",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/manmade.roofing/usgs_s07_ASD_Fiberglass_GDS399_Clear_Roof_ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "manmade",
+      "family": "roofing"
+    },
+    {
+      "name": "usgs:s07_ASD_Cedar_Shake_GDS358_SlgWeathr_ASDFRa_AREF.txt",
+      "material": "Cedar_Shake GDS358 SlgWeathr ASDFRa AREF",
+      "chapter": "manmade.roofing",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/manmade.roofing/usgs_s07_ASD_Cedar_Shake_GDS358_SlgWeathr_ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "manmade",
+      "family": "roofing"
+    },
+    {
+      "name": "usgs:s07_ASD_Cinder_Block_GDS356_Lg_Grey_ASDFRa_AREF.txt",
+      "material": "Cinder_Block GDS356 Lg Grey  ASDFRa AREF",
+      "chapter": "manmade.building",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/manmade.building/usgs_s07_ASD_Cinder_Block_GDS356_Lg_Grey_ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "manmade",
+      "family": "building"
+    },
+    {
+      "name": "usgs:s07_ASD_Cedar_Shake_GDS357_Fresh_ASDFRa_AREF.txt",
+      "material": "Cedar_Shake GDS357 Fresh     ASDFRa AREF",
+      "chapter": "manmade.roofing",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/manmade.roofing/usgs_s07_ASD_Cedar_Shake_GDS357_Fresh_ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "manmade",
+      "family": "roofing"
+    },
+    {
+      "name": "usgs:s07_ASD_Cedar_Shake_GDS359_MedWeathr_ASDFRa_AREF.txt",
+      "material": "Cedar_Shake GDS359 MedWeathr ASDFRa AREF",
+      "chapter": "manmade.roofing",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/manmade.roofing/usgs_s07_ASD_Cedar_Shake_GDS359_MedWeathr_ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "manmade",
+      "family": "roofing"
+    },
+    {
+      "name": "usgs:s07_ASD_Grass_dry.4+.6green_AMX27_BECKa_AREF.txt",
+      "material": "Grass_dry.4+.6green    AMX27  BECKa AREF",
+      "chapter": "natural.npv",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.npv/usgs_s07_ASD_Grass_dry.4+.6green_AMX27_BECKa_AREF.txt",
+      "source": "usgs",
+      "group": "natural",
+      "family": "npv"
+    },
+    {
+      "name": "usgs:s07_ASD_Nylon_Fabric_GDS432_Grn_RpSt_ASDFRa_AREF.txt",
+      "material": "Nylon_Fabric GDS432 Grn RpSt ASDFRa AREF",
+      "chapter": "manmade.textile",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/manmade.textile/usgs_s07_ASD_Nylon_Fabric_GDS432_Grn_RpSt_ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "manmade",
+      "family": "textile"
+    },
+    {
+      "name": "usgs:s07_ASD_Grass_dry.6+.4green_AMX29_BECKa_AREF.txt",
+      "material": "Grass_dry.6+.4green    AMX29  BECKa AREF",
+      "chapter": "natural.npv",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.npv/usgs_s07_ASD_Grass_dry.6+.4green_AMX29_BECKa_AREF.txt",
+      "source": "usgs",
+      "group": "natural",
+      "family": "npv"
+    },
+    {
+      "name": "usgs:s07_ASD_Oil23_Water77_DWH10-3_0.1_mm_ASDHRa_AREF.txt",
+      "material": "Oil23_Water77 DWH10-3 0.1 mm ASDHRa AREF",
+      "chapter": "manmade.oil",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/manmade.oil/usgs_s07_ASD_Oil23_Water77_DWH10-3_0.1_mm_ASDHRa_AREF.txt",
+      "source": "usgs",
+      "group": "manmade",
+      "family": "oil"
+    },
+    {
+      "name": "usgs:s07_ASD_Fiberglass_GDS336_Grn_Roofng_ASDFRa_AREF.txt",
+      "material": "Fiberglass GDS336 Grn Roofng ASDFRa AREF",
+      "chapter": "manmade.roofing",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/manmade.roofing/usgs_s07_ASD_Fiberglass_GDS336_Grn_Roofng_ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "manmade",
+      "family": "roofing"
+    },
+    {
+      "name": "usgs:s07_ASD_Grass_dry.9+.1green_AMX32_BECKa_AREF.txt",
+      "material": "Grass_dry.9+.1green    AMX32  BECKa AREF",
+      "chapter": "natural.npv",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.npv/usgs_s07_ASD_Grass_dry.9+.1green_AMX32_BECKa_AREF.txt",
+      "source": "usgs",
+      "group": "natural",
+      "family": "npv"
+    },
+    {
+      "name": "usgs:s07_ASD_Rangeland_L02-069_S00__G99__ASDFRa_AREF.txt",
+      "material": "Rangeland L02-069 S00% G99%  ASDFRa AREF",
+      "chapter": "natural.vegetation",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.vegetation/usgs_s07_ASD_Rangeland_L02-069_S00__G99__ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "natural",
+      "family": "vegetation"
+    },
+    {
+      "name": "usgs:s07_ASD_Antigorite+.33DryGrass_AMX25_ASDFRa_AREF.txt",
+      "material": "Antigorite+.33DryGrass AMX25 ASDFRa AREF",
+      "chapter": "natural.npv",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.npv/usgs_s07_ASD_Antigorite+.33DryGrass_AMX25_ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "natural",
+      "family": "npv"
+    },
+    {
+      "name": "usgs:s07_ASD_Rangeland_L04-047_S00__G47__ASDFRa_AREF.txt",
+      "material": "Rangeland L04-047 S00% G47%  ASDFRa AREF",
+      "chapter": "natural.vegetation",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.vegetation/usgs_s07_ASD_Rangeland_L04-047_S00__G47__ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "natural",
+      "family": "vegetation"
+    },
+    {
+      "name": "usgs:s07_ASD_Antigorite+.2DryGrass_AMX26_ASDFRa_AREF.txt",
+      "material": "Antigorite+.2DryGrass  AMX26 ASDFRa AREF",
+      "chapter": "natural.npv",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.npv/usgs_s07_ASD_Antigorite+.2DryGrass_AMX26_ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "natural",
+      "family": "npv"
+    },
+    {
+      "name": "usgs:s07_ASD_Cotton_Fabric_GDS437_White_ASDFRa_AREF.txt",
+      "material": "Cotton_Fabric GDS437 White   ASDFRa AREF",
+      "chapter": "manmade.textile",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/manmade.textile/usgs_s07_ASD_Cotton_Fabric_GDS437_White_ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "manmade",
+      "family": "textile"
+    },
+    {
+      "name": "usgs:s07_ASD_Cedar_Shake_GDS360_H_Weamoss_ASDFRa_AREF.txt",
+      "material": "Cedar_Shake GDS360 H Weamoss ASDFRa AREF",
+      "chapter": "manmade.roofing",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/manmade.roofing/usgs_s07_ASD_Cedar_Shake_GDS360_H_Weamoss_ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "manmade",
+      "family": "roofing"
+    },
+    {
+      "name": "usgs:s07_ASD_Stonwll_Ply+.1grnGrass_AMX33_BECKa_AREF.txt",
+      "material": "Stonwll_Ply+.1grnGrass AMX33  BECKa AREF",
+      "chapter": "natural.vegetation",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.vegetation/usgs_s07_ASD_Stonwll_Ply+.1grnGrass_AMX33_BECKa_AREF.txt",
+      "source": "usgs",
+      "group": "natural",
+      "family": "vegetation"
+    },
+    {
+      "name": "usgs:s07_ASD_Rangeland_L02-061_S00__G06__ASDFRa_AREF.txt",
+      "material": "Rangeland L02-061 S00% G06%  ASDFRa AREF",
+      "chapter": "natural.vegetation",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.vegetation/usgs_s07_ASD_Rangeland_L02-061_S00__G06__ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "natural",
+      "family": "vegetation"
+    },
+    {
+      "name": "usgs:s07_ASD_Rangeland_L04-035_S03__G54__ASDFRa_AREF.txt",
+      "material": "Rangeland L04-035 S03% G54%  ASDFRa AREF",
+      "chapter": "natural.vegetation",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.vegetation/usgs_s07_ASD_Rangeland_L04-035_S03__G54__ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "natural",
+      "family": "vegetation"
+    },
+    {
+      "name": "usgs:s07_ASD_Marsh_sediment_DWV3-0511_dry_ASDFRa_AREF.txt",
+      "material": "Marsh sediment DWV3-0511 dry ASDFRa AREF",
+      "chapter": "natural.npv",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.npv/usgs_s07_ASD_Marsh_sediment_DWV3-0511_dry_ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "natural",
+      "family": "npv"
+    },
+    {
+      "name": "usgs:s07_ASD_Marsh_water40_..._CRMS121v69_ASDFRa_AREF.txt",
+      "material": "Marsh water40%... CRMS121v69 ASDFRa AREF",
+      "chapter": "natural.water",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.water/usgs_s07_ASD_Marsh_water40_..._CRMS121v69_ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "natural",
+      "family": "water"
+    },
+    {
+      "name": "usgs:s07_ASD_Marsh_SCAM50_...._CRMS326v48_ASDFRa_AREF.txt",
+      "material": "Marsh SCAM50%.... CRMS326v48 ASDFRa AREF",
+      "chapter": "natural.vegetation",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.vegetation/usgs_s07_ASD_Marsh_SCAM50_...._CRMS326v48_ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "natural",
+      "family": "vegetation"
+    },
+    {
+      "name": "usgs:s07_ASD_Marsh_water_CRMS322v84a_sunl_ASDFRa_AREF.txt",
+      "material": "Marsh water CRMS322v84a sunl ASDFRa AREF",
+      "chapter": "natural.water",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.water/usgs_s07_ASD_Marsh_water_CRMS322v84a_sunl_ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "natural",
+      "family": "water"
+    },
+    {
+      "name": "usgs:s07_ASD_Marsh_water_CRMS121v69-glint_ASDFRa_AREF.txt",
+      "material": "Marsh water CRMS121v69-glint ASDFRa AREF",
+      "chapter": "natural.water",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.water/usgs_s07_ASD_Marsh_water_CRMS121v69-glint_ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "natural",
+      "family": "water"
+    },
+    {
+      "name": "usgs:s07_ASD_Rangeland_C03-085_S06__G24__ASDFRa_AREF.txt",
+      "material": "Rangeland C03-085 S06% G24%  ASDFRa AREF",
+      "chapter": "natural.vegetation",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.vegetation/usgs_s07_ASD_Rangeland_C03-085_S06__G24__ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "natural",
+      "family": "vegetation"
+    },
+    {
+      "name": "usgs:s07_ASD_Marsh_water55_..._CRMS121v47_ASDFRa_AREF.txt",
+      "material": "Marsh water55%... CRMS121v47 ASDFRa AREF",
+      "chapter": "natural.water",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.water/usgs_s07_ASD_Marsh_water55_..._CRMS121v47_ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "natural",
+      "family": "water"
+    },
+    {
+      "name": "usgs:s07_ASD_MarshWater_CRMS121v69-NoGlnt_ASDFRa_AREF.txt",
+      "material": "MarshWater CRMS121v69-NoGlnt ASDFRa AREF",
+      "chapter": "natural.water",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.water/usgs_s07_ASD_MarshWater_CRMS121v69-NoGlnt_ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "natural",
+      "family": "water"
+    },
+    {
+      "name": "usgs:s07_ASD_Marsh_wrack_DWV1-0511_NPV.a_ASDFRa_AREF.txt",
+      "material": "Marsh wrack DWV1-0511 NPV.a  ASDFRa AREF",
+      "chapter": "natural.npv",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.npv/usgs_s07_ASD_Marsh_wrack_DWV1-0511_NPV.a_ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "natural",
+      "family": "npv"
+    },
+    {
+      "name": "usgs:s07_ASD_Marsh_water75_..._CRMS322v84_ASDFRa_AREF.txt",
+      "material": "Marsh water75%... CRMS322v84 ASDFRa AREF",
+      "chapter": "natural.water",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.water/usgs_s07_ASD_Marsh_water75_..._CRMS322v84_ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "natural",
+      "family": "water"
+    },
+    {
+      "name": "usgs:s07_ASD_Willow_Willow-Leaves-1_dry_ASDFRa_AREF.txt",
+      "material": "Willow Willow-Leaves-1 dry   ASDFRa AREF",
+      "chapter": "natural.npv",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.npv/usgs_s07_ASD_Willow_Willow-Leaves-1_dry_ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "natural",
+      "family": "npv"
+    },
+    {
+      "name": "usgs:s07_ASD_Oak_Oak-Leaf-2_dried_ASDFRa_AREF.txt",
+      "material": "Oak Oak-Leaf-2 dried         ASDFRa AREF",
+      "chapter": "natural.vegetation",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.vegetation/usgs_s07_ASD_Oak_Oak-Leaf-2_dried_ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "natural",
+      "family": "vegetation"
+    },
+    {
+      "name": "usgs:s07_ASD_Manzanita_CA01-ARVI-7_leaves_ASDFRa_AREF.txt",
+      "material": "Manzanita CA01-ARVI-7 leaves ASDFRa AREF",
+      "chapter": "natural.vegetation",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.vegetation/usgs_s07_ASD_Manzanita_CA01-ARVI-7_leaves_ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "natural",
+      "family": "vegetation"
+    },
+    {
+      "name": "usgs:s07_ASD_Marsh_wrack_DWV3-0511_dryNPV_ASDFRa_AREF.txt",
+      "material": "Marsh wrack DWV3-0511 dryNPV ASDFRa AREF",
+      "chapter": "natural.npv",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.npv/usgs_s07_ASD_Marsh_wrack_DWV3-0511_dryNPV_ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "natural",
+      "family": "npv"
+    },
+    {
+      "name": "usgs:s07_ASD_Tumbleweed_ANP92-2C_Dry_BECKa_AREF.txt",
+      "material": "Tumbleweed ANP92-2C Dry       BECKa AREF",
+      "chapter": "natural.npv",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.npv/usgs_s07_ASD_Tumbleweed_ANP92-2C_Dry_BECKa_AREF.txt",
+      "source": "usgs",
+      "group": "natural",
+      "family": "npv"
+    },
+    {
+      "name": "usgs:s07_ASD_Lodgepole-Pine_LP-Needles-2_ASDFRa_AREF.txt",
+      "material": "Lodgepole-Pine LP-Needles-2  ASDFRa AREF",
+      "chapter": "natural.vegetation",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.vegetation/usgs_s07_ASD_Lodgepole-Pine_LP-Needles-2_ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "natural",
+      "family": "vegetation"
+    },
+    {
+      "name": "usgs:s07_ASD_Marsh_SPAL50_..._CRMS322v52_ASDFRa_AREF.txt",
+      "material": "Marsh SPAL50%...  CRMS322v52 ASDFRa AREF",
+      "chapter": "natural.vegetation",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.vegetation/usgs_s07_ASD_Marsh_SPAL50_..._CRMS322v52_ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "natural",
+      "family": "vegetation"
+    },
+    {
+      "name": "usgs:s07_ASD_Lichen_Licedea-2_ASDFRb_AREF.txt",
+      "material": "Lichen Licedea-2             ASDFRb AREF",
+      "chapter": "natural.vegetation",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.vegetation/usgs_s07_ASD_Lichen_Licedea-2_ASDFRb_AREF.txt",
+      "source": "usgs",
+      "group": "natural",
+      "family": "vegetation"
+    },
+    {
+      "name": "usgs:s07_ASD_Sagebrush_Sage-Leaves-1_dry_ASDFRa_AREF.txt",
+      "material": "Sagebrush Sage-Leaves-1 dry  ASDFRa AREF",
+      "chapter": "natural.npv",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.npv/usgs_s07_ASD_Sagebrush_Sage-Leaves-1_dry_ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "natural",
+      "family": "npv"
+    },
+    {
+      "name": "usgs:s07_ASD_Lichen_Xanthoparmelia-2_ASDFRb_AREF.txt",
+      "material": "Lichen Xanthoparmelia-2      ASDFRb AREF",
+      "chapter": "natural.vegetation",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.vegetation/usgs_s07_ASD_Lichen_Xanthoparmelia-2_ASDFRb_AREF.txt",
+      "source": "usgs",
+      "group": "natural",
+      "family": "vegetation"
+    },
+    {
+      "name": "usgs:s07_ASD_J.roemer._DWV6a2-0511_NPV.a_ASDFRa_AREF.txt",
+      "material": "J.roemer. DWV6a2-0511 NPV.a  ASDFRa AREF",
+      "chapter": "natural.npv",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.npv/usgs_s07_ASD_J.roemer._DWV6a2-0511_NPV.a_ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "natural",
+      "family": "npv"
+    },
+    {
+      "name": "usgs:s07_ASD_P.austr._DWO-3-DEL-2a_stems_ASDFRa_AREF.txt",
+      "material": "P.austr. DWO-3-DEL-2a stems  ASDFRa AREF",
+      "chapter": "natural.vegetation",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.vegetation/usgs_s07_ASD_P.austr._DWO-3-DEL-2a_stems_ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "natural",
+      "family": "vegetation"
+    },
+    {
+      "name": "usgs:s07_ASD_S.altern._DWV1-0511_NPV.a_ASDFRa_AREF.txt",
+      "material": "S.altern. DWV1-0511 NPV.a    ASDFRa AREF",
+      "chapter": "natural.npv",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.npv/usgs_s07_ASD_S.altern._DWV1-0511_NPV.a_ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "natural",
+      "family": "npv"
+    },
+    {
+      "name": "usgs:s07_ASD_Flower_Petunia-2_Purple_ASDFRa_AREF.txt",
+      "material": "Flower Petunia-2 Purple      ASDFRa AREF",
+      "chapter": "natural.vegetation",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.vegetation/usgs_s07_ASD_Flower_Petunia-2_Purple_ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "natural",
+      "family": "vegetation"
+    },
+    {
+      "name": "usgs:s07_ASD_LeafySpurge_Spurge-A1-Sep97_ASDFRa_AREF.txt",
+      "material": "LeafySpurge Spurge-A1-Sep97  ASDFRa AREF",
+      "chapter": "natural.vegetation",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.vegetation/usgs_s07_ASD_LeafySpurge_Spurge-A1-Sep97_ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "natural",
+      "family": "vegetation"
+    },
+    {
+      "name": "usgs:s07_ASD_S.altern._DWV6a4-0511_gray.a_ASDFRa_AREF.txt",
+      "material": "S.altern. DWV6a4-0511 gray.a ASDFRa AREF",
+      "chapter": "natural.vegetation",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.vegetation/usgs_s07_ASD_S.altern._DWV6a4-0511_gray.a_ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "natural",
+      "family": "vegetation"
+    },
+    {
+      "name": "usgs:s07_ASD_Flower_Geranium-1_Red-Orange_ASDFRa_AREF.txt",
+      "material": "Flower Geranium-1 Red-Orange ASDFRa AREF",
+      "chapter": "natural.vegetation",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.vegetation/usgs_s07_ASD_Flower_Geranium-1_Red-Orange_ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "natural",
+      "family": "vegetation"
+    },
+    {
+      "name": "usgs:s07_ASD_Flower_Petunia-3_White_ASDFRa_AREF.txt",
+      "material": "Flower Petunia-3 White       ASDFRa AREF",
+      "chapter": "natural.vegetation",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.vegetation/usgs_s07_ASD_Flower_Petunia-3_White_ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "natural",
+      "family": "vegetation"
+    },
+    {
+      "name": "usgs:s07_ASD_Flower_Platycodon-1_Purple_ASDFRa_AREF.txt",
+      "material": "Flower Platycodon-1 Purple   ASDFRa AREF",
+      "chapter": "natural.vegetation",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.vegetation/usgs_s07_ASD_Flower_Platycodon-1_Purple_ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "natural",
+      "family": "vegetation"
+    },
+    {
+      "name": "usgs:s07_ASD_Coated_Steel_Girder_WTC01-8_ASDFRa_AREF.txt",
+      "material": "Coated_Steel_Girder WTC01-8  ASDFRa AREF",
+      "chapter": "manmade.metal",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/manmade.metal/usgs_s07_ASD_Coated_Steel_Girder_WTC01-8_ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "manmade",
+      "family": "metal"
+    },
+    {
+      "name": "usgs:s07_ASD_Cedar_Shake_GDS361_HiWeather_ASDFRa_AREF.txt",
+      "material": "Cedar_Shake GDS361 HiWeather ASDFRa AREF",
+      "chapter": "manmade.roofing",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/manmade.roofing/usgs_s07_ASD_Cedar_Shake_GDS361_HiWeather_ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "manmade",
+      "family": "roofing"
+    },
+    {
+      "name": "usgs:s07_ASD_LeafySpurge_Spurge-A1-Oct97_ASDFRa_AREF.txt",
+      "material": "LeafySpurge Spurge-A1-Oct97  ASDFRa AREF",
+      "chapter": "natural.vegetation",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.vegetation/usgs_s07_ASD_LeafySpurge_Spurge-A1-Oct97_ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "natural",
+      "family": "vegetation"
+    },
+    {
+      "name": "usgs:s07_ASD_Asphalt_Shingle_GDS368_Lgray_ASDFRa_AREF.txt",
+      "material": "Asphalt_Shingle GDS368 Lgray ASDFRa AREF",
+      "chapter": "manmade.roofing",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/manmade.roofing/usgs_s07_ASD_Asphalt_Shingle_GDS368_Lgray_ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "manmade",
+      "family": "roofing"
+    },
+    {
+      "name": "usgs:s07_ASD_Brick_GDS355_Paving_Dk_Gry_ASDFRa_AREF.txt",
+      "material": "Brick GDS355 Paving Dk Gry   ASDFRa AREF",
+      "chapter": "manmade.pavement",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/manmade.pavement/usgs_s07_ASD_Brick_GDS355_Paving_Dk_Gry_ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "manmade",
+      "family": "pavement"
+    },
+    {
+      "name": "usgs:s07_ASD_Brick_GDS350_Dk_Red_Building_ASDFRa_AREF.txt",
+      "material": "Brick GDS350 Dk Red Building ASDFRa AREF",
+      "chapter": "manmade.building",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/manmade.building/usgs_s07_ASD_Brick_GDS350_Dk_Red_Building_ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "manmade",
+      "family": "building"
+    },
+    {
+      "name": "usgs:s07_ASD_Brick_GDS347_Paving_Tan_ASDFRa_AREF.txt",
+      "material": "Brick GDS347 Paving Tan      ASDFRa AREF",
+      "chapter": "manmade.pavement",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/manmade.pavement/usgs_s07_ASD_Brick_GDS347_Paving_Tan_ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "manmade",
+      "family": "pavement"
+    },
+    {
+      "name": "usgs:s07_ASD_Aluminum_brushed_293K_ASDFRa_AREF.txt",
+      "material": "Aluminum brushed 293K        ASDFRa AREF",
+      "chapter": "manmade.metal",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/manmade.metal/usgs_s07_ASD_Aluminum_brushed_293K_ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "manmade",
+      "family": "metal"
+    },
+    {
+      "name": "usgs:s07_ASD_Concrete_GDS375_Lt_Gry_Road_ASDFRa_AREF.txt",
+      "material": "Concrete GDS375 Lt Gry Road  ASDFRa AREF",
+      "chapter": "manmade.pavement",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/manmade.pavement/usgs_s07_ASD_Concrete_GDS375_Lt_Gry_Road_ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "manmade",
+      "family": "pavement"
+    },
+    {
+      "name": "usgs:s07_ASD_Brick_GDS348_Pave_DkBrwngrey_ASDFRa_AREF.txt",
+      "material": "Brick GDS348 Pave DkBrwngrey ASDFRa AREF",
+      "chapter": "manmade.pavement",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/manmade.pavement/usgs_s07_ASD_Brick_GDS348_Pave_DkBrwngrey_ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "manmade",
+      "family": "pavement"
+    },
+    {
+      "name": "usgs:s07_ASD_Brick_GDS353_Building_MedRed_ASDFRa_AREF.txt",
+      "material": "Brick GDS353 Building MedRed ASDFRa AREF",
+      "chapter": "manmade.building",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/manmade.building/usgs_s07_ASD_Brick_GDS353_Building_MedRed_ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "manmade",
+      "family": "building"
+    },
+    {
+      "name": "usgs:s07_ASD_Brick_GDS354_Building_Lt_Gry_ASDFRa_AREF.txt",
+      "material": "Brick GDS354 Building Lt Gry ASDFRa AREF",
+      "chapter": "manmade.building",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/manmade.building/usgs_s07_ASD_Brick_GDS354_Building_Lt_Gry_ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "manmade",
+      "family": "building"
+    },
+    {
+      "name": "usgs:s07_ASD_Burlap_Fabric_GDS430_Brown_ASDFRa_AREF.txt",
+      "material": "Burlap_Fabric GDS430 Brown   ASDFRa AREF",
+      "chapter": "manmade.textile",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/manmade.textile/usgs_s07_ASD_Burlap_Fabric_GDS430_Brown_ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "manmade",
+      "family": "textile"
+    },
+    {
+      "name": "usgs:s07_ASD_Asphalt_GDS376_Blck_Road_old_ASDFRa_AREF.txt",
+      "material": "Asphalt GDS376 Blck_Road old ASDFRa AREF",
+      "chapter": "manmade.pavement",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/manmade.pavement/usgs_s07_ASD_Asphalt_GDS376_Blck_Road_old_ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "manmade",
+      "family": "pavement"
+    },
+    {
+      "name": "usgs:s07_ASD_Asphalt_Tar_GDS346_Blck_Roof_ASDFRa_AREF.txt",
+      "material": "Asphalt_Tar GDS346 Blck_Roof ASDFRa AREF",
+      "chapter": "manmade.roofing",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/manmade.roofing/usgs_s07_ASD_Asphalt_Tar_GDS346_Blck_Roof_ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "manmade",
+      "family": "roofing"
+    },
+    {
+      "name": "usgs:s07_ASD_Brick_GDS349_Paving_Red_ASDFRa_AREF.txt",
+      "material": "Brick GDS349 Paving Red      ASDFRa AREF",
+      "chapter": "manmade.pavement",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/manmade.pavement/usgs_s07_ASD_Brick_GDS349_Paving_Red_ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "manmade",
+      "family": "pavement"
+    },
+    {
+      "name": "usgs:s07_ASD_Flower_Petunia-1_Pink_ASDFRa_AREF.txt",
+      "material": "Flower Petunia-1 Pink        ASDFRa AREF",
+      "chapter": "natural.vegetation",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.vegetation/usgs_s07_ASD_Flower_Petunia-1_Pink_ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "natural",
+      "family": "vegetation"
+    },
+    {
+      "name": "usgs:s07_ASD_Lichen_Acarospora-1_ASDFRb_AREF.txt",
+      "material": "Lichen Acarospora-1          ASDFRb AREF",
+      "chapter": "natural.vegetation",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.vegetation/usgs_s07_ASD_Lichen_Acarospora-1_ASDFRb_AREF.txt",
+      "source": "usgs",
+      "group": "natural",
+      "family": "vegetation"
+    },
+    {
+      "name": "usgs:s07_ASD_Marsh_water80_..._CRMS121v23_ASDFRa_AREF.txt",
+      "material": "Marsh water80%... CRMS121v23 ASDFRa AREF",
+      "chapter": "natural.water",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.water/usgs_s07_ASD_Marsh_water80_..._CRMS121v23_ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "natural",
+      "family": "water"
+    },
+    {
+      "name": "usgs:s07_ASD_Cardboard_GDS371_Brn_Corgted_ASDFRa_AREF.txt",
+      "material": "Cardboard GDS371 Brn Corgted ASDFRa AREF",
+      "chapter": "manmade.wood_paper",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/manmade.wood_paper/usgs_s07_ASD_Cardboard_GDS371_Brn_Corgted_ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "manmade",
+      "family": "wood_paper"
+    },
+    {
+      "name": "usgs:s07_ASD_Asphalt_Shingle_GDS366_Tan_ASDFRa_AREF.txt",
+      "material": "Asphalt_Shingle GDS366 Tan   ASDFRa AREF",
+      "chapter": "manmade.roofing",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/manmade.roofing/usgs_s07_ASD_Asphalt_Shingle_GDS366_Tan_ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "manmade",
+      "family": "roofing"
+    },
+    {
+      "name": "usgs:s07_ASD_Grass_Golden_Dry_GDS480_ASDFRa_AREF.txt",
+      "material": "Grass_Golden_Dry GDS480      ASDFRa AREF",
+      "chapter": "natural.npv",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.npv/usgs_s07_ASD_Grass_Golden_Dry_GDS480_ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "natural",
+      "family": "npv"
+    },
+    {
+      "name": "usgs:s07_ASD_Flower_Pansy-1_Yellow_ASDFRa_AREF.txt",
+      "material": "Flower Pansy-1 Yellow        ASDFRa AREF",
+      "chapter": "natural.vegetation",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.vegetation/usgs_s07_ASD_Flower_Pansy-1_Yellow_ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "natural",
+      "family": "vegetation"
+    },
+    {
+      "name": "usgs:s07_ASD_Concrete_WTC01-37A_ASDFRa_AREF.txt",
+      "material": "Concrete WTC01-37A           ASDFRa AREF",
+      "chapter": "manmade.building",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/manmade.building/usgs_s07_ASD_Concrete_WTC01-37A_ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "manmade",
+      "family": "building"
+    },
+    {
+      "name": "usgs:s07_ASD_Grass_AETR70_CA01-AETR-2_NPV_ASDFRa_AREF.txt",
+      "material": "Grass_AETR70 CA01-AETR-2 NPV ASDFRa AREF",
+      "chapter": "natural.npv",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.npv/usgs_s07_ASD_Grass_AETR70_CA01-AETR-2_NPV_ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "natural",
+      "family": "npv"
+    },
+    {
+      "name": "usgs:s07_ASD_Grass_CA01-TACA-1_meadow_NPV_ASDFRa_AREF.txt",
+      "material": "Grass CA01-TACA-1 meadow NPV ASDFRa AREF",
+      "chapter": "natural.npv",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.npv/usgs_s07_ASD_Grass_CA01-TACA-1_meadow_NPV_ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "natural",
+      "family": "npv"
+    },
+    {
+      "name": "usgs:s07_ASD_Aspen_Aspen-4_yellow-top_ASDFRa_AREF.txt",
+      "material": "Aspen Aspen-4 yellow-top     ASDFRa AREF",
+      "chapter": "natural.vegetation",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.vegetation/usgs_s07_ASD_Aspen_Aspen-4_yellow-top_ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "natural",
+      "family": "vegetation"
+    },
+    {
+      "name": "usgs:s07_ASD_Manzanita_CA01-ARVI-6_bush_6_ASDFRa_AREF.txt",
+      "material": "Manzanita CA01-ARVI-6 bush 6 ASDFRa AREF",
+      "chapter": "natural.vegetation",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.vegetation/usgs_s07_ASD_Manzanita_CA01-ARVI-6_bush_6_ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "natural",
+      "family": "vegetation"
+    },
+    {
+      "name": "usgs:s07_ASD_Cactus_Opuntia-1_purple_pad_ASDFRa_AREF.txt",
+      "material": "Cactus Opuntia-1 purple_pad  ASDFRa AREF",
+      "chapter": "natural.vegetation",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.vegetation/usgs_s07_ASD_Cactus_Opuntia-1_purple_pad_ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "natural",
+      "family": "vegetation"
+    },
+    {
+      "name": "usgs:s07_ASD_Aspen_Aspen-2_green-bottom_ASDFRa_AREF.txt",
+      "material": "Aspen Aspen-2 green-bottom   ASDFRa AREF",
+      "chapter": "natural.vegetation",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.vegetation/usgs_s07_ASD_Aspen_Aspen-2_green-bottom_ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "natural",
+      "family": "vegetation"
+    },
+    {
+      "name": "usgs:s07_ASD_Grass_AETR95_CA01-AETR-1_NPV_ASDFRa_AREF.txt",
+      "material": "Grass_AETR95 CA01-AETR-1 NPV ASDFRa AREF",
+      "chapter": "natural.npv",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.npv/usgs_s07_ASD_Grass_AETR95_CA01-AETR-1_NPV_ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "natural",
+      "family": "npv"
+    },
+    {
+      "name": "usgs:s07_ASD_Asphalt_Shingle_GDS367_DkGry_ASDFRa_AREF.txt",
+      "material": "Asphalt_Shingle GDS367 DkGry ASDFRa AREF",
+      "chapter": "manmade.roofing",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/manmade.roofing/usgs_s07_ASD_Asphalt_Shingle_GDS367_DkGry_ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "manmade",
+      "family": "roofing"
+    },
+    {
+      "name": "usgs:s07_ASD_Cheatgrass_ANP92-11A_BECKa_AREF.txt",
+      "material": "Cheatgrass ANP92-11A          BECKa AREF",
+      "chapter": "natural.vegetation",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.vegetation/usgs_s07_ASD_Cheatgrass_ANP92-11A_BECKa_AREF.txt",
+      "source": "usgs",
+      "group": "natural",
+      "family": "vegetation"
+    },
+    {
+      "name": "usgs:s07_ASD_Aspen_Aspen-3_yellowGreenTop_ASDFRa_AREF.txt",
+      "material": "Aspen Aspen-3 yellowGreenTop ASDFRa AREF",
+      "chapter": "natural.vegetation",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.vegetation/usgs_s07_ASD_Aspen_Aspen-3_yellowGreenTop_ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "natural",
+      "family": "vegetation"
+    },
+    {
+      "name": "usgs:s07_ASD_Olivine_GDS71.a_Fo91_65um_BECKb_AREF.txt",
+      "material": "Olivine GDS71.a Fo91 65um     BECKb AREF",
+      "chapter": "natural.mineral",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.mineral/usgs_s07_ASD_Olivine_GDS71.a_Fo91_65um_BECKb_AREF.txt",
+      "source": "usgs",
+      "group": "natural",
+      "family": "mineral"
+    },
+    {
+      "name": "usgs:s07_ASD_Parisite_REE_WS319_crystal_ASDFRa_AREF.txt",
+      "material": "Parisite_REE WS319 crystal   ASDFRa AREF",
+      "chapter": "natural.mineral",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.mineral/usgs_s07_ASD_Parisite_REE_WS319_crystal_ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "natural",
+      "family": "mineral"
+    },
+    {
+      "name": "usgs:s07_ASD_Mascagnite_GDS65.b_(fr)_BECKa_AREF.txt",
+      "material": "Mascagnite GDS65.b (fr)       BECKa AREF",
+      "chapter": "natural.mineral",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.mineral/usgs_s07_ASD_Mascagnite_GDS65.b__fr__BECKa_AREF.txt",
+      "source": "usgs",
+      "group": "natural",
+      "family": "mineral"
+    },
+    {
+      "name": "usgs:s07_ASD_Meionite_WS701_BECKb_AREF.txt",
+      "material": "Meionite WS701                BECKb AREF",
+      "chapter": "natural.mineral",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.mineral/usgs_s07_ASD_Meionite_WS701_BECKb_AREF.txt",
+      "source": "usgs",
+      "group": "natural",
+      "family": "mineral"
+    },
+    {
+      "name": "usgs:s07_ASD_Lepidolite_HS167.6_ASDFRb_AREF.txt",
+      "material": "Lepidolite HS167.6           ASDFRb AREF",
+      "chapter": "natural.mineral",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.mineral/usgs_s07_ASD_Lepidolite_HS167.6_ASDFRb_AREF.txt",
+      "source": "usgs",
+      "group": "natural",
+      "family": "mineral"
+    },
+    {
+      "name": "usgs:s07_ASD_Mascagnite_GDS65.a_(coarse)_BECKa_AREF.txt",
+      "material": "Mascagnite GDS65.a (coarse)   BECKa AREF",
+      "chapter": "natural.mineral",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.mineral/usgs_s07_ASD_Mascagnite_GDS65.a__coarse__BECKa_AREF.txt",
+      "source": "usgs",
+      "group": "natural",
+      "family": "mineral"
+    },
+    {
+      "name": "usgs:s07_ASD_Jarosite_SJ-1_H3O_10-20__BECKb_AREF.txt",
+      "material": "Jarosite SJ-1 H3O 10-20%      BECKb AREF",
+      "chapter": "natural.mineral",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.mineral/usgs_s07_ASD_Jarosite_SJ-1_H3O_10-20__BECKb_AREF.txt",
+      "source": "usgs",
+      "group": "natural",
+      "family": "mineral"
+    },
+    {
+      "name": "usgs:s07_ASD_Hypersthene_PYX02.h_gt250um_BECKc_AREF.txt",
+      "material": "Hypersthene PYX02.h >250um    BECKc AREF",
+      "chapter": "natural.mineral",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.mineral/usgs_s07_ASD_Hypersthene_PYX02.h_gt250um_BECKc_AREF.txt",
+      "source": "usgs",
+      "group": "natural",
+      "family": "mineral"
+    },
+    {
+      "name": "usgs:s07_ASD_Hematite_FE2602_BECKb_AREF.txt",
+      "material": "Hematite FE2602               BECKb AREF",
+      "chapter": "natural.mineral",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.mineral/usgs_s07_ASD_Hematite_FE2602_BECKb_AREF.txt",
+      "source": "usgs",
+      "group": "natural",
+      "family": "mineral"
+    },
+    {
+      "name": "usgs:s07_ASD_Dolomite_ML97-3_Ferroan_ASDFRb_AREF.txt",
+      "material": "Dolomite ML97-3 Ferroan      ASDFRb AREF",
+      "chapter": "natural.mineral",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.mineral/usgs_s07_ASD_Dolomite_ML97-3_Ferroan_ASDFRb_AREF.txt",
+      "source": "usgs",
+      "group": "natural",
+      "family": "mineral"
+    },
+    {
+      "name": "usgs:s07_ASD_Epidote_GDS26.a_75-200um_BECKb_AREF.txt",
+      "material": "Epidote GDS26.a 75-200um      BECKb AREF",
+      "chapter": "natural.mineral",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.mineral/usgs_s07_ASD_Epidote_GDS26.a_75-200um_BECKb_AREF.txt",
+      "source": "usgs",
+      "group": "natural",
+      "family": "mineral"
+    },
+    {
+      "name": "usgs:s07_ASD_Chrysocolla_HS297.2B_ASDFRb_AREF.txt",
+      "material": "Chrysocolla HS297.2B         ASDFRb AREF",
+      "chapter": "natural.mineral",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.mineral/usgs_s07_ASD_Chrysocolla_HS297.2B_ASDFRb_AREF.txt",
+      "source": "usgs",
+      "group": "natural",
+      "family": "mineral"
+    },
+    {
+      "name": "usgs:s07_ASD_Chromite_HS281.1B_ASDFRc_AREF.txt",
+      "material": "Chromite HS281.1B            ASDFRc AREF",
+      "chapter": "natural.mineral",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.mineral/usgs_s07_ASD_Chromite_HS281.1B_ASDFRc_AREF.txt",
+      "source": "usgs",
+      "group": "natural",
+      "family": "mineral"
+    },
+    {
+      "name": "usgs:s07_ASD_Chrysocolla_HS297.4B_ASDFRb_AREF.txt",
+      "material": "Chrysocolla HS297.4B         ASDFRb AREF",
+      "chapter": "natural.mineral",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.mineral/usgs_s07_ASD_Chrysocolla_HS297.4B_ASDFRb_AREF.txt",
+      "source": "usgs",
+      "group": "natural",
+      "family": "mineral"
+    },
+    {
+      "name": "usgs:s07_ASD_Beryl_HS180.6_ASDFRa_AREF.txt",
+      "material": "Beryl HS180.6                ASDFRa AREF",
+      "chapter": "natural.mineral",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.mineral/usgs_s07_ASD_Beryl_HS180.6_ASDFRa_AREF.txt",
+      "source": "usgs",
+      "group": "natural",
+      "family": "mineral"
+    },
+    {
+      "name": "usgs:s07_ASD_Axinite_HS342.6_ASDFRb_AREF.txt",
+      "material": "Axinite HS342.6              ASDFRb AREF",
+      "chapter": "natural.mineral",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.mineral/usgs_s07_ASD_Axinite_HS342.6_ASDFRb_AREF.txt",
+      "source": "usgs",
+      "group": "natural",
+      "family": "mineral"
+    },
+    {
+      "name": "usgs:s07_ASD_Axinite_HS342.4B_ASDFRb_AREF.txt",
+      "material": "Axinite HS342.4B             ASDFRb AREF",
+      "chapter": "natural.mineral",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.mineral/usgs_s07_ASD_Axinite_HS342.4B_ASDFRb_AREF.txt",
+      "source": "usgs",
+      "group": "natural",
+      "family": "mineral"
+    },
+    {
+      "name": "usgs:s07_ASD_Almandine_HS114.3B_Garnet_BECKb_AREF.txt",
+      "material": "Almandine HS114.3B Garnet     BECKb AREF",
+      "chapter": "natural.mineral",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.mineral/usgs_s07_ASD_Almandine_HS114.3B_Garnet_BECKb_AREF.txt",
+      "source": "usgs",
+      "group": "natural",
+      "family": "mineral"
+    },
+    {
+      "name": "ecostress:vegetation.shrub.umbellularia.californica.vswir.vh103.ucsb.asd.spectrum.txt",
+      "material": "Umbellularia californica 1",
+      "chapter": "natural.vegetation",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.vegetation/ecostress_vegetation.shrub.umbellularia.californica.vswir.vh103.ucsb.asd.spectrum.txt",
+      "source": "ecostress",
+      "group": "natural",
+      "family": "vegetation"
+    },
+    {
+      "name": "ecostress:rock.igneous.mafic.solid.all.mewy410a.usgs.perknic.spectrum.txt",
+      "material": "Alkali Basalt",
+      "chapter": "natural.rock",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.rock/ecostress_rock.igneous.mafic.solid.all.mewy410a.usgs.perknic.spectrum.txt",
+      "source": "ecostress",
+      "group": "natural",
+      "family": "rock"
+    },
+    {
+      "name": "ecostress:soil.alfisol.haplustalf.none.all.87p3468.jhu.becknic.spectrum.txt",
+      "material": "Brown loamy fine sand",
+      "chapter": "natural.soil",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.soil/ecostress_soil.alfisol.haplustalf.none.all.87p3468.jhu.becknic.spectrum.txt",
+      "source": "ecostress",
+      "group": "natural",
+      "family": "soil"
+    },
+    {
+      "name": "ecostress:nonphotosyntheticvegetation.leaves.quercus.species.vswir.vh320.ucsb.asd.spectrum.txt",
+      "material": "Quercus sp. litter",
+      "chapter": "natural.npv",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.npv/ecostress_nonphotosyntheticvegetation.leaves.quercus.species.vswir.vh320.ucsb.asd.spectrum.txt",
+      "source": "ecostress",
+      "group": "natural",
+      "family": "npv"
+    },
+    {
+      "name": "ecostress:water.snow.coarsegranular.coarse.all.coarse_snw_.jhu.becknic.spectrum.txt",
+      "material": "Coarse Granular Snow",
+      "chapter": "natural.snow_ice",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.snow_ice/ecostress_water.snow.coarsegranular.coarse.all.coarse_snw_.jhu.becknic.spectrum.txt",
+      "source": "ecostress",
+      "group": "natural",
+      "family": "snow_ice"
+    },
+    {
+      "name": "ecostress:manmade.generalconstructionmaterial.brick.solid.all.0413uuubrk.jhu.becknic.spectrum.txt",
+      "material": "Bare Red Brick",
+      "chapter": "manmade.building",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/manmade.building/ecostress_manmade.generalconstructionmaterial.brick.solid.all.0413uuubrk.jhu.becknic.spectrum.txt",
+      "source": "ecostress",
+      "group": "manmade",
+      "family": "building"
+    },
+    {
+      "name": "ecostress:rock.sedimentary.travertine.coarse.all.travertine_1.jhu.becknic.spectrum.txt",
+      "material": "Travertine",
+      "chapter": "natural.rock",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.rock/ecostress_rock.sedimentary.travertine.coarse.all.travertine_1.jhu.becknic.spectrum.txt",
+      "source": "ecostress",
+      "group": "natural",
+      "family": "rock"
+    },
+    {
+      "name": "ecostress:nonphotosyntheticvegetation.bark.quercus.rubra.vswir.quru-1-79.ucsb.asd.spectrum.txt",
+      "material": "Quercus rubra",
+      "chapter": "natural.npv",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.npv/ecostress_nonphotosyntheticvegetation.bark.quercus.rubra.vswir.quru-1-79.ucsb.asd.spectrum.txt",
+      "source": "ecostress",
+      "group": "natural",
+      "family": "npv"
+    },
+    {
+      "name": "ecostress:soil.entisol.quartzipsamment.none.all.87p706.jhu.becknic.spectrum.txt",
+      "material": "Brown to dark brown sand",
+      "chapter": "natural.soil",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.soil/ecostress_soil.entisol.quartzipsamment.none.all.87p706.jhu.becknic.spectrum.txt",
+      "source": "ecostress",
+      "group": "natural",
+      "family": "soil"
+    },
+    {
+      "name": "ecostress:soil.vertisol.chromoxerert.none.all.88p475.jhu.becknic.spectrum.txt",
+      "material": "Brown to dark brown clay",
+      "chapter": "natural.soil",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.soil/ecostress_soil.vertisol.chromoxerert.none.all.88p475.jhu.becknic.spectrum.txt",
+      "source": "ecostress",
+      "group": "natural",
+      "family": "soil"
+    },
+    {
+      "name": "ecostress:rock.intermediate.felsic.solid.all.ap-961-198.usgs.perknic.spectrum.txt",
+      "material": "Dacite",
+      "chapter": "natural.rock",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.rock/ecostress_rock.intermediate.felsic.solid.all.ap-961-198.usgs.perknic.spectrum.txt",
+      "source": "ecostress",
+      "group": "natural",
+      "family": "rock"
+    },
+    {
+      "name": "ecostress:soil.aridisol.calciorthid.none.all.84p3721.jhu.becknic.spectrum.txt",
+      "material": "Light yellowish brown loam",
+      "chapter": "natural.soil",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.soil/ecostress_soil.aridisol.calciorthid.none.all.84p3721.jhu.becknic.spectrum.txt",
+      "source": "ecostress",
+      "group": "natural",
+      "family": "soil"
+    },
+    {
+      "name": "ecostress:soil.mollisol.cryoboroll.none.all.85p4663.jhu.becknic.spectrum.txt",
+      "material": "Black loam",
+      "chapter": "natural.soil",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.soil/ecostress_soil.mollisol.cryoboroll.none.all.85p4663.jhu.becknic.spectrum.txt",
+      "source": "ecostress",
+      "group": "natural",
+      "family": "soil"
+    },
+    {
+      "name": "ecostress:soil.aridisol.salorthid.none.all.79p1530.jhu.becknic.spectrum.txt",
+      "material": "Dark brown interior moist clay loam",
+      "chapter": "natural.soil",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.soil/ecostress_soil.aridisol.salorthid.none.all.79p1530.jhu.becknic.spectrum.txt",
+      "source": "ecostress",
+      "group": "natural",
+      "family": "soil"
+    },
+    {
+      "name": "ecostress:water.ice.none.solid.all.ice_dat_.jhu.becknic.spectrum.txt",
+      "material": "Ice",
+      "chapter": "natural.snow_ice",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.snow_ice/ecostress_water.ice.none.solid.all.ice_dat_.jhu.becknic.spectrum.txt",
+      "source": "ecostress",
+      "group": "natural",
+      "family": "snow_ice"
+    },
+    {
+      "name": "ecostress:soil.inceptisol.ustocrept.none.all.82p2671.jhu.becknic.spectrum.txt",
+      "material": "Pale brown dry silty clay loam",
+      "chapter": "natural.soil",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.soil/ecostress_soil.inceptisol.ustocrept.none.all.82p2671.jhu.becknic.spectrum.txt",
+      "source": "ecostress",
+      "group": "natural",
+      "family": "soil"
+    },
+    {
+      "name": "ecostress:rock.igneous.felsic.solid.all.ap-961-149.usgs.perknic.spectrum.txt",
+      "material": "Rhyolite",
+      "chapter": "natural.rock",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.rock/ecostress_rock.igneous.felsic.solid.all.ap-961-149.usgs.perknic.spectrum.txt",
+      "source": "ecostress",
+      "group": "natural",
+      "family": "rock"
+    },
+    {
+      "name": "ecostress:soil.spodosol.cryohumod.none.all.87p4264.jhu.becknic.spectrum.txt",
+      "material": "Dark reddish brown, organic-rich, silty loam",
+      "chapter": "natural.soil",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.soil/ecostress_soil.spodosol.cryohumod.none.all.87p4264.jhu.becknic.spectrum.txt",
+      "source": "ecostress",
+      "group": "natural",
+      "family": "soil"
+    },
+    {
+      "name": "ecostress:manmade.roofingmaterial.metal.solid.all.0526uuustla.jhu.becknic.spectrum.txt",
+      "material": "Oxidized Galvanized Steel Metal",
+      "chapter": "manmade.metal",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/manmade.metal/ecostress_manmade.roofingmaterial.metal.solid.all.0526uuustla.jhu.becknic.spectrum.txt",
+      "source": "ecostress",
+      "group": "manmade",
+      "family": "metal"
+    },
+    {
+      "name": "ecostress:manmade.roofingmaterial.roofingpaper.solid.all.0522uuutar.jhu.becknic.spectrum.txt",
+      "material": "Black tar paper",
+      "chapter": "manmade.roofing",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/manmade.roofing/ecostress_manmade.roofingmaterial.roofingpaper.solid.all.0522uuutar.jhu.becknic.spectrum.txt",
+      "source": "ecostress",
+      "group": "manmade",
+      "family": "roofing"
+    },
+    {
+      "name": "ecostress:rock.intermediate.felsic.solid.all.ap-960-157b.usgs.perknic.spectrum.txt",
+      "material": "Dacite",
+      "chapter": "natural.rock",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.rock/ecostress_rock.intermediate.felsic.solid.all.ap-960-157b.usgs.perknic.spectrum.txt",
+      "source": "ecostress",
+      "group": "natural",
+      "family": "rock"
+    },
+    {
+      "name": "ecostress:mineral.sulfide.none.coarse.vswir.s-3a.jpl.beckman.spectrum.txt",
+      "material": "Realgar AsS",
+      "chapter": "natural.mineral",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.mineral/ecostress_mineral.sulfide.none.coarse.vswir.s-3a.jpl.beckman.spectrum.txt",
+      "source": "ecostress",
+      "group": "natural",
+      "family": "mineral"
+    },
+    {
+      "name": "ecostress:manmade.generalconstructionmaterial.paint.solid.all.0406uuupnt.jhu.becknic.spectrum.txt",
+      "material": "Black paint",
+      "chapter": "manmade.paint",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/manmade.paint/ecostress_manmade.generalconstructionmaterial.paint.solid.all.0406uuupnt.jhu.becknic.spectrum.txt",
+      "source": "ecostress",
+      "group": "manmade",
+      "family": "paint"
+    },
+    {
+      "name": "ecostress:mineral.silicate.phyllosilicate.medium.vswir.ps-19a.jpl.perkin.spectrum.txt",
+      "material": "Glauconite (K,Na)(Fe^3+,Al,Mg)_2(Si,Al)_4O_10(OH)_2",
+      "chapter": "natural.mineral",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.mineral/ecostress_mineral.silicate.phyllosilicate.medium.vswir.ps-19a.jpl.perkin.spectrum.txt",
+      "source": "ecostress",
+      "group": "natural",
+      "family": "mineral"
+    },
+    {
+      "name": "ecostress:rock.intermediate.felsic.solid.all.ap-939-213.usgs.perknic.spectrum.txt",
+      "material": "Dacite",
+      "chapter": "natural.rock",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.rock/ecostress_rock.intermediate.felsic.solid.all.ap-939-213.usgs.perknic.spectrum.txt",
+      "source": "ecostress",
+      "group": "natural",
+      "family": "rock"
+    },
+    {
+      "name": "ecostress:rock.metamorphic.gneis.coarse.all.gneiss1.jhu.becknic.spectrum.txt",
+      "material": "Chloritic Gneiss",
+      "chapter": "natural.rock",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.rock/ecostress_rock.metamorphic.gneis.coarse.all.gneiss1.jhu.becknic.spectrum.txt",
+      "source": "ecostress",
+      "group": "natural",
+      "family": "rock"
+    },
+    {
+      "name": "ecostress:rock.metamorphic.marble.coarse.all.marble3.jhu.becknic.spectrum.txt",
+      "material": "Marble",
+      "chapter": "natural.rock",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.rock/ecostress_rock.metamorphic.marble.coarse.all.marble3.jhu.becknic.spectrum.txt",
+      "source": "ecostress",
+      "group": "natural",
+      "family": "rock"
+    },
+    {
+      "name": "ecostress:soil.entisol.torripsamment.none.all.0015.jhu.becknic.spectrum.txt",
+      "material": "White gypsum dune sand.",
+      "chapter": "natural.soil",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.soil/ecostress_soil.entisol.torripsamment.none.all.0015.jhu.becknic.spectrum.txt",
+      "source": "ecostress",
+      "group": "natural",
+      "family": "soil"
+    },
+    {
+      "name": "ecostress:manmade.roofingmaterial.roofingshingle.solid.all.0490uuuasp.jhu.becknic.spectrum.txt",
+      "material": "Asphalt Shingle",
+      "chapter": "manmade.roofing",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/manmade.roofing/ecostress_manmade.roofingmaterial.roofingshingle.solid.all.0490uuuasp.jhu.becknic.spectrum.txt",
+      "source": "ecostress",
+      "group": "manmade",
+      "family": "roofing"
+    },
+    {
+      "name": "ecostress:manmade.roofingmaterial.metal.solid.all.0682uuucop.jhu.becknic.spectrum.txt",
+      "material": "Copper Metal",
+      "chapter": "manmade.metal",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/manmade.metal/ecostress_manmade.roofingmaterial.metal.solid.all.0682uuucop.jhu.becknic.spectrum.txt",
+      "source": "ecostress",
+      "group": "manmade",
+      "family": "metal"
+    },
+    {
+      "name": "ecostress:manmade.road.pavingasphalt.solid.all.0095uuuasp.jhu.becknic.spectrum.txt",
+      "material": "Construction Asphalt",
+      "chapter": "manmade.pavement",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/manmade.pavement/ecostress_manmade.road.pavingasphalt.solid.all.0095uuuasp.jhu.becknic.spectrum.txt",
+      "source": "ecostress",
+      "group": "manmade",
+      "family": "pavement"
+    },
+    {
+      "name": "ecostress:manmade.generalconstructionmaterial.cinder.solid.all.0101uuucin.jhu.becknic.spectrum.txt",
+      "material": "Cinders, ashen",
+      "chapter": "manmade.building",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/manmade.building/ecostress_manmade.generalconstructionmaterial.cinder.solid.all.0101uuucin.jhu.becknic.spectrum.txt",
+      "source": "ecostress",
+      "group": "manmade",
+      "family": "building"
+    },
+    {
+      "name": "ecostress:rock.igneous.mafic.fine.all.norite_h2.jhu.becknic.spectrum.txt",
+      "material": "Norite",
+      "chapter": "natural.rock",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.rock/ecostress_rock.igneous.mafic.fine.all.norite_h2.jhu.becknic.spectrum.txt",
+      "source": "ecostress",
+      "group": "natural",
+      "family": "rock"
+    },
+    {
+      "name": "ecostress:rock.sedimentary.shale.coarse.all.shale_7.jhu.becknic.spectrum.txt",
+      "material": "Argillaceous Shale",
+      "chapter": "natural.rock",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.rock/ecostress_rock.sedimentary.shale.coarse.all.shale_7.jhu.becknic.spectrum.txt",
+      "source": "ecostress",
+      "group": "natural",
+      "family": "rock"
+    },
+    {
+      "name": "ecostress:vegetation.shrub.portulacaria.afra_variegata.vswir.jpl066.jpl.asd.spectrum.txt",
+      "material": "Portulacaria afra 'Variegata'",
+      "chapter": "natural.vegetation",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.vegetation/ecostress_vegetation.shrub.portulacaria.afra_variegata.vswir.jpl066.jpl.asd.spectrum.txt",
+      "source": "ecostress",
+      "group": "natural",
+      "family": "vegetation"
+    },
+    {
+      "name": "ecostress:rock.igneous.mafic.solid.all.basalt_h10.jhu.becknic.spectrum.txt",
+      "material": "Basalt",
+      "chapter": "natural.rock",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.rock/ecostress_rock.igneous.mafic.solid.all.basalt_h10.jhu.becknic.spectrum.txt",
+      "source": "ecostress",
+      "group": "natural",
+      "family": "rock"
+    },
+    {
+      "name": "ecostress:water.tapwater.none.liquid.all.tapwater.jhu.becknic.spectrum.txt",
+      "material": "Tap water",
+      "chapter": "natural.water",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.water/ecostress_water.tapwater.none.liquid.all.tapwater.jhu.becknic.spectrum.txt",
+      "source": "ecostress",
+      "group": "natural",
+      "family": "water"
+    },
+    {
+      "name": "ecostress:vegetation.tree.fagus.grandifolia.vswir.fagr-2-45.ucsb.asd.spectrum.txt",
+      "material": "Fagus grandifolia",
+      "chapter": "natural.vegetation",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.vegetation/ecostress_vegetation.tree.fagus.grandifolia.vswir.fagr-2-45.ucsb.asd.spectrum.txt",
+      "source": "ecostress",
+      "group": "natural",
+      "family": "vegetation"
+    },
+    {
+      "name": "ecostress:nonphotosyntheticvegetation.leaves.avena.fatua.vswir.vh355.ucsb.asd.spectrum.txt",
+      "material": "Avena fatua litter",
+      "chapter": "natural.npv",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.npv/ecostress_nonphotosyntheticvegetation.leaves.avena.fatua.vswir.vh355.ucsb.asd.spectrum.txt",
+      "source": "ecostress",
+      "group": "natural",
+      "family": "npv"
+    },
+    {
+      "name": "ecostress:soil.mollisol.haplaquoll.none.all.86p4603.jhu.becknic.spectrum.txt",
+      "material": "Gray silty clay",
+      "chapter": "natural.soil",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.soil/ecostress_soil.mollisol.haplaquoll.none.all.86p4603.jhu.becknic.spectrum.txt",
+      "source": "ecostress",
+      "group": "natural",
+      "family": "soil"
+    },
+    {
+      "name": "ecostress:rock.metamorphic.slate.coarse.all.slate2.jhu.becknic.spectrum.txt",
+      "material": "Green Slate",
+      "chapter": "natural.rock",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.rock/ecostress_rock.metamorphic.slate.coarse.all.slate2.jhu.becknic.spectrum.txt",
+      "source": "ecostress",
+      "group": "natural",
+      "family": "rock"
+    },
+    {
+      "name": "ecostress:manmade.generalconstructionmaterial.brick.solid.all.0412uuubrk.jhu.becknic.spectrum.txt",
+      "material": "Weathered Red Brick",
+      "chapter": "manmade.building",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/manmade.building/ecostress_manmade.generalconstructionmaterial.brick.solid.all.0412uuubrk.jhu.becknic.spectrum.txt",
+      "source": "ecostress",
+      "group": "manmade",
+      "family": "building"
+    },
+    {
+      "name": "ecostress:rock.metamorphic.schist.solid.all.ap-961-197.usgs.perknic.spectrum.txt",
+      "material": "Chlorite Schist",
+      "chapter": "natural.rock",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.rock/ecostress_rock.metamorphic.schist.solid.all.ap-961-197.usgs.perknic.spectrum.txt",
+      "source": "ecostress",
+      "group": "natural",
+      "family": "rock"
+    },
+    {
+      "name": "ecostress:rock.igneous.ultramafic.solid.all.picrite_h1.jhu.becknic.spectrum.txt",
+      "material": "Picrite",
+      "chapter": "natural.rock",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.rock/ecostress_rock.igneous.ultramafic.solid.all.picrite_h1.jhu.becknic.spectrum.txt",
+      "source": "ecostress",
+      "group": "natural",
+      "family": "rock"
+    },
+    {
+      "name": "ecostress:soil.aridisol.camborthid.none.all.89p1772.jhu.becknic.spectrum.txt",
+      "material": "Light yellowish brown loamy sand",
+      "chapter": "natural.soil",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.soil/ecostress_soil.aridisol.camborthid.none.all.89p1772.jhu.becknic.spectrum.txt",
+      "source": "ecostress",
+      "group": "natural",
+      "family": "soil"
+    },
+    {
+      "name": "ecostress:manmade.roofingmaterial.rubber.solid.all.0795uuurbr.jhu.becknic.spectrum.txt",
+      "material": "White rubberized coating",
+      "chapter": "manmade.roofing",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/manmade.roofing/ecostress_manmade.roofingmaterial.rubber.solid.all.0795uuurbr.jhu.becknic.spectrum.txt",
+      "source": "ecostress",
+      "group": "manmade",
+      "family": "roofing"
+    },
+    {
+      "name": "ecostress:manmade.roofingmaterial.shingle.solid.all.0683uuuasp.jhu.becknic.spectrum.txt",
+      "material": "Reddish asphalt Shingle",
+      "chapter": "manmade.roofing",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/manmade.roofing/ecostress_manmade.roofingmaterial.shingle.solid.all.0683uuuasp.jhu.becknic.spectrum.txt",
+      "source": "ecostress",
+      "group": "manmade",
+      "family": "roofing"
+    },
+    {
+      "name": "ecostress:soil.inceptisol.haplumbrept.none.all.86p4561.jhu.becknic.spectrum.txt",
+      "material": "Dark brown fine sandy loam",
+      "chapter": "natural.soil",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.soil/ecostress_soil.inceptisol.haplumbrept.none.all.86p4561.jhu.becknic.spectrum.txt",
+      "source": "ecostress",
+      "group": "natural",
+      "family": "soil"
+    },
+    {
+      "name": "ecostress:rock.metamorphic.schist.coarse.all.schist2.jhu.becknic.spectrum.txt",
+      "material": "Hornblende Schist",
+      "chapter": "natural.rock",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.rock/ecostress_rock.metamorphic.schist.coarse.all.schist2.jhu.becknic.spectrum.txt",
+      "source": "ecostress",
+      "group": "natural",
+      "family": "rock"
+    },
+    {
+      "name": "ecostress:rock.sedimentary.shale.coarse.all.shale_2.jhu.becknic.spectrum.txt",
+      "material": "Shale (Phosphatic)",
+      "chapter": "natural.rock",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.rock/ecostress_rock.sedimentary.shale.coarse.all.shale_2.jhu.becknic.spectrum.txt",
+      "source": "ecostress",
+      "group": "natural",
+      "family": "rock"
+    },
+    {
+      "name": "ecostress:manmade.generalconstructionmaterial.cementcinderblock.solid.all.0432uuucnc.jhu.becknic.spectrum.txt",
+      "material": "Construction Concrete",
+      "chapter": "manmade.building",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/manmade.building/ecostress_manmade.generalconstructionmaterial.cementcinderblock.solid.all.0432uuucnc.jhu.becknic.spectrum.txt",
+      "source": "ecostress",
+      "group": "manmade",
+      "family": "building"
+    },
+    {
+      "name": "ecostress:vegetation.shrub.agave.attenuata.vswir.jpl062.jpl.asd.spectrum.txt",
+      "material": "Agave attenuata",
+      "chapter": "natural.vegetation",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.vegetation/ecostress_vegetation.shrub.agave.attenuata.vswir.jpl062.jpl.asd.spectrum.txt",
+      "source": "ecostress",
+      "group": "natural",
+      "family": "vegetation"
+    },
+    {
+      "name": "ecostress:nonphotosyntheticvegetation.branches.ceanothus.megacarpus.vswir.vh331.ucsb.asd.spectrum.txt",
+      "material": "Ceanothus megacarpus branch",
+      "chapter": "natural.npv",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.npv/ecostress_nonphotosyntheticvegetation.branches.ceanothus.megacarpus.vswir.vh331.ucsb.asd.spectrum.txt",
+      "source": "ecostress",
+      "group": "natural",
+      "family": "npv"
+    },
+    {
+      "name": "ecostress:manmade.roofingmaterial.roofingpaper.solid.all.0523uuutar.jhu.becknic.spectrum.txt",
+      "material": "Black tar paper",
+      "chapter": "manmade.roofing",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/manmade.roofing/ecostress_manmade.roofingmaterial.roofingpaper.solid.all.0523uuutar.jhu.becknic.spectrum.txt",
+      "source": "ecostress",
+      "group": "manmade",
+      "family": "roofing"
+    },
+    {
+      "name": "ecostress:rock.metamorphic.schist.coarse.all.schist6.jhu.becknic.spectrum.txt",
+      "material": "Tremolite Schist",
+      "chapter": "natural.rock",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.rock/ecostress_rock.metamorphic.schist.coarse.all.schist6.jhu.becknic.spectrum.txt",
+      "source": "ecostress",
+      "group": "natural",
+      "family": "rock"
+    },
+    {
+      "name": "ecostress:rock.metamorphic.schist.fine.all.schist9.jhu.becknic.spectrum.txt",
+      "material": "Hornblende Schist",
+      "chapter": "natural.rock",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.rock/ecostress_rock.metamorphic.schist.fine.all.schist9.jhu.becknic.spectrum.txt",
+      "source": "ecostress",
+      "group": "natural",
+      "family": "rock"
+    },
+    {
+      "name": "ecostress:manmade.concrete.pavingconcrete.solid.all.0425uuuasp.jhu.becknic.spectrum.txt",
+      "material": "Asphaltic concrete",
+      "chapter": "manmade.pavement",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/manmade.pavement/ecostress_manmade.concrete.pavingconcrete.solid.all.0425uuuasp.jhu.becknic.spectrum.txt",
+      "source": "ecostress",
+      "group": "manmade",
+      "family": "pavement"
+    },
+    {
+      "name": "ecostress:soil.aridisol.calciorthid.none.all.79p1536.jhu.becknic.spectrum.txt",
+      "material": "Light yellowish brown interior dry gravelly loam",
+      "chapter": "natural.soil",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.soil/ecostress_soil.aridisol.calciorthid.none.all.79p1536.jhu.becknic.spectrum.txt",
+      "source": "ecostress",
+      "group": "natural",
+      "family": "soil"
+    },
+    {
+      "name": "ecostress:vegetation.shrub.salvia.leucophylla.vswir.vh288.ucsb.asd.spectrum.txt",
+      "material": "Salvia leucophylla 2",
+      "chapter": "natural.vegetation",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.vegetation/ecostress_vegetation.shrub.salvia.leucophylla.vswir.vh288.ucsb.asd.spectrum.txt",
+      "source": "ecostress",
+      "group": "natural",
+      "family": "vegetation"
+    },
+    {
+      "name": "ecostress:manmade.roofingmaterial.tile.solid.all.0484uuupot.jhu.becknic.spectrum.txt",
+      "material": "Terra cotta Tiles",
+      "chapter": "manmade.roofing",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/manmade.roofing/ecostress_manmade.roofingmaterial.tile.solid.all.0484uuupot.jhu.becknic.spectrum.txt",
+      "source": "ecostress",
+      "group": "manmade",
+      "family": "roofing"
+    },
+    {
+      "name": "ecostress:rock.igneous.felsic.solid.all.ap-938-91.usgs.perknic.spectrum.txt",
+      "material": "Rhyolite",
+      "chapter": "natural.rock",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.rock/ecostress_rock.igneous.felsic.solid.all.ap-938-91.usgs.perknic.spectrum.txt",
+      "source": "ecostress",
+      "group": "natural",
+      "family": "rock"
+    },
+    {
+      "name": "ecostress:nonphotosyntheticvegetation.branches.foeniculum.vulgare.vswir.vh361.ucsb.asd.spectrum.txt",
+      "material": "Foeniculum vulgare litter",
+      "chapter": "natural.npv",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.npv/ecostress_nonphotosyntheticvegetation.branches.foeniculum.vulgare.vswir.vh361.ucsb.asd.spectrum.txt",
+      "source": "ecostress",
+      "group": "natural",
+      "family": "npv"
+    },
+    {
+      "name": "ecostress:nonphotosyntheticvegetation.flowers.calocedrus.decurrens.vswir.vh268.ucsb.asd.spectrum.txt",
+      "material": "Calocedrus decrruens",
+      "chapter": "natural.npv",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.npv/ecostress_nonphotosyntheticvegetation.flowers.calocedrus.decurrens.vswir.vh268.ucsb.asd.spectrum.txt",
+      "source": "ecostress",
+      "group": "natural",
+      "family": "npv"
+    },
+    {
+      "name": "ecostress:soil.aridisol.salorthid.none.all.89p1805.jhu.becknic.spectrum.txt",
+      "material": "Dark yellowish brown silty clay",
+      "chapter": "natural.soil",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.soil/ecostress_soil.aridisol.salorthid.none.all.89p1805.jhu.becknic.spectrum.txt",
+      "source": "ecostress",
+      "group": "natural",
+      "family": "soil"
+    },
+    {
+      "name": "ecostress:soil.alfisol.paleustalf.none.all.87p2376.jhu.becknic.spectrum.txt",
+      "material": "Reddish brown fine sandy loam",
+      "chapter": "natural.soil",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.soil/ecostress_soil.alfisol.paleustalf.none.all.87p2376.jhu.becknic.spectrum.txt",
+      "source": "ecostress",
+      "group": "natural",
+      "family": "soil"
+    },
+    {
+      "name": "ecostress:soil.alfisol.paleustalf.none.all.87p1087.jhu.becknic.spectrum.txt",
+      "material": "Reddish brown fine sandy loam",
+      "chapter": "natural.soil",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.soil/ecostress_soil.alfisol.paleustalf.none.all.87p1087.jhu.becknic.spectrum.txt",
+      "source": "ecostress",
+      "group": "natural",
+      "family": "soil"
+    },
+    {
+      "name": "ecostress:manmade.road.tar.solid.all.0100uuutar.jhu.becknic.spectrum.txt",
+      "material": "Construction Tar",
+      "chapter": "manmade.pavement",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/manmade.pavement/ecostress_manmade.road.tar.solid.all.0100uuutar.jhu.becknic.spectrum.txt",
+      "source": "ecostress",
+      "group": "manmade",
+      "family": "pavement"
+    },
+    {
+      "name": "ecostress:nonphotosyntheticvegetation.needles.pinus.ponderosa.vswir.vh324.ucsb.asd.spectrum.txt",
+      "material": "Pinus ponderosa dry needles",
+      "chapter": "natural.npv",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.npv/ecostress_nonphotosyntheticvegetation.needles.pinus.ponderosa.vswir.vh324.ucsb.asd.spectrum.txt",
+      "source": "ecostress",
+      "group": "natural",
+      "family": "npv"
+    },
+    {
+      "name": "ecostress:manmade.generalconstructionmaterial.paint.solid.all.0407uuupnt.jhu.becknic.spectrum.txt",
+      "material": "Olive green paint",
+      "chapter": "manmade.paint",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/manmade.paint/ecostress_manmade.generalconstructionmaterial.paint.solid.all.0407uuupnt.jhu.becknic.spectrum.txt",
+      "source": "ecostress",
+      "group": "manmade",
+      "family": "paint"
+    },
+    {
+      "name": "ecostress:water.frost.none.fine.all.frost_snw_.jhu.becknic.spectrum.txt",
+      "material": "Frost",
+      "chapter": "natural.water",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.water/ecostress_water.frost.none.fine.all.frost_snw_.jhu.becknic.spectrum.txt",
+      "source": "ecostress",
+      "group": "natural",
+      "family": "water"
+    },
+    {
+      "name": "ecostress:nonphotosyntheticvegetation.needles.pinus.coulteri.vswir.vh340.ucsb.asd.spectrum.txt",
+      "material": "Pinus coulteri dry needles",
+      "chapter": "natural.npv",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.npv/ecostress_nonphotosyntheticvegetation.needles.pinus.coulteri.vswir.vh340.ucsb.asd.spectrum.txt",
+      "source": "ecostress",
+      "group": "natural",
+      "family": "npv"
+    },
+    {
+      "name": "ecostress:soil.alfisol.paleustalf.none.all.87p473.jhu.becknic.spectrum.txt",
+      "material": "Dark reddish brown fine sandy loam",
+      "chapter": "natural.soil",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.soil/ecostress_soil.alfisol.paleustalf.none.all.87p473.jhu.becknic.spectrum.txt",
+      "source": "ecostress",
+      "group": "natural",
+      "family": "soil"
+    },
+    {
+      "name": "ecostress:rock.metamorphic.schist.fine.all.schist10.jhu.becknic.spectrum.txt",
+      "material": "Graphite Schist",
+      "chapter": "natural.rock",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.rock/ecostress_rock.metamorphic.schist.fine.all.schist10.jhu.becknic.spectrum.txt",
+      "source": "ecostress",
+      "group": "natural",
+      "family": "rock"
+    },
+    {
+      "name": "ecostress:manmade.roofingmaterial.shingle.solid.all.0597uuuasp.jhu.becknic.spectrum.txt",
+      "material": "Asphalt roofing shingle",
+      "chapter": "manmade.roofing",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/manmade.roofing/ecostress_manmade.roofingmaterial.shingle.solid.all.0597uuuasp.jhu.becknic.spectrum.txt",
+      "source": "ecostress",
+      "group": "manmade",
+      "family": "roofing"
+    },
+    {
+      "name": "ecostress:manmade.generalconstructionmaterial.paint.solid.all.0386uuupnt.jhu.becknic.spectrum.txt",
+      "material": "Olive green gloss paint",
+      "chapter": "manmade.paint",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/manmade.paint/ecostress_manmade.generalconstructionmaterial.paint.solid.all.0386uuupnt.jhu.becknic.spectrum.txt",
+      "source": "ecostress",
+      "group": "manmade",
+      "family": "paint"
+    },
+    {
+      "name": "ecostress:nonphotosyntheticvegetation.bark.quercus.rubra.vswir.quru-2-80.ucsb.asd.spectrum.txt",
+      "material": "Quercus rubra",
+      "chapter": "natural.npv",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.npv/ecostress_nonphotosyntheticvegetation.bark.quercus.rubra.vswir.quru-2-80.ucsb.asd.spectrum.txt",
+      "source": "ecostress",
+      "group": "natural",
+      "family": "npv"
+    },
+    {
+      "name": "ecostress:manmade.concrete.pavingconcrete.solid.all.0397uuucnc.jhu.becknic.spectrum.txt",
+      "material": "Construction Concrete",
+      "chapter": "manmade.pavement",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/manmade.pavement/ecostress_manmade.concrete.pavingconcrete.solid.all.0397uuucnc.jhu.becknic.spectrum.txt",
+      "source": "ecostress",
+      "group": "manmade",
+      "family": "pavement"
+    },
+    {
+      "name": "ecostress:manmade.roofingmaterial.metal.solid.all.0525uuustla.jhu.becknic.spectrum.txt",
+      "material": "Galvanized Steel Metal",
+      "chapter": "manmade.metal",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/manmade.metal/ecostress_manmade.roofingmaterial.metal.solid.all.0525uuustla.jhu.becknic.spectrum.txt",
+      "source": "ecostress",
+      "group": "manmade",
+      "family": "metal"
+    },
+    {
+      "name": "ecostress:vegetation.shrub.aloe.arborescens_flower.vswir.jpl072.jpl.asd.spectrum.txt",
+      "material": "Aloe arborescens flower",
+      "chapter": "natural.vegetation",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.vegetation/ecostress_vegetation.shrub.aloe.arborescens_flower.vswir.jpl072.jpl.asd.spectrum.txt",
+      "source": "ecostress",
+      "group": "natural",
+      "family": "vegetation"
+    },
+    {
+      "name": "ecostress:rock.igneous.ultramafic.solid.all.dunite_h1.jhu.becknic.spectrum.txt",
+      "material": "Dunite",
+      "chapter": "natural.rock",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.rock/ecostress_rock.igneous.ultramafic.solid.all.dunite_h1.jhu.becknic.spectrum.txt",
+      "source": "ecostress",
+      "group": "natural",
+      "family": "rock"
+    },
+    {
+      "name": "ecostress:soil.aridisol.gypsiorthid.none.all.82p2695.jhu.becknic.spectrum.txt",
+      "material": "Very pale brown to brownish yellow interior dry gravelly silt loam",
+      "chapter": "natural.soil",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.soil/ecostress_soil.aridisol.gypsiorthid.none.all.82p2695.jhu.becknic.spectrum.txt",
+      "source": "ecostress",
+      "group": "natural",
+      "family": "soil"
+    },
+    {
+      "name": "ecostress:mineral.silicate.cyclosilicate.medium.vswir.cs-1a.jpl.beckman.spectrum.txt",
+      "material": "Tourmaline Na(Mg_3,Fe_3^2+)Al_6(BO_3)_3Si_6O_18(OH)_4",
+      "chapter": "natural.mineral",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.mineral/ecostress_mineral.silicate.cyclosilicate.medium.vswir.cs-1a.jpl.beckman.spectrum.txt",
+      "source": "ecostress",
+      "group": "natural",
+      "family": "mineral"
+    },
+    {
+      "name": "ecostress:manmade.generalconstructionmaterial.wood.solid.all.0410uuuwod.jhu.becknic.spectrum.txt",
+      "material": "Pine Wood",
+      "chapter": "manmade.wood_paper",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/manmade.wood_paper/ecostress_manmade.generalconstructionmaterial.wood.solid.all.0410uuuwod.jhu.becknic.spectrum.txt",
+      "source": "ecostress",
+      "group": "manmade",
+      "family": "wood_paper"
+    },
+    {
+      "name": "ecostress:mineral.oxide.none.medium.vswir.o-7a.jpl.perkin.spectrum.txt",
+      "material": "Columbite Fe^2+Nb_2O_6",
+      "chapter": "natural.mineral",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.mineral/ecostress_mineral.oxide.none.medium.vswir.o-7a.jpl.perkin.spectrum.txt",
+      "source": "ecostress",
+      "group": "natural",
+      "family": "mineral"
+    },
+    {
+      "name": "ecostress:rock.igneous.felsic.solid.all.ap-939-214.usgs.perknic.spectrum.txt",
+      "material": "Rhyolite",
+      "chapter": "natural.rock",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.rock/ecostress_rock.igneous.felsic.solid.all.ap-939-214.usgs.perknic.spectrum.txt",
+      "source": "ecostress",
+      "group": "natural",
+      "family": "rock"
+    },
+    {
+      "name": "ecostress:soil.inceptisol.haplumbrept.none.all.88p4699.jhu.becknic.spectrum.txt",
+      "material": "Brown sandy loam",
+      "chapter": "natural.soil",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.soil/ecostress_soil.inceptisol.haplumbrept.none.all.88p4699.jhu.becknic.spectrum.txt",
+      "source": "ecostress",
+      "group": "natural",
+      "family": "soil"
+    },
+    {
+      "name": "ecostress:manmade.generalconstructionmaterial.glas.solid.all.0796uuugls.jhu.becknic.spectrum.txt",
+      "material": "Plate Window Glass",
+      "chapter": "manmade.glass",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/manmade.glass/ecostress_manmade.generalconstructionmaterial.glas.solid.all.0796uuugls.jhu.becknic.spectrum.txt",
+      "source": "ecostress",
+      "group": "manmade",
+      "family": "glass"
+    },
+    {
+      "name": "ecostress:nonphotosyntheticvegetation.leaves.none.none.vswir.vh359.ucsb.asd.spectrum.txt",
+      "material": "Misc Grass Litter",
+      "chapter": "natural.npv",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.npv/ecostress_nonphotosyntheticvegetation.leaves.none.none.vswir.vh359.ucsb.asd.spectrum.txt",
+      "source": "ecostress",
+      "group": "natural",
+      "family": "npv"
+    },
+    {
+      "name": "ecostress:manmade.roofingmaterial.shingle.solid.all.0672uuuasp.jhu.becknic.spectrum.txt",
+      "material": "Reddish Asphalt roofing shingle",
+      "chapter": "manmade.roofing",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/manmade.roofing/ecostress_manmade.roofingmaterial.shingle.solid.all.0672uuuasp.jhu.becknic.spectrum.txt",
+      "source": "ecostress",
+      "group": "manmade",
+      "family": "roofing"
+    },
+    {
+      "name": "ecostress:water.snow.mediumgranular.medium.all.medgran_snw_.jhu.becknic.spectrum.txt",
+      "material": "Medium Granular Snow",
+      "chapter": "natural.snow_ice",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.snow_ice/ecostress_water.snow.mediumgranular.medium.all.medgran_snw_.jhu.becknic.spectrum.txt",
+      "source": "ecostress",
+      "group": "natural",
+      "family": "snow_ice"
+    },
+    {
+      "name": "ecostress:rock.metamorphic.gneis.coarse.all.gneiss6.jhu.becknic.spectrum.txt",
+      "material": "Hornblende Gneiss",
+      "chapter": "natural.rock",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.rock/ecostress_rock.metamorphic.gneis.coarse.all.gneiss6.jhu.becknic.spectrum.txt",
+      "source": "ecostress",
+      "group": "natural",
+      "family": "rock"
+    },
+    {
+      "name": "ecostress:manmade.roofingmaterial.rubber.solid.all.0833uuurbr.jhu.becknic.spectrum.txt",
+      "material": "Black unspecified rubber",
+      "chapter": "manmade.roofing",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/manmade.roofing/ecostress_manmade.roofingmaterial.rubber.solid.all.0833uuurbr.jhu.becknic.spectrum.txt",
+      "source": "ecostress",
+      "group": "manmade",
+      "family": "roofing"
+    },
+    {
+      "name": "ecostress:rock.metamorphic.schist.coarse.all.schist8.jhu.becknic.spectrum.txt",
+      "material": "Anthophyllite Mica Schist",
+      "chapter": "natural.rock",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.rock/ecostress_rock.metamorphic.schist.coarse.all.schist8.jhu.becknic.spectrum.txt",
+      "source": "ecostress",
+      "group": "natural",
+      "family": "rock"
+    },
+    {
+      "name": "ecostress:mineral.arsenate.none.coarse.vswir.a-2a.jpl.perkin.spectrum.txt",
+      "material": "Scorodite Fe^3+AsO_4.2H_2O",
+      "chapter": "natural.mineral",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.mineral/ecostress_mineral.arsenate.none.coarse.vswir.a-2a.jpl.perkin.spectrum.txt",
+      "source": "ecostress",
+      "group": "natural",
+      "family": "mineral"
+    },
+    {
+      "name": "ecostress:rock.igneous.felsic.solid.all.ap-936-193b.usgs.perknic.spectrum.txt",
+      "material": "Rhyolite",
+      "chapter": "natural.rock",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.rock/ecostress_rock.igneous.felsic.solid.all.ap-936-193b.usgs.perknic.spectrum.txt",
+      "source": "ecostress",
+      "group": "natural",
+      "family": "rock"
+    },
+    {
+      "name": "ecostress:manmade.concrete.pavingconcrete.solid.all.0424uuucnc.jhu.becknic.spectrum.txt",
+      "material": "Construction  Concrete",
+      "chapter": "manmade.pavement",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/manmade.pavement/ecostress_manmade.concrete.pavingconcrete.solid.all.0424uuucnc.jhu.becknic.spectrum.txt",
+      "source": "ecostress",
+      "group": "manmade",
+      "family": "pavement"
+    },
+    {
+      "name": "ecostress:rock.igneous.felsic.solid.all.cup7.usgs.perknic.spectrum.txt",
+      "material": "Altered volcanic tuff",
+      "chapter": "natural.rock",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.rock/ecostress_rock.igneous.felsic.solid.all.cup7.usgs.perknic.spectrum.txt",
+      "source": "ecostress",
+      "group": "natural",
+      "family": "rock"
+    },
+    {
+      "name": "ecostress:rock.igneous.ultramafic.solid.vswir.ward44.jpl.perkin.spectrum.txt",
+      "material": "Dunite (Olivine Peridotite)",
+      "chapter": "natural.rock",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.rock/ecostress_rock.igneous.ultramafic.solid.vswir.ward44.jpl.perkin.spectrum.txt",
+      "source": "ecostress",
+      "group": "natural",
+      "family": "rock"
+    },
+    {
+      "name": "ecostress:rock.sedimentary.siltstone.coarse.all.siltstone_2.jhu.becknic.spectrum.txt",
+      "material": "Limestone Siltstone",
+      "chapter": "natural.rock",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.rock/ecostress_rock.sedimentary.siltstone.coarse.all.siltstone_2.jhu.becknic.spectrum.txt",
+      "source": "ecostress",
+      "group": "natural",
+      "family": "rock"
+    },
+    {
+      "name": "ecostress:soil.entisol.ustifluvent.none.all.82p2230.jhu.becknic.spectrum.txt",
+      "material": "Brown to dark brown silt loam",
+      "chapter": "natural.soil",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.soil/ecostress_soil.entisol.ustifluvent.none.all.82p2230.jhu.becknic.spectrum.txt",
+      "source": "ecostress",
+      "group": "natural",
+      "family": "soil"
+    },
+    {
+      "name": "ecostress:nonphotosyntheticvegetation.bark.betula.papyrifera.vswir.bepa-2-86.ucsb.asd.spectrum.txt",
+      "material": "Betula papyrifera",
+      "chapter": "natural.npv",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.npv/ecostress_nonphotosyntheticvegetation.bark.betula.papyrifera.vswir.bepa-2-86.ucsb.asd.spectrum.txt",
+      "source": "ecostress",
+      "group": "natural",
+      "family": "npv"
+    },
+    {
+      "name": "ecostress:manmade.generalconstructionmaterial.paint.solid.all.0408uuupnt.jhu.becknic.spectrum.txt",
+      "material": "Olive green paint",
+      "chapter": "manmade.paint",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/manmade.paint/ecostress_manmade.generalconstructionmaterial.paint.solid.all.0408uuupnt.jhu.becknic.spectrum.txt",
+      "source": "ecostress",
+      "group": "manmade",
+      "family": "paint"
+    },
+    {
+      "name": "ecostress:manmade.generalconstructionmaterial.paint.solid.all.0385uuupnt.jhu.becknic.spectrum.txt",
+      "material": "Olive green gloss paint",
+      "chapter": "manmade.paint",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/manmade.paint/ecostress_manmade.generalconstructionmaterial.paint.solid.all.0385uuupnt.jhu.becknic.spectrum.txt",
+      "source": "ecostress",
+      "group": "manmade",
+      "family": "paint"
+    },
+    {
+      "name": "ecostress:nonphotosyntheticvegetation.leaves.avena.fatua.vswir.vh354.ucsb.asd.spectrum.txt",
+      "material": "Avena fatua litter",
+      "chapter": "natural.npv",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.npv/ecostress_nonphotosyntheticvegetation.leaves.avena.fatua.vswir.vh354.ucsb.asd.spectrum.txt",
+      "source": "ecostress",
+      "group": "natural",
+      "family": "npv"
+    },
+    {
+      "name": "ecostress:water.snow.finegranular.fine.all.fine_snw_.jhu.becknic.spectrum.txt",
+      "material": "Fine Snow",
+      "chapter": "natural.snow_ice",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.snow_ice/ecostress_water.snow.finegranular.fine.all.fine_snw_.jhu.becknic.spectrum.txt",
+      "source": "ecostress",
+      "group": "natural",
+      "family": "snow_ice"
+    },
+    {
+      "name": "ecostress:manmade.generalconstructionmaterial.brick.solid.all.0097uuubrk.jhu.becknic.spectrum.txt",
+      "material": "Red smooth-faced Brick",
+      "chapter": "manmade.building",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/manmade.building/ecostress_manmade.generalconstructionmaterial.brick.solid.all.0097uuubrk.jhu.becknic.spectrum.txt",
+      "source": "ecostress",
+      "group": "manmade",
+      "family": "building"
+    },
+    {
+      "name": "ecostress:manmade.roofingmaterial.metal.solid.all.0384uuualm.jhu.becknic.spectrum.txt",
+      "material": "Aluminum Metal",
+      "chapter": "manmade.metal",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/manmade.metal/ecostress_manmade.roofingmaterial.metal.solid.all.0384uuualm.jhu.becknic.spectrum.txt",
+      "source": "ecostress",
+      "group": "manmade",
+      "family": "metal"
+    },
+    {
+      "name": "ecostress:nonphotosyntheticvegetation.needles.abies.concolor.vswir.vh326.ucsb.asd.spectrum.txt",
+      "material": "Abies concolor dry needles",
+      "chapter": "natural.npv",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.npv/ecostress_nonphotosyntheticvegetation.needles.abies.concolor.vswir.vh326.ucsb.asd.spectrum.txt",
+      "source": "ecostress",
+      "group": "natural",
+      "family": "npv"
+    },
+    {
+      "name": "ecostress:soil.alfisol.haplustalf.none.all.87p3665.jhu.becknic.spectrum.txt",
+      "material": "Brown fine sandy loam",
+      "chapter": "natural.soil",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.soil/ecostress_soil.alfisol.haplustalf.none.all.87p3665.jhu.becknic.spectrum.txt",
+      "source": "ecostress",
+      "group": "natural",
+      "family": "soil"
+    },
+    {
+      "name": "ecostress:manmade.generalconstructionmaterial.paint.solid.all.0402uuupnt.jhu.becknic.spectrum.txt",
+      "material": "Black gloss paint",
+      "chapter": "manmade.paint",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/manmade.paint/ecostress_manmade.generalconstructionmaterial.paint.solid.all.0402uuupnt.jhu.becknic.spectrum.txt",
+      "source": "ecostress",
+      "group": "manmade",
+      "family": "paint"
+    },
+    {
+      "name": "ecostress:rock.sedimentary.sandstone.coarse.all.sandstone_3.jhu.becknic.spectrum.txt",
+      "material": "Sandstone (Micaceous Red)",
+      "chapter": "natural.rock",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.rock/ecostress_rock.sedimentary.sandstone.coarse.all.sandstone_3.jhu.becknic.spectrum.txt",
+      "source": "ecostress",
+      "group": "natural",
+      "family": "rock"
+    },
+    {
+      "name": "ecostress:nonphotosyntheticvegetation.needles.pinus.lambertiana.vswir.vh328.ucsb.asd.spectrum.txt",
+      "material": "Pinus lambertiana dry needles",
+      "chapter": "natural.npv",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.npv/ecostress_nonphotosyntheticvegetation.needles.pinus.lambertiana.vswir.vh328.ucsb.asd.spectrum.txt",
+      "source": "ecostress",
+      "group": "natural",
+      "family": "npv"
+    },
+    {
+      "name": "ecostress:soil.utisol.hapludult.none.all.87p707.jhu.becknic.spectrum.txt",
+      "material": "Brown to dark brown loamy sand",
+      "chapter": "natural.soil",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.soil/ecostress_soil.utisol.hapludult.none.all.87p707.jhu.becknic.spectrum.txt",
+      "source": "ecostress",
+      "group": "natural",
+      "family": "soil"
+    },
+    {
+      "name": "ecostress:mineral.phosphate.none.medium.vswir.p-4a.jpl.perkin.spectrum.txt",
+      "material": "Triphylite Li(Mn,Fe)PO_4",
+      "chapter": "natural.mineral",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.mineral/ecostress_mineral.phosphate.none.medium.vswir.p-4a.jpl.perkin.spectrum.txt",
+      "source": "ecostress",
+      "group": "natural",
+      "family": "mineral"
+    },
+    {
+      "name": "ecostress:soil.mollisol.agriudoll.none.all.87p757.jhu.becknic.spectrum.txt",
+      "material": "Vary dark grayish brown loam",
+      "chapter": "natural.soil",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.soil/ecostress_soil.mollisol.agriudoll.none.all.87p757.jhu.becknic.spectrum.txt",
+      "source": "ecostress",
+      "group": "natural",
+      "family": "soil"
+    },
+    {
+      "name": "ecostress:mineral.carbonate.none.coarse.vswir.c-7a.jpl.beckman.spectrum.txt",
+      "material": "Malachite Cu_2(CO_3)(OH)_2",
+      "chapter": "natural.mineral",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.mineral/ecostress_mineral.carbonate.none.coarse.vswir.c-7a.jpl.beckman.spectrum.txt",
+      "source": "ecostress",
+      "group": "natural",
+      "family": "mineral"
+    },
+    {
+      "name": "ecostress:nonphotosyntheticvegetation.leaves.none.none.vswir.ll-2-89z.ucsb.asd.spectrum.txt",
+      "material": "Misc Leaf Litter",
+      "chapter": "natural.npv",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.npv/ecostress_nonphotosyntheticvegetation.leaves.none.none.vswir.ll-2-89z.ucsb.asd.spectrum.txt",
+      "source": "ecostress",
+      "group": "natural",
+      "family": "npv"
+    },
+    {
+      "name": "ecostress:nonphotosyntheticvegetation.bark.pinus.ponderosa.vswir.vh313.ucsb.asd.spectrum.txt",
+      "material": "Pinus ponderosa Bark",
+      "chapter": "natural.npv",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.npv/ecostress_nonphotosyntheticvegetation.bark.pinus.ponderosa.vswir.vh313.ucsb.asd.spectrum.txt",
+      "source": "ecostress",
+      "group": "natural",
+      "family": "npv"
+    },
+    {
+      "name": "ecostress:soil.alfisol.haploxeralf.none.all.87p313.jhu.becknic.spectrum.txt",
+      "material": "Brown to dark brown gravelly loam",
+      "chapter": "natural.soil",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.soil/ecostress_soil.alfisol.haploxeralf.none.all.87p313.jhu.becknic.spectrum.txt",
+      "source": "ecostress",
+      "group": "natural",
+      "family": "soil"
+    },
+    {
+      "name": "ecostress:manmade.roofingmaterial.metal.solid.all.0525uuustlb.jhu.becknic.spectrum.txt",
+      "material": "Galvanized Steel Metal",
+      "chapter": "manmade.metal",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/manmade.metal/ecostress_manmade.roofingmaterial.metal.solid.all.0525uuustlb.jhu.becknic.spectrum.txt",
+      "source": "ecostress",
+      "group": "manmade",
+      "family": "metal"
+    },
+    {
+      "name": "ecostress:manmade.generalconstructionmaterial.wood.solid.all.0404uuuwod.jhu.becknic.spectrum.txt",
+      "material": "Pine Wood",
+      "chapter": "manmade.wood_paper",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/manmade.wood_paper/ecostress_manmade.generalconstructionmaterial.wood.solid.all.0404uuuwod.jhu.becknic.spectrum.txt",
+      "source": "ecostress",
+      "group": "manmade",
+      "family": "wood_paper"
+    },
+    {
+      "name": "ecostress:rock.igneous.mafic.solid.all.mewy9.usgs.perknic.spectrum.txt",
+      "material": "Basalt",
+      "chapter": "natural.rock",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.rock/ecostress_rock.igneous.mafic.solid.all.mewy9.usgs.perknic.spectrum.txt",
+      "source": "ecostress",
+      "group": "natural",
+      "family": "rock"
+    },
+    {
+      "name": "ecostress:manmade.roofingmaterial.shingle.solid.all.0680uuusto.jhu.becknic.spectrum.txt",
+      "material": "Slate stone Shingle",
+      "chapter": "manmade.roofing",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/manmade.roofing/ecostress_manmade.roofingmaterial.shingle.solid.all.0680uuusto.jhu.becknic.spectrum.txt",
+      "source": "ecostress",
+      "group": "manmade",
+      "family": "roofing"
+    },
+    {
+      "name": "ecostress:mineral.hydroxide.none.coarse.vswir.oh-1a.jpl.beckman.spectrum.txt",
+      "material": "Brucite Mg(OH)_2",
+      "chapter": "natural.mineral",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.mineral/ecostress_mineral.hydroxide.none.coarse.vswir.oh-1a.jpl.beckman.spectrum.txt",
+      "source": "ecostress",
+      "group": "natural",
+      "family": "mineral"
+    },
+    {
+      "name": "ecostress:vegetation.tree.quercus.lobata.vswir.vh284.ucsb.asd.spectrum.txt",
+      "material": "Quercus lobata 2",
+      "chapter": "natural.vegetation",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.vegetation/ecostress_vegetation.tree.quercus.lobata.vswir.vh284.ucsb.asd.spectrum.txt",
+      "source": "ecostress",
+      "group": "natural",
+      "family": "vegetation"
+    },
+    {
+      "name": "ecostress:nonphotosyntheticvegetation.bark.calocedrus.decurrens.vswir.vh316.ucsb.asd.spectrum.txt",
+      "material": "Calocedrus decurrens bark",
+      "chapter": "natural.npv",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.npv/ecostress_nonphotosyntheticvegetation.bark.calocedrus.decurrens.vswir.vh316.ucsb.asd.spectrum.txt",
+      "source": "ecostress",
+      "group": "natural",
+      "family": "npv"
+    },
+    {
+      "name": "ecostress:soil.aridisol.salorthid.none.all.89p1763.jhu.becknic.spectrum.txt",
+      "material": "Light yellowish brown clay",
+      "chapter": "natural.soil",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.soil/ecostress_soil.aridisol.salorthid.none.all.89p1763.jhu.becknic.spectrum.txt",
+      "source": "ecostress",
+      "group": "natural",
+      "family": "soil"
+    },
+    {
+      "name": "ecostress:rock.igneous.felsic.solid.all.cup5.usgs.perknic.spectrum.txt",
+      "material": "Altered volcanic tuff",
+      "chapter": "natural.rock",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.rock/ecostress_rock.igneous.felsic.solid.all.cup5.usgs.perknic.spectrum.txt",
+      "source": "ecostress",
+      "group": "natural",
+      "family": "rock"
+    },
+    {
+      "name": "ecostress:manmade.roofingmaterial.rubber.solid.all.0834uuurbr.jhu.becknic.spectrum.txt",
+      "material": "White fiberglass unspecified rubber",
+      "chapter": "manmade.roofing",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/manmade.roofing/ecostress_manmade.roofingmaterial.rubber.solid.all.0834uuurbr.jhu.becknic.spectrum.txt",
+      "source": "ecostress",
+      "group": "manmade",
+      "family": "roofing"
+    },
+    {
+      "name": "ecostress:vegetation.shrub.heteromeles.arbutifolia.vswir.vh017.ucsb.asd.spectrum.txt",
+      "material": "Heteromeles arbutifolia 3",
+      "chapter": "natural.vegetation",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.vegetation/ecostress_vegetation.shrub.heteromeles.arbutifolia.vswir.vh017.ucsb.asd.spectrum.txt",
+      "source": "ecostress",
+      "group": "natural",
+      "family": "vegetation"
+    },
+    {
+      "name": "ecostress:soil.mollisol.cryoboroll.none.all.87p4453.jhu.becknic.spectrum.txt",
+      "material": "Very dark grayish brown loam",
+      "chapter": "natural.soil",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.soil/ecostress_soil.mollisol.cryoboroll.none.all.87p4453.jhu.becknic.spectrum.txt",
+      "source": "ecostress",
+      "group": "natural",
+      "family": "soil"
+    },
+    {
+      "name": "ecostress:soil.inceptisol.dystrochrept.none.all.88p2535.jhu.becknic.spectrum.txt",
+      "material": "Dark yellowish brown micaceous loam",
+      "chapter": "natural.soil",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.soil/ecostress_soil.inceptisol.dystrochrept.none.all.88p2535.jhu.becknic.spectrum.txt",
+      "source": "ecostress",
+      "group": "natural",
+      "family": "soil"
+    },
+    {
+      "name": "ecostress:nonphotosyntheticvegetation.lichen.lichen.species.vswir.vh298.ucsb.asd.spectrum.txt",
+      "material": "lichen off trees",
+      "chapter": "natural.npv",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.npv/ecostress_nonphotosyntheticvegetation.lichen.lichen.species.vswir.vh298.ucsb.asd.spectrum.txt",
+      "source": "ecostress",
+      "group": "natural",
+      "family": "npv"
+    },
+    {
+      "name": "ecostress:nonphotosyntheticvegetation.needles.pinus.coulteri.vswir.vh339.ucsb.asd.spectrum.txt",
+      "material": "Pinus coulteri dry needles",
+      "chapter": "natural.npv",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.npv/ecostress_nonphotosyntheticvegetation.needles.pinus.coulteri.vswir.vh339.ucsb.asd.spectrum.txt",
+      "source": "ecostress",
+      "group": "natural",
+      "family": "npv"
+    },
+    {
+      "name": "ecostress:rock.igneous.felsic.solid.all.cup2.usgs.perknic.spectrum.txt",
+      "material": "Altered volcanic tuff",
+      "chapter": "natural.rock",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.rock/ecostress_rock.igneous.felsic.solid.all.cup2.usgs.perknic.spectrum.txt",
+      "source": "ecostress",
+      "group": "natural",
+      "family": "rock"
+    },
+    {
+      "name": "ecostress:mineral.oxide.none.coarse.vswir.o-11a.jpl.perkin.spectrum.txt",
+      "material": "Gahnite ZnAl_2O_4",
+      "chapter": "natural.mineral",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.mineral/ecostress_mineral.oxide.none.coarse.vswir.o-11a.jpl.perkin.spectrum.txt",
+      "source": "ecostress",
+      "group": "natural",
+      "family": "mineral"
+    },
+    {
+      "name": "ecostress:rock.metamorphic.schist.coarse.all.schist1.jhu.becknic.spectrum.txt",
+      "material": "Green Schist",
+      "chapter": "natural.rock",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.rock/ecostress_rock.metamorphic.schist.coarse.all.schist1.jhu.becknic.spectrum.txt",
+      "source": "ecostress",
+      "group": "natural",
+      "family": "rock"
+    },
+    {
+      "name": "ecostress:manmade.road.tar.solid.all.0099uuutar.jhu.becknic.spectrum.txt",
+      "material": "Construction Tar",
+      "chapter": "manmade.pavement",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/manmade.pavement/ecostress_manmade.road.tar.solid.all.0099uuutar.jhu.becknic.spectrum.txt",
+      "source": "ecostress",
+      "group": "manmade",
+      "family": "pavement"
+    },
+    {
+      "name": "ecostress:vegetation.shrub.baccharis.pilularis.vswir.vh045.ucsb.asd.spectrum.txt",
+      "material": "Baccharis pilularis 2",
+      "chapter": "natural.vegetation",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.vegetation/ecostress_vegetation.shrub.baccharis.pilularis.vswir.vh045.ucsb.asd.spectrum.txt",
+      "source": "ecostress",
+      "group": "natural",
+      "family": "vegetation"
+    },
+    {
+      "name": "ecostress:rock.sedimentary.limestone.coarse.all.limestone_2.jhu.becknic.spectrum.txt",
+      "material": "Dolomitic Limestone",
+      "chapter": "natural.rock",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.rock/ecostress_rock.sedimentary.limestone.coarse.all.limestone_2.jhu.becknic.spectrum.txt",
+      "source": "ecostress",
+      "group": "natural",
+      "family": "rock"
+    },
+    {
+      "name": "ecostress:manmade.concrete.constructionconcrete.solid.all.0598uuucnc.jhu.becknic.spectrum.txt",
+      "material": "Construction  Concrete",
+      "chapter": "manmade.building",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/manmade.building/ecostress_manmade.concrete.constructionconcrete.solid.all.0598uuucnc.jhu.becknic.spectrum.txt",
+      "source": "ecostress",
+      "group": "manmade",
+      "family": "building"
+    },
+    {
+      "name": "ecostress:rock.metamorphic.schist.solid.vswir.ward89.jpl.perkin.spectrum.txt",
+      "material": "Tourmaline-Mica Schist",
+      "chapter": "natural.rock",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.rock/ecostress_rock.metamorphic.schist.solid.vswir.ward89.jpl.perkin.spectrum.txt",
+      "source": "ecostress",
+      "group": "natural",
+      "family": "rock"
+    },
+    {
+      "name": "ecostress:vegetation.shrub.puya.venusta.vswir.jpl080.jpl.asd.spectrum.txt",
+      "material": "Puya venusta",
+      "chapter": "natural.vegetation",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.vegetation/ecostress_vegetation.shrub.puya.venusta.vswir.jpl080.jpl.asd.spectrum.txt",
+      "source": "ecostress",
+      "group": "natural",
+      "family": "vegetation"
+    },
+    {
+      "name": "ecostress:nonphotosyntheticvegetation.bark.pinus.strobus.vswir.pist-2-84.ucsb.asd.spectrum.txt",
+      "material": "Pinus strobus",
+      "chapter": "natural.npv",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.npv/ecostress_nonphotosyntheticvegetation.bark.pinus.strobus.vswir.pist-2-84.ucsb.asd.spectrum.txt",
+      "source": "ecostress",
+      "group": "natural",
+      "family": "npv"
+    },
+    {
+      "name": "ecostress:soil.inceptisol.cryumbrept.none.all.87p3855.jhu.becknic.spectrum.txt",
+      "material": "Gray/dark brown extremely stoney coarse sandy",
+      "chapter": "natural.soil",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.soil/ecostress_soil.inceptisol.cryumbrept.none.all.87p3855.jhu.becknic.spectrum.txt",
+      "source": "ecostress",
+      "group": "natural",
+      "family": "soil"
+    },
+    {
+      "name": "ecostress:nonphotosyntheticvegetation.branches.foeniculum.vulgare.vswir.vh360.ucsb.asd.spectrum.txt",
+      "material": "Foeniculum vulgare litter",
+      "chapter": "natural.npv",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.npv/ecostress_nonphotosyntheticvegetation.branches.foeniculum.vulgare.vswir.vh360.ucsb.asd.spectrum.txt",
+      "source": "ecostress",
+      "group": "natural",
+      "family": "npv"
+    },
+    {
+      "name": "ecostress:manmade.generalconstructionmaterial.paint.solid.all.0403uuupnt.jhu.becknic.spectrum.txt",
+      "material": "Black gloss paint",
+      "chapter": "manmade.paint",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/manmade.paint/ecostress_manmade.generalconstructionmaterial.paint.solid.all.0403uuupnt.jhu.becknic.spectrum.txt",
+      "source": "ecostress",
+      "group": "manmade",
+      "family": "paint"
+    },
+    {
+      "name": "ecostress:manmade.road.pavingasphalt.solid.all.0096uuuasp.jhu.becknic.spectrum.txt",
+      "material": "Construction Asphalt",
+      "chapter": "manmade.pavement",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/manmade.pavement/ecostress_manmade.road.pavingasphalt.solid.all.0096uuuasp.jhu.becknic.spectrum.txt",
+      "source": "ecostress",
+      "group": "manmade",
+      "family": "pavement"
+    },
+    {
+      "name": "ecostress:rock.metamorphic.marble.coarse.all.marble5.jhu.becknic.spectrum.txt",
+      "material": "Serpentine Marble",
+      "chapter": "natural.rock",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.rock/ecostress_rock.metamorphic.marble.coarse.all.marble5.jhu.becknic.spectrum.txt",
+      "source": "ecostress",
+      "group": "natural",
+      "family": "rock"
+    },
+    {
+      "name": "ecostress:rock.metamorphic.gneis.coarse.all.gneiss7.jhu.becknic.spectrum.txt",
+      "material": "Diorite Gneiss",
+      "chapter": "natural.rock",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.rock/ecostress_rock.metamorphic.gneis.coarse.all.gneiss7.jhu.becknic.spectrum.txt",
+      "source": "ecostress",
+      "group": "natural",
+      "family": "rock"
+    },
+    {
+      "name": "ecostress:rock.igneous.ultramafic.fine.all.ijolite_h1.jhu.becknic.spectrum.txt",
+      "material": "Ijolite",
+      "chapter": "natural.rock",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.rock/ecostress_rock.igneous.ultramafic.fine.all.ijolite_h1.jhu.becknic.spectrum.txt",
+      "source": "ecostress",
+      "group": "natural",
+      "family": "rock"
+    },
+    {
+      "name": "ecostress:manmade.roofingmaterial.metal.solid.all.0692uuucop.jhu.becknic.spectrum.txt",
+      "material": "Copper Metal",
+      "chapter": "manmade.metal",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/manmade.metal/ecostress_manmade.roofingmaterial.metal.solid.all.0692uuucop.jhu.becknic.spectrum.txt",
+      "source": "ecostress",
+      "group": "manmade",
+      "family": "metal"
+    },
+    {
+      "name": "ecostress:rock.metamorphic.phyllite.solid.vswir.ward85.jpl.perkin.spectrum.txt",
+      "material": "Phyllite",
+      "chapter": "natural.rock",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.rock/ecostress_rock.metamorphic.phyllite.solid.vswir.ward85.jpl.perkin.spectrum.txt",
+      "source": "ecostress",
+      "group": "natural",
+      "family": "rock"
+    },
+    {
+      "name": "ecostress:nonphotosyntheticvegetation.bark.pinus.coulteri.vswir.vh344.ucsb.asd.spectrum.txt",
+      "material": "Pinus coulteri bark",
+      "chapter": "natural.npv",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.npv/ecostress_nonphotosyntheticvegetation.bark.pinus.coulteri.vswir.vh344.ucsb.asd.spectrum.txt",
+      "source": "ecostress",
+      "group": "natural",
+      "family": "npv"
+    },
+    {
+      "name": "ecostress:manmade.roofingmaterial.metal.solid.all.0681uuucop.jhu.becknic.spectrum.txt",
+      "material": "Copper Metal",
+      "chapter": "manmade.metal",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/manmade.metal/ecostress_manmade.roofingmaterial.metal.solid.all.0681uuucop.jhu.becknic.spectrum.txt",
+      "source": "ecostress",
+      "group": "manmade",
+      "family": "metal"
+    },
+    {
+      "name": "ecostress:rock.igneous.ultramafic.solid.vswir.ward43.jpl.perkin.spectrum.txt",
+      "material": "Pyroxenite",
+      "chapter": "natural.rock",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.rock/ecostress_rock.igneous.ultramafic.solid.vswir.ward43.jpl.perkin.spectrum.txt",
+      "source": "ecostress",
+      "group": "natural",
+      "family": "rock"
+    },
+    {
+      "name": "ecostress:nonphotosyntheticvegetation.flowers.calocedrus.decurrens.vswir.vh253.ucsb.asd.spectrum.txt",
+      "material": "Calocedrus decrruens",
+      "chapter": "natural.npv",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.npv/ecostress_nonphotosyntheticvegetation.flowers.calocedrus.decurrens.vswir.vh253.ucsb.asd.spectrum.txt",
+      "source": "ecostress",
+      "group": "natural",
+      "family": "npv"
+    },
+    {
+      "name": "ecostress:manmade.generalconstructionmaterial.paint.solid.all.0405uuupnt.jhu.becknic.spectrum.txt",
+      "material": "Black gloss paint",
+      "chapter": "manmade.paint",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/manmade.paint/ecostress_manmade.generalconstructionmaterial.paint.solid.all.0405uuupnt.jhu.becknic.spectrum.txt",
+      "source": "ecostress",
+      "group": "manmade",
+      "family": "paint"
+    },
+    {
+      "name": "ecostress:manmade.concrete.pavingconcrete.solid.all.0092uuu_cnc.jhu.becknic.spectrum.txt",
+      "material": "Construction  Concrete",
+      "chapter": "manmade.pavement",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/manmade.pavement/ecostress_manmade.concrete.pavingconcrete.solid.all.0092uuu_cnc.jhu.becknic.spectrum.txt",
+      "source": "ecostress",
+      "group": "manmade",
+      "family": "pavement"
+    },
+    {
+      "name": "ecostress:mineral.silicate.cyclosilicate.medium.vswir.cs-4a.jpl.beckman.spectrum.txt",
+      "material": "Ferroaxinite Ca_2Fe^2+Al_2BSi_4O_15(OH)",
+      "chapter": "natural.mineral",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/natural.mineral/ecostress_mineral.silicate.cyclosilicate.medium.vswir.cs-4a.jpl.beckman.spectrum.txt",
+      "source": "ecostress",
+      "group": "natural",
+      "family": "mineral"
+    },
+    {
+      "name": "ecostress:manmade.road.pavingasphalt.solid.all.0674uuuasp.jhu.becknic.spectrum.txt",
+      "material": "Construction Asphalt",
+      "chapter": "manmade.pavement",
+      "asd_subtype": "ASDFR",
+      "path": "spectra/manmade.pavement/ecostress_manmade.road.pavingasphalt.solid.all.0674uuuasp.jhu.becknic.spectrum.txt",
+      "source": "ecostress",
+      "group": "manmade",
+      "family": "pavement"
+    }
+  ]
+}

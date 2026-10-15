@@ -139,6 +139,15 @@ Three things make it fast and correct:
 It deliberately reads the **native onboarding vendable, not the band-filtered one**, so
 narrow absorption features — the actual diagnostic evidence — survive.
 
+Two limits matter at 30 m.
+- **Whole-pixel matching mostly names the surroundings.** A man-made object usually fills
+  part of a pixel, so the pixel's spectrum is mostly what is around it.
+- **The library has only 3 usable man-made spectra** (known issue 10).
+
+`app/spectral_match/family_match.py` with `data/family_library/` addresses both by naming
+material *families* with calibrated Simplex ACE. It is not yet wired into the action; see
+[`lld/spectral-family-match.md`](lld/spectral-family-match.md).
+
 ---
 
 **Next:** [6. Backend](06-backend.md) · Deep reference: `docs/tech/06_classical_detectors/`
