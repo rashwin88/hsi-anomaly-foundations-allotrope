@@ -29,7 +29,8 @@ import torch
 import torch.nn as nn
 
 from app.foundation_models.components.sam_loss import SAMLoss
-from app.foundation_models.components.spectral_stem_seg_former_mae import SpectralStemSegFormerMAE
+from app.foundation_models.components.spectral_stem_seg_former_mae import (
+    WAVELENGTH_STEMS, SpectralStemSegFormerMAE)
 from app.foundation_models.pixel_stats import resolve_wavelength_stats
 from app.foundation_models.components.token_masking import TokenMasking
 from app.foundation_models.trainers.hyperspectral_segformer_mae_trainer import (
@@ -69,6 +70,26 @@ def align_sample(sample: dict, target_nm) -> dict:
     sample["pixels.npy"] = align_bands(raw, sample["wavelengths.npy"], target_nm)
     sample["wavelengths.npy"] = target_nm
     return sample
+
+
+def sample_band_subset(wl: torch.Tensor, min_bands: int = 40) -> torch.Tensor:
+    """Band-list augmentation (docs/lld/spectral-stem.md): indices of a random subset of the (N,)
+    wavelengths, in one of three shapes - thinning (keep 50-95%), 1-3 gaps of 20-150 nm, or the
+    bands nearest an even grid of 6-15 nm. Falls back to every band if fewer than min_bands remain."""
+    n, lo, hi = wl.numel(), float(wl.min()), float(wl.max())
+    u = lambda a, b: a + (b - a) * torch.rand(()).item()
+    mode = int(torch.randint(3, ()))
+    keep = torch.ones(n, dtype=torch.bool, device=wl.device)
+    if mode == 0:
+        keep = torch.rand(n, device=wl.device) < u(0.5, 0.95)
+    elif mode == 1:
+        for _ in range(int(torch.randint(1, 4, ()))):
+            keep &= (wl - u(lo, hi)).abs() >= u(20.0, 150.0) / 2
+    else:
+        step = u(6.0, 15.0)
+        grid = torch.arange(lo + u(0.0, step), hi, step, device=wl.device)
+        keep = torch.zeros_like(keep).scatter_(0, (wl[:, None] - grid[None]).abs().argmin(0), True)
+    return keep.nonzero().squeeze(1) if int(keep.sum()) >= min_bands else torch.arange(n, device=wl.device)
 
 
 class _EarlyStop(Exception):
@@ -219,10 +240,13 @@ class SpectralStemMAETrainer(HyperspectralSegFormerMAETrainer):
         cfg = self.config.model_config_
         wl, mean, std = resolve_wavelength_stats(self.config.data.pixel_stats_path)
         self._sam_loss = SAMLoss()
+        if cfg.band_augment_prob > 0 and cfg.stem not in WAVELENGTH_STEMS:
+            raise ValueError(f"band_augment_prob needs a wavelength stem, not {cfg.stem!r}")
         return SpectralStemSegFormerMAE(
             stem=cfg.stem, stats_wavelengths_nm=wl, stats_mean=mean, stats_std=std,
             bands=cfg.bands, compressed_channels=cfg.compressed_channels, token_dim=cfg.token_dim,
             attention_heads=cfg.attention_heads, gate_hidden=cfg.gate_hidden, bin_nm=cfg.bin_nm,
+            band_weighting=cfg.band_weighting,
             embed_dims=cfg.embed_dims, num_heads=cfg.num_heads, reduction_ratios=cfg.reduction_ratios,
             num_blocks=cfg.num_blocks, decoder_dim=cfg.decoder_dim,
             expansion_ratio=cfg.expansion_ratio, drop_rate=cfg.drop_rate)
@@ -241,12 +265,12 @@ class SpectralStemMAETrainer(HyperspectralSegFormerMAETrainer):
         mask = band_valid.any(dim=1, keepdim=True).float()
         return pixels, band_valid, wl, mask
 
-    def _forward(self, model, pixels, wl, band_valid, keep_mask) -> torch.Tensor:
+    def _forward(self, model, pixels, wl, band_valid, keep_mask, out_wl=None) -> torch.Tensor:
         """The model under bf16 autocast when amp_bf16 is set (CUDA only); returns fp32 so the
         loss - small differences of reflectance - is always computed in full precision."""
         bf16 = self.config.model_config_.amp_bf16 and self.device.type == "cuda"
         with torch.autocast("cuda", dtype=torch.bfloat16, enabled=bf16):
-            out = model(pixels, wl, band_valid, keep_mask)
+            out = model(pixels, wl, band_valid, keep_mask, out_wl)
         return out.float()
 
     def _keep_samples(self, pixels, band_valid, wl, mask):
@@ -272,7 +296,13 @@ class SpectralStemMAETrainer(HyperspectralSegFormerMAETrainer):
         if n == 0:
             return torch.tensor(0.0, device=self.device, requires_grad=True), 0
         keep_mask, pred_mask = self._build_prediction_mask(mask, cfg.mask_ratio)
-        x_hat = self._forward(model, pixels, wl, band_valid, keep_mask)
+        if cfg.band_augment_prob > 0 and wl.dim() == 1 and torch.rand(()).item() < cfg.band_augment_prob:
+            # Read a random band subset (stated wavelengths jittered), reconstruct every band.
+            idx = sample_band_subset(wl)
+            wl_in = wl[idx] + (torch.rand(len(idx), device=wl.device) * 2 - 1) * cfg.band_jitter_nm
+            x_hat = self._forward(model, pixels[:, idx], wl_in, band_valid[:, idx], keep_mask, out_wl=wl)
+        else:
+            x_hat = self._forward(model, pixels, wl, band_valid, keep_mask)
         loss_mask = (self._pred_mask_to_pixel_mask(pred_mask, *pixels.shape[2:])
                      * TokenMasking.erode_mask(mask, kernel_size=cfg.erosion_kernel_size))
         if loss_mask.sum() == 0:

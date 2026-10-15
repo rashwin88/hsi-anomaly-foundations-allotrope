@@ -58,4 +58,38 @@ cause: SpectralEarth is land-dominated, so water is out of distribution after pr
 Expected to be fixed by fine-tuning on the EnMAP native shards (which contain water, labelled in
 `label_classes`); worth re-checking at a later pretraining epoch first.
 
+**Epoch-10 checkpoint, same bench.** Native 0.217 / 0.824 / 0.728 / 0.703 / mean 0.618; se202
+0.518 / 0.775 / 0.692 / 0.631 / mean 0.654 (v0.2.0 0.662). Five more epochs of SpectralEarth did not
+fix water: native set1 fell further (0.263 -> 0.217, 1 of 153 objects caught). se202 improved on
+every scene but set3 and is now within 0.01 of v0.2.0 on the mean; set2 native (0.824) is the best
+single-scene score of any model so far.
+
+**Epoch-18 checkpoint (last.pt), same bench.** se202 0.725 / 0.790 / 0.756 / 0.732 / **mean 0.751**
+- ahead of v0.2.0 (0.662) on all four scenes, set1 included. Native 0.205 / 0.808 / 0.768 / 0.536 /
+mean 0.579. So E004 handles set1's water once PRISMA is resampled to SpectralEarth's wavelengths,
+and fails on PRISMA's native list: the water failure is a band-list effect, not missing water in
+pretraining (SpectralEarth is 6-11% water by pixel, measured 2026-10-14). Prime suspect: the skip
+path's 1/N mean over bands (spectral_reduced.py line 96) weights each region by its band count -
+PRISMA native is 16% visible / 71% SWIR vs SpectralEarth's 26% / 50%.
+
+**Band-list sensitivity, measured (epoch 18, inference-only ablations, laptop).** Mean per-pixel
+L1, water (NDWI > 0, NIR < 0.05) / land:
+
+| condition | water | land |
+|---|---|---|
+| SE test patches, all 202 bands | 0.0155 | 0.0157 |
+| same pixels, thinned to PRISMA spacing (151 of the 202) | 0.0309 | 0.0226 |
+| thinned + skip path reweighted to each bin's training share | 0.0203 | 0.0205 |
+| set1 native (185 bands) | 0.0462 | 0.0282 |
+| set1 native + skip reweighting | 0.0352 | 0.0200 |
+| set1 native minus its 20 bands at wavelengths SE never had | 0.0327 | 0.0221 |
+| set1 native minus those + skip reweighting | 0.0345 | 0.0190 |
+| set1 resampled to SE's 202 wavelengths | 0.0138 | 0.0160 |
+
+Thinning SpectralEarth's own bands - no new sensor, no new wavelength - doubles the water error, so
+the sensitivity is to the band list itself. The skip path's 1/N mean explains about two thirds of
+that (water) and a third (land); unseen wavelengths matter on set1 but overlap with it. Neither
+alone nor both close the gap: the wavelength networks k, W, U were only ever evaluated at one band
+list in pretraining, so "any band list" was architecturally possible but never trained.
+
 ## Next

@@ -4,7 +4,7 @@ import pytest
 import torch
 
 from app.foundation_models.components.spectral_reduced import (
-    SpectralReducedCompressor, WavelengthLinearDecoder)
+    SpectralReducedCompressor, WavelengthLinearDecoder, band_widths)
 from app.models.dataset.spectralearth import load_band_table
 
 WL = torch.tensor(load_band_table().wavelengths_nm, dtype=torch.float32)
@@ -76,3 +76,49 @@ def test_strictly_per_pixel():
 def test_rejects_per_sample_band_lists():
     with pytest.raises(ValueError):
         SpectralReducedCompressor()(torch.randn(2, 202, 2, 2), WL.expand(2, -1))
+
+
+# --- band weighting (course part 42; docs/lld/spectral-stem.md) -------------------------------
+
+def test_band_widths_half_gaps_capped_and_in_input_order():
+    w = band_widths(torch.tensor([505.0, 500.0, 510.0, 2000.0]))
+    assert w.tolist() == [5.0, 5.0, 12.5, 20.0]       # 510 sits beside a capped 1490 nm gap
+
+
+def test_width_weighting_makes_the_course_toy_density_free():
+    """Course part 42: sensor A (500, 505, 2000 nm) and B (500, 2000) see one spectrum, 2 in the
+    visible and -1 beyond. One vote per band gives 1.0 vs 0.5; one vote per nm gives 0.5 for both."""
+    def mean(wl, v, w):
+        return float((v * w).sum() / w.sum())
+    a_wl, a_v = torch.tensor([500.0, 505.0, 2000.0]), torch.tensor([2.0, 2.0, -1.0])
+    b_wl, b_v = torch.tensor([500.0, 2000.0]), torch.tensor([2.0, -1.0])
+    assert (mean(a_wl, a_v, torch.ones(3)), mean(b_wl, b_v, torch.ones(2))) == (1.0, 0.5)
+    a_w, b_w = torch.tensor([5.0, 5.0, 10.0]), torch.tensor([10.0, 10.0])   # the course's widths
+    assert mean(a_wl, a_v, a_w) == mean(b_wl, b_v, b_w) == 0.5
+
+
+def test_width_equals_count_on_an_even_grid():
+    """Equal widths cancel, so on evenly spaced bands the two weightings agree exactly."""
+    torch.manual_seed(0)
+    count = SpectralReducedCompressor(band_weighting="count").eval()
+    width = SpectralReducedCompressor(band_weighting="width").eval()
+    width.load_state_dict(count.state_dict())
+    wl, x = torch.arange(500.0, 1500.0, 10.0), torch.randn(1, 100, 2, 2)
+    assert torch.allclose(count(x, wl), width(x, wl), atol=1e-5)
+
+
+def test_width_weighting_cuts_sensitivity_to_one_regions_density():
+    torch.manual_seed(0)
+    count = SpectralReducedCompressor(band_weighting="count").eval()
+    width = SpectralReducedCompressor(band_weighting="width").eval()
+    width.load_state_dict(count.state_dict())
+    dense = torch.cat([torch.arange(500.0, 700.0, 5.0), torch.arange(1000.0, 1400.0, 10.0)])
+    even = torch.cat([torch.arange(500.0, 700.0, 10.0), torch.arange(1000.0, 1400.0, 10.0)])
+    spec = lambda wl: torch.where(wl < 800, 2.0, -1.0)[None, :, None, None]
+    shift = lambda m: float((m(spec(dense), dense) - m(spec(even), even)).abs().mean())
+    assert shift(width) < 0.5 * shift(count)
+
+
+def test_unknown_band_weighting_is_rejected():
+    with pytest.raises(ValueError):
+        SpectralReducedCompressor(band_weighting="per_band")

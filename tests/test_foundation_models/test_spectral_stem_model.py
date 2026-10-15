@@ -62,3 +62,33 @@ def test_dead_voxel_value_never_reaches_any_stem():
 def test_unknown_stem_rejected():
     with pytest.raises(ValueError):
         SpectralStemSegFormerMAE("selfattention", *STATS)
+
+
+# --- band-list robustness (course part 42; docs/lld/spectral-stem.md) --------------------------
+
+def test_subset_in_every_band_out_with_gradients():
+    """Band-list augmentation: read a subset, reconstruct the full list, train through it."""
+    torch.manual_seed(0)
+    m = SpectralStemSegFormerMAE("reduced_attention", *STATS, band_weighting="width", **SMALL)
+    x, sub = torch.rand(2, 202, 64, 64) * 0.4, torch.arange(0, 202, 3)
+    y = m(x[:, sub], WL[sub] + 1.5, out_wavelengths_nm=WL)
+    y.abs().mean().backward()
+    assert y.shape == x.shape and torch.isfinite(y).all()
+    assert all(p.grad is not None for p in m.spectral_out.parameters())
+    with pytest.raises(ValueError):
+        SpectralStemSegFormerMAE("linear", *STATS, **SMALL)(x, WL, out_wavelengths_nm=WL)
+
+
+def test_trained_band_mask_drops_wavelengths_far_from_pretraining():
+    m = SpectralStemSegFormerMAE("reduced_attention", *STATS, **SMALL)      # trained 420-2440 nm
+    keep = m.trained_band_mask([400.0, 410.0, 1000.0, 2450.0, 2460.0, 2500.0])
+    assert keep.tolist() == [False, True, True, True, False, False]
+
+
+def test_band_subset_sampler_stays_within_the_list():
+    from app.foundation_models.trainers.spectral_stem_mae_trainer import sample_band_subset
+    torch.manual_seed(0)
+    for _ in range(300):
+        idx = sample_band_subset(WL)
+        assert 40 <= len(idx) <= 202 and len(set(idx.tolist())) == len(idx) and int(idx.max()) < 202
+    assert len(sample_band_subset(WL[:30])) == 30         # too few to thin: every band kept

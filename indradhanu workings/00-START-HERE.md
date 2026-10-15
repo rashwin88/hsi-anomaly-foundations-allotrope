@@ -91,13 +91,13 @@ Every part has the same skeleton:
 | 29 | [29-inference.md](29-inference.md) | Running it on a real scene |
 | 30 | [30-scoring-and-the-product.md](30-scoring-and-the-product.md) | Turning errors into an answer |
 
-**Sequel - the next Indradhanu: a smarter spectral bottleneck (31-41)**
+**Sequel - the next Indradhanu: a smarter spectral bottleneck (31-42)**
 
 Written 2026-10-14, after the decision to pretrain the next Indradhanu on SpectralEarth with a
 cross-attention spectral bottleneck. Parts 31 to 39 were written as a **design studied before
 it was built**; the modules have since been built (`spectral_attention.py`,
 `spectral_tokens.py`, `spectral_gate.py`, `spectral_reduced.py` in
-`app/foundation_models/components/`), and parts 40 and 41 teach what running them changed.
+`app/foundation_models/components/`), and parts 40 to 42 teach what running them changed.
 Assumes all of parts 01 to 30; leans on 08, 10, 12, 13 and 17 to 21.
 
 | # | File | The one thing it teaches |
@@ -113,6 +113,7 @@ Assumes all of parts 01 to 30; leans on 08, 10, 12, 13 and 17 to 21.
 | 39 | [39-per-pixel-gating.md](39-per-pixel-gating.md) | The cheap rival: each pixel sets its own band volumes |
 | 40 | [40-spectral-reduction.md](40-spectral-reduction.md) | Attention over 40 nm wavelength bins, without losing the bands |
 | 41 | [41-scoring-validation.md](41-scoring-validation.md) | Ranking epochs needs a fixed ruler: the ramped-SAM validation trap |
+| 42 | [42-one-band-list.md](42-one-band-list.md) | A stem that can read any band list must be trained on many: the PRISMA water failure |
 
 Parts 34 to 39's numbers were first produced by a study prototype and then re-checked against
 the real modules (5,345 compressor and 6,401 decoder parameters at `d = D = 32`; 13,162 gate

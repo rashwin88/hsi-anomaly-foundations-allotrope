@@ -19,6 +19,7 @@ import argparse
 import json
 import sys
 import time
+from dataclasses import replace
 from pathlib import Path
 
 import numpy as np
@@ -53,6 +54,11 @@ def build(name: str, ckpt_path: str):
 
 def evaluate(inferencer, scene) -> dict:
     if isinstance(inferencer, SpectralStemInferencer):
+        # Bands at wavelengths the model never pretrained on are dropped before inference and
+        # scoring (docs/lld/spectral-stem.md); for se202 none are.
+        keep = inferencer.model.inner.trained_band_mask(scene.wavelengths_nm).cpu().numpy()
+        scene = replace(scene, cube=scene.cube[keep], validity=scene.validity[keep],
+                        wavelengths_nm=scene.wavelengths_nm[keep])
         inferencer.set_wavelengths(scene.wavelengths_nm)
     t = time.time()
     with torch.no_grad():

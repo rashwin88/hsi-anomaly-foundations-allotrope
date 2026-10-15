@@ -36,6 +36,21 @@ from app.foundation_models.components.spectral_attention import _attend
 from app.foundation_models.components.spectral_tokens import wavelength_encoding
 
 BIN_ORIGIN_NM, BIN_END_NM = 400.0, 2500.0
+# A band beside an excluded region (water vapour) would otherwise claim the whole gap.
+MAX_GAP_NM = 20.0
+
+
+def band_widths(wavelengths_nm: torch.Tensor, max_gap_nm: float = MAX_GAP_NM) -> torch.Tensor:
+    """(N,) wavelengths in any order -> (N,) nm of spectrum each band stands for: half the gap to
+    each neighbour (the one gap at either end), gaps capped at max_gap_nm. Weighting averages by
+    this makes them approximate integrals over wavelength, whatever the sensor's band spacing."""
+    wl = wavelengths_nm.float()
+    if wl.numel() < 2:
+        return torch.ones_like(wl)
+    order = torch.argsort(wl)
+    gaps = torch.diff(wl[order]).clamp(max=max_gap_nm)
+    sorted_w = torch.cat([gaps[:1], (gaps[:-1] + gaps[1:]) / 2, gaps[-1:]])
+    return torch.empty_like(wl).scatter_(0, order, sorted_w)
 
 
 def _hyper(out_dim: int, enc_dim: int = 32, hidden: int = 64) -> nn.Module:
@@ -51,11 +66,15 @@ def _rows(x: torch.Tensor) -> torch.Tensor:
 class SpectralReducedCompressor(nn.Module):
     """(B, N, H, W) normalised bands + wavelengths (N,) -> (B, D, H, W)."""
 
-    def __init__(self, compressed_channels: int = 32, token_dim: int = 32, heads: int = 4, bin_nm: float = 40.0):
+    def __init__(self, compressed_channels: int = 32, token_dim: int = 32, heads: int = 4, bin_nm: float = 40.0,
+                 band_weighting: str = "count"):
         super().__init__()
         if token_dim % heads:
             raise ValueError(f"token_dim {token_dim} must divide by heads {heads}")
+        if band_weighting not in ("count", "width"):
+            raise ValueError(f"band_weighting must be 'count' or 'width', got {band_weighting!r}")
         self.D, self.d, self.heads, self.bin_nm = compressed_channels, token_dim, heads, bin_nm
+        self.band_weighting = band_weighting
         self.n_bins = int(math.ceil((BIN_END_NM - BIN_ORIGIN_NM) / bin_nm))
         self.band_weight = _hyper(token_dim)              # fix 1: k(lambda), per band inside a bin
         self.skip_weight = _hyper(compressed_channels)    # fix 2: W(lambda), per-band skip path
@@ -76,8 +95,10 @@ class SpectralReducedCompressor(nn.Module):
         wl = wavelengths_nm.to(x.device).float()
         enc = wavelength_encoding(wl, self.d).to(x.dtype)                           # (N, d)
         valid = torch.ones_like(x) if band_valid is None else band_valid.to(x.dtype)
+        if self.band_weighting == "width":                  # each band counts by the nm it covers
+            valid = valid * band_widths(wl).to(x.dtype).view(1, n, 1, 1)
         vals = _rows(x * valid)                                                      # (P, N), dead -> 0
-        cnt_band = _rows(valid)                                                      # (P, N)
+        cnt_band = _rows(valid)                                                      # (P, N) weight per band
         onehot = F.one_hot(self.bin_index(wl), G).to(x.dtype)                        # (N, G)
         cnt = cnt_band @ onehot                                                      # (P, G) valid bands per bin
         # fix 1: token_g = mean over the bin's valid bands of v_b * k(lambda_b) - one matmul, no (P, N, d)

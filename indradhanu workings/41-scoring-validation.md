@@ -194,6 +194,4 @@ on the old scale, which is why it is ignored on resume.
 
 ---
 
-That is the sequel so far. The agreed design is written up in
-`docs/proposals/spectral-attention-bottleneck.md`; the runs that test it are recorded in
-`research/experiments/indradhanu-se-pretrain/`.
+**Next:** part 42 - why a stem that can read any band list read PRISMA's badly, and the fix.

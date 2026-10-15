@@ -120,6 +120,16 @@ class SpectralStemMAEConfig(HyperspectralSegFormerMAEConfig):
     attention_heads: int = 4
     gate_hidden: int = 32
     bin_nm: float = Field(default=40.0, gt=0, description="reduced_attention: wavelength bin width for the attention tokens.")
+    band_weighting: Literal["count", "width"] = Field(
+        default="count", description="reduced_attention: how bands are averaged in bins and the skip path. "
+        "'width' weights each band by the spectrum it covers, so a sensor's band density does not change "
+        "the result (docs/lld/spectral-stem.md); 'count' (one vote per band) only for E001-E004 checkpoints.")
+    band_augment_prob: float = Field(
+        default=0.0, ge=0, le=1, description="Wavelength stems: chance a training batch's input is a random "
+        "subset of its bands (thinning, gaps or an even spacing); the loss still covers every band.")
+    band_jitter_nm: float = Field(
+        default=0.0, ge=0, description="On augmented batches, shift each input band's stated wavelength by "
+        "up to +/- this much (values unchanged), so wavelength networks stay smooth between trained bands.")
     band_list_path: str | None = Field(
         default=None, description="JSON with a wavelengths_nm list (e.g. a shard set's stats.json): every "
         "sample is aligned onto it by wavelength in the loader workers; bands it lacks become nodata. "

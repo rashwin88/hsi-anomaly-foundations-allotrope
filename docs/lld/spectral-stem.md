@@ -5,7 +5,7 @@ compressor (A), a per-pixel gate (B), cross-attention over wavelength-tagged ban
 reduced attention over wavelength bins (C', the variant now carried forward), so the SpectralEarth
 pretraining experiment changes the stem and nothing else. Design and decision rule:
 `docs/proposals/spectral-attention-bottleneck.md`; runs: `research/experiments/indradhanu-se-pretrain/`;
-taught in `indradhanu workings/31`-`41`.
+taught in `indradhanu workings/31`-`42`.
 
 ## Interfaces
 
@@ -16,15 +16,18 @@ WavelengthStats(wl, mean, std).at(wl) / .normalize(x, wl) / .denormalize(x, wl) 
 SpectralCrossAttentionCompressor(D=32, d=32, heads=4)(x, wl, band_valid) -> (B, D, H, W)   # spectral_attention.py
 SpectralCrossAttentionDecoder(D=32, d=32, heads=4)(z, wl) -> (B, N, H, W)
 SpectralGate(bands, hidden=32)(x) -> x * sigmoid(MLP(x))               # spectral_gate.py
-SpectralReducedCompressor(D=32, d=32, heads=4, bin_nm=40)(x, wl, band_valid) -> (B, D, H, W)  # spectral_reduced.py
+SpectralReducedCompressor(D=32, d=32, heads=4, bin_nm=40, band_weighting="count")(x, wl, band_valid) -> (B, D, H, W)  # spectral_reduced.py
+band_widths(wl, max_gap_nm=20) -> (N,) nm each band stands for                                 # spectral_reduced.py
 WavelengthLinearDecoder(D=32)(z, wl) -> (B, N, H, W)
 SpectralStemSegFormerMAE(stem, stats_wavelengths_nm, stats_mean, stats_std, bands=202, ...)
-    (x, wavelengths_nm, band_valid=None, keep_mask=None) -> (B, N, H, W) reflectance
+    (x, wavelengths_nm, band_valid=None, keep_mask=None, out_wavelengths_nm=None) -> (B, M, H, W) reflectance
+    .trained_band_mask(wavelengths_nm, tol_nm=15) -> (N,) bool    # near a pretraining wavelength
 
 # app/foundation_models/trainers/spectral_stem_mae_trainer.py
 SpectralStemMAETrainer                    # registered for foundation_model_name "spectral_stem_mae"
 decode_i16dz_member(key, data)            # webdataset decoder for compressed pixels (app/utils/shard_codec.py)
 align_sample(sample, target_nm)           # loader-worker transform onto a band list (app/utils/band_alignment.py)
+sample_band_subset(wl, min_bands=40)      # band-list augmentation: indices of a random subset
 # app/abstract_classes/foundation_trainer.py - two hooks, identity/empty by default
 FoundationTrainer._sample_decoders() -> list      # extra webdataset decoders, run in the workers
 FoundationTrainer._sample_transform() -> callable # per-sample transform after decoding, in the workers
@@ -34,7 +37,8 @@ resolve_wavelength_stats(path) -> (wavelengths_nm, mean, std)
 
 Config: `model_config.model_type = "spectral_stem_mae"` (`SpectralStemMAEConfig`, a subclass
 of `HyperspectralSegFormerMAEConfig`) adds `stem`, `bands`, `token_dim`, `attention_heads`,
-`gate_hidden`, `bin_nm` (reduced_attention), `band_list_path` (align every sample onto the
+`gate_hidden`, `bin_nm` (reduced_attention), `band_weighting`, `band_augment_prob` and
+`band_jitter_nm` (band-list robustness, below), `band_list_path` (align every sample onto the
 wavelengths in that JSON, e.g. a shard set's stats.json), `metrics_csv`, and the run controls below (`amp_bf16`, `early_stop_patience`,
 `early_stop_min_delta`, `early_stop_min_epochs`, `checkpoint_s3_uri`, `auto_resume`). `data.pixel_stats_path` must be a wavelength stats file (the
 shards' `stats.json`). Example configs: `research/experiments/indradhanu-se-pretrain/S01-laptop-smoke/`.
@@ -115,6 +119,48 @@ two-pass validation) it runs at ~55 patches/s, 9.2 min per 30,000 patches.
    unchanged SegFormer, so a hidden pixel cannot reconstruct itself (course part 38, trap 1).
 5. **Parameter counts match the course**: compressor 5,345, decoder 6,401, gate 13,162 (202
    bands) / 10,757 (165). Tests pin them; a change must update the course.
+6. **The normalisation curve is fixed at pretraining and never recomputed** (decided 2026-10-14).
+   It is measured once from the pretraining shards' `stats.json` and then lives only in the
+   checkpoint's `stats.*` buffers. Fine-tuning (EnMAP, PRISMA) and inference keep that curve; the
+   EnMAP shards' own `stats.json` is a record of the data, not an input. Changing the curve would
+   shift every input the pretrained weights learned to read. No per-sensor or per-band stats
+   files for these models.
+
+## Band-list robustness (adopted 2026-10-14, verified by E005)
+
+E004 read SpectralEarth's 202 bands well and PRISMA's native 185 badly (set1 ROC-AUC 0.205 native,
+0.725 resampled): its wavelength networks `k`, `W`, `U` had only ever been evaluated at one band list,
+and the skip path's plain `1/N` mean gave every band one vote, so a sensor's band density changed the
+mix (thinning SpectralEarth's own bands to PRISMA spacing doubled the water error). Measurements in
+`research/experiments/indradhanu-se-pretrain/E004-reduced-attention/README.md`; taught in course part 42.
+Three fixes, each off by default so E001-E004 checkpoints behave exactly as trained:
+
+1. **`band_weighting: "width"`** - every band counts by the nm it covers (`band_widths`: half the gap to
+   each neighbour, gaps capped at 20 nm so a band beside a water-vapour gap does not claim it), in the
+   in-bin mean and the skip path. Averages become integrals over wavelength; on an evenly spaced list
+   the result equals `"count"` exactly. No parameters. The inferencer builds the model with the
+   checkpoint's own setting.
+2. **`band_augment_prob`** (trainer) - that share of training batches reads a random subset of its bands
+   (`sample_band_subset`: thinning to 50-95%, 1-3 gaps of 20-150 nm, or the bands nearest an even 6-15 nm
+   grid; never below 40 bands) and reconstructs **every** band via `out_wavelengths_nm`; the loss covers
+   all of them. Validation always reads the full list, so it stays comparable across runs.
+3. **`band_jitter_nm`** - on augmented batches each input band's *stated* wavelength moves by up to
+   +/- this much (values unchanged), so `k`, `W` are smooth between trained wavelengths - what a denser
+   sensor (AVIRIS-NG, ~5 nm) needs, since thinning can only make lists sparser than SpectralEarth.
+
+Plus a rule at load time: **`trained_band_mask`** keeps bands within 15 nm of a pretraining wavelength
+(the checkpoint's normalisation curve); `scripts/evaluate_prisma_bench.py` drops the rest for spectral
+stems (set1 native: 185 -> 165, the 20 inside SpectralEarth's water-vapour gaps and past 2445 nm).
+
+**Invariant - augmentation never trains self-completion.** The loss is taken only on pixels hidden by
+the token mask (`loss_mask` comes from the prediction mask), and a hidden pixel's own bands are never
+an input; it is rebuilt from its neighbours' band subsets. Scoring never augments. This is what keeps
+design decision 7 ("hide pixels, never bands while scoring") intact. If the loss is ever extended to
+visible pixels, augmentation must be switched off for it.
+
+Gotchas: one band list per batch (augmentation draws one subset per batch); augmentation requires a
+wavelength stem (`ValueError` at `build_model` otherwise); per-sample wavelength lists `(B, N)` are
+never augmented.
 
 ## Failure modes
 
@@ -153,4 +199,6 @@ two-pass validation) it runs at ~55 patches/s, 9.2 min per 30,000 patches.
 - **Alignment by wavelength in the workers, not resampling.** A band a sample lacks becomes nodata,
   which every wavelength stem already masks exactly. Pre-training batches are single-sensor
   (SpectralEarth); mixing is for fine-tuning only, and the label-key policy for mixed batches is open.
-- **Rejected:** band masking for pretraining (spectral self-completion leak).
+- **Rejected:** band masking for pretraining (spectral self-completion leak) - training a pixel to
+  fill its *own* missing bands, which lets an anomaly rebuild itself. Band-list augmentation (below)
+  is not that: see its invariant.

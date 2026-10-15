@@ -1,0 +1,51 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 820 300" font-family="Helvetica, Arial, sans-serif" role="img" aria-label="Band shares by region for SpectralEarth and PRISMA, and the water reconstruction error under band thinning">
+<title>Band density and the water error</title>
+<rect x="0" y="0" width="820" height="300" fill="#ffffff"/>
+<text x="20" y="26" font-size="12" text-anchor="start" fill="#1f2328" font-weight="bold">a  Share of bands by region</text>
+<text x="110" y="84" font-size="11" text-anchor="end" fill="#1f2328">SpectralEarth</text>
+<text x="110" y="98" font-size="10" text-anchor="end" fill="#8f979f">202 bands</text>
+<rect x="120.0" y="70" width="66.2" height="32" rx="2" fill="#0f766e"/>
+<text x="153.10891089108912" y="90" font-size="10.5" text-anchor="middle" fill="#ffffff">26%</text>
+<rect x="188.2" y="70" width="59.8" height="32" rx="2" fill="#3a4aa8"/>
+<text x="218.10891089108912" y="90" font-size="10.5" text-anchor="middle" fill="#ffffff">24%</text>
+<rect x="250.0" y="70" width="128.0" height="32" rx="2" fill="#b45f06"/>
+<text x="314.0" y="90" font-size="10.5" text-anchor="middle" fill="#ffffff">50%</text>
+<text x="110" y="154" font-size="11" text-anchor="end" fill="#1f2328">PRISMA native</text>
+<text x="110" y="168" font-size="10" text-anchor="end" fill="#8f979f">185 bands</text>
+<rect x="120.0" y="140" width="40.2" height="32" rx="2" fill="#0f766e"/>
+<text x="140.0810810810811" y="160" font-size="10.5" text-anchor="middle" fill="#ffffff">16%</text>
+<rect x="162.2" y="140" width="30.3" height="32" rx="2" fill="#3a4aa8"/>
+<text x="177.32432432432432" y="160" font-size="10.5" text-anchor="middle" fill="#ffffff">12%</text>
+<rect x="194.5" y="140" width="183.5" height="32" rx="2" fill="#b45f06"/>
+<text x="286.2432432432432" y="160" font-size="10.5" text-anchor="middle" fill="#ffffff">71%</text>
+<rect x="120" y="219" width="10" height="10" rx="2" fill="#0f766e"/>
+<text x="136" y="228" font-size="10.5" text-anchor="start" fill="#4b535d">visible &lt; 700 nm</text>
+<rect x="120" y="237" width="10" height="10" rx="2" fill="#3a4aa8"/>
+<text x="136" y="246" font-size="10.5" text-anchor="start" fill="#4b535d">near-infrared 700-1000</text>
+<rect x="120" y="255" width="10" height="10" rx="2" fill="#b45f06"/>
+<text x="136" y="264" font-size="10.5" text-anchor="start" fill="#4b535d">shortwave infrared &gt; 1000</text>
+<text x="450" y="26" font-size="12" text-anchor="start" fill="#1f2328" font-weight="bold">b  E004 water error, SpectralEarth test pixels</text>
+<line x1="500" y1="220.0" x2="800" y2="220.0" stroke="#d5dae0" stroke-width="0.8"/>
+<text x="492" y="224.0" font-size="10.5" text-anchor="end" fill="#4b535d">0.00</text>
+<line x1="500" y1="174.3" x2="800" y2="174.3" stroke="#d5dae0" stroke-width="0.8"/>
+<text x="492" y="178.28571428571428" font-size="10.5" text-anchor="end" fill="#4b535d">0.01</text>
+<line x1="500" y1="128.6" x2="800" y2="128.6" stroke="#d5dae0" stroke-width="0.8"/>
+<text x="492" y="132.57142857142856" font-size="10.5" text-anchor="end" fill="#4b535d">0.02</text>
+<line x1="500" y1="82.9" x2="800" y2="82.9" stroke="#d5dae0" stroke-width="0.8"/>
+<text x="492" y="86.85714285714286" font-size="10.5" text-anchor="end" fill="#4b535d">0.03</text>
+<text x="450" y="46" font-size="10.5" text-anchor="start" fill="#4b535d">mean L1 on water</text>
+<rect x="524" y="149.1" width="52" height="70.9" rx="4" fill="#8f979f"/>
+<text x="550" y="143.14285714285717" font-size="10.5" text-anchor="middle" fill="#1f2328">0.0155</text>
+<text x="550" y="236" font-size="10.5" text-anchor="middle" fill="#1f2328">all 202</text>
+<text x="550" y="250" font-size="10.5" text-anchor="middle" fill="#4b535d">bands</text>
+<rect x="624" y="78.7" width="52" height="141.3" rx="4" fill="#8a3b86"/>
+<text x="650" y="72.74285714285716" font-size="10.5" text-anchor="middle" fill="#1f2328">0.0309</text>
+<text x="650" y="236" font-size="10.5" text-anchor="middle" fill="#1f2328">thinned to</text>
+<text x="650" y="250" font-size="10.5" text-anchor="middle" fill="#4b535d">PRISMA spacing</text>
+<rect x="724" y="127.2" width="52" height="92.8" rx="4" fill="#4b535d"/>
+<text x="750" y="121.20000000000002" font-size="10.5" text-anchor="middle" fill="#1f2328">0.0203</text>
+<text x="750" y="236" font-size="10.5" text-anchor="middle" fill="#1f2328">thinned +</text>
+<text x="750" y="250" font-size="10.5" text-anchor="middle" fill="#4b535d">skip reweighted</text>
+<line x1="500" y1="220" x2="800" y2="220" stroke="#4b535d" stroke-width="1"/>
+<text x="20" y="290" font-size="10" text-anchor="start" fill="#7d858f" font-style="italic">Same pixels in every bar; only the band list changes. E004 epoch 18, measured 2026-10-14.</text>
+</svg>
