@@ -1,0 +1,83 @@
+{
+ "prisma": {
+  "per_scene": {
+   "set1": {
+    "Indradhanu L1": 0.8958,
+    "cube global": 0.895,
+    "residual global": 0.9335,
+    "MNF-RX (product)": 0.8125,
+    "residual local-mean 21/61": 0.9419,
+    "Indradhanu combined": 0.7088,
+    "Indradhanu SAM": 0.4737
+   },
+   "set2": {
+    "Indradhanu L1": 0.7045,
+    "cube global": 0.8197,
+    "residual global": 0.8479,
+    "MNF-RX (product)": 0.7617,
+    "residual local-mean 21/61": 0.8462,
+    "Indradhanu combined": 0.689,
+    "Indradhanu SAM": 0.5783
+   },
+   "set3": {
+    "Indradhanu L1": 0.6613,
+    "cube global": 0.7662,
+    "residual global": 0.7088,
+    "MNF-RX (product)": 0.6577,
+    "residual local-mean 21/61": 0.7492,
+    "Indradhanu combined": 0.7267,
+    "Indradhanu SAM": 0.7294
+   },
+   "set4": {
+    "Indradhanu L1": 0.5473,
+    "cube global": 0.8448,
+    "residual global": 0.866,
+    "MNF-RX (product)": 0.7767,
+    "residual local-mean 21/61": 0.8768,
+    "Indradhanu combined": 0.5233,
+    "Indradhanu SAM": 0.497
+   }
+  },
+  "mean": {
+   "Indradhanu L1": 0.7022,
+   "Indradhanu SAM": 0.5696,
+   "Indradhanu combined": 0.6619,
+   "MNF-RX (product)": 0.7521,
+   "cube global": 0.8314,
+   "residual global": 0.8391,
+   "residual local-mean 21/61": 0.8535
+  }
+ },
+ "had100_94_tiles": {
+  "n": 94,
+  "mean": {
+   "Indradhanu L1": 0.8482,
+   "MNF-RX (product)": 0.8879,
+   "cube global": 0.9683,
+   "residual global": 0.9729,
+   "residual local-mean 5/15": 0.9742
+  }
+ },
+ "had100_official_protocol": {
+  "n": 100,
+  "mAUC": {
+   "GRX 50": 0.9799,
+   "PCA30-RX 50": 0.9797,
+   "local-mean 5/15 50": 0.98,
+   "dual-window 7/11 50": 0.977,
+   "GRX 100": 0.9714,
+   "PCA30-RX 100": 0.9603,
+   "local-mean 5/15 100": 0.9603,
+   "dual-window 7/11 100": 0.9558,
+   "GRX 200": 0.9649,
+   "PCA30-RX 200": 0.9636,
+   "local-mean 5/15 200": 0.9641,
+   "dual-window 7/11 200": 0.9566,
+   "Indradhanu L1 (full spectrum)": 0.8445,
+   "Indradhanu + Mahalanobis (full spectrum)": 0.974,
+   "Indradhanu + local-mean 5/15 (full spectrum)": 0.9748,
+   "PCA30-RX (all 276 bands)": 0.9648,
+   "GRX (all 276 bands)": 0.9634
+  }
+ }
+}
