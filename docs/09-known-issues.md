@@ -70,6 +70,14 @@ any search containing an underscore — which is every PRISMA/EnMAP product id
 (`PRS_L2D_STD_…`) — becomes a different string and matches nothing. Fix: escape them and
 pass `escape="\\"`, as `allotrope_inventory/api/datasets.py` does.
 
+**9. SAM ranks dark water as anomalous in production scoring.** On near-black pixels a tiny
+residual is a large spectral angle, so on sea-heavy scenes the `SAM` and `combined` maps light
+up ordinary water (PRISMA set1: 75% sea, SAM ROC-AUC 0.34-0.48). `compute_score` has an opt-in
+fix, `sam_dark_fade` (see [5. Detectors](05-detectors.md#sam-on-dark-water)), but
+`backend/allotrope/action_types/_anomaly_scoring_run.py` does not pass it, so the product still
+scores with the plain angle. Turning it on by default is an open product decision; the 0.05
+threshold was chosen, not tuned, and only one labelled scene contains water.
+
 ## Deliberate limitations in segmentation sharding
 
 Added 2026-08-25 with the `enmap_seg` lane. All known and accepted, not defects. Design

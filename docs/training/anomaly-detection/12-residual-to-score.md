@@ -128,6 +128,67 @@ today.**
 Each is normalised by its maximum over **valid pixels only** before combining, so the two
 scales are comparable. Invalid pixels are then zeroed.
 
+## The dark-water trap, and the fade
+
+SAM's brightness invariance has a cost. **An angle measures error relative to the signal**,
+so the same small absolute error is a big angle on a dark pixel and a tiny one on a bright
+pixel.
+
+Give two pixels exactly the same residual, +0.01 / -0.01 / +0.01:
+
+```
+                 band 1   band 2   band 3    mean    L1
+dark sea  true    0.02     0.03     0.01     0.02
+          recon   0.03     0.02     0.02             0.010
+bright    true    0.20     0.30     0.10     0.20
+land      recon   0.21     0.29     0.11             0.010
+```
+
+L1 sees no difference: 0.010 for both. Now SAM.
+
+```
+dark sea:
+  dot   = 0.02*0.03 + 0.03*0.02 + 0.01*0.02 = 0.0006 + 0.0006 + 0.0002 = 0.0014
+  |t|   = sqrt(0.0004 + 0.0009 + 0.0001) = sqrt(0.0014) = 0.03742
+  |r|   = sqrt(0.0009 + 0.0004 + 0.0004) = sqrt(0.0017) = 0.04123
+  cos   = 0.0014 / (0.03742 * 0.04123) = 0.0014 / 0.001543 = 0.9075
+  angle = arccos(0.9075) = 0.4335 rad = 24.84 degrees
+
+bright land:
+  dot   = 0.20*0.21 + 0.30*0.29 + 0.10*0.11 = 0.042 + 0.087 + 0.011 = 0.140
+  |t|   = sqrt(0.04 + 0.09 + 0.01) = sqrt(0.14) = 0.37417
+  |r|   = sqrt(0.0441 + 0.0841 + 0.0121) = sqrt(0.1403) = 0.37457
+  cos   = 0.140 / (0.37417 * 0.37457) = 0.140 / 0.14015 = 0.9989
+  angle = arccos(0.9989) = 0.0463 rad = 2.65 degrees
+```
+
+**Same error, nine times the angle.** The dark pixel's 0.43 rad is even larger than
+reconstruction B's genuine material error earlier in this part (0.229 rad). So on a scene full
+of open water, SAM ranks ordinary sea above real targets.
+
+This is not hypothetical. PRISMA set1 is 75% sea; scored with the F001 model, the median angle is 0.34 rad on sea,
+0.13 on land and 0.18 on the labelled anomalies, and SAM's ROC-AUC is 0.34 - worse than
+guessing.
+
+**The fix: fade SAM out on dark pixels.** `compute_score(..., sam_dark_fade=0.05)` multiplies
+the angle by `clip(mean reflectance / 0.05, 0, 1)`, where the mean is over the input
+spectrum's bands. At or above 5% the angle is untouched; below it, it shrinks linearly to 0.
+
+```
+dark sea:     weight = clip(0.02 / 0.05, 0, 1) = 0.40    faded angle = 0.4335 * 0.40 = 0.1734 rad
+bright land:  weight = clip(0.20 / 0.05, 0, 1) = 1.00    faded angle = 0.0463 rad (unchanged)
+```
+
+The sea pixel now scores 0.173 rad - below the 0.229 of a real material error, so the real
+error wins. It still scores above the bright pixel with the same residual, because at 2%
+reflectance we genuinely cannot tell a material change from noise; the fade only stops
+darkness from *dominating*.
+
+On set1 this lifts the combined ROC-AUC from 0.712 to 0.891 for the production model (v0.2.0)
+and from 0.430 to 0.683 for F001, while the three land scenes barely move (largest change
++0.006). The option is off by default (`None`); switching it on in the product is a pending
+decision, because only one labelled scene contains water.
+
 ## Thresholding, and why it is a human's job
 
 You have a score map. Which pixels are anomalies?
@@ -182,6 +243,11 @@ because Mahalanobis distances from two detectors are not commensurable at all.
 No. It is the default for Indradhanu because it matches that model's training loss. If you
 are hunting bright hot targets, plain L1 is more direct.
 
+**"Why not just drop water pixels?"**
+That needs a water mask, and a ship or an oil slick *on* water is exactly the kind of anomaly
+you want to keep. The fade keeps L1 at full strength there - only the angle, which is
+unreliable on dark pixels, is turned down.
+
 **"Can I use accuracy to evaluate this?"**
 No - part 1 showed why. With 40 anomalies in 20 million pixels, always answering "normal"
 scores 99.9998%. ROC and AUC, computed over valid pixels only.
@@ -235,7 +301,16 @@ are 0.10.
 </details>
 
 <details>
-<summary>5. Why does compute_roc use percentile-spaced thresholds?</summary>
+<summary>5. With `sam_dark_fade=0.05`, a pixel of mean reflectance 0.03 has a raw angle of 0.30 rad. What is its faded angle? And for a pixel of mean 0.12?</summary>
+
+```
+mean 0.03:  weight = clip(0.03 / 0.05, 0, 1) = 0.60    0.30 * 0.60 = 0.18 rad
+mean 0.12:  weight = clip(0.12 / 0.05, 0, 1) = 1.00    0.30 rad, unchanged
+```
+</details>
+
+<details>
+<summary>6. Why does compute_roc use percentile-spaced thresholds?</summary>
 
 Score distributions are heavy-tailed - nearly every pixel sits near zero and a few sit far
 out. Linear spacing would place almost every sample in the empty upper range and almost none

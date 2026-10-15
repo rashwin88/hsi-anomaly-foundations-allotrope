@@ -279,3 +279,6 @@ coverage.xml
 
 # Inventory service secrets (Supabase password, API keys)
 backend/.env.inventory
+
+# Personal Claude Code overrides
+.claude/settings.local.json

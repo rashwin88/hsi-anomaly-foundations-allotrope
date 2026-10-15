@@ -199,6 +199,10 @@ never augmented.
 - **Alignment by wavelength in the workers, not resampling.** A band a sample lacks becomes nodata,
   which every wavelength stem already masks exactly. Pre-training batches are single-sensor
   (SpectralEarth); mixing is for fine-tuning only, and the label-key policy for mixed batches is open.
+- **One inference method: native bands** (decided 2026-10-15). A wavelength-stem model reads each
+  sensor's own band list, minus bands `trained_band_mask` rejects - never a resampled grid.
+  `scripts/evaluate_prisma_bench.py` defaults to it; resampling to SpectralEarth's 202 (`se202`) stays
+  only for the fixed-band stems, which cannot read anything else, and for diagnosis.
 - **Rejected:** band masking for pretraining (spectral self-completion leak) - training a pixel to
   fill its *own* missing bands, which lets an anomaly rebuild itself. Band-list augmentation (below)
   is not that: see its invariant.

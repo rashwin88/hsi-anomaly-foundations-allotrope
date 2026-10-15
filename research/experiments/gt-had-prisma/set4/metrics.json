@@ -1,0 +1,52 @@
+{
+  "set": 4,
+  "bands": 234,
+  "shape": [
+    1210,
+    1219
+  ],
+  "n_cubes": 164428,
+  "anomaly_px": 1165,
+  "valid_frac": 0.6820249628811043,
+  "auc_full": 0.8951209352849572,
+  "auc_valid": 0.8502720418353013,
+  "rx_pca30_auc_valid": 0.8336015676790931,
+  "runtime_s": 4598,
+  "epochs": 150,
+  "search_iter": 25,
+  "seed": 0,
+  "final_bfb_blocks": 113853,
+  "info": {
+    "he5": "/content/drive/MyDrive/PS_11/stage2prep_holdout/stage2_dataset_extracted/Phase II datasets/Set-4/Hyper/PRS_L2D_STD_20231229050902_20231229050907_0001.he5",
+    "gt": "/content/drive/MyDrive/PS_11/stage2prep_holdout/stage2_dataset_extracted/Phase II datasets/Set-4/Hyper/Ground truth/ground_truth_hyper.tif",
+    "gt_transform": [
+      30.00034454470879,
+      0.0,
+      172617.28,
+      0.0,
+      -30.0,
+      2426872.5
+    ],
+    "he5_attrs": {
+      "Epsg_Code": 32645,
+      "Product_LLcorner_easting": 172632.515625,
+      "Product_LLcorner_lat": 21.588333129882812,
+      "Product_LLcorner_long": 83.83869934082031,
+      "Product_LLcorner_northing": 2390587.5,
+      "Product_LRcorner_easting": 209172.703125,
+      "Product_LRcorner_lat": 21.59465789794922,
+      "Product_LRcorner_long": 84.19121551513672,
+      "Product_LRcorner_northing": 2390587.5,
+      "Product_ULcorner_easting": 172632.28125,
+      "Product_ULcorner_lat": 21.915523529052734,
+      "Product_ULcorner_long": 83.8315200805664,
+      "Product_ULcorner_northing": 2426857.5,
+      "Product_URcorner_easting": 209172.828125,
+      "Product_URcorner_lat": 21.921955108642578,
+      "Product_URcorner_long": 84.1848373413086,
+      "Product_URcorner_northing": 2426857.5
+    }
+  },
+  "pd_at_pf_0.001": 0.011158798283261802,
+  "pd_at_pf_0.01": 0.17167381974248927
+}

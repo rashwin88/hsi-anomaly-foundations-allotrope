@@ -64,6 +64,31 @@ shard's sha256 is in `native-v1/manifest.json`.
 5. **Stats are keyed by wavelength** (0.01 nm), so the 5 renumbered scenes add to the right bands;
    bands with no valid voxel (L2A blanks 1343-1390 nm) have no stats rather than a fake zero.
 
+## What QL_PIXELMASK flags (measured 2026-10-15)
+
+Probe of three L2A scenes (first, middle and last of the 210 in the inventory), `/opt/enmap-work/pixmask/probe.py`
+on the prod box:
+
+- **Binary, per band:** uint8, 224 bands, 0 = good, 1 = flagged - the convention `tiles.py` and
+  `EnmapDatasetBuilder` both assume. No other values occur.
+- **Bands 131-135 (~1343-1390 nm) are flagged in every pixel** and are nodata in the cube: the L2A
+  water-vapour blank. They are not among SpectralEarth's 202.
+- **Elsewhere it is a fixed defect map:** about 200 bands carry scattered flags, and each band's
+  flagged share is identical in all three scenes to 0.01% (band 187: 5.31%, 183: 5.01%, 117: 4.21%,
+  180: 3.91%), so it follows the detector, not the scene. Orthorectification smears the defective
+  detector columns, so no image column is more than 50% flagged.
+- **Flagged voxels hold real readings, not nodata.** Their medians match the band's; their difference
+  from the left/right neighbours is usually 1.1-2x that of unflagged voxels, but in one scene band 183
+  is ~20x (2,122 DN vs 100) - so some flags mark genuinely bad values.
+- Net effect in the shards: 85-95% of pixels lose 2-4 of their 224 bands. The wavelength stems and the
+  loss skip dead voxels exactly, so this is a small per-pixel band gap, not a data hole. SpectralEarth
+  shows no flags at all, so DLR evidently did not blank them.
+
+Kept as is (recommended 2026-10-15, pending the user's call): masking flagged voxels is the provider's convention, matches the
+product's `EnmapDatasetBuilder`, and removes the occasional bad value at the cost of a few bands per
+pixel. Not done: storing the mask as a label so a trainer could choose; worth it only if fine-tuning
+shows the gaps matter.
+
 ## Failure modes
 
 | What | Seen as |

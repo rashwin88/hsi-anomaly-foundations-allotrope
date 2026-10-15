@@ -257,6 +257,22 @@ water vapour, sun angles, cover %). Split by datatake, stratified on cloud. Outp
 `patches/enmap/native-v1/`. Bands are matched by wavelength because 5 scenes number them
 differently. See `docs/lld/enmap-shards.md`.
 
+## PRISMA at native bands - fine-tuning
+
+`scripts/shard_prisma.py` does the same for the 223 PRISMA L2D scenes: all 234 bands PRISMA flags
+valid (one fixed band list across every scene), the product's DN-to-reflectance scale and validity
+rules but none of its band pipeline, and the EnMAP sample layout so one trainer reads both. No label
+keys - L2D has no cloud or water mask. Split by site after tiling (the inventory has no footprints),
+with the anomaly-benchmark sites held out of both sides. Output `patches/prisma/native-v1/`. See
+`docs/lld/prisma-shards.md`.
+
+## AVIRIS-NG at native bands and pixel size - fine-tuning
+
+`scripts/shard_aviris.py` shards the 79 AVIRIS-NG L2 flight lines of the India campaign (copied from
+Google Drive into the inventory on 2026-10-15): the 372 good bands (`bbl` = 1), 3-8 m native pixels,
+compressed pixels (`pixels.i16dz`), the same split rules as PRISMA. Output
+`patches/aviris_ng/native-v1/`. See `docs/lld/aviris-shards.md`.
+
 Health check after changes, or before a training run, on the EC2 box:
 `scripts/spectralearth_sanity.py <collection uri> --n 500` — value ranges, nodata, sites,
 loader speed, a percentile spectrum (the red edge must sit at 700–750 nm) and RGB previews.

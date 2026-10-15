@@ -26,6 +26,12 @@ Score methods:
     Convex combination of L1 and SAM after normalising each to its valid
     pixel max. Default for the hyperspectral SegFormer-MAE (Indradhanu) —
     matches the L1+SAM training loss.
+
+Gotcha - SAM on dark pixels: the angle is scale-free, so on near-black spectra (open water at
+~2% reflectance) a tiny absolute residual becomes a large angle and ordinary sea outranks real
+land anomalies (PRISMA set1: SAM ROC-AUC 0.34, below chance). `sam_dark_fade` scales the angle
+by clip(mean reflectance / threshold, 0, 1) to fade it out there. Opt-in; None keeps the plain
+angle.
 """
 
 from __future__ import annotations
@@ -45,6 +51,7 @@ def compute_score(
     method: ScoringMethod,
     *,
     combined_weight: float = 0.5,
+    sam_dark_fade: float | None = None,
 ) -> np.ndarray:
     """Compute a (H, W) anomaly score map.
 
@@ -56,6 +63,9 @@ def compute_score(
         method:         L1 | MSE | SAM | combined.
         combined_weight: w in `w * L1_norm + (1-w) * SAM_norm` when
                         method='combined'. Default 0.5.
+        sam_dark_fade:  reflectance below which the SAM term (methods SAM and
+                        combined) is faded linearly to 0, by the pixel's mean
+                        over bands of `original`. None = plain angle.
 
     Returns:
         (H, W) float32 score map; non-negative, validity-masked.
@@ -77,10 +87,10 @@ def compute_score(
         diff = original - reconstruction
         score = np.mean(diff * diff, axis=0)
     elif method == "SAM":
-        score = _sam(original, reconstruction)
+        score = _sam(original, reconstruction, sam_dark_fade)
     elif method == "combined":
         l1 = np.mean(np.abs(original - reconstruction), axis=0)
-        sam = _sam(original, reconstruction)
+        sam = _sam(original, reconstruction, sam_dark_fade)
         l1n = _normalise(l1, spatial)
         samn = _normalise(sam, spatial)
         score = combined_weight * l1n + (1.0 - combined_weight) * samn
@@ -92,15 +102,21 @@ def compute_score(
     return score
 
 
-def _sam(original: np.ndarray, reconstruction: np.ndarray) -> np.ndarray:
+def _sam(
+    original: np.ndarray, reconstruction: np.ndarray, dark_fade: float | None = None,
+) -> np.ndarray:
     """Spectral angle (radians) between observed and reconstructed
-    spectra. Returns (H, W)."""
+    spectra, optionally faded on dark pixels (see `sam_dark_fade`). Returns (H, W)."""
     eps = 1e-8
     dot = (original * reconstruction).sum(axis=0)
     norm_o = np.sqrt((original * original).sum(axis=0) + eps)
     norm_r = np.sqrt((reconstruction * reconstruction).sum(axis=0) + eps)
     cos_sim = np.clip(dot / (norm_o * norm_r), -1.0, 1.0)
-    return np.arccos(cos_sim).astype(np.float32, copy=False)
+    angle = np.arccos(cos_sim).astype(np.float32, copy=False)
+    if dark_fade is None:
+        return angle
+    weight = np.clip(original.mean(axis=0) / dark_fade, 0.0, 1.0)
+    return (angle * weight).astype(np.float32, copy=False)
 
 
 def _normalise(arr: np.ndarray, validity: np.ndarray) -> np.ndarray:

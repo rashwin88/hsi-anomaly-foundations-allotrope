@@ -3,13 +3,15 @@ Score Indradhanu-family checkpoints on the 4 labelled PRISMA anomaly scenes.
 
     python scripts/evaluate_prisma_bench.py --bench-root C:/Users/FITT/Documents/stage1_datasets \
         --baseline C:/es/models/hyperspectral_segformer_mae_v0.2.0_epoch200.pt \
-        --model E004=C:/es/models/E004_best.pt@se202,native --out eval.json
+        --model F001=C:/es/models/F001_best.pt --out eval.json
 
 Every model is run through the product's own path: the SegFormer full-scene inferencer (128 px
 patches, stride 32, two complementary token masks, erosion 15, overlap averaging), then the
 product's compute_score (L1, SAM, combined with alpha 0.5) and compute_roc. The baseline reads the
 scene exactly as band_filter_apply prepares it (product165); a spectral-stem checkpoint reads it in
-the modes listed after `@` (se202 by default - see app/utils/evaluation/prisma_bench.py).
+the modes listed after `@`. Without `@`, a wavelength stem reads PRISMA's own bands (native) - the one
+standard inference for the new models (decided 2026-10-15) - and a fixed-band stem the 202 SpectralEarth
+wavelengths (se202), the only list it can read (app/utils/evaluation/prisma_bench.py).
 
 Prints one table (combined ROC-AUC per scene and the mean - the decision-rule number) plus the L1
 and SAM AUCs, TPR at 1% FPR and objects caught at the top-1% cut; writes everything to --out.
@@ -29,6 +31,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from app.foundation_models.inferencers.hyperspectral_segformer_mae_inferencer import (  # noqa: E402
     HyperspectralSegFormerMAEInferencer)
+from app.foundation_models.components.spectral_stem_seg_former_mae import WAVELENGTH_STEMS  # noqa: E402
 from app.foundation_models.inferencers.spectral_stem_inferencer import SpectralStemInferencer  # noqa: E402
 from app.models.training.inference_config import InferenceConfig  # noqa: E402
 from app.utils.anomaly_detection.scoring import compute_score  # noqa: E402
@@ -50,6 +53,11 @@ def build(name: str, ckpt_path: str):
             foundation_model_name="hyperspectral_segformer_mae", **common,
             pixel_stats_path=str(REPO / "app" / "constants" / "hyperspectral.json")))
     return SpectralStemInferencer(InferenceConfig(foundation_model_name="spectral_stem_mae", **common))
+
+
+def default_mode(ckpt_path: str) -> str:
+    stem = torch.load(ckpt_path, map_location="cpu", weights_only=False)["config"]["model_config"].get("stem")
+    return "native" if stem in WAVELENGTH_STEMS else "se202"
 
 
 def evaluate(inferencer, scene) -> dict:
@@ -75,7 +83,7 @@ def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[1])
     ap.add_argument("--bench-root", required=True)
     ap.add_argument("--baseline", help="production Indradhanu checkpoint (read in product165 mode)")
-    ap.add_argument("--model", action="append", default=[], help="NAME=checkpoint[@mode,mode] (default mode se202)")
+    ap.add_argument("--model", action="append", default=[], help="NAME=checkpoint[@mode,mode] (default: native for wavelength stems, se202 for fixed ones)")
     ap.add_argument("--scenes", default=",".join(SCENES))
     ap.add_argument("--out", default="prisma_bench.json")
     args = ap.parse_args()
@@ -86,7 +94,7 @@ def main() -> None:
     for spec in args.model:
         name, _, rest = spec.partition("=")
         path, _, modes = rest.partition("@")
-        for mode in (modes or "se202").split(","):
+        for mode in (modes or default_mode(path)).split(","):
             runs.append((f"{name}/{mode}", path, mode))
 
     results: dict = {}

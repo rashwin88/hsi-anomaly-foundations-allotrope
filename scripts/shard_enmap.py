@@ -60,14 +60,15 @@ def _s3():
     return s3_config.client()
 
 
-def list_scenes(inventory_uri: str) -> list[dict]:
-    """Scene datasets under the prefix: {id, scene_id, bucket, prefix}, sorted by scene id."""
+def list_scenes(inventory_uri: str, sensor: str = "enmap") -> list[dict]:
+    """`sensor` scene datasets under the prefix: {id, scene_id, bucket, prefix}, sorted by scene id.
+    Also used by scripts/shard_prisma.py."""
     bucket, _, prefix = inventory_uri.removeprefix("s3://").partition("/")
     s3, out = _s3(), []
     for page in s3.get_paginator("list_objects_v2").paginate(Bucket=bucket, Prefix=prefix, Delimiter="/"):
         for cp in page.get("CommonPrefixes", []):
             m = json.loads(s3.get_object(Bucket=bucket, Key=cp["Prefix"] + "manifest.json")["Body"].read())
-            if m.get("kind") == "scene" and m.get("status") == "available" and m.get("sensor_type") == "enmap":
+            if m.get("kind") == "scene" and m.get("status") == "available" and m.get("sensor_type") == sensor:
                 out.append({"id": m["id"], "scene_id": m["sensor_scene_id"], "bucket": bucket, "prefix": cp["Prefix"]})
     return sorted(out, key=lambda s: s["scene_id"])
 
@@ -190,7 +191,9 @@ def shards_step(work: Path, out: Output, k: int, n: int) -> None:
         print(f"{name}: {len(keys)} tiles, {len(data) / 2**20:.0f} MiB [{done}/{len(mine)}]", flush=True)
 
 
-def finalize(work: Path, out: Output) -> None:
+def finalize(work: Path, out: Output, source: str = "inventory EnMAP L2A scene datasets",
+             bands: str = "native (all 224, each scene's own wavelengths)", split_record: dict | None = None) -> None:
+    """manifest.json + stats.json. scripts/shard_prisma.py passes its own source, bands and split."""
     p = json.loads((work / "plan.json").read_text())
     shards = shard_plan(work)
     rows = {split: [json.loads(out.get_bytes(f"{split}/shard-{i:06d}.json")) for i in range(len(s))]
@@ -206,13 +209,13 @@ def finalize(work: Path, out: Output) -> None:
     wl = sorted(acc, key=float)
     mean = [acc[w][1] / acc[w][0] if acc[w][0] else None for w in wl]
     std = [float(np.sqrt(max(acc[w][2] / acc[w][0] - m * m, 0.0))) if m is not None else None for w, m in zip(wl, mean)]
-    out.put_bytes("stats.json", json.dumps({"source": "EnMAP L2A train split, kept tiles, valid voxels",
+    out.put_bytes("stats.json", json.dumps({"source": f"{source}: train split, kept tiles, valid voxels",
         "keyed_by": "wavelength_nm (rounded 0.01)", "wavelengths_nm": [float(w) for w in wl],
         "mean": mean, "std": std, "count": [acc[w][0] for w in wl], "units": "reflectance"}, indent=1).encode())
     out.put_bytes("manifest.json", json.dumps({
-        "source": "inventory EnMAP L2A scene datasets", "bands": "native (all 224, each scene's own wavelengths)",
-        "split": {"by": "datatake, stratified on cloud", "fraction": TEST_FRACTION, "seed": SPLIT_SEED,
-                  "test_datatakes": p["test_datatakes"]},
+        "source": source, "bands": bands,
+        "split": split_record or {"by": "datatake, stratified on cloud", "fraction": TEST_FRACTION, "seed": SPLIT_SEED,
+                           "test_datatakes": p["test_datatakes"]},
         "shuffle_seed": SHUFFLE_SEED, "patches_per_shard": PATCHES_PER_SHARD,
         "scenes": [{k: s[k] for k in ("id", "scene_id", "split")} for s in p["scenes"]],
         "splits": {sp: {"shards": [{k: x[k] for k in ("shard", "patches", "bytes", "sha256")} for x in r],

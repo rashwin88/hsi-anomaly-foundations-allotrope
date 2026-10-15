@@ -1,0 +1,52 @@
+{
+  "set": 3,
+  "bands": 234,
+  "shape": [
+    1202,
+    1210
+  ],
+  "n_cubes": 162004,
+  "anomaly_px": 778,
+  "valid_frac": 0.6844584095378227,
+  "auc_full": 0.6437879225002268,
+  "auc_valid": 0.4801039309751716,
+  "rx_pca30_auc_valid": 0.7720818601360395,
+  "runtime_s": 660,
+  "epochs": 25,
+  "search_iter": 25,
+  "seed": 0,
+  "final_bfb_blocks": 0,
+  "info": {
+    "he5": "/content/drive/MyDrive/PS_11/stage2prep_holdout/stage2_dataset_extracted/Phase II datasets/Set-3/Hyper/PRS_L2D_STD_20210516050459_20210516050503_0001.he5",
+    "gt": "/content/drive/MyDrive/PS_11/stage2prep_holdout/stage2_dataset_extracted/Phase II datasets/Set-3/Hyper/Ground truth/Groundtruth hyper anomalies.tif",
+    "gt_transform": [
+      29.99986776859499,
+      0.0,
+      173397.5,
+      0.0,
+      -30.0,
+      2428542.5
+    ],
+    "he5_attrs": {
+      "Epsg_Code": 32645,
+      "Product_LLcorner_easting": 173412.40625,
+      "Product_LLcorner_lat": 21.60570526123047,
+      "Product_LLcorner_long": 83.8458480834961,
+      "Product_LLcorner_northing": 2392497.5,
+      "Product_LRcorner_easting": 209682.34375,
+      "Product_LRcorner_lat": 21.61197853088379,
+      "Product_LRcorner_long": 84.19580078125,
+      "Product_LRcorner_northing": 2392497.5,
+      "Product_ULcorner_easting": 173412.5,
+      "Product_ULcorner_lat": 21.93073272705078,
+      "Product_ULcorner_long": 83.83872985839844,
+      "Product_ULcorner_northing": 2428527.5,
+      "Product_URcorner_easting": 209682.3125,
+      "Product_URcorner_lat": 21.937108993530273,
+      "Product_URcorner_long": 84.18946838378906,
+      "Product_URcorner_northing": 2428527.5
+    }
+  },
+  "pd_at_pf_0.001": 0.008997429305912597,
+  "pd_at_pf_0.01": 0.02056555269922879
+}

@@ -75,6 +75,33 @@ the operator choose which kind of anomaly matters.
 
 Each is normalised by its maximum over **valid pixels only**, then invalid pixels are zeroed.
 
+### SAM on dark water
+
+SAM is scale-free, which is also its weakness: on a near-black spectrum (open sea, ~2%
+reflectance) a residual of 0.01 is a large *fraction* of the signal, so the angle is large.
+On PRISMA set1 (75% sea) the median angle is 0.34 rad on sea, 0.13 on land and 0.18 on the
+labelled anomalies (F001) - SAM ranks ordinary water above the targets.
+
+`compute_score(..., sam_dark_fade=t)` multiplies the angle by `clip(mean_reflectance / t, 0, 1)`
+(mean over bands of the input spectrum), fading SAM linearly to 0 below `t` and leaving
+pixels at or above `t` untouched. It applies to `SAM` and `combined`. The default is `None`
+(plain angle, byte-identical to before), and the product action does not pass it yet - see
+[known issue 9](09-known-issues.md).
+
+Measured 2026-10-15 on the 4 labelled PRISMA scenes, bench inference
+(`scripts/evaluate_prisma_bench.py`), `t = 0.05` chosen up front, not tuned:
+
+| combined ROC-AUC | set1 | set2 | set3 | set4 | mean |
+|---|---|---|---|---|---|
+| v0.2.0, plain | 0.712 | 0.686 | 0.730 | 0.521 | 0.662 |
+| v0.2.0, fade 0.05 | 0.891 | 0.686 | 0.733 | 0.521 | 0.708 |
+| F001 epoch 14, plain | 0.430 | 0.765 | 0.720 | 0.724 | 0.660 |
+| F001 epoch 14, fade 0.05 | 0.683 | 0.765 | 0.726 | 0.724 | 0.725 |
+
+Only set1 has water, so the three land scenes show the fade is harmless, not that 0.05 is
+right. The sensitivity is steep on set1 (v0.2.0 combined: 0.830 at 0.03, 0.908 at 0.08; F001:
+0.524 / 0.810) - a reason to validate on more water scenes before picking a default.
+
 ### Thresholding is percentile, never absolute
 
 A fixed cut like `score > 0.05` is indefensible across scenes — a calm lake has typical

@@ -1,0 +1,320 @@
+<title>Indradhanu SpectralEarth Runs</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,500;6..72,600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one reading column (~72ch) for prose; charts and tables run the full 1080px frame. */
+:root {
+  --bg: #f6f7f5; --surface: #fcfcfb; --ink: #15191a; --ink-2: #4b5256; --muted: #767d82;
+  --rule: #dce0de; --grid: #e8ebe9; --accent: #0f5e66; --good: #0b7d0b; --bad: #b42d2d;
+  --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a; --s4: #eda100; --s5: #e87ba4;
+  --display: "Newsreader", Georgia, "Times New Roman", serif;
+  --body: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", Consolas, "SFMono-Regular", monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #121414; --surface: #1a1a19; --ink: #eef0ee; --ink-2: #c3c6c2; --muted: #8f9591;
+  --rule: #2e3231; --grid: #262928; --accent: #6cc0c6; --good: #4cc04c; --bad: #e66767;
+  --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500; --s5: #d55181; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #121414; --surface: #1a1a19; --ink: #eef0ee; --ink-2: #c3c6c2; --muted: #8f9591;
+  --rule: #2e3231; --grid: #262928; --accent: #6cc0c6; --good: #4cc04c; --bad: #e66767;
+  --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500; --s5: #d55181; color-scheme: dark }
+* { box-sizing: border-box }
+body { background: var(--bg); color: var(--ink); font: 15px/1.6 var(--body); margin: 0;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+main { max-width: 1080px; margin: 0 auto; padding-block: 40px 72px; display: grid; gap: 52px }
+h1, h2 { font-family: var(--display); font-weight: 600; text-wrap: balance; margin: 0; letter-spacing: -0.01em }
+h1 { font-size: clamp(30px, 4.6vw, 44px); line-height: 1.1 }
+h2 { font-size: 26px; line-height: 1.2 }
+h3 { font: 600 13px/1.3 var(--body); text-transform: uppercase; letter-spacing: 0.06em; color: var(--ink-2); margin: 0 }
+p { margin: 0; max-width: 72ch }
+.prose { display: grid; gap: 14px }
+.eyebrow { font: 500 12px/1 var(--mono); letter-spacing: 0.04em; color: var(--accent) }
+.meta { color: var(--muted); font-size: 13.5px }
+code, .num { font-family: var(--mono); font-size: 0.92em }
+.num, td, th { font-variant-numeric: tabular-nums }
+header { display: grid; gap: 16px; border-bottom: 1px solid var(--rule); padding-bottom: 28px }
+.lede { font-size: 17px; color: var(--ink-2) }
+.figures { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 0; border-block: 1px solid var(--rule) }
+.figure { padding: 18px 20px 18px 0; display: grid; gap: 4px; min-width: 0 }
+.figure + .figure { padding-left: 20px; border-left: 1px solid var(--rule) }
+.figure b { font: 500 32px/1.1 var(--mono); color: var(--ink) }
+.figure span { font-size: 13.5px; color: var(--ink-2) }
+section { display: grid; gap: 20px; min-width: 0 }
+.legend { display: flex; flex-wrap: wrap; gap: 8px 20px; font-size: 13.5px; color: var(--ink-2) }
+.legend button { all: unset; cursor: pointer; display: inline-flex; align-items: center; gap: 8px; padding: 2px 0 }
+.legend button:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 2px }
+.legend button[aria-pressed="false"] { opacity: 0.38 }
+.sw { width: 16px; height: 3px; border-radius: 2px; display: inline-block }
+.charts { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 28px 32px }
+.chart { position: relative; min-width: 0; display: grid; gap: 8px }
+.chart svg { width: 100%; height: auto; display: block; overflow: visible }
+.chart .sub { font-size: 12.5px; color: var(--muted) }
+.tip { position: absolute; pointer-events: none; background: var(--surface); border: 1px solid var(--rule); border-radius: 6px;
+  padding: 8px 10px; font: 12.5px/1.5 var(--body); color: var(--ink); box-shadow: 0 4px 16px rgb(0 0 0 / 0.12); min-width: 150px; z-index: 2 }
+.tip .row { display: flex; align-items: center; gap: 8px; justify-content: space-between }
+.tip .row span:first-child { display: inline-flex; align-items: center; gap: 6px; color: var(--ink-2) }
+.tablewrap { overflow-x: auto; border-top: 1px solid var(--rule) }
+table { border-collapse: collapse; width: 100%; font-size: 14px }
+th, td { text-align: right; padding: 9px 12px; border-bottom: 1px solid var(--rule); white-space: nowrap }
+th:first-child, td:first-child, th.l, td.l { text-align: left }
+#runs-table td.l { white-space: normal; min-width: 180px }
+th { font: 600 12px/1.3 var(--body); color: var(--ink-2); text-transform: uppercase; letter-spacing: 0.05em }
+td.best { font-weight: 600; color: var(--accent) }
+td.low { color: var(--bad) }
+tr.ref td { color: var(--muted) }
+.pill { display: inline-block; font: 500 11.5px/1 var(--body); padding: 4px 7px; border-radius: 999px; border: 1px solid var(--rule); color: var(--ink-2) }
+.pill.pass { border-color: var(--good); color: var(--good) }
+.pill.fail { border-color: var(--bad); color: var(--bad) }
+.dots svg { width: 100%; height: auto; display: block }
+.callout { border-left: 3px solid var(--accent); padding: 4px 0 4px 16px; display: grid; gap: 8px }
+ol, ul { margin: 0; padding-left: 20px; display: grid; gap: 8px; max-width: 72ch }
+details { border-top: 1px solid var(--rule); padding-top: 12px }
+summary { cursor: pointer; font-weight: 500; color: var(--ink-2) }
+summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px }
+@media (prefers-reduced-motion: no-preference) { .series path { transition: opacity 0.15s } }
+</style>
+
+<main>
+<header>
+  <div class="eyebrow">research/experiments/indradhanu-se-pretrain · 14–15 October 2026</div>
+  <h1>Indradhanu SpectralEarth pretraining: five runs, one stem to carry forward</h1>
+  <p class="lede">Every run trained on the same 30,000 SpectralEarth patches with the same SegFormer, schedule and batch, and changed only the spectral stem: the layers that squeeze each pixel's spectrum into 32 numbers and expand it back. They were scored on reconstruction of held-out SpectralEarth sites and on anomaly detection in the four labelled PRISMA scenes.</p>
+  <div class="figures">
+    <div class="figure"><b>0.752</b><span>E005 mean ROC-AUC on PRISMA's own bands. Production v0.2.0: 0.662</span></div>
+    <div class="figure"><b>0.239 → 0.693</b><span>Set1 (75% sea) on PRISMA's own bands, E004 to E005: the band-list fixes</span></div>
+    <div class="figure"><b>$37</b><span>GPU time for all five runs on one g6e.2xlarge (L40S): 13.7 hours of training</span></div>
+  </div>
+  <p class="meta">Recommendation: pretrain the next Indradhanu with E005's configuration, the reduced-attention stem (C′) with width weighting, band-list augmentation and wavelength jitter.</p>
+</header>
+
+<section id="training">
+  <div class="prose">
+    <h2>Training curves</h2>
+    <p>Validation is scored the same way every epoch (L1 plus SAM at full weight), on 1,500 patches from sites the model never trains on. E003 was stopped after three epochs at 41 minutes each and replaced by E004. Every other run was capped at 20 epochs on the original 200-epoch learning-rate schedule, so they stop at the same point on the same curve.</p>
+  </div>
+  <div class="legend" id="legend" role="group" aria-label="Show or hide runs"></div>
+  <div class="charts">
+    <div class="chart" id="c-val-l1"><h3>Validation L1</h3><span class="sub">mean absolute reflectance error, hidden pixels</span></div>
+    <div class="chart" id="c-val-sam"><h3>Validation SAM</h3><span class="sub">spectral angle, degrees</span></div>
+    <div class="chart" id="c-train-l1"><h3>Training L1</h3><span class="sub">E005 trains on random band subsets 80% of the time</span></div>
+  </div>
+  <details><summary>Curve data as a table</summary><div class="tablewrap" id="curve-table"></div></details>
+</section>
+
+<section id="detection">
+  <div class="prose">
+    <h2>Anomaly detection on PRISMA</h2>
+    <p>Combined ROC-AUC from the product's own scoring (L1 and SAM, alpha 0.5) over four labelled PRISMA L2D scenes. <em>Resampled</em> means the scene was interpolated onto SpectralEarth's 202 wavelengths; <em>own bands</em> means PRISMA's native list, minus the 20 bands that lie far from any pretraining wavelength. The linear and gate stems can only read the 202, so they have no own-bands row. Best checkpoint of each run: E001 epoch 18, E002 and E004 epoch 19, E005 epoch 20.</p>
+  </div>
+  <div class="dots" id="dots" role="img" aria-label="Mean ROC-AUC per model and mode, with each scene's score"></div>
+  <div class="tablewrap" id="bench-table"></div>
+  <p class="meta">0.5 is chance. Objects caught counts ground-truth objects with at least one pixel in the top 1% of scores. The two highest scores in each column are marked.</p>
+</section>
+
+<section id="bands">
+  <div class="prose">
+    <h2>Why E004 failed on its own bands, and what fixed it</h2>
+    <p>E004 scored set1 below chance on PRISMA's own bands (0.239) and well above production when the same scene was resampled (0.797). Set1 is mostly sea, and E004 painted a land-like near-infrared over it. A water census ruled out the obvious cause: SpectralEarth is 6–11% water, about the same as EnMAP. The cause was the band list. The stem's wavelength networks had only ever seen SpectralEarth's 202 bands, and its skip path gave each band one vote, so a sensor with fewer visible bands got a different mix. Thinning SpectralEarth's own bands to PRISMA's spacing doubled E004's water error with no new sensor involved.</p>
+    <p>E005 added three fixes: each band counts by the nanometres it covers rather than one vote each; 80% of training batches read a random subset of bands and must still reconstruct all 202; and stated wavelengths are jittered by up to ±3 nm. The loss is only taken on pixels hidden by the mask, so a pixel never learns to fill in its own missing bands.</p>
+  </div>
+  <div class="tablewrap"><table>
+    <thead><tr><th>Reconstruction L1</th><th>E004 · epoch 18</th><th>E005 · epoch 20</th></tr></thead>
+    <tbody>
+      <tr><td>Water, SpectralEarth test patches, all 202 bands</td><td>0.0155</td><td>0.0152</td></tr>
+      <tr><td>Water, same pixels thinned to PRISMA's spacing</td><td class="low">0.0309</td><td class="best">0.0120</td></tr>
+      <tr><td>Land, same pixels thinned</td><td>0.0226</td><td>0.0177</td></tr>
+      <tr><td>Water, set1 on PRISMA's own bands</td><td class="low">0.0462</td><td class="best">0.0087</td></tr>
+      <tr><td>Water, set1 resampled to SpectralEarth's wavelengths</td><td>0.0138</td><td>—</td></tr>
+    </tbody></table></div>
+  <div class="prose">
+    <h3>E005 pass criteria, written before launch</h3>
+    <div class="tablewrap"><table>
+      <thead><tr><th>Criterion</th><th>Epoch 10</th><th>Epoch 20</th></tr></thead>
+      <tbody>
+        <tr><td class="l">Own bands score as well as resampled</td><td><span class="pill fail">set1 gap 0.09</span></td><td><span class="pill pass">own bands ahead, 0.752 vs 0.684</span></td></tr>
+        <tr><td class="l">Resampled no worse than E004 at the same epoch</td><td><span class="pill pass">pass</span></td><td><span class="pill fail">set1 0.523 vs 0.797</span></td></tr>
+        <tr><td class="l">Thinned bands don't raise the water error</td><td><span class="pill pass">pass</span></td><td><span class="pill pass">0.0120 vs 0.0152</span></td></tr>
+        <tr><td class="l">Validation within 5% of E004</td><td><span class="pill pass">+4.3% L1, +4.5% SAM</span></td><td><span class="pill fail">+1.9% L1, +6.6% SAM</span></td></tr>
+      </tbody></table></div>
+  </div>
+</section>
+
+<section id="runs">
+  <div class="prose"><h2>The runs</h2></div>
+  <div class="tablewrap" id="runs-table"></div>
+  <p class="meta">All on the kept g6e.2xlarge in ap-south-1b at $2.69 per hour, batch 8 × 4 accumulation, bf16, se-v1 train shards 000000–000199 and test 000000–000009. Throughput is set by data loading and the shared SegFormer, so the stems differ in speed by under 10%.</p>
+</section>
+
+<section id="findings">
+  <div class="prose">
+    <h2>What we learned</h2>
+    <ol>
+      <li><strong>The stem is where the gain is.</strong> The linear stem pretrained on SpectralEarth (E001) detects exactly as well as production (0.663 vs 0.662). The adaptive stems add 0.08–0.09.</li>
+      <li><strong>Reconstruction and detection disagree.</strong> The gate stem (E002) reconstructs SpectralEarth best at every epoch, but detects 0.015 below the reduced-attention stem. The pre-registered rule prefers B if it is within seed noise of C, and that noise was never measured. B also cannot read any band list except SpectralEarth's.</li>
+      <li><strong>A wavelength-aware stem must be trained on many band lists.</strong> Without that, E004 fit SpectralEarth's list and failed on PRISMA's. With it, E005 reads PRISMA's own bands at 0.752, level with E004's best resampled score.</li>
+      <li><strong>Set1 is a volatile scene.</strong> Its resampled score swung from 0.44 to 0.80 across E004's epochs and dropped from 0.721 to 0.523 between E005's epochs 10 and 20. One water-dominated scene with 153 tiny objects is weak evidence alone.</li>
+    </ol>
+  </div>
+  <div class="callout">
+    <h3>Open before the final pretraining run</h3>
+    <ul>
+      <li>Training data size (these runs used 30,000 of 512,849 patches) and where to run it (the kept L40S, about 2.6 hours per full epoch, or the H200).</li>
+      <li>Why E005's resampled set1 score fell between epochs 10 and 20.</li>
+    </ul>
+    <h3>Open before fine-tuning</h3>
+    <ul>
+      <li>A trained-wavelength record in the checkpoint, extended by each training stage, so EnMAP and PRISMA fine-tuning can bring back the bands SpectralEarth lacks, including the ~1730 nm hydrocarbon band.</li>
+      <li>The EnMAP shards blank a few bands in 85–95% of pixels via the provider's pixel mask; SpectralEarth has none.</li>
+      <li>AVIRIS-NG samples twice as densely as SpectralEarth; check own bands vs resampled on a real scene first.</li>
+    </ul>
+  </div>
+</section>
+</main>
+
+<script>
+const DATA = {"runs": [{"id": "E001", "label": "A \u00b7 linear", "rows": [{"epoch": 1.0, "train_l1": 0.05083, "train_sam_deg": 11.99411, "val_l1": 0.03315, "val_sam_deg": 8.79309, "seconds": 515.2, "patches_per_s": 58.23}, {"epoch": 2.0, "train_l1": 0.04123, "train_sam_deg": 9.38702, "val_l1": 0.03116, "val_sam_deg": 8.0284, "seconds": 534.0, "patches_per_s": 56.18}, {"epoch": 3.0, "train_l1": 0.03777, "train_sam_deg": 8.49949, "val_l1": 0.0317, "val_sam_deg": 8.10195, "seconds": 515.5, "patches_per_s": 58.2}, {"epoch": 4.0, "train_l1": 0.03619, "train_sam_deg": 7.99684, "val_l1": 0.02963, "val_sam_deg": 7.55828, "seconds": 515.8, "patches_per_s": 58.17}, {"epoch": 5.0, "train_l1": 0.03568, "train_sam_deg": 7.7468, "val_l1": 0.02947, "val_sam_deg": 7.05291, "seconds": 515.5, "patches_per_s": 58.2}, {"epoch": 6.0, "train_l1": 0.03445, "train_sam_deg": 7.36862, "val_l1": 0.02796, "val_sam_deg": 6.75121, "seconds": 515.6, "patches_per_s": 58.18}, {"epoch": 7.0, "train_l1": 0.03375, "train_sam_deg": 7.10687, "val_l1": 0.02809, "val_sam_deg": 6.69127, "seconds": 515.6, "patches_per_s": 58.18}, {"epoch": 8.0, "train_l1": 0.03324, "train_sam_deg": 6.9206, "val_l1": 0.02735, "val_sam_deg": 6.2772, "seconds": 515.4, "patches_per_s": 58.21}, {"epoch": 9.0, "train_l1": 0.03285, "train_sam_deg": 6.77393, "val_l1": 0.02792, "val_sam_deg": 6.30845, "seconds": 515.1, "patches_per_s": 58.24}, {"epoch": 10.0, "train_l1": 0.03242, "train_sam_deg": 6.62848, "val_l1": 0.02709, "val_sam_deg": 5.9955, "seconds": 515.4, "patches_per_s": 58.21}, {"epoch": 11.0, "train_l1": 0.03214, "train_sam_deg": 6.53984, "val_l1": 0.027, "val_sam_deg": 5.76155, "seconds": 515.6, "patches_per_s": 58.19}, {"epoch": 12.0, "train_l1": 0.03185, "train_sam_deg": 6.448, "val_l1": 0.0263, "val_sam_deg": 5.86925, "seconds": 515.3, "patches_per_s": 58.22}, {"epoch": 13.0, "train_l1": 0.0315, "train_sam_deg": 6.33925, "val_l1": 0.02712, "val_sam_deg": 6.1277, "seconds": 515.3, "patches_per_s": 58.22}, {"epoch": 14.0, "train_l1": 0.03133, "train_sam_deg": 6.27322, "val_l1": 0.0262, "val_sam_deg": 5.80957, "seconds": 515.5, "patches_per_s": 58.19}, {"epoch": 15.0, "train_l1": 0.03112, "train_sam_deg": 6.22277, "val_l1": 0.02575, "val_sam_deg": 5.68209, "seconds": 515.8, "patches_per_s": 58.16}, {"epoch": 16.0, "train_l1": 0.03089, "train_sam_deg": 6.17697, "val_l1": 0.02564, "val_sam_deg": 5.66967, "seconds": 515.5, "patches_per_s": 58.2}, {"epoch": 17.0, "train_l1": 0.03074, "train_sam_deg": 6.11564, "val_l1": 0.02534, "val_sam_deg": 5.50506, "seconds": 515.5, "patches_per_s": 58.2}, {"epoch": 18.0, "train_l1": 0.03049, "train_sam_deg": 6.08079, "val_l1": 0.02485, "val_sam_deg": 5.4899, "seconds": 515.5, "patches_per_s": 58.2}, {"epoch": 19.0, "train_l1": 0.03036, "train_sam_deg": 6.02588, "val_l1": 0.02441, "val_sam_deg": 5.56824, "seconds": 515.0, "patches_per_s": 58.25}, {"epoch": 20.0, "train_l1": 0.03022, "train_sam_deg": 5.98419, "val_l1": 0.02435, "val_sam_deg": 5.57004, "seconds": 515.3, "patches_per_s": 58.21}]}, {"id": "E002", "label": "B \u00b7 gate", "rows": [{"epoch": 1.0, "train_l1": 0.04035, "train_sam_deg": 10.90708, "val_l1": 0.02758, "val_sam_deg": 7.55048, "seconds": 510.5, "patches_per_s": 58.76}, {"epoch": 2.0, "train_l1": 0.02996, "train_sam_deg": 7.93286, "val_l1": 0.02645, "val_sam_deg": 7.37642, "seconds": 516.5, "patches_per_s": 58.08}, {"epoch": 3.0, "train_l1": 0.02856, "train_sam_deg": 7.28885, "val_l1": 0.02426, "val_sam_deg": 6.82858, "seconds": 512.2, "patches_per_s": 58.58}, {"epoch": 4.0, "train_l1": 0.02686, "train_sam_deg": 6.71534, "val_l1": 0.02276, "val_sam_deg": 5.69212, "seconds": 511.4, "patches_per_s": 58.66}, {"epoch": 5.0, "train_l1": 0.02582, "train_sam_deg": 6.33911, "val_l1": 0.02298, "val_sam_deg": 5.46822, "seconds": 511.4, "patches_per_s": 58.66}, {"epoch": 6.0, "train_l1": 0.02519, "train_sam_deg": 6.0941, "val_l1": 0.02178, "val_sam_deg": 5.33277, "seconds": 511.7, "patches_per_s": 58.63}, {"epoch": 7.0, "train_l1": 0.02469, "train_sam_deg": 5.88756, "val_l1": 0.02155, "val_sam_deg": 5.1418, "seconds": 511.3, "patches_per_s": 58.68}, {"epoch": 8.0, "train_l1": 0.02435, "train_sam_deg": 5.72459, "val_l1": 0.02165, "val_sam_deg": 5.22359, "seconds": 510.9, "patches_per_s": 58.72}, {"epoch": 9.0, "train_l1": 0.024, "train_sam_deg": 5.58992, "val_l1": 0.02092, "val_sam_deg": 4.86443, "seconds": 511.4, "patches_per_s": 58.66}, {"epoch": 10.0, "train_l1": 0.02379, "train_sam_deg": 5.4872, "val_l1": 0.02106, "val_sam_deg": 4.92112, "seconds": 510.9, "patches_per_s": 58.72}, {"epoch": 11.0, "train_l1": 0.02363, "train_sam_deg": 5.41202, "val_l1": 0.02066, "val_sam_deg": 4.82115, "seconds": 511.6, "patches_per_s": 58.64}, {"epoch": 12.0, "train_l1": 0.02335, "train_sam_deg": 5.28122, "val_l1": 0.02046, "val_sam_deg": 4.72669, "seconds": 511.2, "patches_per_s": 58.69}, {"epoch": 13.0, "train_l1": 0.02308, "train_sam_deg": 5.21531, "val_l1": 0.02004, "val_sam_deg": 4.56302, "seconds": 511.3, "patches_per_s": 58.68}, {"epoch": 14.0, "train_l1": 0.02283, "train_sam_deg": 5.1292, "val_l1": 0.02003, "val_sam_deg": 4.55057, "seconds": 511.3, "patches_per_s": 58.67}, {"epoch": 15.0, "train_l1": 0.02281, "train_sam_deg": 5.12009, "val_l1": 0.01987, "val_sam_deg": 4.71405, "seconds": 510.8, "patches_per_s": 58.73}, {"epoch": 16.0, "train_l1": 0.02259, "train_sam_deg": 5.04658, "val_l1": 0.02005, "val_sam_deg": 4.50268, "seconds": 511.2, "patches_per_s": 58.68}, {"epoch": 17.0, "train_l1": 0.02243, "train_sam_deg": 4.99693, "val_l1": 0.01933, "val_sam_deg": 4.58111, "seconds": 511.9, "patches_per_s": 58.61}, {"epoch": 18.0, "train_l1": 0.02238, "train_sam_deg": 4.98558, "val_l1": 0.01978, "val_sam_deg": 4.57656, "seconds": 511.0, "patches_per_s": 58.7}, {"epoch": 19.0, "train_l1": 0.02222, "train_sam_deg": 4.93154, "val_l1": 0.01999, "val_sam_deg": 4.43535, "seconds": 511.4, "patches_per_s": 58.66}, {"epoch": 20.0, "train_l1": 0.02205, "train_sam_deg": 4.88639, "val_l1": 0.01944, "val_sam_deg": 4.53885, "seconds": 511.1, "patches_per_s": 58.69}]}, {"id": "E003", "label": "C \u00b7 per-band attention", "rows": [{"epoch": 1.0, "train_l1": 0.0732, "train_sam_deg": 17.92723, "val_l1": 0.05497, "val_sam_deg": 17.283, "seconds": 2478.8, "patches_per_s": 12.1}, {"epoch": 2.0, "train_l1": 0.05335, "train_sam_deg": 13.95736, "val_l1": 0.04621, "val_sam_deg": 13.49395, "seconds": 2423.3, "patches_per_s": 12.38}, {"epoch": 3.0, "train_l1": 0.04608, "train_sam_deg": 11.26119, "val_l1": 0.05976, "val_sam_deg": 14.45501, "seconds": 2422.9, "patches_per_s": 12.38}]}, {"id": "E004", "label": "C\u2032 \u00b7 reduced attention", "rows": [{"epoch": 1.0, "train_l1": 0.04785, "train_sam_deg": 11.66423, "val_l1": 0.03214, "val_sam_deg": 8.96266, "seconds": 545.0, "patches_per_s": 55.05}, {"epoch": 2.0, "train_l1": 0.03535, "train_sam_deg": 9.05058, "val_l1": 0.03128, "val_sam_deg": 7.8942, "seconds": 549.7, "patches_per_s": 54.58}, {"epoch": 3.0, "train_l1": 0.03132, "train_sam_deg": 7.98051, "val_l1": 0.02614, "val_sam_deg": 7.1841, "seconds": 545.1, "patches_per_s": 55.04}, {"epoch": 4.0, "train_l1": 0.02974, "train_sam_deg": 7.38442, "val_l1": 0.02472, "val_sam_deg": 6.81841, "seconds": 545.0, "patches_per_s": 55.05}, {"epoch": 5.0, "train_l1": 0.02832, "train_sam_deg": 6.98421, "val_l1": 0.0253, "val_sam_deg": 6.24202, "seconds": 545.7, "patches_per_s": 54.98}, {"epoch": 6.0, "train_l1": 0.02739, "train_sam_deg": 6.67538, "val_l1": 0.02496, "val_sam_deg": 6.04919, "seconds": 545.6, "patches_per_s": 54.99}, {"epoch": 7.0, "train_l1": 0.02688, "train_sam_deg": 6.46375, "val_l1": 0.02586, "val_sam_deg": 6.0637, "seconds": 545.4, "patches_per_s": 55.0}, {"epoch": 8.0, "train_l1": 0.02634, "train_sam_deg": 6.24918, "val_l1": 0.02376, "val_sam_deg": 5.68576, "seconds": 545.6, "patches_per_s": 54.98}, {"epoch": 9.0, "train_l1": 0.02615, "train_sam_deg": 6.16154, "val_l1": 0.02302, "val_sam_deg": 5.66714, "seconds": 545.8, "patches_per_s": 54.96}, {"epoch": 10.0, "train_l1": 0.02572, "train_sam_deg": 5.97824, "val_l1": 0.02324, "val_sam_deg": 5.60041, "seconds": 545.5, "patches_per_s": 55.0}, {"epoch": 11.0, "train_l1": 0.02545, "train_sam_deg": 5.86634, "val_l1": 0.02181, "val_sam_deg": 5.11879, "seconds": 545.7, "patches_per_s": 54.98}, {"epoch": 12.0, "train_l1": 0.025, "train_sam_deg": 5.72986, "val_l1": 0.02234, "val_sam_deg": 5.14324, "seconds": 545.4, "patches_per_s": 55.01}, {"epoch": 13.0, "train_l1": 0.02469, "train_sam_deg": 5.63683, "val_l1": 0.0214, "val_sam_deg": 4.85823, "seconds": 546.1, "patches_per_s": 54.93}, {"epoch": 14.0, "train_l1": 0.02439, "train_sam_deg": 5.54922, "val_l1": 0.0212, "val_sam_deg": 4.93106, "seconds": 545.8, "patches_per_s": 54.97}, {"epoch": 15.0, "train_l1": 0.02411, "train_sam_deg": 5.47386, "val_l1": 0.02208, "val_sam_deg": 5.0114, "seconds": 545.4, "patches_per_s": 55.01}, {"epoch": 16.0, "train_l1": 0.02384, "train_sam_deg": 5.40777, "val_l1": 0.02028, "val_sam_deg": 4.69832, "seconds": 546.1, "patches_per_s": 54.94}, {"epoch": 17.0, "train_l1": 0.02387, "train_sam_deg": 5.41482, "val_l1": 0.02112, "val_sam_deg": 4.9916, "seconds": 545.3, "patches_per_s": 55.01}, {"epoch": 18.0, "train_l1": 0.02349, "train_sam_deg": 5.32535, "val_l1": 0.02049, "val_sam_deg": 4.66208, "seconds": 545.8, "patches_per_s": 54.97}, {"epoch": 19.0, "train_l1": 0.02327, "train_sam_deg": 5.2456, "val_l1": 0.02015, "val_sam_deg": 4.5857, "seconds": 546.1, "patches_per_s": 54.94}, {"epoch": 20.0, "train_l1": 0.02315, "train_sam_deg": 5.21387, "val_l1": 0.02102, "val_sam_deg": 4.84088, "seconds": 545.0, "patches_per_s": 55.04}]}, {"id": "E005", "label": "C\u2032 + band fixes", "rows": [{"epoch": 1.0, "train_l1": 0.04783, "train_sam_deg": 11.74136, "val_l1": 0.03489, "val_sam_deg": 9.98511, "seconds": 540.8, "patches_per_s": 55.48}, {"epoch": 2.0, "train_l1": 0.03668, "train_sam_deg": 9.24845, "val_l1": 0.02957, "val_sam_deg": 8.45463, "seconds": 540.3, "patches_per_s": 55.52}, {"epoch": 3.0, "train_l1": 0.03335, "train_sam_deg": 8.39256, "val_l1": 0.02647, "val_sam_deg": 7.45338, "seconds": 540.6, "patches_per_s": 55.49}, {"epoch": 4.0, "train_l1": 0.03077, "train_sam_deg": 7.77771, "val_l1": 0.02609, "val_sam_deg": 7.41545, "seconds": 540.7, "patches_per_s": 55.49}, {"epoch": 5.0, "train_l1": 0.03376, "train_sam_deg": 8.1904, "val_l1": 0.02716, "val_sam_deg": 7.16748, "seconds": 541.2, "patches_per_s": 55.43}, {"epoch": 6.0, "train_l1": 0.03009, "train_sam_deg": 7.44887, "val_l1": 0.02543, "val_sam_deg": 6.75811, "seconds": 540.3, "patches_per_s": 55.53}, {"epoch": 7.0, "train_l1": 0.0294, "train_sam_deg": 7.11723, "val_l1": 0.02471, "val_sam_deg": 6.28283, "seconds": 540.1, "patches_per_s": 55.54}, {"epoch": 8.0, "train_l1": 0.02901, "train_sam_deg": 6.89193, "val_l1": 0.02502, "val_sam_deg": 6.21254, "seconds": 539.3, "patches_per_s": 55.62}, {"epoch": 9.0, "train_l1": 0.03014, "train_sam_deg": 7.07068, "val_l1": 0.02442, "val_sam_deg": 6.07448, "seconds": 539.6, "patches_per_s": 55.59}, {"epoch": 10.0, "train_l1": 0.02849, "train_sam_deg": 6.68427, "val_l1": 0.02419, "val_sam_deg": 5.84799, "seconds": 540.4, "patches_per_s": 55.52}, {"epoch": 11.0, "train_l1": 0.02764, "train_sam_deg": 6.47992, "val_l1": 0.02326, "val_sam_deg": 5.66463, "seconds": 542.9, "patches_per_s": 55.26}, {"epoch": 12.0, "train_l1": 0.02761, "train_sam_deg": 6.40119, "val_l1": 0.02349, "val_sam_deg": 5.74865, "seconds": 541.7, "patches_per_s": 55.38}, {"epoch": 13.0, "train_l1": 0.02789, "train_sam_deg": 6.37594, "val_l1": 0.02451, "val_sam_deg": 5.70029, "seconds": 543.5, "patches_per_s": 55.2}, {"epoch": 14.0, "train_l1": 0.02757, "train_sam_deg": 6.27234, "val_l1": 0.02384, "val_sam_deg": 5.51321, "seconds": 542.5, "patches_per_s": 55.3}, {"epoch": 15.0, "train_l1": 0.02629, "train_sam_deg": 6.01985, "val_l1": 0.02379, "val_sam_deg": 5.14968, "seconds": 542.9, "patches_per_s": 55.26}, {"epoch": 16.0, "train_l1": 0.02601, "train_sam_deg": 5.95854, "val_l1": 0.02339, "val_sam_deg": 5.09703, "seconds": 543.4, "patches_per_s": 55.21}, {"epoch": 17.0, "train_l1": 0.02601, "train_sam_deg": 5.8977, "val_l1": 0.02267, "val_sam_deg": 5.22334, "seconds": 541.6, "patches_per_s": 55.4}, {"epoch": 18.0, "train_l1": 0.02609, "train_sam_deg": 5.92946, "val_l1": 0.02265, "val_sam_deg": 5.16815, "seconds": 542.6, "patches_per_s": 55.29}, {"epoch": 19.0, "train_l1": 0.02635, "train_sam_deg": 5.92647, "val_l1": 0.02348, "val_sam_deg": 5.11083, "seconds": 541.6, "patches_per_s": 55.39}, {"epoch": 20.0, "train_l1": 0.02543, "train_sam_deg": 5.74665, "val_l1": 0.02142, "val_sam_deg": 5.16274, "seconds": 542.6, "patches_per_s": 55.29}]}], "bench": [{"model": "v0.2.0 (production)", "mode": "165-band grid", "auc": [0.712, 0.686, 0.73, 0.521], "ref": true}, {"model": "E001 \u00b7 A linear", "mode": "resampled", "auc": [0.687, 0.762, 0.784, 0.418], "caught": ["116/153", "70/295", "26/231", "12/230"]}, {"model": "E002 \u00b7 B gate", "mode": "resampled", "auc": [0.732, 0.757, 0.755, 0.711], "caught": ["113/153", "80/295", "33/231", "68/230"]}, {"model": "E004 \u00b7 C\u2032 reduced", "mode": "resampled", "auc": [0.797, 0.777, 0.744, 0.7], "caught": ["103/153", "77/295", "54/231", "65/230"]}, {"model": "E004 \u00b7 C\u2032 reduced", "mode": "own bands", "auc": [0.239, 0.836, 0.767, 0.609], "caught": ["3/153", "84/295", "39/231", "36/230"]}, {"model": "E005 \u00b7 C\u2032 + fixes", "mode": "resampled", "auc": [0.523, 0.77, 0.774, 0.669], "caught": ["78/153", "72/295", "34/231", "91/230"]}, {"model": "E005 \u00b7 C\u2032 + fixes", "mode": "own bands", "auc": [0.693, 0.781, 0.748, 0.784], "caught": ["72/153", "64/295", "32/231", "95/230"]}]};
+const ORDER = ["E005", "E004", "E002", "E001", "E003"];        // headline runs take the first slots
+const SLOT = { E005: "--s1", E004: "--s2", E002: "--s3", E001: "--s4", E003: "--s5" };
+const runs = ORDER.map(id => DATA.runs.find(r => r.id === id));
+const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+const NS = "http://www.w3.org/2000/svg";
+const el = (tag, attrs = {}, parent) => { const e = document.createElementNS(NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); if (parent) parent.appendChild(e); return e; };
+const shown = new Set(ORDER.filter(id => id !== "E003"));
+try { const s = JSON.parse(localStorage.getItem("se-runs-hidden") || "null"); if (s) { ORDER.forEach(id => shown.add(id)); s.forEach(id => shown.delete(id)); } } catch (e) {}
+
+function legend() {
+  const box = document.getElementById("legend");
+  runs.forEach(r => {
+    const b = document.createElement("button");
+    b.setAttribute("aria-pressed", shown.has(r.id)); b.dataset.id = r.id;
+    b.innerHTML = `<span class="sw" style="background:var(${SLOT[r.id]})"></span><span><b>${r.id}</b> ${r.label}</span>`;
+    b.onclick = () => { shown.has(r.id) ? shown.delete(r.id) : shown.add(r.id); b.setAttribute("aria-pressed", shown.has(r.id));
+      try { localStorage.setItem("se-runs-hidden", JSON.stringify(ORDER.filter(i => !shown.has(i)))); } catch (e) {}
+      drawAll(); };
+    box.appendChild(b);
+  });
+}
+
+function niceTicks(lo, hi, n = 4) {
+  const step0 = (hi - lo) / n, mag = Math.pow(10, Math.floor(Math.log10(step0)));
+  const step = [1, 2, 2.5, 5, 10].map(m => m * mag).find(s => s >= step0);
+  const t = []; for (let v = Math.ceil(lo / step) * step; v <= hi + 1e-9; v += step) t.push(+v.toFixed(6)); return { t, step };
+}
+
+function lineChart(id, key, fmt) {
+  const host = document.getElementById(id);
+  host.querySelectorAll("svg,.tip").forEach(n => n.remove());
+  const W = 360, H = 230, m = { l: 46, r: 14, t: 10, b: 28 };
+  const vis = runs.filter(r => shown.has(r.id));
+  const vals = vis.flatMap(r => r.rows.map(x => x[key]));
+  if (!vals.length) return;
+  let lo = Math.min(...vals), hi = Math.max(...vals); const pad = (hi - lo) * 0.08; lo -= pad; hi += pad;
+  const { t } = niceTicks(lo, hi); lo = Math.min(lo, t[0]); hi = Math.max(hi, t[t.length - 1]);
+  const x = e => m.l + (e - 1) / 19 * (W - m.l - m.r), y = v => m.t + (hi - v) / (hi - lo) * (H - m.t - m.b);
+  const svg = el("svg", { viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": host.querySelector("h3").textContent + " by epoch" }, host);
+  t.forEach(v => { el("line", { x1: m.l, x2: W - m.r, y1: y(v), y2: y(v), stroke: css("--grid"), "stroke-width": 1 }, svg);
+    const tx = el("text", { x: m.l - 6, y: y(v) + 4, "text-anchor": "end", "font-size": 10.5, fill: css("--muted"), "font-family": css("--mono") }, svg); tx.textContent = fmt(v); });
+  [1, 5, 10, 15, 20].forEach(e => { const tx = el("text", { x: x(e), y: H - 8, "text-anchor": "middle", "font-size": 10.5, fill: css("--muted"), "font-family": css("--mono") }, svg); tx.textContent = e; });
+  el("line", { x1: m.l, x2: W - m.r, y1: H - m.b, y2: H - m.b, stroke: css("--rule"), "stroke-width": 1 }, svg);
+  const g = el("g", { class: "series" }, svg);
+  vis.slice().reverse().forEach(r => {
+    const d = r.rows.map((p, i) => (i ? "L" : "M") + x(p.epoch).toFixed(1) + "," + y(p[key]).toFixed(1)).join("");
+    el("path", { d, fill: "none", stroke: css(SLOT[r.id]), "stroke-width": 2, "stroke-linejoin": "round", "stroke-linecap": "round" }, g);
+    const last = r.rows[r.rows.length - 1];
+    el("circle", { cx: x(last.epoch), cy: y(last[key]), r: 3.5, fill: css(SLOT[r.id]), stroke: css("--surface"), "stroke-width": 2 }, g);
+  });
+  const cross = el("line", { y1: m.t, y2: H - m.b, stroke: css("--muted"), "stroke-width": 1, "stroke-dasharray": "3 3", visibility: "hidden" }, svg);
+  const tip = document.createElement("div"); tip.className = "tip"; tip.hidden = true; host.appendChild(tip);
+  const hit = el("rect", { x: m.l, y: m.t, width: W - m.l - m.r, height: H - m.t - m.b, fill: "transparent" }, svg);
+  const move = ev => {
+    const b = svg.getBoundingClientRect(), px = (ev.clientX - b.left) / b.width * W;
+    const e = Math.max(1, Math.min(20, Math.round(1 + (px - m.l) / (W - m.l - m.r) * 19)));
+    const at = vis.map(r => [r, r.rows.find(p => p.epoch === e)]).filter(a => a[1]);
+    if (!at.length) { tip.hidden = true; cross.setAttribute("visibility", "hidden"); return; }
+    cross.setAttribute("x1", x(e)); cross.setAttribute("x2", x(e)); cross.setAttribute("visibility", "visible");
+    at.sort((a, b2) => a[1][key] - b2[1][key]);
+    tip.innerHTML = `<div style="font-weight:600;margin-bottom:4px">Epoch ${e}</div>` + at.map(([r, p]) =>
+      `<div class="row"><span><span class="sw" style="background:var(${SLOT[r.id]})"></span>${r.id}</span><span class="num">${fmt(p[key])}</span></div>`).join("");
+    tip.hidden = false;
+    const hb = host.getBoundingClientRect(), left = ev.clientX - hb.left + 14;
+    tip.style.left = Math.min(left, hb.width - tip.offsetWidth - 4) + "px"; tip.style.top = (ev.clientY - hb.top + 12) + "px";
+  };
+  hit.addEventListener("pointermove", move); hit.addEventListener("pointerleave", () => { tip.hidden = true; cross.setAttribute("visibility", "hidden"); });
+}
+
+function curveTable() {
+  const keys = [["val_l1", "val L1", v => v.toFixed(4)], ["val_sam_deg", "val SAM °", v => v.toFixed(2)], ["train_l1", "train L1", v => v.toFixed(4)]];
+  let h = "<table><thead><tr><th>Epoch</th>" + runs.map(r => keys.map(k => `<th>${r.id} ${k[1]}</th>`).join("")).join("") + "</tr></thead><tbody>";
+  for (let e = 1; e <= 20; e++) h += `<tr><td>${e}</td>` + runs.map(r => { const p = r.rows.find(q => q.epoch === e);
+    return keys.map(k => `<td>${p ? k[2](p[k[0]]) : "—"}</td>`).join(""); }).join("") + "</tr>";
+  document.getElementById("curve-table").innerHTML = h + "</tbody></table>";
+}
+
+const runColor = name => SLOT[name.slice(0, 4)] || "--muted";
+function benchTable() {
+  const rows = DATA.bench.map(b => ({ ...b, mean: b.auc.reduce((a, c) => a + c, 0) / 4 }));
+  const cols = [0, 1, 2, 3].map(i => rows.filter(r => !r.ref).map(r => r.auc[i]).sort((a, b) => b - a).slice(0, 2));
+  const meanTop = rows.filter(r => !r.ref).map(r => r.mean).sort((a, b) => b - a).slice(0, 2);
+  let h = "<table><thead><tr><th>Model</th><th class='l'>Bands read</th><th>Set1</th><th>Set2</th><th>Set3</th><th>Set4</th><th>Mean</th><th>Objects caught (top 1%)</th></tr></thead><tbody>";
+  rows.forEach(r => {
+    h += `<tr class="${r.ref ? "ref" : ""}"><td><span class="sw" style="background:var(${r.ref ? "--muted" : runColor(r.model)});margin-right:8px;vertical-align:middle"></span>${r.model}</td><td class="l">${r.mode}</td>`;
+    r.auc.forEach((v, i) => h += `<td class="${!r.ref && cols[i].includes(v) ? "best" : v < 0.5 ? "low" : ""}">${v.toFixed(3)}</td>`);
+    h += `<td class="${!r.ref && meanTop.includes(r.mean) ? "best" : ""}"><b>${r.mean.toFixed(3)}</b></td><td class="num">${r.caught ? r.caught.join(" · ") : "—"}</td></tr>`;
+  });
+  document.getElementById("bench-table").innerHTML = h + "</tbody></table>";
+}
+
+function dotPlot() {
+  const host = document.getElementById("dots"); host.innerHTML = "";
+  const rows = DATA.bench.map(b => ({ ...b, mean: b.auc.reduce((a, c) => a + c, 0) / 4 }));
+  const W = 1000, rh = 34, m = { l: 250, r: 20, t: 26, b: 30 }, H = m.t + rows.length * rh + m.b;
+  const lo = 0.2, hi = 0.9, x = v => m.l + (v - lo) / (hi - lo) * (W - m.l - m.r);
+  const svg = el("svg", { viewBox: `0 0 ${W} ${H}` }, host);
+  [0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9].forEach(v => {
+    el("line", { x1: x(v), x2: x(v), y1: m.t - 6, y2: H - m.b, stroke: v === 0.5 ? css("--rule") : css("--grid"), "stroke-width": 1 }, svg);
+    const t = el("text", { x: x(v), y: H - 10, "text-anchor": "middle", "font-size": 12, fill: css("--muted"), "font-family": css("--mono") }, svg); t.textContent = v.toFixed(1);
+  });
+  const ref = rows.find(r => r.ref).mean;
+  el("line", { x1: x(ref), x2: x(ref), y1: m.t - 14, y2: H - m.b, stroke: css("--ink-2"), "stroke-width": 1.5, "stroke-dasharray": "5 4" }, svg);
+  const rl = el("text", { x: x(ref) + 6, y: m.t - 10, "font-size": 12, fill: css("--ink-2") }, svg); rl.textContent = "production v0.2.0 · 0.662";
+  const ch = el("text", { x: x(0.5) - 6, y: m.t - 10, "font-size": 12, fill: css("--muted"), "text-anchor": "end" }, svg); ch.textContent = "chance";
+  rows.forEach((r, i) => {
+    const cy = m.t + i * rh + rh / 2, col = r.ref ? css("--muted") : css(runColor(r.model));
+    const lab = el("text", { x: m.l - 14, y: cy + 4, "text-anchor": "end", "font-size": 13.5, fill: css("--ink") }, svg);
+    lab.textContent = r.model + "  ·  " + r.mode;
+    const mn = Math.min(...r.auc), mx = Math.max(...r.auc);
+    el("line", { x1: x(mn), x2: x(mx), y1: cy, y2: cy, stroke: css("--rule"), "stroke-width": 2, "stroke-linecap": "round" }, svg);
+    r.auc.forEach(v => el("circle", { cx: x(v), cy, r: 3, fill: css("--surface"), stroke: col, "stroke-width": 1.5 }, svg));
+    const own = r.mode === "own bands";
+    el("circle", { cx: x(r.mean), cy, r: 7, fill: own ? css("--surface") : col, stroke: col, "stroke-width": own ? 3 : 2 }, svg);
+    const v = el("text", { x: x(mx) + 12, y: cy + 4, "text-anchor": "start", "font-size": 12, fill: css("--ink-2"), "font-family": css("--mono") }, svg); v.textContent = r.mean.toFixed(3);
+  });
+  const note = document.createElement("p"); note.className = "meta";
+  note.textContent = "Large dot: mean of the four scenes (filled = resampled to 202 bands, ring = PRISMA's own bands). Small dots: each scene.";
+  host.appendChild(note);
+}
+
+function runsTable() {
+  const info = { E001: ["A", "linear 1×1 compressor"], E002: ["B", "per-pixel gate + linear"], E003: ["C", "per-band cross-attention"],
+    E004: ["C′", "reduced attention, 40 nm bins"], E005: ["C′ + fixes", "width weighting, band augmentation 0.8, ±3 nm jitter"] };
+  let h = "<table><thead><tr><th>Run</th><th class='l'>Stem</th><th>Epochs</th><th>Final val L1</th><th>Final val SAM</th><th>Min / epoch</th><th>Patches / s</th><th>Hours</th><th>Cost</th></tr></thead><tbody>";
+  ["E001", "E002", "E003", "E004", "E005"].forEach(id => {
+    const r = DATA.runs.find(q => q.id === id), last = r.rows[r.rows.length - 1];
+    const hours = r.rows.reduce((a, p) => a + p.seconds, 0) / 3600, mins = r.rows.reduce((a, p) => a + p.seconds, 0) / r.rows.length / 60;
+    h += `<tr><td><span class="sw" style="background:var(${SLOT[id]});margin-right:8px;vertical-align:middle"></span><b>${id}</b> ${info[id][0]}</td><td class="l">${info[id][1]}</td><td>${r.rows.length}</td>` +
+      `<td>${last.val_l1.toFixed(4)}</td><td>${last.val_sam_deg.toFixed(2)}°</td><td>${mins.toFixed(1)}</td><td>${last.patches_per_s.toFixed(1)}</td><td>${hours.toFixed(1)}</td><td>$${(hours * 2.69).toFixed(0)}</td></tr>`;
+  });
+  document.getElementById("runs-table").innerHTML = h + "</tbody></table>";
+}
+
+function drawAll() {
+  lineChart("c-val-l1", "val_l1", v => v.toFixed(3));
+  lineChart("c-val-sam", "val_sam_deg", v => v.toFixed(1) + "°");
+  lineChart("c-train-l1", "train_l1", v => v.toFixed(3));
+}
+legend(); drawAll(); curveTable(); benchTable(); dotPlot(); runsTable();
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => { drawAll(); dotPlot(); });
+new MutationObserver(() => { drawAll(); dotPlot(); }).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+</script>

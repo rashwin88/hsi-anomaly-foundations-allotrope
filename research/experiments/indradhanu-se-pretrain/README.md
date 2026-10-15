@@ -34,6 +34,7 @@ One row per run, newest last. A run that crashed or was abandoned still gets a r
 | E001 | 2026-10-14 | A | baseline | g6e.2xlarge (kept) | 2.9 | ~$8 | 5.57 (ep 20) | 0.663 resampled (ep 18) | = v0.2.0 (0.662) |
 | E002 | 2026-10-14 | B | does per-pixel adaptivity help at all? | g6e.2xlarge (kept) | 2.8 | ~$8 | 4.54 (ep 20) | 0.739 resampled (ep 19) | best reconstruction; 0.015 behind C' on detection; 202 bands only |
 | E005 | 2026-10-15 | C' + band fixes | do the part-42 fixes make native band lists read as well as resampled? | g6e.2xlarge (kept) | 1.5 | ~$4 | 5.85 (ep 10) | 0.720 resampled / 0.705 native (ep 10) | 3 of 4 criteria; set1 native gap 0.09 vs 0.05 |
+| F001 | 2026-10-15 | C' + band fixes | final pretraining: 200 epochs, data rotated every 20 through 10 blocks of 30,000 patches | g6e.2xlarge (kept) | - | - | - | - | running |
 
 ## Layout
 

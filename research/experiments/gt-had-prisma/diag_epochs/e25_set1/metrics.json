@@ -1,0 +1,52 @@
+{
+  "set": 1,
+  "bands": 234,
+  "shape": [
+    1186,
+    1196
+  ],
+  "n_cubes": 158004,
+  "anomaly_px": 638,
+  "valid_frac": 0.7013583784058159,
+  "auc_full": 0.9339050981606594,
+  "auc_valid": 0.9077950050958474,
+  "rx_pca30_auc_valid": 0.8816317055091554,
+  "runtime_s": 648,
+  "epochs": 25,
+  "search_iter": 25,
+  "seed": 0,
+  "final_bfb_blocks": 0,
+  "info": {
+    "he5": "/content/drive/MyDrive/PS_11/stage2prep_holdout/stage2_dataset_extracted/Phase II datasets/Set-1/Hypersepctral Datasets/PRS_L2D_STD_20201214060713_20201214060717_0001.he5",
+    "gt": "/content/drive/MyDrive/PS_11/stage2prep_holdout/stage2_dataset_extracted/Phase II datasets/Set-1/Hypersepctral Datasets/Ground truth/groundtruth_hyper.tif",
+    "gt_transform": [
+      30.0,
+      0.0,
+      545007.75,
+      0.0,
+      -30.0,
+      2501437.5
+    ],
+    "he5_attrs": {
+      "Epsg_Code": 32642,
+      "Product_LLcorner_easting": 545022.8125,
+      "Product_LLcorner_lat": 22.297958374023438,
+      "Product_LLcorner_long": 69.43709564208984,
+      "Product_LLcorner_northing": 2465872.5,
+      "Product_LRcorner_easting": 580872.75,
+      "Product_LRcorner_lat": 22.296648025512695,
+      "Product_LRcorner_long": 69.78511810302734,
+      "Product_LRcorner_northing": 2465872.5,
+      "Product_ULcorner_easting": 545022.75,
+      "Product_ULcorner_lat": 22.619110107421875,
+      "Product_ULcorner_long": 69.43810272216797,
+      "Product_ULcorner_northing": 2501422.5,
+      "Product_URcorner_easting": 580872.5,
+      "Product_URcorner_lat": 22.617778778076172,
+      "Product_URcorner_long": 69.78692626953125,
+      "Product_URcorner_northing": 2501422.5
+    }
+  },
+  "pd_at_pf_0.001": 0.06583072100313479,
+  "pd_at_pf_0.01": 0.164576802507837
+}
