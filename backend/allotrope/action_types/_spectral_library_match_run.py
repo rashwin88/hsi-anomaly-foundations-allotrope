@@ -43,6 +43,28 @@ _PIXEL_SPECTRA_NPZ = "anomaly_pixel_spectra.npz"
 # matched, sized identically to rgb.png so it can be CSS-overlaid.
 _MATCH_MAP_OVERLAY_PNG = "match_map_overlay.png"
 
+_FAMILY_MATCHES_PARQUET = "family_matches.parquet"
+_FAMILY_MAP_TIF = "family_map.tif"
+_FAMILY_MAP_PNG = "family_map.png"
+_FAMILY_MAP_OVERLAY_PNG = "family_map_overlay.png"
+_FAMILY_LEGEND_JSON = "family_legend.json"
+_FAMILY_LIBRARY_NPZ = "family_library_refl.npz"
+
+# family_map.tif codes. 1..F index summary["family"]["families"] (sorted) plus one.
+_FAMILY_NOT_IN_MASK = -2
+_FAMILY_NOT_SCORED = -1
+_FAMILY_UNCONFIRMED = 0
+
+# Man-made families get saturated colours, natural ones muted earth tones, so a glance at
+# the map separates "something built" from "unusual ground". Assigned in sorted-name order.
+_MANMADE_COLOURS = [
+    "#ef4444", "#3b82f6", "#f59e0b", "#a855f7", "#10b981", "#ec4899", "#06b6d4",
+    "#f97316", "#84cc16", "#6366f1", "#14b8a6", "#e11d48", "#0ea5e9", "#d946ef",
+]
+_NATURAL_COLOURS = ["#a3a380", "#8d7b68", "#7c9070", "#b5a48b", "#6b7b8c", "#9c8f7a", "#7f8f6f"]
+_UNCONFIRMED_COLOUR = "#e2e8f0"
+_NOT_SCORED_COLOUR = "#475569"
+
 _PNG_MAX_EDGE = 4096
 
 # Sentinel values painted into match_map.tif.
@@ -285,6 +307,14 @@ def run(ctx: Any) -> None:
     histogram = _build_histogram(result, library_entries)
     (output_dir / _HISTOGRAM_JSON).write_text(json.dumps(histogram, indent=2))
 
+    # ---- 8. Family matching (the answer; SAM above is kept alongside) ----
+    ctx.on_step("family_match")
+    family_block = _family_match(
+        ctx, cfg, vendable=vendable, cube=cube, validity=validity,
+        anomaly_mask=anomaly_mask, pixel_mask=pixel_mask, rows=rows, cols=cols,
+        profile=match_map_profile, output_dir=output_dir,
+    )
+
     summary = {
         "upstream_anomaly_detection_output_id": upstream_id,
         "sensor_type": ctx.sensor_type,
@@ -304,6 +334,7 @@ def run(ctx: Any) -> None:
             "match": round(match_seconds, 3),
             "total": round(time.monotonic() - t0, 3),
         },
+        "family": family_block,
     }
     (output_dir / _SUMMARY_JSON).write_text(json.dumps(summary, indent=2))
 
@@ -321,6 +352,184 @@ def summarize(ctx: Any, output_dir: Any) -> dict[str, Any]:
 def preview(ctx: Any, output_dir: Any) -> Any:
     """No PNG preview — the viewer renders match_map.tif client-side."""
     return Path(output_dir) / _SUMMARY_JSON
+
+
+# ---------------------------------------------------------------------------
+# Family matching
+# ---------------------------------------------------------------------------
+
+
+def _family_match(
+    ctx: Any, cfg: dict, *, vendable, cube, validity, anomaly_mask, pixel_mask,
+    rows, cols, profile, output_dir: Path,
+) -> dict[str, Any]:
+    """Run calibrated Simplex ACE and write the family_* outputs; return summary["family"].
+
+    Never raises: a failure is returned as {"status": "failed", "error": ...} so the SAM
+    outputs already written still make a complete action.
+    """
+    import numpy as np
+
+    from app.spectral_match.family_match import (DEFAULT_ALPHA, ensure_family_cache,
+                                                 match_families)
+
+    from ..config import settings
+
+    if cfg["mode"] != "anomaly_pixels":
+        return {"status": "skipped",
+                "reason": f"mode={cfg['mode']}: family matching runs on anomaly pixels only"}
+    alpha = float(cfg.get("family_alpha", DEFAULT_ALPHA))      # absent on pre-family configs
+    t = time.monotonic()
+    try:
+        entries = ensure_family_cache(vendable, ctx.sensor_type,
+                                      cache_dir=str(settings.splib07_cache_dir))
+        # Raw cube, not the SG-smoothed one: the family experiments did not smooth.
+        fam = match_families(cube, validity, anomaly_mask.astype(bool), rows, cols,
+                             entries, alpha=alpha)
+    except Exception as exc:  # noqa: BLE001 — recorded in the summary, SAM still lands
+        logger.exception("family matching failed")
+        return {"status": "failed", "error": f"{type(exc).__name__}: {exc}"}
+    seconds = time.monotonic() - t
+
+    names = list(fam.family_names)
+    code_of = {f: i + 1 for i, f in enumerate(names)}
+    codes = np.full(rows.size, _FAMILY_NOT_SCORED, dtype=np.int16)
+    for i in np.flatnonzero(fam.scored):
+        named = fam.answered[i] or fam.group[i] == "natural"
+        codes[i] = code_of[fam.family[i]] if named else _FAMILY_UNCONFIRMED
+
+    legend = _family_legend(names, fam.family_groups)
+    code_map = np.full(pixel_mask.shape, _FAMILY_NOT_IN_MASK, dtype=np.int16)
+    code_map[rows, cols] = codes
+
+    _write_family_parquet(output_dir / _FAMILY_MATCHES_PARQUET, rows=rows, cols=cols,
+                          fam=fam, codes=codes)
+    _write_family_map(output_dir / _FAMILY_MAP_TIF, profile=profile, code_map=code_map)
+    for path, transparent in ((_FAMILY_MAP_PNG, False), (_FAMILY_MAP_OVERLAY_PNG, True)):
+        _render_family_png(output_dir / path, code_map=code_map, legend=legend,
+                           transparent=transparent)
+    # "library" lists the npz rows' ids and names: the browser's npz reader is numeric-only.
+    (output_dir / _FAMILY_LEGEND_JSON).write_text(json.dumps({
+        "alpha": alpha, "p_star": fam.p_star, "n_manmade_families": fam.n_manmade_families,
+        "codes": legend,
+        "library": [{"id": e.material_id, "label": e.name} for e in entries],
+    }, indent=2))
+    np.savez(
+        output_dir / _FAMILY_LIBRARY_NPZ,
+        refl=np.stack([e.refl for e in entries]).astype(np.float32),
+        valid=np.stack([e.valid for e in entries]).astype(np.uint8),
+        wavelengths=np.asarray(vendable.band_cw_order, dtype=np.float64),
+    )
+
+    scored = fam.scored
+    manmade = scored & (fam.group == "manmade")
+    counts = {legend[str(c)]["family"]: int((codes == c).sum())
+              for c in sorted(set(codes.tolist())) if c > _FAMILY_NOT_SCORED}
+    return {
+        "status": "ok",
+        "alpha": alpha,
+        "p_star": fam.p_star,
+        "n_manmade_families": fam.n_manmade_families,
+        "families": names,
+        "n_library_entries": len(entries),
+        "n_bands_used": int(fam.bands_used.sum()),
+        "n_scored": int(scored.sum()),
+        "n_not_scored": int((~scored).sum()),
+        "n_named_manmade": int((manmade & fam.answered).sum()),
+        "n_unconfirmed_manmade": int((manmade & ~fam.answered).sum()),
+        "n_natural": int((scored & (fam.group == "natural")).sum()),
+        "counts": counts,
+        "timing_seconds": round(seconds, 3),
+    }
+
+
+def _family_legend(names: list[str], groups: tuple[str, ...]) -> dict[str, dict]:
+    """family_map code (as str) → {family, group, label, colour}."""
+    legend = {
+        str(_FAMILY_NOT_SCORED): {"family": "not_scored", "group": "none",
+                                  "label": "Not scored (nodata on a used band)",
+                                  "colour": _NOT_SCORED_COLOUR},
+        str(_FAMILY_UNCONFIRMED): {"family": "unconfirmed", "group": "manmade",
+                                   "label": "Man-made, type unconfirmed",
+                                   "colour": _UNCONFIRMED_COLOUR},
+    }
+    n_mm = n_nat = 0
+    for i, (f, g) in enumerate(zip(names, groups)):
+        if g == "manmade":
+            colour = _MANMADE_COLOURS[n_mm % len(_MANMADE_COLOURS)]
+            n_mm += 1
+        else:
+            colour = _NATURAL_COLOURS[n_nat % len(_NATURAL_COLOURS)]
+            n_nat += 1
+        legend[str(i + 1)] = {"family": f, "group": g, "label": f.replace("_", " / "),
+                              "colour": colour}
+    return legend
+
+
+def _write_family_parquet(out_path: Path, *, rows, cols, fam, codes) -> None:
+    """One row per anomaly pixel, scored or not. int32/float32 for the browser reader."""
+    import pyarrow as pa
+    import pyarrow.parquet as pq
+
+    schema = pa.schema([
+        pa.field("row", pa.int32()), pa.field("col", pa.int32()),
+        pa.field("scored", pa.bool_()), pa.field("family", pa.string()),
+        pa.field("family_group", pa.string()), pa.field("family_code", pa.int32()),
+        pa.field("confidence", pa.float32()), pa.field("answered", pa.bool_()),
+        pa.field("best_entry", pa.string()),
+    ])
+    table = pa.table({
+        "row": rows.astype("int32"), "col": cols.astype("int32"),
+        "scored": fam.scored.astype(bool), "family": fam.family.astype(str),
+        "family_group": fam.group.astype(str), "family_code": codes.astype("int32"),
+        "confidence": fam.confidence.astype("float32"), "answered": fam.answered.astype(bool),
+        "best_entry": fam.best_entry.astype(str),
+    }, schema=schema)
+    pq.write_table(table, out_path, compression="snappy")
+
+
+def _write_family_map(out_path: Path, *, profile, code_map) -> None:
+    import rasterio
+
+    profile = dict(profile)
+    profile.update(dtype="int16", count=1, nodata=_FAMILY_NOT_IN_MASK,
+                   compress="deflate", predictor=2)
+    with rasterio.open(out_path, "w", **profile) as dst:
+        dst.write(code_map, 1)
+
+
+def _render_family_png(out_path: Path, *, code_map, legend: dict, transparent: bool) -> None:
+    """Family colours per pixel; dark backing (thumbnail) or transparent (overlay).
+
+    The overlay grows each pixel by a dimmer one-pixel halo, as the SAM overlay does, so
+    single pixels read against any RGB underlay.
+    """
+    import numpy as np
+    from PIL import Image
+
+    H, W = code_map.shape
+    rgba = np.zeros((H, W, 4), dtype=np.uint8)
+    if not transparent:
+        rgba[...] = (12, 14, 18, 255)
+    inside = code_map > _FAMILY_NOT_IN_MASK
+    for code, item in legend.items():
+        sel = code_map == int(code)
+        if sel.any():
+            h = item["colour"].lstrip("#")
+            rgba[sel] = (int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16), 255)
+    if transparent and inside.any():
+        r, c = np.nonzero(inside)
+        for dr in (-1, 0, 1):
+            for dc in (-1, 0, 1):
+                rr, cc = np.clip(r + dr, 0, H - 1), np.clip(c + dc, 0, W - 1)
+                empty = rgba[rr, cc, 3] == 0
+                rgba[rr[empty], cc[empty], :3] = rgba[r[empty], c[empty], :3].astype(np.uint16) * 3 // 4
+                rgba[rr[empty], cc[empty], 3] = 220
+    img = Image.fromarray(rgba, mode="RGBA")
+    if max(H, W) > _PNG_MAX_EDGE:
+        scale = _PNG_MAX_EDGE / max(H, W)
+        img = img.resize((max(1, round(W * scale)), max(1, round(H * scale))), Image.NEAREST)
+    img.save(out_path, format="PNG", optimize=True)
 
 
 # ---------------------------------------------------------------------------
@@ -590,4 +799,5 @@ def _write_empty_outputs(
         "n_pixels_no_match": 0,
         "timing_seconds": {"total": round(time.monotonic() - t0, 3)},
         "note": "no pixels in the input mask — empty outputs written.",
+        "family": {"status": "skipped", "reason": "no pixels in the input mask"},
     }, indent=2))

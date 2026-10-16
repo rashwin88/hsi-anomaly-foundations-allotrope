@@ -94,6 +94,17 @@ imagery onto the common grid. Any image resampled with it from a ~10 nm sensor l
 without an error. Densify the source first (as `scripts/curate_family_library.py` and step 1
 of the man-made library experiments do), or lower `min_lib_points_per_band` for images.
 
+**12. The local deployment's AVIRIS-NG vendables cannot be read by this repo.**
+- **What is on disk:** in the stack that runs from `/home/fitt/allotrope`,
+  `vendable.pkl` stores `normalized_hyperspectral_cube` and `validity_cube` as
+  `{"__memmap__": True, "filename": ..., "dtype", "shape", "offset"}` dicts. They point at
+  `primary_cube_bsq.npy` and `validity_cube.npy` beside the pickle.
+- **Why it breaks:** nothing in this repo or its history writes or reopens that form. With
+  this repo's code, every action that `pickle.load`s such a vendable fails on its first
+  array operation. That includes SAM in `spectral_library_match`.
+- **Status:** found 2026-10-16 while testing family matching. The deployed images carry code
+  this repo does not.
+
 ## Deliberate limitations in segmentation sharding
 
 Added 2026-08-25 with the `enmap_seg` lane. All known and accepted, not defects. Design

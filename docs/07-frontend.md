@@ -71,8 +71,10 @@ files — so the dataset page pages its files through `/files` and filters live 
 - `uplot` — charts (lazy-imported; its built-in legend breaks past 5 series, hence the
   custom one)
 - `panzoom` — linked pan/zoom keeping several image panels in transform lockstep
-- `hyparquet` — reads `matches.parquet` **client-side in the browser**, so material-match
-  hover probes need no server round trip
+- `hyparquet` — reads `matches.parquet` and `family_matches.parquet` **client-side in the
+  browser**, so material-match hover probes need no server round trip. The spectral match
+  viewer shows the RGB + family map beside the binary anomaly mask, with linked pan/zoom
+  (`docs/lld/spectral-family-match.md` §7)
 
 `vite.config.ts` manually splits chunks because the single bundle otherwise exceeds Vite's
 import-analysis parser buffer. Leave that alone unless you know why it's there.

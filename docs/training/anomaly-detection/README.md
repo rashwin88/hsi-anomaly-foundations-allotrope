@@ -3,7 +3,7 @@
 A course for someone who has never worked with hyperspectral data and has never opened this
 repository. Start at part 1 knowing nothing; finish able to read the source.
 
-Fourteen parts, each finishable in a sitting. **Read them in order.** Part N assumes parts
+Fifteen parts, each finishable in a sitting. **Read them in order.** Part N assumes parts
 1 to N-1 and nothing else, so skipping ahead will cost you more time than it saves.
 
 | part | one-sentence purpose |
@@ -22,6 +22,7 @@ Fourteen parts, each finishable in a sitting. **Read them in order.** Part N ass
 | [12](12-residual-to-score.md) | Turning reconstruction error into a decision |
 | [13](13-end-to-end.md) | One scene, one anomaly, start to finish |
 | [14](14-material-and-export.md) | Naming the material and getting it out |
+| [15](15-naming-the-family.md) | Naming the material family of a pixel the object only partly fills |
 
 ## How to use this
 
@@ -55,6 +56,7 @@ relying on them:
 | 08, 09 | detector defaults - windows, regularisation, component counts |
 | 10 | parameter counts, checkpoint validation losses |
 | 12 | scoring defaults and threshold percentiles |
+| 15 | family counts in the library, `family_alpha`, the ~2.5 ms per pixel cost, PRISMA results |
 
 Structural claims - what a vendable is, why masking works the way it does - will outlive
 the numbers.

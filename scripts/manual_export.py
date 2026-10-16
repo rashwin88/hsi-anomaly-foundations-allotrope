@@ -184,7 +184,8 @@ def main():
     p.add_argument("--out", default="/tmp",
                    help="Output directory (default /tmp).")
     p.add_argument("--confidence-deg", type=float, default=15.0,
-                   help="SAM-angle threshold for the `conf` shapefile column.")
+                   help="SAM-angle threshold for the `conf` shapefile column "
+                        "(SAM-only actions; family-matched ones carry `named`).")
     args = p.parse_args()
 
     if args.list:

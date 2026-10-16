@@ -1,10 +1,17 @@
-"""Action type: ``spectral_library_match`` — USGS splib07 SAM matching.
+"""Action type: ``spectral_library_match`` — material family + USGS splib07 SAM.
 
-Runs Spectral Angle Mapper against a sensor-specific USGS splib07 cache
-to identify materials for anomaly pixels (or the whole keep-mask, when
-``mode='all_kept'``).
+Names the material of each anomaly pixel two ways:
 
-Pipeline (worker):
+* **Family matching (the answer).** Calibrated Simplex ACE against the family library
+  (``data/family_library``, baked into the worker image at ``/srv/family_library``) names a
+  family — roofing, metal, plastic, … — with a calibrated confidence, and only when that
+  confidence clears p* = 1 - family_alpha / F. See ``docs/lld/spectral-family-match.md``.
+  Skipped in ``mode='all_kept'``: it costs ~2.5 ms per pixel, ~40 min on a full PRISMA scene.
+* **SAM (kept alongside).** Spectral Angle Mapper against a sensor-specific USGS splib07
+  cache, top-K single spectra per pixel. Kept until the family result has been checked on
+  more product scenes; its outputs are unchanged.
+
+SAM pipeline (worker):
 
   1. Resolve the upstream ``anomaly_detection_prep`` output. Read its
      committed binary anomaly mask.
@@ -20,6 +27,10 @@ Pipeline (worker):
      library indices + n_bands_used per pixel.
   6. Write outputs: matches.parquet (long table), match_map.tif
      (top-1 library index raster), histogram.json, summary.json.
+
+Family matching then writes its own ``family_*`` files beside them, on the raw (unsmoothed)
+cube, and a ``family`` block in summary.json. A family failure is recorded there, not raised:
+the SAM result still lands.
 
 This module is api-side only — the heavy lifting lives in
 ``_spectral_library_match_run.py`` (worker process).
@@ -125,7 +136,19 @@ class SpectralLibraryMatchConfig(BaseModel):
         description=(
             "``anomaly_pixels``: match only pixels with anomaly_mask==1 "
             "(fast, default). ``all_kept``: match every valid pixel in "
-            "the keep_mask (full-scene material map; minutes of compute)."
+            "the keep_mask (full-scene material map; minutes of compute). "
+            "Family matching runs in ``anomaly_pixels`` mode only."
+        ),
+    )
+
+    family_alpha: float = Field(
+        default=0.05,
+        gt=0.0,
+        le=0.5,
+        description=(
+            "Family matching: the share of ordinary background pixels you accept being "
+            "given a man-made name. Sets the confidence bar p* = 1 - alpha / F "
+            "(F = man-made families). 0.05 gives p* = 0.995 with the shipped library."
         ),
     )
 
@@ -141,6 +164,7 @@ _DEFAULT_HSI: dict[str, Any] = {
     "sg_window_length": 7,
     "sg_polyorder": 2,
     "mode": "anomaly_pixels",
+    "family_alpha": 0.05,
 }
 
 
@@ -149,13 +173,21 @@ _DEFAULT_HSI: dict[str, Any] = {
 
 META = ActionTypeMeta(
     type=KIND,
-    label="Spectral library match (USGS splib07)",
+    label="Spectral match (material family + USGS splib07)",
     short_description=(
-        "Identify materials at anomaly pixels by SAM-matching against the "
-        "USGS splib07 reference library."
+        "Name the likely material family of each anomaly pixel (calibrated "
+        "Simplex ACE), with SAM against USGS splib07 alongside."
     ),
     description=(
-        "Takes a committed ``anomaly_detection_prep`` mask and asks: "
+        "**Material family.** Each anomaly pixel is compared with the ring of "
+        "ordinary pixels around it, in whitened space, against a family library "
+        "(metal, plastic, roofing, paint, …). A family is named only when its "
+        "score beats the scene's own ordinary pixels by the bar p* = 1 - "
+        "``family_alpha`` / F; otherwise the pixel reads \"man-made, type "
+        "unconfirmed\" or its natural family. This is a naming step, not a "
+        "false-alarm filter: false alarms are unusual too, so they get "
+        "man-made names more often than ordinary pixels do.\n\n"
+        "**SAM (kept alongside).** Takes a committed ``anomaly_detection_prep`` mask and asks: "
         "*what material is each anomaly pixel?* For each pixel we pull "
         "its spectrum from the **native onboarding cube** (un-resampled, "
         "so narrow absorption features survive), Savitzky-Golay smooth "
@@ -292,11 +324,65 @@ META = ActionTypeMeta(
             filename="histogram.json",
         ),
         ActionOutputSpec(
+            key="family_matches",
+            label="Family matches (parquet)",
+            description=(
+                "One row per anomaly pixel: row, col, scored, family, family_group, "
+                "family_code, confidence, answered, best_entry. best_entry is the "
+                "closest library spectrum inside the family — a hint, not the answer."
+            ),
+            artifact_type="pickle",
+            filename="family_matches.parquet",
+        ),
+        ActionOutputSpec(
+            key="family_map",
+            label="Material family map (raster)",
+            description=(
+                "Int16 raster of family codes: ``-2`` not in the mask, ``-1`` not "
+                "scored, ``0`` man-made type unconfirmed, ``1..F`` a family. "
+                "``family_legend.json`` maps code → family, group, colour."
+            ),
+            artifact_type="raster",
+            filename="family_map.tif",
+        ),
+        ActionOutputSpec(
+            key="family_map_preview",
+            label="Family map preview",
+            description="Family colours on a dark background, one colour per family.",
+            artifact_type="image",
+            filename="family_map.png",
+        ),
+        ActionOutputSpec(
+            key="family_map_overlay",
+            label="Family map overlay (transparent)",
+            description="Same colours, transparent off the mask, for compositing on rgb.png.",
+            artifact_type="image",
+            filename="family_map_overlay.png",
+        ),
+        ActionOutputSpec(
+            key="family_legend",
+            label="Family legend",
+            description="JSON: family code → {family, group, colour}, plus p* and alpha.",
+            artifact_type="json",
+            filename="family_legend.json",
+        ),
+        ActionOutputSpec(
+            key="family_library_refl",
+            label="Family library snapshot",
+            description=(
+                "NPZ of the family library resampled to this scene's bands (names, refl, "
+                "valid, wavelengths). Powers the viewer's best-entry hint curve."
+            ),
+            artifact_type="pickle",
+            filename="family_library_refl.npz",
+        ),
+        ActionOutputSpec(
             key="summary",
             label="Summary",
             description=(
                 "Cache used, sensor settings, pixel counts, match "
-                "counts, timing breakdown, settings echo."
+                "counts, timing breakdown, settings echo. A ``family`` "
+                "block carries alpha, p*, family counts, or the error."
             ),
             artifact_type="json",
             filename="summary.json",

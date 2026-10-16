@@ -101,6 +101,34 @@ def test_ordinary_pixels_get_a_manmade_name_at_most_alpha(grid_library):
     assert ((res.group == "manmade") & res.answered).mean() <= 0.05 + 0.02   # 400 px: binomial slack
 
 
+def test_pixels_with_nodata_on_a_kept_band_are_not_scored(grid_library):
+    rng = np.random.default_rng(4)
+    cube = _scene(grid_library, rng)
+    B, H, W = cube.shape
+    r, c = np.divmod(rng.choice(H * W, 400, replace=False), W)
+    validity = np.ones((B, H, W), np.uint8)
+    validity[50, r[:2], c[:2]] = 0                         # 0.5 % of pixels: band 50 still kept
+    cube[50, r[:2], c[:2]] = -9999.0                       # AVIRIS-NG nodata fill
+    res = match_families(cube, validity, np.zeros((H, W), bool), r, c, grid_library)
+    assert res.bands_used[50]
+    assert res.scored.tolist() == [False, False] + [True] * 398
+    assert res.family[:2].tolist() == ["", ""] and not res.answered[:2].any()
+    assert (res.family[2:] != "").all()
+    assert len(res.family_names) == len(res.family_groups) >= 2
+
+
+def test_cache_builds_for_a_vendable_with_null_fwhm(tmp_path):
+    from types import SimpleNamespace
+    from app.spectral_match.family_match import ensure_family_cache
+    wl = np.arange(450.0, 2400.0, 10.0)
+    fwhm = [10.0] * len(wl)
+    fwhm[3] = None                                          # PRISMA ships some null FWHMs
+    v = SimpleNamespace(band_cw_order=wl.tolist(), band_fwhm_order=fwhm,
+                        band_validity_by_position=[1] * len(wl))
+    ents = ensure_family_cache(v, "test", cache_dir=str(tmp_path), bundle_dir=str(BUNDLE))
+    assert ents and not any(e.valid[3] for e in ents)      # the null-FWHM band is invalid, not a crash
+
+
 def test_held_out_roofing_target_is_named_roofing(grid_library):
     rng = np.random.default_rng(3)
     cube = _scene(grid_library, rng)

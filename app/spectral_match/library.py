@@ -371,7 +371,9 @@ def build_cache_for_vendable(
         return {"status": "skipped:no_band_validity"}
 
     target_wl = np.asarray(band_cw, dtype=np.float64)
-    target_fwhm = np.asarray(band_fwhm, dtype=np.float64)
+    # PRISMA carries a null FWHM on some bands. None -> NaN, as the spectral_library_match
+    # worker does when it recomputes this cache's key, so both hash the same array.
+    target_fwhm = np.asarray([np.nan if v is None else v for v in band_fwhm], dtype=np.float64)
     bbl = np.asarray(band_validity, dtype=np.uint8)
 
     slim_path = Path(slim_bundle_dir)

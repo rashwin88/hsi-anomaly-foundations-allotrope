@@ -158,7 +158,9 @@ def export_action(
         le=90.0,
         description=(
             "SAM angle (degrees) below which a hyperspectral match is "
-            "flagged as `confident`. Ignored for thermal exports."
+            "flagged as `confident`. Only for SAM-only actions (bundle "
+            "schema /1); family-matched actions carry `named` instead. "
+            "Ignored for thermal exports."
         ),
     ),
     _claims: Claims = Depends(current_user_claims),

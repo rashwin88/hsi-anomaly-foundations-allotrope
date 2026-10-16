@@ -20,7 +20,8 @@ band_filter_apply    → filtered_vendable.pkl (+ nearest-valid pixel fill)
  → scene_segmentation | cloud_mask   → keep_mask.tif
    → anomaly_scoring                 → anomaly_score.{tif,png}, ROC/metrics
      → anomaly_detection_prep        → composite_score.tif + anomaly_mask.tif (human threshold)
-       → spectral_library_match      → matches.parquet + match_map.tif   [hyperspectral]
+       → spectral_library_match      → family_matches.parquet + family_map.tif (the answer),
+                                       matches.parquet + match_map.tif (SAM)   [hyperspectral]
          → POST /actions/{id}/export → submission bundle zip
 ```
 

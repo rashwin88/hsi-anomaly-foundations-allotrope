@@ -213,15 +213,5 @@ and the library is not exhaustive. It is a ranked hypothesis, not an identificat
 
 ---
 
-## You have finished
-
-You can now read the source. Where to go next:
-
-- **`docs/01-orientation.md`** through **`docs/10-code-style.md`** - the reference docs
-- **`docs/lld/`** - low-level designs for individual subsystems
-- **`docs/09-known-issues.md`** - what is currently broken, and what to check before trusting
-  a green test run
-
-One habit worth keeping from this course: **when a comment and the code disagree, the code
-wins.** You met three such disagreements here - the regularisation default, the
-`MIN_VALID_FRACTION` comment, and the discarded `units` field. There will be more.
+**Next:** [part 15](15-naming-the-family.md) - why SAM usually names the grass around a small
+object, and the family matcher that now leads the answer.

@@ -174,7 +174,10 @@ Two limits matter at 30 m.
 - **The library has only 3 usable man-made spectra** (known issue 10).
 
 `app/spectral_match/family_match.py` with `data/family_library/` addresses both by naming
-material *families* with calibrated Simplex ACE. It is not yet wired into the action; see
+material *families* with calibrated Simplex ACE. Since 2026-10-16 the action runs it after
+SAM, on the raw cube, and it is the answer the viewer and the export lead with: "likely
+material: roofing" only above the bar p\* = 1 − `family_alpha` / F, otherwise "man-made, type
+unconfirmed" or the natural family. SAM's outputs are unchanged and still shown. See
 [`lld/spectral-family-match.md`](lld/spectral-family-match.md).
 
 ---

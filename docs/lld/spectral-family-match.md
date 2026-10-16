@@ -5,8 +5,9 @@ pixel in 30 m hyperspectral imagery, and say how confident that name is. The cur
 compares whole pixels with lab spectra. That rarely names a man-made material, because at 30 m
 a man-made object usually fills only part of a pixel.
 
-**Status.** The code and library are on branch `spectral_match_improv`, tested but **not yet
-wired into the `spectral_library_match` action**. The wiring is a planned product change; see
+**Status.** Wired into the `spectral_library_match` action since 2026-10-16. Family matching
+is the answer; SAM still runs alongside with its outputs unchanged, until the family result
+has been checked on more product scenes. See
 [Integrating into the pipeline](#7-integrating-into-the-pipeline).
 
 | What | Where |
@@ -15,7 +16,10 @@ wired into the `spectral_library_match` action**. The wiring is a planned produc
 | Library tags, pruning, band choice | `app/spectral_match/family_library.py` |
 | Family library (411 spectra, USGS + ECOSTRESS) | `data/family_library/` (provenance in `sources.md`) |
 | Library build script | `scripts/curate_family_library.py` |
-| Tests | `tests/test_spectral_match/test_family_match.py` |
+| Worker step | `backend/allotrope/action_types/_spectral_library_match_run.py` `_family_match` |
+| Export (bundle schema `/2`) | `app/spectral_match/export.py` |
+| Viewer | `frontend/src/components/ActionDetailPane.tsx` `SpectralLibraryMatchModal`, `FamilyVerdict` |
+| Tests | `tests/test_spectral_match/test_family_match.py`, `tests/test_backend/test_spectral_family_outputs.py` |
 | Worker image | `backend/Dockerfile.worker` copies the library to `/srv/family_library` |
 
 The experiments behind the numbers below were run on Google Colab, October 2026. Code, logs
@@ -212,7 +216,7 @@ The true fill of every coarse pixel comes from the same weights applied to the 4
   sd). Per-scene differences under ~8 points count as noise.
 - **Every number was reproduced on a fresh machine** before it was used as a baseline.
 
-### Unit tests (`tests/test_spectral_match/test_family_match.py`, 7 tests, all pass)
+### Unit tests (`tests/test_spectral_match/test_family_match.py`, 9 tests, all pass)
 
 - p\* arithmetic, including no man-made families.
 - The calibration percentile.
@@ -222,6 +226,14 @@ The true fill of every coarse pixel comes from the same weights applied to the 4
 - **End to end, with the shipped family library on the 165-band grid:**
   - ordinary pixels of a synthetic natural scene get a man-made name at most alpha;
   - a roofing target **held out of the library** is still named roofing.
+- A pixel with nodata on a kept band is not scored (gotcha 3).
+- The cache builds for a vendable with a null FWHM (PRISMA); that band becomes invalid.
+
+`tests/test_backend/test_spectral_family_outputs.py` (4 tests) covers the worker step and the
+export: the file set, parquet ↔ raster code agreement, the legend, `all_kept` skipped, a
+failure recorded rather than raised, bundle schema `/2`, and an unchanged `/1` bundle for a
+SAM-only action. It needs `sqlalchemy`, `pydantic-settings`, `pyarrow` and `geopandas`, and
+`PYTHONPATH=backend;.`.
 
 Run them with `python -m pytest tests/test_spectral_match -q` (about 16 s).
 
@@ -346,26 +358,86 @@ def common_band_mask(pixel_valid, lib, min_pixel_share=0.99, min_entry_share=0.9
 
 ## 7. Integrating into the pipeline
 
-In `backend/allotrope/action_types/_spectral_library_match_run.py`, after step 4 ("Pick
-pixels"). Imports stay inside `run()` (the lazy-import rule):
+Done 2026-10-16. The recipe first planned here added family columns to SAM's
+`matches.parquet`; it was built **additively** instead, so SAM's files, the actions already on
+disk, and their viewer and export keep working with no compatibility code.
 
-1. `entries = ensure_family_cache(vendable, ctx.sensor_type,
-   cache_dir=settings.splib07_cache_dir)`.
-2. `fam = match_families(cube, validity, anomaly_mask.astype(bool), rows, cols, entries,
-   alpha=cfg["family_alpha"])`. Pass the **unsmoothed** cube: the experiments did not smooth,
-   and the Savitzky–Golay step is the SAM path's.
-3. Add columns to `matches.parquet`:
-   - `family`, `family_group`, `family_confidence`, `family_answered`, `family_best_entry`.
+**Worker** — `_spectral_library_match_run._family_match`, step 8, after SAM has written its
+outputs. Imports stay inside the function (the lazy-import rule).
+- `ensure_family_cache(vendable, ctx.sensor_type, cache_dir=settings.splib07_cache_dir)`
+  builds the family cache on first use; the worker mounts that volume read-write.
+- `match_families` on the **raw** cube: the experiments did not smooth; Savitzky–Golay is
+  SAM's.
+- Runs in `mode='anomaly_pixels'` only. `all_kept` would be ~1 M pixels on PRISMA, about
+  40 min at ~2.5 ms each, so it records `skipped`.
+- Never raises. A failure lands in `summary.json` as `family.status = "failed"` with the
+  error; SAM's result still makes a complete action.
 
-   Add `alpha`, `p_star` and `n_manmade_families` to `summary.json`.
-4. Add `family_alpha: float = 0.05` (and an on/off switch, if wanted) to
-   `SpectralLibraryMatchConfig` in `spectral_library_match.py`. `META` drives the UI picker,
-   so no frontend code changes there.
-5. In the viewer, show "likely material: <family> (confidence)" when `family_answered`.
-   Otherwise show "man-made, type unconfirmed" or the natural family.
-6. Keep SAM's outputs as they are until the family result has been checked on a few product
-   scenes.
-7. Verify that the worker starts: `docker compose ps -a` must show `running`.
+**Outputs** (beside SAM's, which are unchanged):
+
+| File | Contents |
+|---|---|
+| `family_matches.parquet` | one row per anomaly pixel: `row, col, scored, family, family_group, family_code, confidence, answered, best_entry` |
+| `family_map.tif` | int16 family codes, nodata `-2` |
+| `family_map.png` / `family_map_overlay.png` | family colours on dark / transparent, the overlay with a one-pixel halo |
+| `family_legend.json` | `alpha`, `p_star`, `n_manmade_families`, `codes` (code → family, group, label, colour), `library` (ids and names in npz row order) |
+| `family_library_refl.npz` | the family library on the scene's bands: `refl`, `valid`, `wavelengths`; numeric only, because the browser's npz reader is |
+| `summary.json` → `family` | `status`, alpha, p\*, families, scored / not-scored / named / unconfirmed / natural counts, per-family counts, timing |
+
+**Family codes:** `-2` not in the mask, `-1` not scored, `0` man-made type unconfirmed (best
+family man-made, below p\*), `1..F` the family. F indexes the sorted `families` list plus one.
+A natural best family keeps its code even below p\*, as the viewer rule below wants.
+
+**Config:** `family_alpha` (default 0.05, 0 < alpha ≤ 0.5). Configs stored before it existed
+run with the default.
+
+**Viewer:**
+- **Two linked maps:**
+  - **Left:** RGB under the family-colour overlay.
+  - **Right:** the binary anomaly mask. White is an anomaly pixel; slate is one with no
+    result.
+- **Shared pan/zoom:** one transform drives both maps. Hover and click work on either.
+- **The rail:**
+  - The verdict: "Likely material: X" when the pixel cleared p\*, "Man-made, type
+    unconfirmed" below it, or "Natural: X".
+  - The best entry as a hint curve on the spectrum chart.
+  - Per-family counts.
+  - SAM's top-K and histogram as before.
+- **Wording:** it carries the naming-not-filtering caveat from section 5.
+- **Old actions:** an action without a `family` block renders as it did.
+
+**Export:** a family action's bundle is schema `allotrope-export-hyper/2`.
+- **Raster:** family codes.
+- **Points:** one per anomaly pixel.
+- **Columns:** DBF `family, group, fconf, named, best_ent`, then SAM's `mat1/scr1 … mat3/scr3`.
+- **Legends:** `hyper_sam_legend.json` beside the family legend.
+- **Manifest:** alpha, p\* and family counts.
+- **SAM-only actions** still export schema `/1`, unchanged.
+
+**Measured in the worker image (2026-10-16).** These are real scenes from the local stack,
+run read-only. Times and peak memory are for the family step alone:
+
+| Scene | Cube | Anomaly px | Not scored | Named man-made / unconfirmed / natural | Time | Peak RSS |
+|---|---|---|---|---|---|---|
+| PRISMA | 239 x 1205 x 1212 | 3,638 | 67 | 195 / 1,257 / 2,119 | 4.8 s | 2.5 GB |
+| PRISMA | 239 x 1214 x 1322 | 25,000 | 355 | 474 / 8,461 / 15,710 | 15.3 s | 4.9 GB* |
+| EnMAP L2A | 224 x 1179 x 1398 | 4,250 | 1,248 | 5 / 2,252 / 745 | 7.6 s | 3.3 GB* |
+| AVIRIS-NG | 425 x 4118 x 691 | 200,389 | 0 | 23,395 / 109,987 / 67,007 | 85 s | 7.1 GB |
+
+\* Measured before bands were read one at a time and pixels scored in chunks
+(`SCORE_CHUNK_PX`). That change halved the peak on the other two scenes: AVIRIS-NG went from
+14.2 to 7.1 GB, and PRISMA from 4.1 to 2.5 GB.
+
+The EnMAP scene's 29 % not scored is the nodata guard working. That scene is very bright: the
+median valid reflectance is 0.96, and its anomaly pixels carry 5 to 18 scattered invalid
+(saturated) bands each. They are left unnamed rather than scored on fill values.
+
+**Still open:**
+- Check the family result on more product scenes, then decide whether SAM stays.
+- The local deployment's AVIRIS-NG vendables pickle their cubes as `{"__memmap__": ...}`
+  references. No code in this repo reopens them, so every action fails on those scenes. That
+  includes SAM. It is a mismatch between the deployed images and this repo, predating this
+  change.
 
 ## Gotchas
 
@@ -390,8 +462,12 @@ pixels"). Imports stay inside `run()` (the lazy-import rule):
 6. **The product's Gaussian resampler silently drops (NaN) a 10 nm target band with fewer than
    3 source samples.** Fine for 1 nm library spectra. It dropped 42 of 165 bands when
    resampling ~10 nm AVIRIS imagery, so check any image resampling of ~10 nm sensors.
-7. **Runtime.** About 45 s per PRISMA scene for ~18,000 candidates, CPU only. Most of it is
-   the per-pixel non-negative least squares, about 10 man-made families per pixel.
+7. **Runtime.**
+   - **The experiments:** about 45 s per PRISMA scene for ~18,000 candidates, CPU only.
+   - **In the worker:** 5–85 s, 0.4–1.3 ms per pixel, plus a fixed pass over the bands
+     (section 7 table).
+   - **Where the time goes:** the per-pixel non-negative least squares (about 10 man-made
+     families per pixel), and two uniform filters per band for the ring means.
 8. **Small evidence base on real targets.** Gudalur has 5 sheets; the PRISMA scenes have ~395
    objects in 4 scenes, with mixed results. Treat the gains as directional until more
    labelled 30 m targets are available.
