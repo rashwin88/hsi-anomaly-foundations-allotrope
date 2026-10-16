@@ -1,6 +1,6 @@
 # FT03 - Joint reconstruction + segmentation
 
-**Status:** revised and launched 2026-10-17 on the user's go ("Go"); prepared 2026-10-16 with one-sensor batches,
+**Status:** done 2026-10-16 19:49 - 22:48 UTC (3.0 h, ~$8), code ea4652c, exit 0, best.pt = epoch 10. Revised and launched on the user's go ("Go"); prepared 2026-10-16 with one-sensor batches,
 FT02 init and seg_weight 1.0 - all three changed, below.
 
 ## Question
@@ -26,4 +26,32 @@ FT02c; detection unchanged within noise (the bench has not separated any stage-2
 3. Detection not below FT02c beyond noise: PRISMA bench (all measures) and the implanted-target benchmark by tier.
 
 ## Results
+
+Per epoch (EnMAP test IoU; per-sensor validation SAM deg):
+
+| epoch | water | cloud | thin cloud | shadow | SAM EnMAP / PRISMA / AVIRIS-NG |
+|---|---|---|---|---|---|
+| 1 | 0.819 | 0.785 | 0.063 | 0.133 | 4.03 / 4.49 / 6.27 |
+| 4 | 0.833 | 0.811 | 0.059 | 0.174 | 3.96 / 4.30 / 5.80 |
+| 7 | 0.838 | 0.802 | 0.102 | 0.185 | 3.94 / 4.21 / 5.51 |
+| **10 (best.pt)** | **0.841** | **0.815** | 0.108 | 0.205 | **3.92 / 4.21 / 5.48** |
+
+Criterion 1 (water / cloud >= 0.82 / 0.80): **met**. Criterion 2 (SAM within 0.1 deg of FT02c 3.93 / 4.21 / 5.41):
+**met** (AVIRIS-NG +0.07; it was +0.46 at epoch 6 and recovered). Snow 0.0 throughout (1 test tile).
+
+Criterion 3, detection, residual Mahalanobis - **met** (unchanged from FT02c):
+
+| | implant bench: all / easy / medium caught top 1% | easy pAUC | medium pAUC | PRISMA bench: pAUC <= 1% | caught top 1% / 0.1% |
+|---|---|---|---|---|---|
+| FT02c ep10 | 27% / 50% / 21% | 0.371 | 0.124 | 0.159 | 413 / 131 |
+| **FT03 ep10** | 27% / 50% / 21% | 0.371 | 0.121 | 0.158 | 413 / 130 |
+
+**Verdict: passed all three.** FT03 is the stage-3 model: the segmentation head improved on the frozen probe (water
+0.841, cloud 0.815) while reconstruction and detection held.
+
 ## Observations
+
+- Joint training changed detection by nothing measurable, as expected with seg_weight 0.1: the head learned on top of
+  an encoder that kept reconstructing as before. The head's value comes in stage 5 - masks for `scene_segmentation`
+  and class-aware scoring - not from joint training lifting detection by itself.
+- Thin cloud rose 0.06 -> 0.11 and shadow 0.13 -> 0.21 as the encoder adapted; both remain low (label quality, rarity).

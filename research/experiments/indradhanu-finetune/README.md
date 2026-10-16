@@ -15,7 +15,7 @@ are written in its README before launch and not moved afterwards.
 | FT02 | 2 | adapt | reconstruction on all three sensors, one sensor per batch | g6e.2xlarge (kept) | 4.25 | ~$12 | bench 0.855 < 0.861, **not met** | reconstruction better on all three; combined 0.706 -> 0.824; per-sensor see-saw under investigation |
 | FT02b | 2b | adapt, mixed batches | FT02 ep8 continued, every batch all three sensors | g6e.2xlarge (kept) | 2.2 | ~$6 | bench 0.856 < 0.861, not met | see-saw gone; SAM 3.99 / 4.37 / 5.57; bench measures tie v0.2.0 |
 | FT02c | 2c | adapt, mixed + edge term | FT02b ep9 continued, gradient L1 weight 1.0 | g6e.2xlarge (kept) | 2.2 | ~$6 | edge FP share unchanged, not met | edge term moved 1%: decoder bottleneck; SAM 3.93 / 4.21 / 5.41 |
-| FT03 | 3 | joint | reconstruction + segmentation | g6e.2xlarge (kept) | - | - | - | not started |
+| FT03 | 3 | joint, mixed batches | FT02c ep10 + FT01 head, seg_weight 0.1 | g6e.2xlarge (kept) | 3.0 | ~$8 | IoU 0.841 / 0.815 >= FT01, SAM held, detection held: **passed** | stage-3 model; head ready for stage 5 |
 
 ## Stage 0 records
 
