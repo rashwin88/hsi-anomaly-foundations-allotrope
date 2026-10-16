@@ -186,6 +186,14 @@ class SpectralStemFinetuneConfig(SpectralStemMAEConfig):
                                            "scene_wv (g/cm2 x 1000; 750 = 0.75 g/cm2, from the 2026-10-16 label QA).")
     cirrus_min_level: int = Field(default=2, ge=1, le=3)
     finetune_metrics_csv: str | None = Field(default=None, description="Per-epoch per-sensor validation and per-class IoU.")
+    mixed_batches: bool = Field(default=False, description="adapt: every training batch holds every source, "
+                                "share x batch_size samples each (at least 1), instead of one source per batch.")
+
+    @model_validator(mode="after")
+    def _mixed_batches_in_adapt_only(self):
+        if self.mixed_batches and self.mode != "adapt":
+            raise ValueError("mixed_batches is implemented for mode 'adapt' only")
+        return self
 
 
 class SpectralCompressorConfig(BaseModel):

@@ -8,7 +8,7 @@ import pytest
 import torch
 
 from app.foundation_models.components.spectral_stem_seg_former_mae import SpectralStemSegFormerMAE
-from app.foundation_models.trainers.finetune_trainer import _MixedLoader, prepare_sample
+from app.foundation_models.trainers.finetune_trainer import _AllSourcesLoader, _MixedLoader, prepare_sample
 from app.utils.segmentation.targets import IoUTally, LabelPolicy, enmap_targets, masked_bce_dice
 
 WL = torch.linspace(420, 2440, 202)
@@ -109,3 +109,33 @@ def test_mixed_loader_tags_sources_follows_shares_and_restarts():
     names = [next(it)["_source"] for _ in range(400)]
     share_a = names.count("a") / len(names)
     assert 0.65 < share_a < 0.85 and set(names) == {"a", "b"}             # endless: both restart when exhausted
+
+
+def test_forward_mixed_matches_forward_per_group():
+    """In eval mode (stored BatchNorm statistics) a mixed pass equals one forward per band list."""
+    torch.manual_seed(0)
+    m = SpectralStemSegFormerMAE("reduced_attention", *STATS, **SMALL).eval()
+    a_wl, b_wl = WL[::2], WL[1::3] + 1.5                       # two different band lists
+    a, b = torch.rand(2, len(a_wl), 64, 64) * 0.3, torch.rand(1, len(b_wl), 64, 64) * 0.3
+    groups = [(a, a_wl, None, None, None), (b, b_wl, None, None, WL)]
+    with torch.no_grad():
+        out_a, out_b = m.forward_mixed(groups)
+        assert torch.allclose(out_a, m(a, a_wl), atol=1e-5)
+        assert torch.allclose(out_b, m(b, b_wl, out_wavelengths_nm=WL), atol=1e-5)
+    assert out_b.shape == (1, len(WL), 64, 64)
+
+
+def test_all_sources_loader_puts_every_source_in_every_batch_and_restarts():
+    it = iter(_AllSourcesLoader({"a": [{"k": 1}, {"k": 2}], "b": [{"k": 9}]}))
+    batches = [next(it) for _ in range(3)]
+    assert all([name for name, _ in b["_groups"]] == ["a", "b"] for b in batches)
+    assert [b["_groups"][0][1]["k"] for b in batches] == [1, 2, 1]       # a restarts after its 2 batches
+    assert [b["_groups"][1][1]["k"] for b in batches] == [9, 9, 9]
+
+
+def test_mixed_batches_only_in_adapt():
+    from app.models.training.training_config import SpectralStemFinetuneConfig
+    src = [{"name": "enmap", "train_dir": "t", "test_dir": "v", "share": 1.0}]
+    assert SpectralStemFinetuneConfig(sources=src, mode="adapt", mixed_batches=True).mixed_batches
+    with pytest.raises(ValueError):
+        SpectralStemFinetuneConfig(sources=src, mode="joint", mixed_batches=True)

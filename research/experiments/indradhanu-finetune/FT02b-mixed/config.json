@@ -1,0 +1,131 @@
+{
+  "_description": "FT02b: FT02 continued with mixed-sensor batches (every batch EnMAP 3 / PRISMA 3 / AVIRIS-NG 2, x4 accumulation), from FT02 epoch 8. Everything else as FT02. 2026-10-16.",
+  "foundation_model_name": "spectral_stem_finetune",
+  "version": "0.5.0",
+  "device": "cuda",
+  "model_config": {
+    "model_type": "spectral_stem_finetune",
+    "stem": "reduced_attention",
+    "bands": 202,
+    "compressed_channels": 32,
+    "token_dim": 32,
+    "attention_heads": 4,
+    "gate_hidden": 32,
+    "embed_dims": [
+      32,
+      64,
+      160,
+      256
+    ],
+    "num_heads": [
+      2,
+      2,
+      5,
+      8
+    ],
+    "reduction_ratios": [
+      8,
+      4,
+      2,
+      1
+    ],
+    "num_blocks": [
+      2,
+      2,
+      2,
+      2
+    ],
+    "decoder_dim": 256,
+    "expansion_ratio": 4,
+    "drop_rate": 0.4,
+    "mask_ratio": 0.65,
+    "trim_fraction": 0.0,
+    "sam_weight": 0.5,
+    "sam_ramp_epochs": 10,
+    "erosion_kernel_size": 1,
+    "metrics_csv": "/opt/dlami/nvme/runs/FT02b-mixed/metrics.csv",
+    "amp_bf16": true,
+    "early_stop_patience": null,
+    "early_stop_min_delta": 0.01,
+    "early_stop_min_epochs": 20,
+    "checkpoint_s3_uri": "s3://allotrope-training-data-prod-india/experiments/indradhanu-finetune/FT02b-mixed/checkpoints/",
+    "auto_resume": true,
+    "bin_nm": 40.0,
+    "band_weighting": "width",
+    "band_augment_prob": 0.8,
+    "band_jitter_nm": 3.0,
+    "mode": "adapt",
+    "sources": [
+      {
+        "name": "enmap",
+        "train_dir": "/opt/dlami/nvme/ft/enmap/train",
+        "test_dir": "/opt/dlami/nvme/ft/enmap/test",
+        "share": 0.4,
+        "band_list_path": "/opt/dlami/nvme/ft/band_lists/enmap_224.json",
+        "labels": "enmap",
+        "skip_scenes_path": "/opt/dlami/nvme/ft/band_lists/enmap_drop_duplicate_scenes.json"
+      },
+      {
+        "name": "prisma",
+        "train_dir": "/opt/dlami/nvme/ft/prisma/train",
+        "test_dir": "/opt/dlami/nvme/ft/prisma/test",
+        "share": 0.35
+      },
+      {
+        "name": "aviris_ng",
+        "train_dir": "/opt/dlami/nvme/ft/aviris_ng/train",
+        "test_dir": "/opt/dlami/nvme/ft/aviris_ng/test",
+        "share": 0.25,
+        "band_list_path": "/opt/dlami/nvme/ft/band_lists/aviris_ng_372.json"
+      }
+    ],
+    "init_from": "s3://allotrope-training-data-prod-india/experiments/indradhanu-finetune/FT02-adapt/checkpoints/best.pt",
+    "seg_classes": 5,
+    "seg_decoder_dim": 128,
+    "seg_weight": 1.0,
+    "plateau_elevation_m": 3500.0,
+    "low_water_vapour": 750.0,
+    "cirrus_min_level": 2,
+    "finetune_metrics_csv": "/opt/dlami/nvme/runs/FT02b-mixed/finetune_metrics.csv",
+    "mixed_batches": true
+  },
+  "data": {
+    "num_epochs": 10,
+    "data_provider": "spectralearth",
+    "train_samples_per_epoch": {
+      "128": 30000
+    },
+    "test_samples_per_epoch": {
+      "128": 5000
+    },
+    "shard_key_template": "unused/{split}/",
+    "stage": "ft-v1",
+    "bucket_name": "allotrope-training-data-prod-india",
+    "region_name": "ap-south-1",
+    "batch_size": 8,
+    "gradient_accumulation_steps": 4,
+    "num_workers": 6,
+    "shardshuffle": 100,
+    "pixel_stats_path": null
+  },
+  "learning_rate": 0.0001,
+  "lr_schedule": {
+    "scheduler_type": "cosine",
+    "warmup_epochs": 1,
+    "min_lr": 1e-06,
+    "step_size": 10,
+    "step_gamma": 0.5
+  },
+  "checkpoint": {
+    "checkpoint_dir": "/opt/dlami/nvme/runs/FT02b-mixed/ckpt",
+    "save_every_n_epochs": 1,
+    "keep_top_k": 2
+  },
+  "hot_storage": {
+    "enabled": true,
+    "local_cache_dir": "/opt/dlami/nvme/ft",
+    "train_shards_per_size": 1,
+    "test_shards_per_size": 1,
+    "skip_sync_if_exists": true
+  }
+}

@@ -42,7 +42,7 @@ import webdataset as wds
 from app.foundation_models.components.spectral_stem_seg_former_mae import SpectralStemSegFormerMAE
 from app.foundation_models.trainers.hyperspectral_segformer_mae_trainer import MIN_VALID_PIXEL_FRACTION
 from app.foundation_models.trainers.spectral_stem_mae_trainer import (
-    NODATA, SpectralStemMAETrainer, align_sample)
+    NODATA, SpectralStemMAETrainer, TokenMasking, align_sample, sample_band_subset)
 from app.utils.segmentation.targets import CLASSES, IoUTally, LabelPolicy, enmap_targets, masked_bce_dice
 
 logger = logging.getLogger("FinetuneTrainer")
@@ -88,6 +88,27 @@ class _MixedLoader:
                 batch = next(self.iters[name])
             batch["_source"] = name
             yield batch
+
+
+class _AllSourcesLoader:
+    """Endless mixed batches: one sub-batch from every loader per step, as {"_groups": [(name, batch), ...]}."""
+
+    def __init__(self, loaders: dict):
+        self.loaders, self.iters = loaders, {}
+
+    def __iter__(self):
+        while True:
+            groups = []
+            for name, loader in self.loaders.items():
+                if name not in self.iters:
+                    self.iters[name] = iter(loader)
+                try:
+                    batch = next(self.iters[name])
+                except StopIteration:                   # that sensor's shards are done: start them again
+                    self.iters[name] = iter(loader)
+                    batch = next(self.iters[name])
+                groups.append((name, batch))
+            yield {"_groups": groups}
 
 
 class _SequentialLoader:
@@ -157,7 +178,7 @@ class FinetuneTrainer(SpectralStemMAETrainer):
 
     # --- data ----------------------------------------------------------------------------------
 
-    def _source_loader(self, src, split: str):
+    def _source_loader(self, src, split: str, batch_size: int | None = None):
         from app.utils.band_alignment import load_band_list
         folder = Path(src.train_dir if split == "train" else src.test_dir)
         shards = sorted(folder.glob("*.tar"))
@@ -170,12 +191,18 @@ class FinetuneTrainer(SpectralStemMAETrainer):
         dataset = (wds.WebDataset(urls, shardshuffle=self.config.data.shardshuffle if split == "train" else False,
                                   handler=wds.warn_and_continue)
                    .decode(*self._sample_decoders()).select(functools.partial(keep_sample, skip=skip)).map(transform))
-        return torch.utils.data.DataLoader(dataset, batch_size=self.config.data.batch_size, num_workers=self.config.data.num_workers)
+        return torch.utils.data.DataLoader(dataset, batch_size=batch_size or self.config.data.batch_size,
+                                           num_workers=self.config.data.num_workers)
 
     def _train_with_hot_storage(self) -> None:
         cfg = self.config.model_config_
-        train = _MixedLoader({s.name: self._source_loader(s, "train") for s in cfg.sources},
-                             {s.name: s.share for s in cfg.sources}, seed=self.start_epoch)
+        if cfg.mixed_batches:                            # every batch holds every sensor, share x batch_size each
+            size = self.config.data.batch_size
+            train = _AllSourcesLoader({s.name: self._source_loader(s, "train", max(1, round(s.share * size)))
+                                       for s in cfg.sources})
+        else:
+            train = _MixedLoader({s.name: self._source_loader(s, "train") for s in cfg.sources},
+                                 {s.name: s.share for s in cfg.sources}, seed=self.start_epoch)
         test = _SequentialLoader({s.name: self._source_loader(s, "test") for s in cfg.sources})
         sizes = self.config.data.patch_sizes
         for epoch in range(self.start_epoch, self.config.data.num_epochs):
@@ -211,6 +238,8 @@ class FinetuneTrainer(SpectralStemMAETrainer):
 
     def compute_loss(self, batch: dict, model: nn.Module):
         cfg = self.config.model_config_
+        if "_groups" in batch:
+            return self._mixed_loss(batch["_groups"], model)
         wl = torch.as_tensor(batch["wavelengths.npy"])
         self._note_band_list(wl[0] if wl.dim() == 2 else wl)
         seg = self._seg_batch(batch) if cfg.mode in ("probe", "joint") else None
@@ -224,6 +253,47 @@ class FinetuneTrainer(SpectralStemMAETrainer):
             pixels, bv, w, t, k = seg
             loss = loss + cfg.seg_weight * masked_bce_dice(self._segment(pixels, bv, w), t, k)
         return loss, n
+
+    def _mixed_loss(self, groups: list, model: nn.Module):
+        """The parent's reconstruction loss for a mixed batch: per sensor, its own MAE mask and band-list
+        augmentation; one shared pass (forward_mixed); L1 + ramped SAM per sensor, weighted by its samples."""
+        cfg = self.config.model_config_
+        inputs, truth = [], []
+        for _, batch in groups:
+            wl = torch.as_tensor(batch["wavelengths.npy"])
+            self._note_band_list(wl[0] if wl.dim() == 2 else wl)
+            pixels, band_valid, wl, mask, n = self._keep_samples(*self._decode_batch(batch))
+            if n == 0:
+                continue
+            if wl.dim() != 1:
+                raise ValueError("mixed batches need one band list per source - set band_list_path")
+            keep_mask, pred_mask = self._build_prediction_mask(mask, cfg.mask_ratio)
+            x, wl_in, bv, out_wl = pixels, wl, band_valid, None
+            if cfg.band_augment_prob > 0 and torch.rand(()).item() < cfg.band_augment_prob:
+                idx = sample_band_subset(wl)
+                wl_in = wl[idx] + (torch.rand(len(idx), device=wl.device) * 2 - 1) * cfg.band_jitter_nm
+                x, bv, out_wl = pixels[:, idx], band_valid[:, idx], wl
+            loss_mask = (self._pred_mask_to_pixel_mask(pred_mask, *pixels.shape[2:])
+                         * TokenMasking.erode_mask(mask, kernel_size=cfg.erosion_kernel_size))
+            inputs.append((x, wl_in, bv, keep_mask, out_wl))
+            truth.append((pixels, band_valid, loss_mask, n))
+        if not inputs:
+            return torch.tensor(0.0, device=self.device, requires_grad=True), 0
+        bf16 = cfg.amp_bf16 and self.device.type == "cuda"
+        with torch.autocast("cuda", dtype=torch.bfloat16, enabled=bf16):
+            outs = model.forward_mixed(inputs)
+        total, kept = 0.0, 0
+        for x_hat, (pixels, band_valid, loss_mask, n) in zip(outs, truth):
+            if loss_mask.sum() == 0:
+                continue
+            l1, sam = self._masked_l1_sam(x_hat.float(), pixels, band_valid, loss_mask)
+            self._epoch_l1_sum += l1.item() * n
+            self._epoch_sam_sum += sam.item() * n
+            self._epoch_loss_samples += n
+            total, kept = total + (l1 + self._get_sam_weight(self._current_epoch) * sam) * n, kept + n
+        if not kept:
+            return torch.tensor(0.0, device=self.device, requires_grad=True), 0
+        return total / kept, kept
 
     def compute_validation_loss(self, batch: dict, model: nn.Module):
         cfg = self.config.model_config_

@@ -11,8 +11,8 @@ are written in its README before launch and not moved afterwards.
 
 | id | stage | mode | what | instance | hours | cost | gate result | verdict |
 |---|---|---|---|---|---|---|---|---|
-| FT01 | 1 | probe | segmentation head on frozen F001, EnMAP | g6e.2xlarge (kept) | - | - | - | not started |
-| FT02 | 2 | adapt | reconstruction on all three sensors | g6e.2xlarge (kept) | - | - | - | not started |
+| FT01 | 1 | probe | segmentation head on frozen F001 (epoch 109), EnMAP | g6e.2xlarge (kept) | 1.4 | ~$4 | water 0.82 >= 0.6, pass | water 0.82, cloud 0.80, shadow 0.20, thin cloud 0.09 (label-limited) |
+| FT02 | 2 | adapt | reconstruction on all three sensors | g6e.2xlarge (kept) | 4.25 | ~$12 | bench 0.855 < 0.861, **not met** | reconstruction better on all three; combined 0.706 -> 0.824; per-sensor see-saw under investigation |
 | FT03 | 3 | joint | reconstruction + segmentation | g6e.2xlarge (kept) | - | - | - | not started |
 
 ## Stage 0 records

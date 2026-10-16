@@ -119,11 +119,32 @@ class SpectralStemSegFormerMAE(nn.Module):
         """Reflectance (B, N, H, W) -> the encoder's four stage features (MAE token removal if keep_mask)."""
         if self.stem not in WAVELENGTH_STEMS and x.shape[1] != self.bands:
             raise ValueError(f"{self.stem} stem was built for {self.bands} bands, got {x.shape[1]}")
+        return self.encoder(self.norm(self._stem(x, wavelengths_nm, band_valid)), keep_mask=keep_mask)
+
+    def _stem(self, x: torch.Tensor, wavelengths_nm: torch.Tensor, band_valid: torch.Tensor | None) -> torch.Tensor:
+        """(B, N, H, W) reflectance -> (B, D, H, W): normalise, zero dead voxels, spectral stem."""
         z = self.stats.normalize(x, wavelengths_nm)
         if band_valid is not None:
             z = z.masked_fill(~band_valid, 0.0)
-        z = self.spectral_in(z, wavelengths_nm, band_valid) if self.stem in WAVELENGTH_STEMS else self.spectral_in(z)
-        return self.encoder(self.norm(z), keep_mask=keep_mask)
+        return self.spectral_in(z, wavelengths_nm, band_valid) if self.stem in WAVELENGTH_STEMS else self.spectral_in(z)
+
+    def forward_mixed(self, groups: list) -> list:
+        """One pass over samples with different band lists. groups: [(x, wavelengths_nm, band_valid, keep_mask,
+        out_wavelengths_nm)], each as in forward (keep_mask set for all groups or none; out may be None). Each group
+        has its own stem pass; the stem outputs share one batch through BatchNorm, encoder and decoder, so batch
+        statistics and gradients mix sensors. Returns each group's (B_g, M_g, H, W) reconstruction."""
+        if self.stem not in WAVELENGTH_STEMS:
+            raise ValueError(f"{self.stem} stem reads one band list only")
+        z = torch.cat([self._stem(x, wl, bv) for x, wl, bv, _, _ in groups])
+        keep = None if groups[0][3] is None else torch.cat([g[3] for g in groups])
+        z_hat = self.decoder(self.encoder(self.norm(z), keep_mask=keep))
+        out, start = [], 0
+        for x, wl, _, _, out_wl in groups:
+            wl_out = wl if out_wl is None else out_wl
+            part = self.spectral_out(z_hat[start:start + len(x)], wl_out)
+            out.append(self.stats.denormalize(part, wl_out))
+            start += len(x)
+        return out
 
     def segment(self, x: torch.Tensor, wavelengths_nm: torch.Tensor, band_valid: torch.Tensor | None = None) -> torch.Tensor:
         """(B, N, H, W) reflectance -> (B, seg_classes, H, W) logits, from the unmasked encoder."""
