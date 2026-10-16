@@ -8,7 +8,7 @@ import pytest
 import torch
 
 from app.foundation_models.components.spectral_stem_seg_former_mae import SpectralStemSegFormerMAE
-from app.foundation_models.trainers.finetune_trainer import _AllSourcesLoader, _MixedLoader, prepare_sample
+from app.foundation_models.trainers.finetune_trainer import _AllSourcesLoader, _MixedLoader, gradient_l1, prepare_sample
 from app.utils.segmentation.targets import IoUTally, LabelPolicy, enmap_targets, masked_bce_dice
 
 WL = torch.linspace(420, 2440, 202)
@@ -139,3 +139,21 @@ def test_mixed_batches_only_in_adapt():
     assert SpectralStemFinetuneConfig(sources=src, mode="adapt", mixed_batches=True).mixed_batches
     with pytest.raises(ValueError):
         SpectralStemFinetuneConfig(sources=src, mode="joint", mixed_batches=True)
+
+
+def test_gradient_l1_by_hand():
+    """x = 0, 0, 1 and x_hat = 0, 0.2, 0.9 along one row: differences (0, 1) vs (0.2, 0.7) -> |.| 0.2, 0.3."""
+    x, x_hat = torch.tensor([0.0, 0.0, 1.0]).view(1, 1, 1, 3), torch.tensor([0.0, 0.2, 0.9]).view(1, 1, 1, 3)
+    ones = torch.ones(1, 1, 1, 3)
+    assert gradient_l1(x_hat, x, ones.bool(), ones).item() == pytest.approx(0.25)
+    assert gradient_l1(x, x, ones.bool(), ones).item() == 0.0
+    assert gradient_l1(x_hat, x, ones.bool(), torch.tensor([1.0, 1.0, 0.0]).view(1, 1, 1, 3)).item() == pytest.approx(0.2)
+    assert gradient_l1(x_hat, x, torch.tensor([False, True, True]).view(1, 1, 1, 3), ones).item() == pytest.approx(0.3)
+
+
+def test_grad_loss_needs_mixed_batches():
+    from app.models.training.training_config import SpectralStemFinetuneConfig
+    src = [{"name": "enmap", "train_dir": "t", "test_dir": "v", "share": 1.0}]
+    with pytest.raises(ValueError):
+        SpectralStemFinetuneConfig(sources=src, mode="adapt", grad_loss_weight=1.0)
+    assert SpectralStemFinetuneConfig(sources=src, mode="adapt", mixed_batches=True, grad_loss_weight=1.0).grad_loss_weight == 1.0

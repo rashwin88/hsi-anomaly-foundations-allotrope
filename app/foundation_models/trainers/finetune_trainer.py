@@ -63,6 +63,18 @@ def prepare_sample(sample: dict, target_nm=None, labels: str | None = None, poli
     return sample
 
 
+def gradient_l1(x_hat: torch.Tensor, x: torch.Tensor, band_valid: torch.Tensor, loss_mask: torch.Tensor) -> torch.Tensor:
+    """Edge term: mean |d x_hat - d x| over horizontal and vertical neighbour differences, per band, on pairs whose
+    two pixels are both in loss_mask (B, 1, H, W) and valid in that band. Blur shows up as a gradient mismatch."""
+    total, count = x.new_zeros(()), x.new_zeros(())
+    for dim in (2, 3):
+        d_hat, d = torch.diff(x_hat, dim=dim), torch.diff(x, dim=dim)
+        ok = (torch.diff(loss_mask, dim=dim) == 0) * loss_mask.narrow(dim, 1, x.shape[dim] - 1)   # both in mask
+        ok = ok * band_valid.narrow(dim, 1, x.shape[dim] - 1) * band_valid.narrow(dim, 0, x.shape[dim] - 1)
+        total, count = total + ((d_hat - d).abs() * ok).sum(), count + ok.sum()
+    return total / count.clamp(min=1)
+
+
 def keep_sample(sample: dict, skip: frozenset = frozenset()) -> bool:
     """Loader-worker filter: drop samples of skipped scenes (meta.json scene_id)."""
     return not skip or (sample.get("meta.json") or {}).get("scene_id") not in skip
@@ -287,10 +299,15 @@ class FinetuneTrainer(SpectralStemMAETrainer):
             if loss_mask.sum() == 0:
                 continue
             l1, sam = self._masked_l1_sam(x_hat.float(), pixels, band_valid, loss_mask)
+            edge = 0.0
+            if cfg.grad_loss_weight:                     # kept out of train L1 / metrics.csv; own column
+                grad = gradient_l1(x_hat.float(), pixels, band_valid, loss_mask)
+                self._epoch_grad_sum, self._epoch_grad_n = self._epoch_grad_sum + grad.item() * n, self._epoch_grad_n + n
+                edge = cfg.grad_loss_weight * grad
             self._epoch_l1_sum += l1.item() * n
             self._epoch_sam_sum += sam.item() * n
             self._epoch_loss_samples += n
-            total, kept = total + (l1 + self._get_sam_weight(self._current_epoch) * sam) * n, kept + n
+            total, kept = total + (l1 + self._get_sam_weight(self._current_epoch) * sam + edge) * n, kept + n
         if not kept:
             return torch.tensor(0.0, device=self.device, requires_grad=True), 0
         return total / kept, kept
@@ -327,6 +344,7 @@ class FinetuneTrainer(SpectralStemMAETrainer):
 
     def _run_epoch(self, epoch, train_loaders, test_loaders):
         self._val_by_source, self._iou = {}, IoUTally()
+        self._epoch_grad_sum, self._epoch_grad_n = 0.0, 0
         try:
             super()._run_epoch(epoch, train_loaders, test_loaders)
         finally:                                         # also when early stopping ends the run
@@ -338,6 +356,8 @@ class FinetuneTrainer(SpectralStemMAETrainer):
             return
         deg = 180 / math.pi
         row = {"epoch": epoch + 1, "trained_wavelengths": len(self.model.trained_wl)}
+        if self.config.model_config_.grad_loss_weight:
+            row["train_grad_l1"] = round(self._epoch_grad_sum / max(self._epoch_grad_n, 1), 6)
         for s in self.config.model_config_.sources:
             l1, sam, n = self._val_by_source.get(s.name, [0.0, 0.0, 0])
             row[f"{s.name}_val_l1"] = round(l1 / n, 6) if n else ""

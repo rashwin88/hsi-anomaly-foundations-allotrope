@@ -189,10 +189,15 @@ class SpectralStemFinetuneConfig(SpectralStemMAEConfig):
     mixed_batches: bool = Field(default=False, description="adapt: every training batch holds every source, "
                                 "share x batch_size samples each (at least 1), instead of one source per batch.")
 
+    grad_loss_weight: float = Field(default=0.0, ge=0, description="mixed batches: weight of the edge term - L1 between "
+                                    "the spatial gradients of reconstruction and input on hidden pixels (0 = off).")
+
     @model_validator(mode="after")
     def _mixed_batches_in_adapt_only(self):
         if self.mixed_batches and self.mode != "adapt":
             raise ValueError("mixed_batches is implemented for mode 'adapt' only")
+        if self.grad_loss_weight and not self.mixed_batches:
+            raise ValueError("grad_loss_weight is implemented for mixed_batches only")
         return self
 
 
