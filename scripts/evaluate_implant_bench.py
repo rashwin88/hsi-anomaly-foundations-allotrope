@@ -12,7 +12,8 @@ pixel. Scores: residual Mahalanobis (default) and combined.
 
 Reported per model, overall and by tier (realised contrast), source (signature / material) and sensor: objects caught
 in the top 1% and 0.1% of scores (1-pixel tolerance), and pAUC <= 1% FPR with that group's pixels as positives and
-non-object pixels as negatives. Reconstructions are cached under <bench>/recon/ (float16).
+non-object pixels as negatives. Score maps (both methods, float16) are cached under <bench>/scores/ - a
+reconstruction is ~0.25-0.5 GB per host, too big to keep for every model (it filled the dev laptop once).
 """
 
 from __future__ import annotations
@@ -56,8 +57,8 @@ def load_host(host: Path):
     return refl, wl, spatial, np.load(host / "gt.npy"), json.load(open(host / "objects.json"))
 
 
-def reconstruct(label: str, ckpt: str, refl: np.ndarray, wl: np.ndarray, spatial: np.ndarray, cache: Path):
-    """(cube the model read, its reconstruction), cached."""
+def reconstruct(label: str, ckpt: str, refl: np.ndarray, wl: np.ndarray, spatial: np.ndarray):
+    """(cube the model read, its reconstruction)."""
     import torch
     from evaluate_prisma_bench import build
     from app.foundation_models.inferencers.spectral_stem_inferencer import SpectralStemInferencer
@@ -71,14 +72,9 @@ def reconstruct(label: str, ckpt: str, refl: np.ndarray, wl: np.ndarray, spatial
         grid = np.asarray(grid, float)
         M = np.stack([np.interp(grid, wl, np.eye(len(wl))[i]) for i in range(len(wl))], 1)   # (165, B)
         cube = np.einsum("gb,bhw->ghw", M, refl, optimize=True).astype(np.float32)
-    if cache.exists():
-        return cube, np.load(cache).astype(np.float32)
     with torch.no_grad():
         recon = inf.predict_full_scene(torch.from_numpy(cube), torch.from_numpy(spatial[None]).float())
-    recon = recon.detach().cpu().numpy().astype(np.float32)
-    cache.parent.mkdir(parents=True, exist_ok=True)
-    np.save(cache, recon.astype(np.float16))
-    return cube, recon
+    return cube, recon.detach().cpu().numpy().astype(np.float32)
 
 
 def object_hits(score: np.ndarray, keep: np.ndarray, gt: np.ndarray, top_pct: float) -> set:
@@ -121,10 +117,19 @@ def main() -> None:
                 continue
             host = bench / h["sensor"] / h["scene"]
             refl, wl, spatial, gt, objects = load_host(host)
-            cube, recon = reconstruct(label, ckpt, refl, wl, spatial, bench / "recon" / label / f"{h['scene']}.npy")
+            cache = bench / "scores" / label / f"{h['scene']}.npz"
+            if cache.exists():
+                scores = {k: v.astype(np.float32) for k, v in np.load(cache).items()}
+            else:
+                cube, recon = reconstruct(label, ckpt, refl, wl, spatial)
+                scores = {m: compute_score(cube, recon, spatial.astype(np.uint8), method=m)
+                          for m in ("residual_mahalanobis", "combined")}
+                del cube, recon
+                cache.parent.mkdir(parents=True, exist_ok=True)
+                np.savez(cache, **{k: v.astype(np.float16) for k, v in scores.items()})
             entry = {}
             for method in ("residual_mahalanobis", "combined"):
-                s = compute_score(cube, recon, spatial.astype(np.uint8), method=method)
+                s = scores[method]
                 entry[method] = {"objects": score_host(s, spatial, gt, objects),
                                  "pauc": {t: group_pauc(s, spatial, gt, [o["id"] for o in objects if o["tier"] == t])
                                           for t in TIERS}}
