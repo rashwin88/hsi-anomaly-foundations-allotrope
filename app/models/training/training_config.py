@@ -186,16 +186,18 @@ class SpectralStemFinetuneConfig(SpectralStemMAEConfig):
                                            "scene_wv (g/cm2 x 1000; 750 = 0.75 g/cm2, from the 2026-10-16 label QA).")
     cirrus_min_level: int = Field(default=2, ge=1, le=3)
     finetune_metrics_csv: str | None = Field(default=None, description="Per-epoch per-sensor validation and per-class IoU.")
-    mixed_batches: bool = Field(default=False, description="adapt: every training batch holds every source, "
+    mixed_batches: bool = Field(default=False, description="adapt / joint: every training batch holds every source, "
                                 "share x batch_size samples each (at least 1), instead of one source per batch.")
 
+    seg_head_from: str | None = Field(default=None, description="Checkpoint (local or s3://) whose seg_head.* weights "
+                                      "replace the fresh head after init_from (e.g. FT01's probe).")
     grad_loss_weight: float = Field(default=0.0, ge=0, description="mixed batches: weight of the edge term - L1 between "
                                     "the spatial gradients of reconstruction and input on hidden pixels (0 = off).")
 
     @model_validator(mode="after")
     def _mixed_batches_in_adapt_only(self):
-        if self.mixed_batches and self.mode != "adapt":
-            raise ValueError("mixed_batches is implemented for mode 'adapt' only")
+        if self.mixed_batches and self.mode == "probe":
+            raise ValueError("mixed_batches is implemented for modes 'adapt' and 'joint'")
         if self.grad_loss_weight and not self.mixed_batches:
             raise ValueError("grad_loss_weight is implemented for mixed_batches only")
         return self

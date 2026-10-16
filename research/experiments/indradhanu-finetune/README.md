@@ -13,8 +13,8 @@ are written in its README before launch and not moved afterwards.
 |---|---|---|---|---|---|---|---|---|
 | FT01 | 1 | probe | segmentation head on frozen F001 (epoch 109), EnMAP | g6e.2xlarge (kept) | 1.4 | ~$4 | water 0.82 >= 0.6, pass | water 0.82, cloud 0.80, shadow 0.20, thin cloud 0.09 (label-limited) |
 | FT02 | 2 | adapt | reconstruction on all three sensors, one sensor per batch | g6e.2xlarge (kept) | 4.25 | ~$12 | bench 0.855 < 0.861, **not met** | reconstruction better on all three; combined 0.706 -> 0.824; per-sensor see-saw under investigation |
-| FT02b | 2b | adapt, mixed batches | FT02 epoch 8 continued, every batch EnMAP 3 / PRISMA 3 / AVIRIS-NG 2 | g6e.2xlarge (kept) | - | - | pending (epochs 3 / 6 / 10) | running since 2026-10-16 10:15 UTC |
-| FT02c | 2c | adapt, mixed batches + edge term | gradient-matching loss on hidden pixels | g6e.2xlarge (kept) | - | - | - | planned, after FT02b ([FT02c-edges](FT02c-edges/README.md), code 9ff0484) |
+| FT02b | 2b | adapt, mixed batches | FT02 ep8 continued, every batch all three sensors | g6e.2xlarge (kept) | 2.2 | ~$6 | bench 0.856 < 0.861, not met | see-saw gone; SAM 3.99 / 4.37 / 5.57; bench measures tie v0.2.0 |
+| FT02c | 2c | adapt, mixed + edge term | FT02b ep9 continued, gradient L1 weight 1.0 | g6e.2xlarge (kept) | 2.2 | ~$6 | edge FP share unchanged, not met | edge term moved 1%: decoder bottleneck; SAM 3.93 / 4.21 / 5.41 |
 | FT03 | 3 | joint | reconstruction + segmentation | g6e.2xlarge (kept) | - | - | - | not started |
 
 ## Stage 0 records

@@ -128,6 +128,18 @@ class SpectralStemSegFormerMAE(nn.Module):
             z = z.masked_fill(~band_valid, 0.0)
         return self.spectral_in(z, wavelengths_nm, band_valid) if self.stem in WAVELENGTH_STEMS else self.spectral_in(z)
 
+    def segment_mixed(self, groups: list) -> list:
+        """segment() over samples with different band lists: groups [(x, wavelengths_nm, band_valid)]. One stem pass
+        per group, then one unmasked encoder pass and the head over the concatenated batch (BatchNorm sees every
+        group). Returns each group's (B_g, seg_classes, H, W) logits."""
+        if self.seg_head is None:
+            raise ValueError("this model has no segmentation head (seg_classes = 0)")
+        if self.stem not in WAVELENGTH_STEMS:
+            raise ValueError(f"{self.stem} stem reads one band list only")
+        z = torch.cat([self._stem(x, wl, bv) for x, wl, bv in groups])
+        logits = self.seg_head(self.encoder(self.norm(z)))
+        return list(torch.split(logits, [len(x) for x, _, _ in groups]))
+
     def forward_mixed(self, groups: list) -> list:
         """One pass over samples with different band lists. groups: [(x, wavelengths_nm, band_valid, keep_mask,
         out_wavelengths_nm)], each as in forward (keep_mask set for all groups or none; out may be None). Each group

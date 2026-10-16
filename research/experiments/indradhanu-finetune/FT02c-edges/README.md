@@ -1,6 +1,6 @@
 # FT02c - FT02b continued with an edge term
 
-**Status:** prepared 2026-10-16; launches after FT02b, on the user's go (agreed in principle 2026-10-16).
+**Status:** done 2026-10-16 12:25-14:39 UTC (2.2 h), code 9ff0484, exit 0; best.pt = epoch 10.
 
 ## Question
 Half or more of the top-1% false alarms sit on strong spatial edges (FT02 README, "Edge diagnosis": 49-68%, chance
@@ -35,4 +35,25 @@ Edge false-alarm share down on >= 3 of 4 scenes, and bench residual Mahalanobis 
 FT03).
 
 ## Results
+
+Per-sensor validation SAM (deg), epoch 1 -> 10: EnMAP 4.02 -> 3.93, PRISMA 4.44 -> 4.21, AVIRIS-NG 5.63 -> 5.41 (FT02b
+best: 3.99 / 4.37 / 5.57). The edge term itself barely moved: `train_grad_l1` 0.01163 -> 0.01153 (-1%) over 10 epochs.
+
+**Bench, residual Mahalanobis** (means of 4 scenes, `C:/es/rescore/`): FT02c ep10 ROC-AUC 0.855, pAUC <= 1% 0.159,
+TPR @ 0.1% 0.059, caught 413 (top 1%) / 131 (top 0.1%); FT02b ep9 0.856 / 0.158 / 0.059 / 411 / 128. Combined fell:
+0.819 -> 0.806, caught 320 -> 296.
+
+**Edge diagnosis** (`C:/es/edges/edges.py`, same rules), residual Mahalanobis, share of top-1% false positives on
+strong edges, set1-4: FT02b ep9 69 / 52 / 52 / 60%; FT02c ep10 69 / 52 / 52 / 61%.
+
+**Verdict: not met.** Edge false-alarm share unchanged on all 4 scenes (criterion: down on >= 3); bench unchanged
+within noise (>= FT02b holds on caught, not on ROC-AUC 0.855 vs 0.856).
+
 ## Observations
+
+- The edge term could not be reduced: 0.01163 -> 0.01153 in 10 epochs (-1%), against L1 and SAM that kept falling.
+  The decoder predicts each 4x4 pixel block from one H/4 feature vector (PixelShuffle), so sub-block edge position
+  has to be carried in that vector; with the loss on, it was not learned. The likely fix is architectural - a
+  higher-resolution path into the decoder, masked so it cannot see hidden tokens - not a loss term.
+- The per-sensor reconstruction gains over FT02b (SAM 3.99/4.37/5.57 -> 3.93/4.21/5.41) are more plausibly from the
+  constant SAM weight 0.5 (FT02b ramped it from 0) than from the edge term.

@@ -133,12 +133,13 @@ def test_all_sources_loader_puts_every_source_in_every_batch_and_restarts():
     assert [b["_groups"][1][1]["k"] for b in batches] == [9, 9, 9]
 
 
-def test_mixed_batches_only_in_adapt():
+def test_mixed_batches_not_in_probe():
     from app.models.training.training_config import SpectralStemFinetuneConfig
     src = [{"name": "enmap", "train_dir": "t", "test_dir": "v", "share": 1.0}]
     assert SpectralStemFinetuneConfig(sources=src, mode="adapt", mixed_batches=True).mixed_batches
+    assert SpectralStemFinetuneConfig(sources=src, mode="joint", mixed_batches=True).mixed_batches
     with pytest.raises(ValueError):
-        SpectralStemFinetuneConfig(sources=src, mode="joint", mixed_batches=True)
+        SpectralStemFinetuneConfig(sources=src, mode="probe", mixed_batches=True)
 
 
 def test_gradient_l1_by_hand():
@@ -157,3 +158,14 @@ def test_grad_loss_needs_mixed_batches():
     with pytest.raises(ValueError):
         SpectralStemFinetuneConfig(sources=src, mode="adapt", grad_loss_weight=1.0)
     assert SpectralStemFinetuneConfig(sources=src, mode="adapt", mixed_batches=True, grad_loss_weight=1.0).grad_loss_weight == 1.0
+
+
+def test_segment_mixed_matches_segment_per_group():
+    torch.manual_seed(0)
+    m = SpectralStemSegFormerMAE("reduced_attention", *STATS, seg_classes=5, seg_decoder_dim=16, **SMALL).eval()
+    a_wl, b_wl = WL[::2], WL[1::3] + 1.5
+    a, b = torch.rand(2, len(a_wl), 64, 64) * 0.3, torch.rand(1, len(b_wl), 64, 64) * 0.3
+    with torch.no_grad():
+        la, lb = m.segment_mixed([(a, a_wl, None), (b, b_wl, None)])
+        assert torch.allclose(la, m.segment(a, a_wl), atol=1e-5) and torch.allclose(lb, m.segment(b, b_wl), atol=1e-5)
+    assert la.shape == (2, 5, 64, 64)

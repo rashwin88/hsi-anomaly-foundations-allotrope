@@ -103,9 +103,40 @@ def score_metrics(score: np.ndarray, gt: np.ndarray, keep: np.ndarray) -> dict:
     fpr, tpr = np.asarray(roc["fpr"]), np.asarray(roc["tpr"])
     tpr_1 = float(np.interp(0.01, fpr, tpr)) if len(fpr) > 1 else float("nan")
     k = keep.astype(bool) & np.isfinite(score)
-    cut = np.percentile(score[k], 99.0)
-    hits = ndimage.binary_dilation((score >= cut) & k, iterations=1)
     labels, n_obj = ndimage.label(gt)
-    caught = len(np.unique(labels[hits & (labels > 0)]))
-    return {"auc": float(roc["auc"]), "tpr_at_1pct_fpr": tpr_1, "objects": int(n_obj), "objects_caught": int(caught),
-            "n_positive": int(roc.get("n_positive", 0))}
+
+    def caught(top_pct: float) -> int:
+        hits = ndimage.binary_dilation((score >= np.percentile(score[k], 100 - top_pct)) & k, iterations=1)
+        return len(np.unique(labels[hits & (labels > 0)]))
+
+    return {"auc": float(roc["auc"]), "tpr_at_1pct_fpr": tpr_1, "objects": int(n_obj), "objects_caught": caught(1.0),
+            "objects_caught_0p1": caught(0.1), "n_positive": int(roc.get("n_positive", 0)),
+            **detection_measures(score[k], gt[k].astype(bool))}
+
+
+def detection_measures(s: np.ndarray, g: np.ndarray) -> dict:
+    """Measures that look at the top of the ranking, where an analyst looks (s: scores, g: truth, both 1-D).
+
+    pauc_1pct     - area under the exact ROC over FPR 0..0.01, divided by 0.01 (1 = perfect, 0.005 = random)
+    tpr_at_0p1pct - the best detection rate reached with at most 0.1% false alarms (exact)
+    auc_d_tau / auc_f_tau - the 3D-ROC areas: scores min-max normalised to [0, 1], the integral over the threshold
+        of Pd (Pf) equals the mean normalised score of target (background) pixels - exact, no sampling
+    auc_bs        - background suppressibility, auc - auc_f_tau (the 3D-ROC literature's; higher is better)
+    snpr          - auc_d_tau / auc_f_tau"""
+    pos, neg = int(g.sum()), int((~g).sum())
+    if pos == 0 or neg == 0:
+        return {}
+    order = np.argsort(-s, kind="stable")
+    s_sorted, g_sorted = s[order], g[order]
+    last = np.r_[np.flatnonzero(np.diff(s_sorted)), len(s_sorted) - 1]   # end of each run of tied scores
+    tpr = np.r_[0.0, np.cumsum(g_sorted)[last] / pos]
+    fpr = np.r_[0.0, np.cumsum(~g_sorted)[last] / neg]
+    x0, x1, y0, y1 = fpr[:-1], fpr[1:], tpr[:-1], tpr[1:]     # segments; vertical ones (x0 == x1) add nothing
+    y1c = np.where(x1 > 0.01, y0 + (y1 - y0) * (0.01 - x0) / np.where(x1 > x0, x1 - x0, 1.0), y1)
+    pauc = float(np.sum(((np.minimum(x1, 0.01) - x0) * (y0 + y1c) / 2)[x0 < 0.01]) / 0.01)
+    auc = float(np.sum((x1 - x0) * (y0 + y1) / 2))
+    lo, hi = float(s.min()), float(s.max())
+    norm = (s - lo) / (hi - lo) if hi > lo else np.zeros_like(s, dtype=float)
+    d_tau, f_tau = float(norm[g].mean()), float(norm[~g].mean())
+    return {"pauc_1pct": pauc, "tpr_at_0p1pct": float(tpr[fpr <= 0.001].max()), "auc_exact": auc,
+            "auc_d_tau": d_tau, "auc_f_tau": f_tau, "auc_bs": auc - f_tau, "snpr": d_tau / f_tau if f_tau else float("inf")}

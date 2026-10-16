@@ -177,14 +177,19 @@ class FinetuneTrainer(SpectralStemMAETrainer):
             if unexpected or any(not k.startswith("seg_head.") for k in missing):
                 raise ValueError(f"init_from does not match the model: missing {missing[:5]}, unexpected {unexpected[:5]}")
             logger.info(f"init_from {cfg.init_from}: loaded; {len(missing)} new segmentation-head tensors")
+        if cfg.seg_head_from:                            # e.g. FT01's probe head instead of a fresh one
+            head = {k[len("seg_head."):]: v for k, v in self._load_init_state(cfg.seg_head_from, "seg_head.pt").items()
+                    if k.startswith("seg_head.")}
+            model.seg_head.load_state_dict(head)
+            logger.info(f"seg_head_from {cfg.seg_head_from}: {len(head)} tensors")
         return model
 
-    def _load_init_state(self, uri: str) -> dict:
+    def _load_init_state(self, uri: str, local_name: str = "init.pt") -> dict:
         path = Path(uri)
         if uri.startswith("s3://"):
             from app.utils.general_utils import s3_config
             bucket, _, key = uri.removeprefix("s3://").partition("/")
-            path = Path(self.config.checkpoint.checkpoint_dir) / "init.pt"
+            path = Path(self.config.checkpoint.checkpoint_dir) / local_name
             path.parent.mkdir(parents=True, exist_ok=True)
             if not path.exists():
                 s3_config.client().download_file(bucket, key, str(path))
@@ -270,7 +275,9 @@ class FinetuneTrainer(SpectralStemMAETrainer):
 
     def _mixed_loss(self, groups: list, model: nn.Module):
         """The parent's reconstruction loss for a mixed batch: per sensor, its own MAE mask and band-list
-        augmentation; one shared pass (forward_mixed); L1 + ramped SAM per sensor, weighted by its samples."""
+        augmentation; one shared pass (forward_mixed); L1 + ramped SAM per sensor, weighted by its samples.
+        joint: + seg_weight x the segmentation loss of the labelled sensors, from one unmasked pass over the whole
+        mixed batch (segment_mixed), so BatchNorm sees every sensor in this pass too."""
         cfg = self.config.model_config_
         inputs, truth = [], []
         for _, batch in groups:
@@ -312,7 +319,35 @@ class FinetuneTrainer(SpectralStemMAETrainer):
             total, kept = total + (l1 + self._get_sam_weight(self._current_epoch) * sam + edge) * n, kept + n
         if not kept:
             return torch.tensor(0.0, device=self.device, requires_grad=True), 0
-        return total / kept, kept
+        loss = total / kept
+        if cfg.mode == "joint":
+            seg = self._mixed_seg_loss(groups, model)
+            if seg is not None:
+                loss = loss + cfg.seg_weight * seg
+        return loss, kept
+
+    def _seg_inputs(self, batch: dict):
+        """(pixels, band_valid, wl, targets or None, known or None) for the batch's usable samples, or None."""
+        pixels, band_valid, wl, mask = self._decode_batch(batch)
+        keep = mask.flatten(1).mean(dim=1) >= MIN_VALID_PIXEL_FRACTION
+        if not keep.any():
+            return None
+        t = k = None
+        if "seg_targets.npy" in batch:
+            t = torch.as_tensor(batch["seg_targets.npy"]).to(self.device)[keep]
+            k = torch.as_tensor(batch["seg_known.npy"]).to(self.device).bool()[keep] & mask[keep].bool()
+        return pixels[keep], band_valid[keep], (wl if wl.dim() == 1 else wl[keep]), t, k
+
+    def _mixed_seg_loss(self, groups: list, model: nn.Module):
+        """Mean masked BCE + Dice over the labelled groups of a mixed batch, or None if none is labelled."""
+        parts = [p for p in (self._seg_inputs(b) for _, b in groups) if p is not None]
+        if not any(p[3] is not None for p in parts):
+            return None
+        bf16 = self.config.model_config_.amp_bf16 and self.device.type == "cuda"
+        with torch.autocast("cuda", dtype=torch.bfloat16, enabled=bf16):
+            logits = model.segment_mixed([(p[0], p[2], p[1]) for p in parts])   # (x, wl, band_valid)
+        losses = [masked_bce_dice(lg.float(), p[3], p[4]) for lg, p in zip(logits, parts) if p[3] is not None]
+        return sum(losses) / len(losses)
 
     def compute_validation_loss(self, batch: dict, model: nn.Module):
         cfg = self.config.model_config_

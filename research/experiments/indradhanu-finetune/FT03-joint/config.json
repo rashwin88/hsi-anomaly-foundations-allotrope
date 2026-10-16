@@ -1,5 +1,5 @@
 {
-  "_description": "Stage 3: reconstruction + segmentation (seg_weight 1.0, EnMAP batches) from FT02's best; head starts fresh.",
+  "_description": "FT03: joint reconstruction + segmentation from FT02c epoch 10 with FT01's head; mixed batches, seg loss on the EnMAP part of one unmasked mixed pass, seg_weight 0.1 (reconstruction-dominant: seg ~0.4 x 0.1 vs recon ~0.05); SAM weight 0.5 throughout; no edge term. 10 epochs. 2026-10-17.",
   "foundation_model_name": "spectral_stem_finetune",
   "version": "0.5.0",
   "device": "cuda",
@@ -41,7 +41,7 @@
     "mask_ratio": 0.65,
     "trim_fraction": 0.0,
     "sam_weight": 0.5,
-    "sam_ramp_epochs": 10,
+    "sam_ramp_epochs": 0,
     "erosion_kernel_size": 1,
     "metrics_csv": "/opt/dlami/nvme/runs/FT03-joint/metrics.csv",
     "amp_bf16": true,
@@ -79,17 +79,20 @@
         "band_list_path": "/opt/dlami/nvme/ft/band_lists/aviris_ng_372.json"
       }
     ],
-    "init_from": "s3://allotrope-training-data-prod-india/experiments/indradhanu-finetune/FT02-adapt/checkpoints/best.pt",
+    "init_from": "s3://allotrope-training-data-prod-india/experiments/indradhanu-finetune/FT02c-edges/checkpoints/best.pt",
     "seg_classes": 5,
     "seg_decoder_dim": 128,
-    "seg_weight": 1.0,
+    "seg_weight": 0.1,
     "plateau_elevation_m": 3500.0,
     "low_water_vapour": 750.0,
     "cirrus_min_level": 2,
-    "finetune_metrics_csv": "/opt/dlami/nvme/runs/FT03-joint/finetune_metrics.csv"
+    "finetune_metrics_csv": "/opt/dlami/nvme/runs/FT03-joint/finetune_metrics.csv",
+    "mixed_batches": true,
+    "grad_loss_weight": 0.0,
+    "seg_head_from": "s3://allotrope-training-data-prod-india/experiments/indradhanu-finetune/FT01-probe/checkpoints/best.pt"
   },
   "data": {
-    "num_epochs": 20,
+    "num_epochs": 10,
     "data_provider": "spectralearth",
     "train_samples_per_epoch": {
       "128": 30000
