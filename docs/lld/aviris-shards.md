@@ -50,6 +50,17 @@ date, product version, pixel size, tile row/col/origin, valid fraction, tile-cen
 Smoke run (2 lines, 2026-10-15): 215 and 221 tiles, ~1.1 GB each (~5.3 MB per compressed tile), 2-2.5 min
 per line; a read-back tile: 372 bands 381-2500 nm, 91% valid, median 0.067 at 550 nm.
 
+Full run, 2026-10-15 (`/opt/se-shard/aviris_all.sh`, ~3.5 h on the prod box): 79 flight lines; split 73
+train / 6 test / 0 excluded. Train 150 shards, 22,377 tiles, 116.0 GiB; test 16 shards, 2,270 tiles,
+11.2 GiB (compressed). `stats.json` lists 1,116 distinct wavelengths: the 372 bands appear at up to three
+slightly different centres across product versions, all within 0.5 nm of each other (372 groups), so one
+aligned band list serves every line. Shard sha256s in `native-v1/manifest.json`; local tiles deleted after
+the shards were checked against it.
+
+Provenance check, 2026-10-16: all 316 imported data files (79 lines x 4) match the provider's `.sha256`
+sidecars from the Drive delivery (0 mismatches), so the inventory hashes the shards were verified against are
+the provider's own bytes.
+
 ## Invariants
 
 1. **The product's reading, version-agnostic.** The `_corr_` cube is surface reflectance (the header's

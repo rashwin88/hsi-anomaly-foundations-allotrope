@@ -48,7 +48,7 @@ class SpectralStemSegFormerMAE(nn.Module):
     def __init__(self, stem: str, stats_wavelengths_nm: list[float], stats_mean: list[float],
                  stats_std: list[float], bands: int = 202, compressed_channels: int = 32,
                  token_dim: int = 32, attention_heads: int = 4, gate_hidden: int = 32, bin_nm: float = 40.0,
-                 band_weighting: str = "count",
+                 band_weighting: str = "count", seg_classes: int = 0, seg_decoder_dim: int = 128,
                  embed_dims=(32, 64, 160, 256), num_heads=(1, 2, 5, 8), reduction_ratios=(8, 4, 2, 1),
                  num_blocks=(2, 2, 2, 2), decoder_dim: int = 256, expansion_ratio: int = 4,
                  drop_rate: float = 0.0):
@@ -75,13 +75,61 @@ class SpectralStemSegFormerMAE(nn.Module):
             reduction_ratios=list(reduction_ratios), num_blocks=list(num_blocks),
             expansion_ratio=expansion_ratio, drop_rate=drop_rate)
         self.decoder = SegFormerDecoder(embed_dims=list(embed_dims), decoder_dim=decoder_dim, out_channels=D)
+        # Optional segmentation head on the same encoder features (fine-tuning stage 1+,
+        # docs/proposals/fine-tuning-and-segmentation.md): one logit per class, independent (sigmoid),
+        # predicted per pixel like the reconstruction. Absent (seg_classes = 0) in pretrained models.
+        self.seg_head = (SegFormerDecoder(embed_dims=list(embed_dims), decoder_dim=seg_decoder_dim, out_channels=seg_classes)
+                         if seg_classes else None)
+        # Every wavelength the model has trained on, sorted: starts as the pretraining list (the
+        # normalisation curve) and grows as fine-tuning reads other sensors. The curve itself stays
+        # frozen (docs/lld/spectral-stem.md); this record is what trained_band_mask reads.
+        self.register_buffer("trained_wl", self.stats.wl.clone())
+
+    def extend_trained_wavelengths(self, wavelengths_nm, tol_nm: float = 0.5) -> int:
+        """Add wavelengths not within tol_nm of one already recorded; returns how many were added."""
+        wl = torch.as_tensor(wavelengths_nm, dtype=torch.float32, device=self.trained_wl.device).flatten()
+        new = torch.sort(wl[(wl[:, None] - self.trained_wl[None, :]).abs().min(dim=1).values > tol_nm]).values
+        kept = []                                   # new wavelengths within tol_nm of each other count once
+        for v in new.tolist():
+            if not kept or v - kept[-1] > tol_nm:
+                kept.append(v)
+        if kept:
+            self.trained_wl = torch.sort(torch.cat([self.trained_wl, torch.tensor(kept, device=self.trained_wl.device)])).values
+        return len(kept)
+
+    def _load_from_state_dict(self, state_dict, prefix, *args, **kwargs):
+        # Checkpoints from before 2026-10-16 have no record: fall back to their curve. Newer ones may hold
+        # a longer record than this freshly built model, so take its size from the checkpoint.
+        key, curve = prefix + "trained_wl", state_dict.get(prefix + "stats.wl")
+        if key not in state_dict and curve is not None:
+            state_dict[key] = torch.sort(curve).values
+        if key in state_dict:
+            self.trained_wl = torch.empty_like(state_dict[key])
+        super()._load_from_state_dict(state_dict, prefix, *args, **kwargs)
 
     def trained_band_mask(self, wavelengths_nm, tol_nm: float = 15.0) -> torch.Tensor:
-        """(N,) bool: True where a band lies within tol_nm of a wavelength the model was pretrained
-        on (its normalisation curve). Bands outside - another sensor's water-vapour bands, or
-        beyond the pretraining range - meet untrained wavelength networks, so callers drop them."""
-        wl = torch.as_tensor(wavelengths_nm, dtype=torch.float32, device=self.stats.wl.device)
-        return (wl[:, None] - self.stats.wl[None, :]).abs().min(dim=1).values <= tol_nm
+        """(N,) bool: True where a band lies within tol_nm of a wavelength the model has trained on
+        (trained_wl). Bands outside - another sensor's water-vapour bands, or beyond everything trained -
+        meet untrained wavelength networks, so callers drop them."""
+        wl = torch.as_tensor(wavelengths_nm, dtype=torch.float32, device=self.trained_wl.device)
+        return (wl[:, None] - self.trained_wl[None, :]).abs().min(dim=1).values <= tol_nm
+
+    def encode(self, x: torch.Tensor, wavelengths_nm: torch.Tensor, band_valid: torch.Tensor | None = None,
+               keep_mask: torch.Tensor | None = None) -> list[torch.Tensor]:
+        """Reflectance (B, N, H, W) -> the encoder's four stage features (MAE token removal if keep_mask)."""
+        if self.stem not in WAVELENGTH_STEMS and x.shape[1] != self.bands:
+            raise ValueError(f"{self.stem} stem was built for {self.bands} bands, got {x.shape[1]}")
+        z = self.stats.normalize(x, wavelengths_nm)
+        if band_valid is not None:
+            z = z.masked_fill(~band_valid, 0.0)
+        z = self.spectral_in(z, wavelengths_nm, band_valid) if self.stem in WAVELENGTH_STEMS else self.spectral_in(z)
+        return self.encoder(self.norm(z), keep_mask=keep_mask)
+
+    def segment(self, x: torch.Tensor, wavelengths_nm: torch.Tensor, band_valid: torch.Tensor | None = None) -> torch.Tensor:
+        """(B, N, H, W) reflectance -> (B, seg_classes, H, W) logits, from the unmasked encoder."""
+        if self.seg_head is None:
+            raise ValueError("this model has no segmentation head (seg_classes = 0)")
+        return self.seg_head(self.encode(x, wavelengths_nm, band_valid))
 
     def forward(self, x: torch.Tensor, wavelengths_nm: torch.Tensor, band_valid: torch.Tensor | None = None,
                 keep_mask: torch.Tensor | None = None, out_wavelengths_nm: torch.Tensor | None = None) -> torch.Tensor:
@@ -94,16 +142,7 @@ class SpectralStemSegFormerMAE(nn.Module):
         if out_wavelengths_nm is not None and self.stem not in WAVELENGTH_STEMS:
             raise ValueError(f"{self.stem} stem reconstructs its input bands only")
         out_wl = wavelengths_nm if out_wavelengths_nm is None else out_wavelengths_nm
-        if self.stem not in WAVELENGTH_STEMS and x.shape[1] != self.bands:
-            raise ValueError(f"{self.stem} stem was built for {self.bands} bands, got {x.shape[1]}")
-        z = self.stats.normalize(x, wavelengths_nm)                       # (B, N, H, W) z-scores
-        if band_valid is not None:
-            z = z.masked_fill(~band_valid, 0.0)
-        if self.stem in WAVELENGTH_STEMS:
-            z = self.spectral_in(z, wavelengths_nm, band_valid)              # (B, D, H, W)
-        else:
-            z = self.spectral_in(z)
-        features = self.encoder(self.norm(z), keep_mask=keep_mask)
+        features = self.encode(x, wavelengths_nm, band_valid, keep_mask)
         z_hat = self.decoder(features)                                    # (B, D, H, W)
         if self.stem in WAVELENGTH_STEMS:
             z_hat = self.spectral_out(z_hat, out_wl)                         # (B, M, H, W)

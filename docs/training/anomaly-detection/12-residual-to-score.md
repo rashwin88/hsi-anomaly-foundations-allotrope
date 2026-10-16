@@ -1,7 +1,8 @@
 # Part 12 - From residual to score
 
 > **The one thing this part teaches:** magnitude error and shape error find different
-> anomalies, and no fixed threshold works across scenes.
+> anomalies, how unusual an error is matters more than how big it is, and no fixed threshold
+> works across scenes.
 
 ## Where we are
 
@@ -189,6 +190,63 @@ and from 0.430 to 0.683 for F001, while the three land scenes barely move (large
 +0.006). The option is off by default (`None`); switching it on in the product is a pending
 decision, because only one labelled scene contains water.
 
+## Scoring the direction: residual Mahalanobis
+
+L1, SAM and the fade all still measure how *big* the residual is. There is a better question:
+how *unusual* is it, compared with the errors every normal pixel in this scene makes?
+
+A real scene's normal errors are not random. The model over- or under-shoots brightness, haze
+shifts every band together, PRISMA's detector leaves stripes, the sea is dark. Each of those
+pushes many bands in the **same direction** at once. So normal residuals are large along a few
+shared directions and tiny along all the others.
+
+Picture two directions only. Along direction 1 (say, overall brightness), normal errors spread
+by about 10 - a variance of 100. Along direction 2 (an absorption shape nothing in the scene
+has), they spread by about 1 - a variance of 1. Two pixels:
+
+```
+                 residual (dir 1, dir 2)    size  sqrt(10^2 + 0^2) or sqrt(0^2 + 3^2)
+A  bright roof        (10, 0)               10
+B  odd material        (0, 3)                3
+```
+
+By size, A is the bigger anomaly. Now divide each direction by its normal spread before
+measuring - that is the **Mahalanobis distance**:
+
+```
+A:  D^2 = 10^2 / 100 + 0^2 / 1 = 1.00 + 0.00 = 1.00
+B:  D^2 =  0^2 / 100 + 3^2 / 1 = 0.00 + 9.00 = 9.00
+```
+
+B is now nine times more anomalous: a small error in a direction the background never takes.
+
+The product does this in four steps (`app/utils/anomaly_detection/residual_mahalanobis.py`):
+
+1. Collect the residual of every valid pixel and find its **principal components** - the
+   directions in band space along which residuals vary most - keeping the top 30.
+2. Express each pixel's residual in those 30 directions and divide each by its spread
+   (**whitening**), exactly as in the example.
+3. Subtract the average of the pixels in a **ring** around it, between 21 and 61 pixels across,
+   so a slowly changing background (a field, a coast) is compared with its own neighbourhood.
+4. The score is the sum of squares - the squared distance.
+
+On the four labelled PRISMA scenes this lifts the production model's mean ROC-AUC from 0.662
+(`combined`) to 0.854, and the new model's from 0.715 to 0.865 - better on every scene. It also
+removes the dark-water problem without a special case: "sea is dark" is one of the shared
+directions it learns and discounts. Since 2026-10-15 it is Indradhanu's default score.
+
+![Figure 12.3 - Size versus direction: the same residuals before and after whitening](figures/12-residual-mahalanobis.svg)
+
+*Figure 12.3 - Why direction beats size, in two dimensions. Left: normal residuals (grey) spread
+widely along direction 1 and barely along direction 2; A sits far out along the common direction,
+B a short way along the rare one. Right: after whitening, the cloud is round, A is inside it and B
+is far outside.*
+
+For the deep version - the principal directions and whitening worked by hand from five pixels, why
+only 30 components, the ring mean and the integral-image trick that makes it fast, and the
+eleven-method comparison that chose this default - see parts 45 and 46 of the Indradhanu course
+(`indradhanu workings/45-scoring-the-direction.md` and `46-the-ring-and-the-comparison.md`).
+
 ## Thresholding, and why it is a human's job
 
 You have a score map. Which pixels are anomalies?
@@ -240,8 +298,14 @@ Max-normalisation puts both metrics on [0, 1] so a weighted sum is meaningful. N
 because Mahalanobis distances from two detectors are not commensurable at all.
 
 **"Is 'combined' always best?"**
-No. It is the default for Indradhanu because it matches that model's training loss. If you
-are hunting bright hot targets, plain L1 is more direct.
+No, and since 2026-10-15 it is not even the default: `residual_mahalanobis` is. `combined` matches
+the model's training loss, which is why it was the default before; if you are hunting bright hot
+targets, plain L1 is more direct.
+
+**"Isn't this just RX? Wasn't RX dropped?"**
+Plain RX runs Mahalanobis on the raw cube over all 165 bands, where the covariance is nearly
+singular and distances blow up - that was dropped. This runs on the *residual*, in 30 whitened
+components, where the covariance is well behaved. Same mathematics, different input.
 
 **"Why not just drop water pixels?"**
 That needs a water mask, and a ship or an oil slick *on* water is exactly the kind of anomaly
@@ -310,7 +374,17 @@ mean 0.12:  weight = clip(0.12 / 0.05, 0, 1) = 1.00    0.30 rad, unchanged
 </details>
 
 <details>
-<summary>6. Why does compute_roc use percentile-spaced thresholds?</summary>
+<summary>6. Normal residuals have variance 25 along direction 1 and 0.25 along direction 2. Score pixel P with residual (5, 0) and pixel Q with residual (0, 1). Which is more anomalous by size, and by Mahalanobis distance?</summary>
+
+```
+size:          P = sqrt(5^2 + 0^2) = 5.0      Q = sqrt(0^2 + 1^2) = 1.0      P looks bigger
+Mahalanobis:   P: D^2 = 5^2 / 25 + 0 = 25 / 25 = 1.0
+               Q: D^2 = 0 + 1^2 / 0.25 = 1 / 0.25 = 4.0                     Q is 4 times more anomalous
+```
+</details>
+
+<details>
+<summary>7. Why does compute_roc use percentile-spaced thresholds?</summary>
 
 Score distributions are heavy-tailed - nearly every pixel sits near zero and a few sit far
 out. Linear spacing would place almost every sample in the empty upper range and almost none

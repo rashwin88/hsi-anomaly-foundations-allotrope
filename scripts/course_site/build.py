@@ -47,7 +47,7 @@ COURSES = {
         "sections": [["Start", 0, 0], ["Background - what and why", 1, 5], ["Foundations", 6, 8],
                      ["The machine, piece by piece", 9, 22], ["Training and running it", 23, 30],
                      ["Sequel - the next Indradhanu", 31, 99]],
-        "notes": {"31": "Designed, then built and measured (parts 40-42)."},
+        "notes": {"31": "Designed, then built and measured (parts 40-42); final pretraining, scoring and fine-tuning (parts 43-49)."},
     },
     "anomaly": {
         "folder": "docs/training/anomaly-detection", "index": "README.md", "out": "anomaly_course.html",

@@ -1,5 +1,5 @@
 """
-Re-encode SpectralEarth shards with band-delta + zstd (`pixels.npy` -> `pixels.i16dz`) for shipping.
+Re-encode training shards (SpectralEarth, EnMAP, PRISMA) with band-delta + zstd (`pixels.npy` -> `pixels.i16dz`) for shipping.
 
 Reads shards written by scripts/shard_spectralearth.py, writes the same layout under a new prefix
 plus its own manifest.json and a copy of stats.json. Runs on the prod box: S3 -> EC2 -> S3 in one
@@ -88,7 +88,9 @@ def finalize(src: Output, dst: Output, todo: list[tuple[str, int]]) -> None:
         rows[split].append({k: side[k] for k in ("shard", "patches", "bytes", "sha256", "source_sha256")})
     source = json.loads(src.get_bytes("manifest.json"))
     manifest = {"encoding": "pixels.i16dz: band-delta int16 + zstd-3 (app/utils/shard_codec.py)",
-                "source_manifest": {k: source[k] for k in ("collection", "split", "shuffle_seed", "patches_per_shard")},
+                # EnMAP / PRISMA / AVIRIS-NG manifests describe their source differently from SpectralEarth's.
+                "source_manifest": {k: source[k] for k in ("collection", "source", "bands", "split", "shuffle_seed",
+                                                           "patches_per_shard") if k in source},
                 "splits": {s: {"shards": r, "patches": sum(x["patches"] for x in r),
                                "bytes": sum(x["bytes"] for x in r)} for s, r in rows.items() if r}}
     dst.put_bytes("stats.json", src.get_bytes("stats.json"))

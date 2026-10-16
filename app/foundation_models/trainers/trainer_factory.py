@@ -30,6 +30,7 @@ from app.foundation_models.trainers.hyperspectral_segformer_mae_trainer import (
 from app.foundation_models.trainers.spectral_stem_mae_trainer import (
     SpectralStemMAETrainer,
 )
+from app.foundation_models.trainers.finetune_trainer import FinetuneTrainer
 
 from app.models.training.training_config import (
     FoundationModelName,
@@ -45,6 +46,7 @@ _REGISTRY: dict[FoundationModelName, type[FoundationTrainer]] = {
     FoundationModelName.SEGFORMER_MAE: SegFormerMAETrainer,
     FoundationModelName.HYPERSPECTRAL_SEGFORMER_MAE: HyperspectralSegFormerMAETrainer,
     FoundationModelName.SPECTRAL_STEM_MAE: SpectralStemMAETrainer,
+    FoundationModelName.SPECTRAL_STEM_FINETUNE: FinetuneTrainer,
 }
 
 

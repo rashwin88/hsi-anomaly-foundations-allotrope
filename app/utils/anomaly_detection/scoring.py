@@ -24,8 +24,15 @@ Score methods:
 
 - combined
     Convex combination of L1 and SAM after normalising each to its valid
-    pixel max. Default for the hyperspectral SegFormer-MAE (Indradhanu) —
-    matches the L1+SAM training loss.
+    pixel max. Matches Indradhanu's L1+SAM training loss; its default until
+    2026-10-15.
+
+- residual_mahalanobis
+    How unusual the residual's direction is: Mahalanobis distance of the
+    residual in its whitened top-30 principal components, against a local
+    ring mean (21/61 px) or the global mean. Indradhanu's default since
+    2026-10-15 (mean ROC-AUC on the labelled PRISMA scenes 0.662 -> 0.854
+    for v0.2.0). See residual_mahalanobis.py.
 
 Gotcha - SAM on dark pixels: the angle is scale-free, so on near-black spectra (open water at
 ~2% reflectance) a tiny absolute residual becomes a large angle and ordinary sea outranks real
@@ -40,8 +47,9 @@ from typing import Literal
 
 import numpy as np
 
+from app.utils.anomaly_detection.residual_mahalanobis import LOCAL_WINDOW, residual_mahalanobis
 
-ScoringMethod = Literal["L1", "MSE", "SAM", "combined"]
+ScoringMethod = Literal["L1", "MSE", "SAM", "combined", "residual_mahalanobis"]
 
 
 def compute_score(
@@ -52,6 +60,7 @@ def compute_score(
     *,
     combined_weight: float = 0.5,
     sam_dark_fade: float | None = None,
+    local_window: tuple[int, int] | None = LOCAL_WINDOW,
 ) -> np.ndarray:
     """Compute a (H, W) anomaly score map.
 
@@ -60,12 +69,14 @@ def compute_score(
         reconstruction: (C, H, W) reconstructed cube (same shape).
         validity:       (H, W) uint/bool spatial validity mask. Invalid
                         pixels are zeroed in the output.
-        method:         L1 | MSE | SAM | combined.
+        method:         L1 | MSE | SAM | combined | residual_mahalanobis.
         combined_weight: w in `w * L1_norm + (1-w) * SAM_norm` when
                         method='combined'. Default 0.5.
         sam_dark_fade:  reflectance below which the SAM term (methods SAM and
                         combined) is faded linearly to 0, by the pixel's mean
                         over bands of `original`. None = plain angle.
+        local_window:   residual_mahalanobis only: (inner, outer) full widths of
+                        the ring whose mean is subtracted; None = global mean.
 
     Returns:
         (H, W) float32 score map; non-negative, validity-masked.
@@ -94,6 +105,8 @@ def compute_score(
         l1n = _normalise(l1, spatial)
         samn = _normalise(sam, spatial)
         score = combined_weight * l1n + (1.0 - combined_weight) * samn
+    elif method == "residual_mahalanobis":
+        score = residual_mahalanobis(original, reconstruction, spatial, local_window=local_window)
     else:
         raise ValueError(f"unknown scoring method {method!r}")
 

@@ -70,13 +70,13 @@ any search containing an underscore — which is every PRISMA/EnMAP product id
 (`PRS_L2D_STD_…`) — becomes a different string and matches nothing. Fix: escape them and
 pass `escape="\\"`, as `allotrope_inventory/api/datasets.py` does.
 
-**9. SAM ranks dark water as anomalous in production scoring.** On near-black pixels a tiny
-residual is a large spectral angle, so on sea-heavy scenes the `SAM` and `combined` maps light
-up ordinary water (PRISMA set1: 75% sea, SAM ROC-AUC 0.34-0.48). `compute_score` has an opt-in
-fix, `sam_dark_fade` (see [5. Detectors](05-detectors.md#sam-on-dark-water)), but
-`backend/allotrope/action_types/_anomaly_scoring_run.py` does not pass it, so the product still
-scores with the plain angle. Turning it on by default is an open product decision; the 0.05
-threshold was chosen, not tuned, and only one labelled scene contains water.
+**9. SAM and `combined` rank dark water as anomalous.** On near-black pixels a tiny residual is a
+large spectral angle, so on sea-heavy scenes those maps light up ordinary water (PRISMA set1: 75%
+sea, SAM ROC-AUC 0.34-0.48). Indradhanu's default is now `residual_mahalanobis` (2026-10-15),
+which does not have this problem (set1 0.94 for v0.2.0), but `SAM` and `combined` remain
+selectable per model and still score with the plain angle: `compute_score`'s opt-in
+`sam_dark_fade` (see [5. Detectors](05-detectors.md#sam-on-dark-water)) is not passed by
+`_anomaly_scoring_run.py`. Whether to enable it for those methods, or retire it, is open.
 
 **10. The splib07 slim bundle drops most man-made spectra.** `scripts/curate_splib07.py` keeps
 ASD-instrument files only and skips Beckman (BECK) spectra, on the claim that their

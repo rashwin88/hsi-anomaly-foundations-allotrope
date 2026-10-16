@@ -17,8 +17,8 @@ SpectralEarth wavelengths exactly; matching on them is right for both maps.
 Gotchas:
   - Files are found by suffix (`-SPECTRAL_IMAGE_COG.tiff`, `-SPECTRAL_IMAGE.TIF`, ...): the
     inventory keeps provider names, and older deliveries are not COGs.
-  - Quality-layer values are kept exactly as delivered (cirrus 0-3; classes 0 and 3 are
-    no-data, 1 land, 2 water) - see docs/03-data-pipeline.md, "Segmentation shards".
+  - Quality-layer values are kept exactly as delivered (cirrus 0-3; classes 0 cloud,
+    1 land, 2 water, 3 no-data) - see docs/03-data-pipeline.md, "Segmentation shards".
   - spatial_info width/height in METADATA.XML are not the raster size; read the raster.
 """
 

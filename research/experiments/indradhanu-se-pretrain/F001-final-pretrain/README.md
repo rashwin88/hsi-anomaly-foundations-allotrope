@@ -18,7 +18,7 @@ mean ROC-AUC on PRISMA's own bands above E005's 0.752 by the end. Roughly 30 hou
 | | |
 |---|---|
 | configuration | E005's exactly: `reduced_attention`, `bin_nm` 40, `band_weighting: width`, `band_augment_prob: 0.8`, `band_jitter_nm: 3.0`; batch 8 x 4, bf16 - [config.json](config.json) |
-| schedule | one cosine schedule over 200 epochs (5 warm-up), not restarted at rotations |
+| schedule | one cosine schedule over 200 epochs (no warm-up: `warmup_epochs` is 0 in the config), not restarted at rotations |
 | data | se-v1 train, rotated every 20 epochs through 10 blocks of 200 shards: block k = shards k*200 .. k*200+199 (30,000 patches); 2,000 shards, ~300,000 patches, 58% of the split. Validation: test shards 000000-000009 (1,500 patches) throughout, as E001-E005 |
 | early stopping | off (fresh data every 20 epochs makes a plateau before a rotation likely); best.pt still tracks the lowest validation score |
 | driver | [rotate_f001.sh](rotate_f001.sh) - prefetches the next block while the current trains, stops after epoch 20k (checkpoint already in S3), swaps the folder, resumes via auto_resume; restart-safe |
@@ -39,8 +39,8 @@ PRISMA is scored on its own bands only: the one standard inference for wavelengt
 | 14 | 0.0219 (ep 13) | 5.53 (ep 13) | 0.430 / 0.765 / 0.720 / 0.724 / **0.660** |
 | 20 | **0.0202** | **4.90** | 0.702 / 0.764 / 0.729 / 0.740 / **0.734** (first F001 checkpoint above v0.2.0's 0.662; rotation to block 1 at 12:41 UTC, clean) |
 | 38 | **0.0192** | **4.47** | 0.763 / 0.762 / 0.688 / 0.695 / **0.727**; with the SAM dark-pixel fade 0.904 / 0.763 / 0.693 / 0.695 / **0.764** |
-| 60 | | | |
-| 100 | | | |
+| 60 | **0.0185** | **4.18** | combined 0.819 / 0.747 / 0.693 / 0.677 / **0.734** (233/909 caught); residual Mahalanobis (new default) 0.930 / 0.860 / 0.775 / 0.881 / **0.861** (386/909). Rotation to block 3 at 18:53 UTC, clean |
+| 109 | 0.0185 | 4.16 | combined 0.645 / 0.767 / 0.674 / 0.739 / **0.706** (201/909); residual Mahalanobis 0.927 / 0.861 / 0.768 / 0.890 / **0.862** (400/909). The epoch-100 decision point (no per-epoch checkpoint is kept, so last.pt at 109); epoch 60 re-scored in the same run reproduced its row exactly |
 | 200 | | | |
 
 ## Graphs

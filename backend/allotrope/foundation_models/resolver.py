@@ -30,7 +30,9 @@ from pathlib import Path
 from typing import Literal
 
 
-ScoringMethod = Literal["L1", "MSE", "SAM", "combined", "mahalanobis"]
+# "mahalanobis" is the classical detectors' RX on the cube; "residual_mahalanobis" scores a
+# foundation model's reconstruction residual (app/utils/anomaly_detection/residual_mahalanobis.py).
+ScoringMethod = Literal["L1", "MSE", "SAM", "combined", "mahalanobis", "residual_mahalanobis"]
 
 
 @dataclass(frozen=True)
@@ -141,8 +143,10 @@ _CAPABILITIES: dict[str, ModelCapabilities] = {
     "hyperspectral_segformer_mae": ModelCapabilities(
         architecture="hyperspectral_segformer_mae",
         foundation_model_name="hyperspectral_segformer_mae",
-        scoring_methods=("L1", "SAM", "combined"),
-        default_scoring_method="combined",
+        # residual_mahalanobis default since 2026-10-15: mean ROC-AUC on the four labelled PRISMA
+        # scenes 0.662 -> 0.854 (docs/lld/residual-mahalanobis.md). combined remains selectable.
+        scoring_methods=("residual_mahalanobis", "combined", "L1", "SAM"),
+        default_scoring_method="residual_mahalanobis",
         default_patch_size=128,
         default_stride=32,
         pixel_stats_relpath=_HSI_STATS,

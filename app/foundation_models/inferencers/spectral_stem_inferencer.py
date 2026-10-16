@@ -48,7 +48,10 @@ class SpectralStemInferencer(SegFormerMAEInferencer):
             stem=cfg.stem, stats_wavelengths_nm=sd["stats.wl"].tolist(), stats_mean=sd["stats.mean"].tolist(),
             stats_std=sd["stats.std"].tolist(), bands=cfg.bands, compressed_channels=cfg.compressed_channels,
             token_dim=cfg.token_dim, attention_heads=cfg.attention_heads, gate_hidden=cfg.gate_hidden,
-            bin_nm=cfg.bin_nm, band_weighting=cfg.band_weighting, embed_dims=cfg.embed_dims, num_heads=cfg.num_heads,
+            bin_nm=cfg.bin_nm, band_weighting=cfg.band_weighting,
+            # fine-tuned checkpoints carry a segmentation head (spectral_stem_finetune); pretrained ones do not
+            seg_classes=getattr(cfg, "seg_classes", 0), seg_decoder_dim=getattr(cfg, "seg_decoder_dim", 128),
+            embed_dims=cfg.embed_dims, num_heads=cfg.num_heads,
             reduction_ratios=cfg.reduction_ratios, num_blocks=cfg.num_blocks, decoder_dim=cfg.decoder_dim,
             expansion_ratio=cfg.expansion_ratio, drop_rate=0.0)
         return _ProductCallAdapter(inner)

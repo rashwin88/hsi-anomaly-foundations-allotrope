@@ -28,6 +28,7 @@ class FoundationModelName(str, Enum):
     SEGFORMER_MAE = "segformer_mae"
     HYPERSPECTRAL_SEGFORMER_MAE = "hyperspectral_segformer_mae"
     SPECTRAL_STEM_MAE = "spectral_stem_mae"
+    SPECTRAL_STEM_FINETUNE = "spectral_stem_finetune"
 
 
 
@@ -152,6 +153,41 @@ class SpectralStemMAEConfig(HyperspectralSegFormerMAEConfig):
         "checkpoint_s3_uri/last.pt, if either exists; otherwise start fresh.")
 
 
+class FinetuneSource(BaseModel):
+    """One sensor's shards for fine-tuning: local shard folders (staged before the run), its share of
+    training batches, an optional band list to align its samples onto, and its label format."""
+    name: str
+    train_dir: str
+    test_dir: str
+    share: float = Field(gt=0)
+    band_list_path: str | None = None
+    labels: Literal["enmap"] | None = Field(default=None, description="'enmap': label_* layers -> segmentation targets.")
+    skip_scenes_path: str | None = Field(default=None, description="JSON list of meta.json scene_id values to leave out "
+                                         "(e.g. the older copy of a scene processed twice).")
+
+
+class SpectralStemFinetuneConfig(SpectralStemMAEConfig):
+    """Fine-tuning a pretrained spectral-stem model on several sensors, with a segmentation head
+    (docs/proposals/fine-tuning-and-segmentation.md). Inherits every model and run-control field; the
+    normalisation curve comes from init_from's checkpoint, never from data (frozen at pretraining)."""
+
+    model_type: Literal["spectral_stem_finetune"] = "spectral_stem_finetune"
+    sources: list[FinetuneSource] = Field(min_length=1)
+    init_from: str | None = Field(default=None, description="Pretrained checkpoint (local path or s3://) to start from.")
+    mode: Literal["probe", "adapt", "joint"] = Field(
+        default="joint", description="probe: train the segmentation head only, backbone frozen. adapt: reconstruction "
+        "only. joint: reconstruction + segmentation loss on labelled batches.")
+    seg_classes: int = Field(default=5, ge=0)
+    seg_decoder_dim: int = 128
+    seg_weight: float = Field(default=1.0, ge=0, description="joint: weight of the segmentation loss.")
+    plateau_elevation_m: float | None = Field(default=3500.0, description="Label policy: cloud/thin-cloud unknown at or above "
+                                              "this mean ground elevation (a guard; no native-v1 scene reaches it).")
+    low_water_vapour: float | None = Field(default=750.0, description="Label policy: cloud/thin-cloud unknown below this "
+                                           "scene_wv (g/cm2 x 1000; 750 = 0.75 g/cm2, from the 2026-10-16 label QA).")
+    cirrus_min_level: int = Field(default=2, ge=1, le=3)
+    finetune_metrics_csv: str | None = Field(default=None, description="Per-epoch per-sensor validation and per-class IoU.")
+
+
 class SpectralCompressorConfig(BaseModel):
     """Architecture config for SpectralCompressor (linear autoencoder)."""
 
@@ -163,7 +199,7 @@ class SpectralCompressorConfig(BaseModel):
 # Pydantic picks the right config based on the model_type literal field.
 # Adding a new model = add a config class above and extend this union.
 ModelSpecificConfig = Annotated[
-    Union[SpatialAutoencoderConfig, SpectralCompressorConfig, SpatialMaskedAutoEncoderConfig, NormalizedMaskedAutoEncoderConfig, SegFormerMAEConfig, HyperspectralSegFormerMAEConfig, SpectralStemMAEConfig],
+    Union[SpatialAutoencoderConfig, SpectralCompressorConfig, SpatialMaskedAutoEncoderConfig, NormalizedMaskedAutoEncoderConfig, SegFormerMAEConfig, HyperspectralSegFormerMAEConfig, SpectralStemMAEConfig, SpectralStemFinetuneConfig],
     Field(discriminator="model_type"),
 ]
 

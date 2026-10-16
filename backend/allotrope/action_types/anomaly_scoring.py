@@ -60,7 +60,7 @@ KIND = "anomaly_scoring"
 # --- Per-type config schema ---------------------------------------------
 
 
-_VALID_METHODS = {"L1", "MSE", "SAM", "combined", "mahalanobis"}
+_VALID_METHODS = {"L1", "MSE", "SAM", "combined", "mahalanobis", "residual_mahalanobis"}
 
 
 class ModelOverride(BaseModel):
@@ -72,7 +72,7 @@ class ModelOverride(BaseModel):
 
     scoring_method: str | None = Field(
         default=None,
-        description="L1 | MSE | SAM | combined. Must be supported by the model.",
+        description="residual_mahalanobis | combined | L1 | SAM | MSE. Must be supported by the model.",
     )
     patch_size: int | None = Field(default=None, ge=32, le=1024)
     stride: int | None = Field(default=None, ge=8, le=1024)
@@ -224,8 +224,11 @@ META = ActionTypeMeta(
         "The headline scoring action. Loads the (filtered, on HSI) "
         "vendable, fans out across every selected model codename: load "
         "the checkpoint, run patch-based two-pass reconstruction, "
-        "compute the per-pixel anomaly score (L1 · SAM · combined · "
-        "MSE — defaulted per model, overridable per codename).\n\n"
+        "compute the per-pixel anomaly score (residual Mahalanobis · "
+        "combined · L1 · SAM · MSE — defaulted per model, overridable per "
+        "codename). Indradhanu defaults to residual Mahalanobis: how unusual "
+        "each pixel's reconstruction error is against the scene's normal "
+        "errors, which discounts haze, detector striping and dark water.\n\n"
         "When a scene_segmentation Output is attached the score is "
         "masked to its keep_mask. When a ground-truth annotation is "
         "attached on the Scene, the worker computes a per-model "

@@ -224,6 +224,6 @@ cheapest result an experiment can give.
 
 ---
 
-That is the sequel so far. The agreed design is written up in
-`docs/proposals/spectral-attention-bottleneck.md`; the runs that test it are recorded in
-`research/experiments/indradhanu-se-pretrain/`.
+**Next:** part 43 - F001, the final pretraining run that carried these fixes for 200 epochs. The
+agreed design is written up in `docs/proposals/spectral-attention-bottleneck.md`; the runs that test
+it are recorded in `research/experiments/indradhanu-se-pretrain/`.

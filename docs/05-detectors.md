@@ -66,7 +66,8 @@ model: given the original cube, the reconstruction, and a validity mask, produce
 | `L1` | mean absolute residual | default, any band count |
 | `MSE` | mean squared residual | matching an MSE-trained model |
 | `SAM` | angle between spectra | multi-band only; catches *shape* change |
-| `combined` | `w·L̃1 + (1−w)·S̃AM`, `w=0.5` | default for Indradhanu |
+| `combined` | `w·L̃1 + (1−w)·S̃AM`, `w=0.5` | Indradhanu's default until 2026-10-15 |
+| `residual_mahalanobis` | how *unusual* the residual's direction is (below) | **default for Indradhanu** |
 
 **L1 and SAM carry independent information.** L1 is a *magnitude* signal, SAM a *shape*
 signal. A bright cloud has large L1 but small SAM. A chemically odd material with normal
@@ -74,6 +75,34 @@ brightness but an unusual absorption profile has small L1 but large SAM. Reporti
 the operator choose which kind of anomaly matters.
 
 Each is normalised by its maximum over **valid pixels only**, then invalid pixels are zeroed.
+
+### Residual Mahalanobis - the default for Indradhanu
+
+L1, SAM and `combined` measure the residual's *size*. A scene's normal residuals are large along a
+few shared directions - overall brightness, haze, PRISMA's detector striping, dark water - and
+tiny along the rest, so size alone rewards ordinary pixels that sit on a common error direction.
+`residual_mahalanobis` (`app/utils/anomaly_detection/residual_mahalanobis.py`) projects the
+residual onto its top 30 principal components, whitens each by its spread over the scene, and
+scores each pixel by its squared distance from the mean of a ring between 21 and 61 pixels
+around it (`local_window=None`: the scene mean). Common error directions are discounted; an error
+in a direction the background never takes scores high even when it is small.
+
+Measured 2026-10-15 on the four labelled PRISMA scenes, through `compute_score` on the bench's
+reconstructions (mean ROC-AUC; objects caught in the top 1% of 909):
+
+| | set1 | set2 | set3 | set4 | mean | caught |
+|---|---|---|---|---|---|---|
+| v0.2.0, `combined` | 0.712 | 0.686 | 0.730 | 0.521 | 0.662 | 194 |
+| v0.2.0, `residual_mahalanobis` | 0.942 | 0.847 | 0.750 | 0.877 | **0.854** | 403 |
+| F001 epoch 52, `combined` | 0.731 | 0.755 | 0.677 | 0.698 | 0.715 | 208 |
+| F001 epoch 52, `residual_mahalanobis` | 0.929 | 0.859 | 0.787 | 0.885 | **0.865** | 383 |
+
+The global-mean variant scores 0.840 / 0.849. The 21/61 window was the best of four in the
+original sweep on these same scenes (`research/experiments/dual-window-mahalanobis/`), so the
+local variant is slightly favoured here. About 3-4 s per scene on CPU. Scores are squared
+distances with a heavy tail: the score PNG uses the sqrt stretch, and thresholds stay percentiles.
+Spatial post-filters (local z-scores, blob filters, +/-1 px shift suppression) were tested on top
+and did not help (comparison of 11 scoring methods, 2026-10-15; see docs/lld/residual-mahalanobis.md).
 
 ### SAM on dark water
 

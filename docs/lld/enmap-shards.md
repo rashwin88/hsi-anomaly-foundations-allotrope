@@ -40,7 +40,8 @@ inventory scene dataset (files.jsonl.gz: sha256 per file)
 
 Per sample: `pixels.npy` int16 (224, 128, 128) (x 0.0001 = reflectance, -32768 = nodata),
 `wavelengths.npy` float32 (224,), `label_cloud|cirrus|haze|cloud_shadow|snow|classes.npy` uint8
-(1, 128, 128) exactly as delivered (cirrus 0-3; classes 0 and 3 no-data, 1 land, 2 water),
+(1, 128, 128) exactly as delivered (cirrus 0-3; classes 0 = cloud, 1 land, 2 water, 3 no-data - class 0 was first
+read as no-data; the 2026-10-16 label QA showed every class-0 pixel is cloud-labelled and cloud-bright),
 `meta.json`: scene id, datatake, tile, date, processor, mean ground elevation, scene water vapour
 and aerosol, sun elevation/azimuth, scene cover %, tile row/col, centre lon/lat, CRS, affine.
 

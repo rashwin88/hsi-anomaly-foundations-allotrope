@@ -466,7 +466,8 @@ def run(ctx: Any) -> None:
             # to the percentile cap and the PNG goes black.
             kept=eroded_keep_mask.astype(bool),
             out_path=model_dir / "anomaly_score.png",
-            stretch="sqrt" if is_classical else "linear",
+            # residual_mahalanobis is a squared distance too: same heavy tail, same stretch.
+            stretch="sqrt" if is_classical or method == "residual_mahalanobis" else "linear",
         )
         _render_recon_png(
             recon=recon_np,

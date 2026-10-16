@@ -91,7 +91,7 @@ Every part has the same skeleton:
 | 29 | [29-inference.md](29-inference.md) | Running it on a real scene |
 | 30 | [30-scoring-and-the-product.md](30-scoring-and-the-product.md) | Turning errors into an answer |
 
-**Sequel - the next Indradhanu: a smarter spectral bottleneck (31-42)**
+**Sequel - the next Indradhanu: a smarter spectral bottleneck, then pretraining, scoring and fine-tuning (31-49)**
 
 Written 2026-10-14, after the decision to pretrain the next Indradhanu on SpectralEarth with a
 cross-attention spectral bottleneck. Parts 31 to 39 were written as a **design studied before
@@ -114,6 +114,13 @@ Assumes all of parts 01 to 30; leans on 08, 10, 12, 13 and 17 to 21.
 | 40 | [40-spectral-reduction.md](40-spectral-reduction.md) | Attention over 40 nm wavelength bins, without losing the bands |
 | 41 | [41-scoring-validation.md](41-scoring-validation.md) | Ranking epochs needs a fixed ruler: the ramped-SAM validation trap |
 | 42 | [42-one-band-list.md](42-one-band-list.md) | A stem that can read any band list must be trained on many: the PRISMA water failure |
+| 43 | [43-f001-rotating-pretraining.md](43-f001-rotating-pretraining.md) | F001: 200 epochs on rotating 30,000-patch blocks, and a detection score that stalled |
+| 44 | [44-three-native-datasets.md](44-three-native-datasets.md) | EnMAP, PRISMA and AVIRIS-NG at their own bands: quirks, splits, compression, one band list per batch |
+| 45 | [45-scoring-the-direction.md](45-scoring-the-direction.md) | Why size-based scores fail, and residual Mahalanobis worked by hand |
+| 46 | [46-the-ring-and-the-comparison.md](46-the-ring-and-the-comparison.md) | The 21/61 ring, integral images, and the eleven-way comparison that chose the default |
+| 47 | [47-the-segmentation-head.md](47-the-segmentation-head.md) | A second head for water, cloud, thin cloud, shadow and snow, and a loss for untrusted labels |
+| 48 | [48-checking-labels.md](48-checking-labels.md) | Auditing provider labels without ground truth: class 0 is cloud, and dry air makes false cirrus |
+| 49 | [49-the-fine-tuning-curriculum.md](49-the-fine-tuning-curriculum.md) | Probe, adapt, joint: stages, gates, sensor shares, the trained-wavelength record |
 
 Parts 34 to 39's numbers were first produced by a study prototype and then re-checked against
 the real modules (5,345 compressor and 6,401 decoder parameters at `d = D = 32`; 13,162 gate
@@ -122,6 +129,20 @@ throughput table measured on 2026-10-14 - are the ones most likely to drift: a c
 `bin_nm`, `_hyper`'s hidden width, or the encoder will move them. The agreed design, including
 the evaluation plan, is `docs/proposals/spectral-attention-bottleneck.md`; the runs are
 recorded in `research/experiments/indradhanu-se-pretrain/`.
+
+Parts 43 to 49 were written 2026-10-16, while F001 was still training and fine-tuning was at
+stage 0. They follow the work of 2026-10-15/16: the final pretraining run (43), the three
+native-band fine-tuning datasets (44), the switch of Indradhanu's default score to residual
+Mahalanobis (45, 46), and the fine-tuning design - segmentation head, label audit and curriculum
+(47 to 49). **Their numbers will drift more than any others in the course:** F001's validation
+and bench figures by epoch (parts 43, 45, 46, 49 - the run had reached about epoch 60), the 0.861
+stage-2 gate (49), the eleven-method comparison on F001's epoch 52 (46), the shard counts (44), the
+label-audit figures and the 0.75 g/cm2 dry-air threshold (47, 48), and the starting sensor shares
+and FT01-FT03 settings (49). The fine-tuning parts describe a design studied before its runs; the
+code they cite (`finetune_trainer.py`, `targets.py`, the `trained_wl` record) exists and is tested,
+but no fine-tuning run had finished. Authoritative: `docs/proposals/fine-tuning-and-segmentation.md`,
+`docs/lld/residual-mahalanobis.md`, the LLDs for the EnMAP, PRISMA and AVIRIS-NG shards, and
+`research/experiments/indradhanu-finetune/README.md`.
 
 ## Figures
 
