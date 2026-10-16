@@ -91,7 +91,7 @@ Every part has the same skeleton:
 | 29 | [29-inference.md](29-inference.md) | Running it on a real scene |
 | 30 | [30-scoring-and-the-product.md](30-scoring-and-the-product.md) | Turning errors into an answer |
 
-**Sequel - the next Indradhanu: a smarter spectral bottleneck, then pretraining, scoring and fine-tuning (31-49)**
+**Sequel - the next Indradhanu: a smarter spectral bottleneck, then pretraining, scoring and fine-tuning (31-54)**
 
 Written 2026-10-14, after the decision to pretrain the next Indradhanu on SpectralEarth with a
 cross-attention spectral bottleneck. Parts 31 to 39 were written as a **design studied before
@@ -121,6 +121,11 @@ Assumes all of parts 01 to 30; leans on 08, 10, 12, 13 and 17 to 21.
 | 47 | [47-the-segmentation-head.md](47-the-segmentation-head.md) | A second head for water, cloud, thin cloud, shadow and snow, and a loss for untrusted labels |
 | 48 | [48-checking-labels.md](48-checking-labels.md) | Auditing provider labels without ground truth: class 0 is cloud, and dry air makes false cirrus |
 | 49 | [49-the-fine-tuning-curriculum.md](49-the-fine-tuning-curriculum.md) | Probe, adapt, joint: stages, gates, sensor shares, the trained-wavelength record |
+| 50 | [50-what-ft01-and-ft02-showed.md](50-what-ft01-and-ft02-showed.md) | The probe's IoUs, FT02's gate miss by 0.006, and why `combined` caught up |
+| 51 | [51-the-see-saw-and-batchnorm.md](51-the-see-saw-and-batchnorm.md) | Sensor-pure batches and the one BatchNorm: why evaluation depends on which sensor ended the epoch |
+| 52 | [52-mixed-batches.md](52-mixed-batches.md) | `forward_mixed`: one stem pass per band list, one encoder pass for all - and what else FT02b changed |
+| 53 | [53-edges.md](53-edges.md) | Why correcting the score map for edges fails, and why an edge term under the blind spot is different |
+| 54 | [54-options-not-taken-yet.md](54-options-not-taken-yet.md) | Teacher head, per-sensor heads, synthetic targets, regularisation: what each costs and where it stands |
 
 Parts 34 to 39's numbers were first produced by a study prototype and then re-checked against
 the real modules (5,345 compressor and 6,401 decoder parameters at `d = D = 32`; 13,162 gate
@@ -143,6 +148,14 @@ code they cite (`finetune_trainer.py`, `targets.py`, the `trained_wl` record) ex
 but no fine-tuning run had finished. Authoritative: `docs/proposals/fine-tuning-and-segmentation.md`,
 `docs/lld/residual-mahalanobis.md`, the LLDs for the EnMAP, PRISMA and AVIRIS-NG shards, and
 `research/experiments/indradhanu-finetune/README.md`.
+
+Parts 50 to 54 were written later on 2026-10-16, after FT01 and FT02 had run and while FT02b (mixed
+batches) was running: the two runs' results and the decision to build on FT02 (50), the BatchNorm
+diagnosis (51), mixed batches (52), the edge diagnosis and the planned FT02c edge term (53), and the
+options set aside (54). **Values that will drift:** FT02b's results (pending when written - part 52's
+table is empty), FT02c's design (its code was being written; part 53 describes the plan), and the
+status of every option in part 54. The run READMEs under `research/experiments/indradhanu-finetune/`
+and its "Log" section are authoritative; `docs/lld/finetune.md` holds the interfaces and decisions.
 
 ## Figures
 

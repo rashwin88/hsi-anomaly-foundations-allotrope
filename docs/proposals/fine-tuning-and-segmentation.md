@@ -1,8 +1,11 @@
 # Fine-tuning Indradhanu with a segmentation head
 
-**Status:** agreed 2026-10-16 (classes, shared model, L40S); stage 0 in progress; label policy fixed 2026-10-16.
+**Status:** agreed 2026-10-16 (classes, shared model, L40S); label policy fixed 2026-10-16. As of 2026-10-16:
+stage 1 done (FT01), stage 2 run but gate not met (FT02), stage 2b running (FT02b, mixed-sensor batches), stage 2c
+planned (FT02c, edge term), stage 3 prepared (FT03). Running log: `research/experiments/indradhanu-finetune/README.md`.
 **Starts from:** F001, the SpectralEarth-pretrained reduced-attention model
-(`research/experiments/indradhanu-se-pretrain/F001-final-pretrain/`), finishing 2026-10-16.
+(`research/experiments/indradhanu-se-pretrain/F001-final-pretrain/`), stopped at epoch 113 of 200 on 2026-10-16
+(bench flat: 0.861 at epoch 60, 0.862 at epoch 109); fine-tuning loads `F001_ep109.pt`.
 **Runs in:** `research/experiments/indradhanu-finetune/` (FT01, FT02, ... one folder per run).
 
 ## Why
@@ -51,10 +54,13 @@ pixels only (a per-class ignore mask), so a tile without, say, trustworthy cloud
 | PRISMA | `patches/prisma/native-v1` | 14,802 / 1,570 | none | 30 m |
 | AVIRIS-NG | `patches/aviris_ng/native-v1` | 22,377 / 2,270 | none | 3-8 m |
 
-- **One sensor per batch** (the stem takes one band list per batch). Each sensor's samples are aligned onto
+- **One band list per stem pass.** Each sensor's samples are aligned onto
   that sensor's own band list in the loader (`band_alignment`); PRISMA needs none, AVIRIS-NG aligns its three
-  product-version variants (all within 0.42 nm), EnMAP aligns its renumbered scenes.
-- **Per-epoch shares, not concatenation:** start at EnMAP 40% / PRISMA 35% / AVIRIS-NG 25% of batches, so
+  product-version variants (all within 0.42 nm), EnMAP aligns its renumbered scenes. Until FT02b every batch
+  was one sensor; from FT02b (`mixed_batches`, adapt only) every batch holds all three, each through the stem
+  on its own and concatenated after it (`SpectralStemSegFormerMAE.forward_mixed`, `docs/lld/finetune.md`).
+- **Per-epoch shares, not concatenation:** start at EnMAP 40% / PRISMA 35% / AVIRIS-NG 25% of batches (with
+  mixed batches, of each batch: 3 / 3 / 2 of 8, i.e. 0.375 / 0.375 / 0.25), so
   AVIRIS-NG's 22k tiles (about 200 per flight line) do not swamp the satellites. Tuned only on the stage gates.
 - **Label policy, applied at load time** (no reshard), fixed from a QA of all 15,492 EnMAP tiles (2026-10-16;
   tables in `research/experiments/indradhanu-finetune/README.md`):
@@ -80,12 +86,38 @@ pixels only (a per-class ignore mask), so a tile without, say, trustworthy cloud
 |---|---|---|---|
 | **0. Setup** | nothing | - | everything below exists and is tested; label thresholds fixed |
 | **1. Probe** (FT01) | the segmentation head only; F001 frozen | EnMAP | per-class IoU on EnMAP's held-out datatakes recorded; tells how much F001's features already separate cloud / water |
-| **2. Adapt** (FT02) | stem + encoder + reconstruction decoder, MAE loss, low LR, band augmentation on | all three, shares above | PRISMA bench (residual Mahalanobis) >= F001's (0.861 at epoch 60); EnMAP / PRISMA / AVIRIS-NG test reconstruction falls |
+| **2. Adapt** (FT02) | stem + encoder + reconstruction decoder, MAE loss, low LR, band augmentation on | all three, shares above, one sensor per batch | PRISMA bench (residual Mahalanobis) >= F001's (0.861 at epoch 60); EnMAP / PRISMA / AVIRIS-NG test reconstruction falls |
+| **2b. Mixed batches** (FT02b) | as stage 2, from FT02's epoch 8, every batch holding all three sensors | all three, 3 / 3 / 2 per batch of 8 | bench >= 0.861; reconstruction no worse than FT02 epoch 8 on any sensor; per-sensor validation moves together |
+| **2c. Edge term** (FT02c) | as 2b, plus a gradient-matching loss on hidden pixels (spatial gradients of reconstruction vs input) | as 2b | written in its README before launch |
 | **3. Joint** (FT03) | everything from the start, MAE + segmentation loss (MAE dominant); gradual top-down unfreezing is not implemented - an option if joint training destabilises reconstruction | all three; segmentation loss on EnMAP batches only | bench not below stage 2; IoU above stage 1 |
 | **4. Pseudo-labels** (optional, FT04) | as stage 3 | + PRISMA / AVIRIS-NG pixels the stage-3 head labels with high confidence | IoU on EnMAP holds; visual check on PRISMA cloud scenes; bench holds |
 | **5. Product** | - | - | masks replace the threshold rules in `scene_segmentation`; class-aware residual Mahalanobis offered in scoring, shipped only if it beats the default on the bench |
 
 Pass criteria for each run are written in its README before launch, as for E005.
+
+**Status by stage (2026-10-16):**
+
+| stage | run | status | result |
+|---|---|---|---|
+| 0 | - | done | code, tests, label policy, shards on the L40S |
+| 1 | FT01 | done, 1.4 h | IoU water 0.82, cloud 0.80, shadow 0.20, thin cloud 0.09 (flat all run: label ceiling), snow not measurable (1 test tile); gate (water >= 0.6) passed |
+| 2 | FT02 | done, 4.25 h, **gate not met** | bench 0.855 (best.pt, epoch 8) / 0.853 (epoch 20) vs 0.861; SAM fell on all three sensors; combined 0.706 -> 0.824; per-sensor validation see-sawed. Not discarded: built on (user decision) |
+| 2b | FT02b | running since 10:15 UTC, code 9ae3215 | pending (scored at epochs 3, 6, 10) |
+| 2c | FT02c | planned, after FT02b | - |
+| 3 | FT03 | prepared, not run | waits for a stage-2 run that passes |
+| 4, 5 | - | not started | - |
+
+Why 2b: FT02's see-saw, and the stem's single BatchNorm, whose running statistics with one sensor per batch
+are set by whichever sensors ended the epoch (FT02 README, "BatchNorm sensitivity"). Mixed batches balance each
+step's gradient across sensors and give BatchNorm mixed statistics in training and evaluation alike.
+
+Why 2c: edges are the main false-alarm source (49-68% of top-1% false positives on the top-10% edges), but
+29-79% of target pixels are strong-edge pixels too, so every score-map correction tried lost to residual
+Mahalanobis (edge-rank correction 0.86 -> 0.67). Inference reconstructs each pixel while its token is hidden,
+so a boundary that continues across a hidden token can be learned sharply, while a target isolated inside one
+stays unpredictable. The term sharpens what the context predicts; it cannot see the hidden target. Caveat: a
+target larger than one token (4 x 4 px) is partly visible in the neighbouring tokens of the same pass.
+Folder: `research/experiments/indradhanu-finetune/FT02c-edges/`; code 9ff0484.
 
 ## Stage 0 - what has to exist first
 
@@ -94,7 +126,7 @@ Pass criteria for each run are written in its README before launch, as for E005.
    normalisation curve stays frozen (decided 2026-10-14).
 2. **Label QA and policy:** label statistics per EnMAP scene against elevation and water vapour, thresholds
    chosen and documented; a loader-time label decoder producing (classes, H, W) targets + ignore masks.
-3. **Multi-sensor loader:** one dataset per sensor, batches drawn by share, one band list per batch; reuses the
+3. **Multi-sensor loader:** one dataset per sensor, batches drawn by share, one band list per batch (per stem pass since FT02b); reuses the
    hot-storage, decoding (`.i16dz`) and band-alignment hooks.
 4. **Segmentation head + losses + metrics** (`app/foundation_models/components/`), with a config switch to freeze
    the backbone (stage 1) or train jointly (stage 3).
@@ -102,9 +134,24 @@ Pass criteria for each run are written in its README before launch, as for E005.
    laptop at checkpoints; later the bench with segmentation masks and class-aware scoring.
 6. **Infrastructure:** GPU role read access to the three shard sets; EnMAP and PRISMA recompressed; a staging
    script for the L40S once F001 frees the disk.
-7. **Course:** new parts for the segmentation head, multi-task training and class-aware scoring.
+7. **Course:** new parts for the segmentation head, multi-task training and class-aware scoring (parts 47-49;
+   the FT01/FT02 results, BatchNorm, mixed batches, edges and the options not taken are parts 50-54).
 
 ## Open questions (decide as stages report)
+
+Decided 2026-10-16 (user):
+- **Mixed-sensor batches: yes** (FT02b).
+- **Regularisation shelved** - an EMA of the weights, SpectralEarth replay, a lower LR, L2-SP (penalise distance
+  from F001's weights). FT02 improved reconstruction on every sensor, so forgetting is not the leading suspect.
+
+Still open:
+- **Teacher ("oracle") head** - cross-sensor distillation: an EMA teacher reading a sensor's full band list
+  teaches a student reading a degraded list. Discussed; deferred until mixed batches report.
+- **Per-sensor heads** - discussed, not chosen: more capacity per sensor, at the cost of the one band-agnostic
+  decoder that lets any band list in.
+- **Synthetic-target detection head** - discussed, not chosen: implant synthetic targets and train a head to find
+  them; detection becomes a training signal, but the targets' realism decides what it learns.
+- **The edge term (stage 2c)** - weight, and whether it costs small-target detection; judged on the bench.
 
 - Whether class-aware Mahalanobis uses hard classes or soft (probability-weighted) statistics.
 - Whether pseudo-labels (stage 4) are needed at all, or EnMAP-trained masks transfer well enough.

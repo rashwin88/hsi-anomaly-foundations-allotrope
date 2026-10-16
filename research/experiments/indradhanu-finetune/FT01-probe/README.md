@@ -39,6 +39,7 @@ Per-class IoU on EnMAP test (950 tiles), from `finetune_metrics.csv`; segmentati
 Against the expectation written before launch: water 0.82 (expected >= 0.80, met); cloud 0.80 (expected >= 0.5, well
 above); thin cloud 0.09 (expected 0.3-0.5, far below); shadow 0.20 (expected < 0.3, as expected); snow 0.17 on a
 single test tile, not a measurement. Gate: water >= 0.6, so the plan stands.
+
 ## Observations
 
 - F001's frozen features already separate water and cloud: 0.82 / 0.80 IoU from a 372k-parameter head alone.

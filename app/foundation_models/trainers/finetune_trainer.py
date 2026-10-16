@@ -8,8 +8,10 @@ full SAM weight, early stopping, checkpoints and auto-resume. What it adds:
 
   - **Sources.** One WebDataset pipeline per sensor (`model_config.sources`), each reading its own staged
     shard folders, aligned onto its own band list, EnMAP's label layers turned into segmentation targets
-    (app/utils/segmentation/targets.py). Every training batch comes from one sensor - the stem takes one
-    band list per batch - drawn at random by the sources' shares.
+    (app/utils/segmentation/targets.py). By default every training batch comes from one sensor, drawn at random
+    by the sources' shares; with `mixed_batches` (adapt) every batch holds every sensor, share x batch_size each,
+    through `forward_mixed` - one stem pass per band list, shared BatchNorm / encoder / decoder.
+  - **Edge term.** `grad_loss_weight` adds `gradient_l1` (spatial-gradient L1 on hidden pixels) to the mixed loss.
   - **Modes.** probe: the segmentation head alone, backbone frozen (its BatchNorm statistics too).
     adapt: reconstruction only. joint: reconstruction + seg_weight x segmentation loss on labelled batches.
   - **Start point.** `init_from` loads a pretrained checkpoint's weights (the head starts fresh). The model's

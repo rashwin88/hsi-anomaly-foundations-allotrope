@@ -16,12 +16,13 @@ label policy it learns from. This part puts them in order. The plan is `docs/pro
 `app/foundation_models/trainers/finetune_trainer.py` with its config `SpectralStemFinetuneConfig` in
 `app/models/training/training_config.py`. Runs live in `research/experiments/indradhanu-finetune/`, one
 folder per run, each with its pass criteria written before launch. When this part was written the first
-three had configs and none had started:
+three had configs and none had started (update, 2026-10-16: FT01 and FT02 have since run, and FT02 missed its
+gate - part 50 reads the results):
 
 | run | stage | starts from | sources | epochs x samples | learning rate |
 |---|---|---|---|---|---|
-| FT01-probe | 1 | F001 `best.pt` | EnMAP only | 15 x 14,542 | 0.001 (head only) |
-| FT02-adapt | 2 | F001 `best.pt` | all three, 0.40 / 0.35 / 0.25 | 20 x 30,000 | 0.0001 |
+| FT01-probe | 1 | F001 epoch 109 (`F001_ep109.pt`) | EnMAP only | 15 x 14,542 | 0.001 (head only) |
+| FT02-adapt | 2 | F001 epoch 109 (`F001_ep109.pt`) | all three, 0.40 / 0.35 / 0.25 | 20 x 30,000 | 0.0001 |
 | FT03-joint | 3 | FT02's `best.pt`, head fresh | all three, 0.40 / 0.35 / 0.25 | 20 x 30,000 | 0.0001 |
 
 Note what FT03 starts from: the *adapted* backbone, not the probe's head. The probe is a measurement,
@@ -158,6 +159,9 @@ augmentation on (part 42). The question: does F001 learn PRISMA's and AVIRIS-NG'
 EnMAP's native ones, without forgetting how to detect? The gate asks two things: test reconstruction
 falls for each sensor, **and** the bench under residual Mahalanobis stays at or above F001's 0.861.
 
+What happened: reconstruction fell on all three sensors, but the bench ended at 0.855 - gate not met. Part 50
+reads the run; parts 51 and 52 follow the see-saw it showed to the next run, FT02b.
+
 ## Stage 3: joint
 
 `mode: joint` trains every parameter on
@@ -169,10 +173,10 @@ loss = reconstruction loss + seg_weight x segmentation loss      (seg_weight def
 The segmentation term exists only on batches that carry labels - EnMAP's - and uses the second,
 unmasked pass of part 47. PRISMA and AVIRIS-NG batches contribute reconstruction only.
 
-**Source and design disagree here too.** The proposal's table says stage 3 trains with the "encoder
-unfrozen from the top stage down" - gradual unfreezing. `finetune_trainer.py` has no such mechanism:
-`joint` trains everything from the first step. The source wins; if gradual unfreezing is wanted, it
-is still to be built.
+**Source and design disagreed here.** The first draft of the proposal said stage 3 trains with the
+"encoder unfrozen from the top stage down" - gradual unfreezing. `finetune_trainer.py` has no such
+mechanism: `joint` trains everything from the first step. The source won, and the proposal now says so
+("gradual top-down unfreezing is not implemented"); if it is wanted, it is still to be built.
 
 Stage 4 (optional) would add the stage-3 head's most confident predictions on PRISMA and AVIRIS-NG as
 extra labels, so-called **pseudo-labels**, if EnMAP-trained masks do not transfer well enough on their
@@ -180,7 +184,9 @@ own.
 
 ## Mixing sensors by share
 
-Every batch comes from one sensor, because the stem takes one band list per batch (part 44).
+Every batch comes from one sensor, because the stem takes one band list per batch (part 44). That was
+true for FT01 and FT02; from FT02b a `mixed_batches` option puts every sensor in every batch, and the
+rule becomes one band list per stem pass (part 52).
 `_MixedLoader` picks the sensor for each batch at random, weighted by its share:
 
 ```python
@@ -336,8 +342,8 @@ the same.
 the product's job. IoU is measured on EnMAP, which has labels; detection on PRISMA, which has the
 labelled anomalies.
 
-**"Joint training unfreezes the encoder gradually?"** The proposal says so; the code does not. Joint
-trains everything at once.
+**"Joint training unfreezes the encoder gradually?"** The proposal's first draft said so; the code
+does not, and the proposal has been corrected. Joint trains everything at once.
 
 ## Check yourself
 
@@ -371,6 +377,5 @@ trains everything at once.
 
 ---
 
-That is the course so far. The authoritative documents for this stretch are
-`docs/proposals/fine-tuning-and-segmentation.md`, `docs/lld/residual-mahalanobis.md` and
-`docs/lld/spectral-stem.md`; the runs will be recorded in `research/experiments/indradhanu-finetune/`.
+**Next:** part 50 - what FT01 and FT02 showed: the probe's IoUs, FT02's gate miss, and why `combined`
+caught up.

@@ -31,8 +31,8 @@ PRISMA bench, own bands (`C:/es/ep109/score.py`, the product's `compute_score`),
 | epoch | val L1 / SAM: EnMAP, PRISMA, AVIRIS-NG | residual Mahalanobis (gate >= 0.861) | combined |
 |---|---|---|---|
 | 1 | 0.0183 / 4.81, 0.0224 / 7.30, 0.0179 / 7.94 | 0.929 / 0.874 / 0.775 / 0.878 / **0.864** (413) | 0.827 / 0.764 / 0.795 / 0.653 / **0.760** (332) |
-| 13 | 0.0165 / 4.16, 0.0193 / 6.04, 0.0164 / 6.49 | 0.930 / 0.846 / 0.759 / 0.885 / **0.855** (400) | 0.938 / 0.807 / 0.726 / 0.766 / **0.809** (330) |
 | 8 (best.pt) | 0.0164 / 4.17, 0.0200 / 5.93, 0.0159 / 6.07 | 0.931 / 0.852 / 0.757 / 0.879 / **0.855** (401) | 0.943 / 0.781 / 0.736 / 0.834 / **0.824** (335) |
+| 13 | 0.0165 / 4.16, 0.0193 / 6.04, 0.0164 / 6.49 | 0.930 / 0.846 / 0.759 / 0.885 / **0.855** (400) | 0.938 / 0.807 / 0.726 / 0.766 / **0.809** (330) |
 | 20 (last.pt) | 0.0162 / 4.07, 0.0199 / 6.31, 0.0156 / 6.19 | 0.934 / 0.848 / 0.748 / 0.882 / **0.853** (410) | 0.943 / 0.799 / 0.735 / 0.780 / **0.814** (320) |
 
 **Gate: not met** - residual Mahalanobis 0.855 / 0.853 against >= 0.861 (F001 ep109 0.862). Reconstruction fell on
@@ -44,6 +44,7 @@ PRISMA SAM 5.04, AVIRIS-NG 8.24), then reverts. Validation tiles are fixed and u
 
 Epoch 1 reads PRISMA through a record that now holds PRISMA's own wavelengths, so it reads all 185 of the bench scenes' bands where F001 read 165: the 20 F001 dropped
 (SpectralEarth's gaps) are scored too; part of any change is those bands, not just better weights.
+
 ## Observations
 
 - **BatchNorm sensitivity (2026-10-16, `C:/es/bn/adabn.py`, FT02 epoch 20).** The model has one BatchNorm layer (the

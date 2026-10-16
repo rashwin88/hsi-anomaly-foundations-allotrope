@@ -1,5 +1,5 @@
 {
-  "_description": "FT02c: FT02b continued with an edge term - L1 between the spatial gradients of reconstruction and input on hidden pixels, weight 1.0 (same units as L1). Mixed batches as FT02b. 2026-10-16.",
+  "_description": "FT02c: FT02b continued with an edge term - L1 between the spatial gradients of reconstruction and input on hidden pixels, weight 1.0 (same units as L1). Mixed batches as FT02b. 2026-10-16. SAM weight 0.5 from epoch 1 (no ramp restart - FT02b's init restarted it).",
   "foundation_model_name": "spectral_stem_finetune",
   "version": "0.5.0",
   "device": "cuda",
@@ -41,7 +41,7 @@
     "mask_ratio": 0.65,
     "trim_fraction": 0.0,
     "sam_weight": 0.5,
-    "sam_ramp_epochs": 10,
+    "sam_ramp_epochs": 0,
     "erosion_kernel_size": 1,
     "metrics_csv": "/opt/dlami/nvme/runs/FT02c-edges/metrics.csv",
     "amp_bf16": true,

@@ -12,7 +12,9 @@ are written in its README before launch and not moved afterwards.
 | id | stage | mode | what | instance | hours | cost | gate result | verdict |
 |---|---|---|---|---|---|---|---|---|
 | FT01 | 1 | probe | segmentation head on frozen F001 (epoch 109), EnMAP | g6e.2xlarge (kept) | 1.4 | ~$4 | water 0.82 >= 0.6, pass | water 0.82, cloud 0.80, shadow 0.20, thin cloud 0.09 (label-limited) |
-| FT02 | 2 | adapt | reconstruction on all three sensors | g6e.2xlarge (kept) | 4.25 | ~$12 | bench 0.855 < 0.861, **not met** | reconstruction better on all three; combined 0.706 -> 0.824; per-sensor see-saw under investigation |
+| FT02 | 2 | adapt | reconstruction on all three sensors, one sensor per batch | g6e.2xlarge (kept) | 4.25 | ~$12 | bench 0.855 < 0.861, **not met** | reconstruction better on all three; combined 0.706 -> 0.824; per-sensor see-saw under investigation |
+| FT02b | 2b | adapt, mixed batches | FT02 epoch 8 continued, every batch EnMAP 3 / PRISMA 3 / AVIRIS-NG 2 | g6e.2xlarge (kept) | - | - | pending (epochs 3 / 6 / 10) | running since 2026-10-16 10:15 UTC |
+| FT02c | 2c | adapt, mixed batches + edge term | gradient-matching loss on hidden pixels | g6e.2xlarge (kept) | - | - | - | planned, after FT02b ([FT02c-edges](FT02c-edges/README.md), code 9ff0484) |
 | FT03 | 3 | joint | reconstruction + segmentation | g6e.2xlarge (kept) | - | - | - | not started |
 
 ## Stage 0 records
@@ -53,3 +55,44 @@ not no-data; no scene is above 2,776 m, so dry air, not altitude, marks the fals
 under two processor versions (`band_lists/enmap_drop_duplicate_scenes.json`); snow and cloud overlap on 122,815
 pixels; 53% of shadow pixels have no cloud within 900 m in the same tile (an upper bound - the cloud may be in a
 neighbouring tile). Class balance after the policy and the remaining caveats are in the proposal.
+
+## Log
+
+One entry per run, diagnosis or decision, dated, newest last. Numbers live in the run READMEs; this is the
+thread that connects them.
+
+- **2026-10-16 - Label QA and policy.** EnMAP label audit over all 15,492 tiles (Stage 0 records above): class 0
+  is cloud, dry air (wv < 0.75 g/cm2) not altitude marks false cloud/cirrus labels, 4 duplicate scenes dropped.
+- **2026-10-16 - F001 stopped at epoch 113 of 200** (decision). Bench (residual Mahalanobis, own bands) 0.861 at
+  epoch 60, 0.862 at epoch 109: flat for 49 epochs. Fine-tuning starts from `F001_ep109.pt`
+  ([F001 README](../indradhanu-se-pretrain/F001-final-pretrain/README.md)).
+- **2026-10-16 - FT01 probe done** ([FT01-probe](FT01-probe/README.md)). Head only, frozen F001, 15 epochs,
+  1.4 h. IoU water 0.82, cloud 0.80, shadow 0.20, thin cloud 0.09 (flat all run - the label ceiling the QA
+  predicted), snow not measurable (1 test tile). Gate (water >= 0.6) passed.
+- **2026-10-16 - FT02 adapt done, gate not met** ([FT02-adapt](FT02-adapt/README.md)). Reconstruction on all
+  three sensors, one sensor per batch, 20 epochs, 4.25 h. SAM fell on every sensor; bench 0.855 (best.pt, epoch
+  8) / 0.853 (epoch 20) vs >= 0.861; combined rose 0.706 -> 0.824. The trained-wavelength record grew 202 -> 733
+  (AVIRIS-NG +337, PRISMA +177, EnMAP +17), so FT02 reads all 185 bench PRISMA bands where F001 read 165.
+  Per-sensor validation see-sawed (epoch 17: PRISMA 5.04 deg, AVIRIS-NG 8.24 deg).
+- **2026-10-16 - Edge diagnosis** (FT02 README, Observations). 49-68% of top-1% false positives sit on the
+  top-10% spatial edges (chance 10%), but 29-79% of ground-truth pixels are strong-edge pixels too; an
+  edge-strength correction of the score map collapses the bench 0.86 -> 0.67, and the earlier sharpeners
+  (difference-of-Gaussians, ring z, one-pixel shift-min) all lost to residual Mahalanobis. Conclusion:
+  post-hoc edge correction cannot tell a field boundary from a target.
+- **2026-10-16 - BatchNorm diagnosis** (FT02 README, Observations). The model's one BatchNorm (the stem's)
+  re-estimated per PRISMA scene moves 0.35-0.76 sd; residual Mahalanobis barely moves (0.853 -> 0.858),
+  combined swings (set1 0.943 -> 0.755). Sensor-pure batches leave its stored statistics set by the last
+  batches of an epoch - consistent with the see-saw.
+- **2026-10-16 - Decisions (user).** FT02 is not invalidated: build on it. Mixed-sensor batches: yes (FT02b).
+  Regularisation (EMA, SpectralEarth replay, lower LR, L2-SP): shelved. Teacher ("oracle") head - an EMA
+  teacher on the full band list distilling into a student on a degraded list: deferred until after mixed
+  batches. Per-sensor heads and a synthetic-target detection head: discussed, not chosen.
+- **2026-10-16 10:15 UTC - FT02b launched** ([FT02b-mixed](FT02b-mixed/README.md), code 9ae3215). FT02 epoch 8
+  continued with every micro-batch EnMAP 3 / PRISMA 3 / AVIRIS-NG 2, x4 accumulation, 10 epochs. Weights only
+  are carried over: the optimiser, the cosine LR (back to 1e-4) and the SAM ramp restart (SAM weight 0 in its
+  first epoch, 0.45 in its tenth). The configured 1-epoch warm-up does not exist in code (`warmup_epochs` is
+  never read). Results pending.
+- **2026-10-16 - FT02c planned, after FT02b.** An edge term: L1 between the spatial gradients of reconstruction
+  and input on hidden pixels. Inference reconstructs each pixel while its token is hidden, so a boundary that
+  continues across the hidden token is learnable sharply, while a target isolated inside it is not. Caveat: a
+  target larger than one 4 x 4 px token is partly visible in its neighbours. Folder [FT02c-edges](FT02c-edges/README.md); code 9ff0484.

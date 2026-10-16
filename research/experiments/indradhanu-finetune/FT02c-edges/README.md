@@ -10,8 +10,9 @@ reconstruction to be sharp at edges - on hidden pixels only - cut the edge false
 **Why it should not hide targets:** inference reconstructs every pixel while its token is hidden (two complementary
 masks, `app/foundation_models/inferencers/spectral_stem_inferencer.py`), so the model predicts each patch from its
 surroundings. A field boundary, road or coastline continues across the hidden patch and can be predicted sharply; an
-isolated target inside the patch cannot. **Caveat:** stage-1 patch embeddings overlap their neighbours by 1-2 px, so a
-target larger than a patch is partly visible from next door; a sharper decoder may fill in some of it.
+isolated target inside the patch cannot. Stage-1 patch embeddings do not overlap (kernel 4, stride 4, padding 0,
+`seg_former_encoder.py`), so nothing of a hidden 4x4 token leaks into its neighbours. **Caveat:** a target spanning more
+than one token is partly visible in the neighbouring kept tokens; a sharper decoder may fill in some of it.
 
 **Where the blur comes from:** the decoder fuses all encoder stages at H/4 and PixelShuffle(4) turns one feature vector
 into a 4x4 pixel block (`app/foundation_models/components/seg_former_decoder.py`). An edge crossing a block must be
@@ -24,7 +25,7 @@ scenes; bench residual Mahalanobis does not fall below FT02b's.
 ## Setup
 | | |
 |---|---|
-| config | [config.json](config.json): FT02b's, plus `grad_loss_weight: 1.0`; init FT02b `best.pt`; 10 epochs |
+| config | [config.json](config.json): FT02b's, plus `grad_loss_weight: 1.0` and `sam_ramp_epochs: 0` (SAM weight 0.5 throughout: `init_from` restarts the epoch counter, so FT02b's ramp restarted at 0 - not repeated here); init FT02b `best.pt`; 10 epochs |
 | edge term | `gradient_l1` in `app/foundation_models/trainers/finetune_trainer.py`: mean over bands of \|d x_hat - d x\| for horizontal and vertical neighbour pairs, both pixels hidden and valid in that band; weight 1.0 because it is in the same reflectance units as L1 (laptop smoke: 0.014-0.016, the order of L1). Logged as `train_grad_l1` in `finetune_metrics.csv`, not in train L1 |
 | measurement | PRISMA bench at epochs 3, 6, 10; the edge diagnosis (`C:/es/edges/edges.py`, same rules) on FT02b best and FT02c best |
 | instance | `i-0a3afdd4efbcafe92`, g6e.2xlarge (L40S), kept |
