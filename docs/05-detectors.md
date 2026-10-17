@@ -118,7 +118,7 @@ pixels at or above `t` untouched. It applies to `SAM` and `combined`. The defaul
 [known issue 9](09-known-issues.md).
 
 Measured 2026-10-15 on the 4 labelled PRISMA scenes, bench inference
-(`scripts/evaluate_prisma_bench.py`), `t = 0.05` chosen up front, not tuned:
+(then `scripts/evaluate_prisma_bench.py`; now `scripts/evaluate.py`, docs/lld/evaluation.md), `t = 0.05` chosen up front, not tuned:
 
 | combined ROC-AUC | set1 | set2 | set3 | set4 | mean |
 |---|---|---|---|---|---|

@@ -32,7 +32,7 @@ from scipy import ndimage
 REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO))
 
-from app.utils.evaluation.implant import (  # noqa: E402
+from app.evaluation.implant import (  # noqa: E402
     TIERS, contrast_z, grow_blob, implant_material, implant_signature, ring_mask, solve_strength, tier_of)
 
 NODATA, SCALE = -32768, 1e-4
@@ -60,19 +60,19 @@ def band_means(refl: np.ndarray, wl: np.ndarray, lo: float, hi: float) -> np.nda
 # --- real: measure the PRISMA bench objects ---------------------------------------------------------------------
 
 def measure_real(root: str, out: str) -> None:
-    from app.utils.evaluation.prisma_bench import SCENES, load_scene
+    from app.evaluation.datasets import PRISMA_SCENES, load_prisma_scene
     objects, valid_px, scene_wl = [], 0, {}
-    for name in SCENES:
-        s = load_scene(root, name, "native")
-        cube, keep, wl = s.cube.astype(np.float64), s.spatial_valid.astype(bool), s.wavelengths_nm
+    for name in PRISMA_SCENES:
+        cube, _, wl, spatial, gt = load_prisma_scene(root, name, "native")
+        cube, keep = cube.astype(np.float64), spatial.astype(bool)
         bv = np.ones(cube.shape, bool)
         ndvi = ndvi_map(cube, wl)
-        labels, n = ndimage.label(s.gt)
+        labels, n = ndimage.label(gt)
         valid_px += int(keep.sum())
         scene_wl[name] = [float(w) for w in wl]          # set1 has 185 bands, the others 186
         for i in range(1, n + 1):
             obj = labels == i
-            ring = ring_mask(obj, keep, exclude=s.gt.astype(bool))
+            ring = ring_mask(obj, keep, exclude=gt.astype(bool))
             if ring.sum() < 8:
                 continue
             o, r = cube[:, obj].mean(1), cube[:, ring].mean(1)

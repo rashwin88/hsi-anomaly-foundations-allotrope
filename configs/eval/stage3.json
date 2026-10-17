@@ -1,0 +1,26 @@
+{
+  "name": "stage3: shipped v0.2.0, pretrained F001, fine-tuned FT02c and FT03; default, combined, water/cloud exclusion, classical",
+  "models": [
+    {"name": "v0.2.0", "checkpoint": "C:/es/models/hyperspectral_segformer_mae_v0.2.0_epoch200.pt"},
+    {"name": "F001_ep109", "checkpoint": "s3://allotrope-training-data-prod-india/experiments/indradhanu-se-pretrain/F001-final-pretrain/checkpoints/F001_ep109.pt"},
+    {"name": "FT02c_ep10", "checkpoint": "s3://allotrope-training-data-prod-india/experiments/indradhanu-finetune/FT02c-edges/checkpoints/best.pt"},
+    {"name": "FT03_ep10", "checkpoint": "s3://allotrope-training-data-prod-india/experiments/indradhanu-finetune/FT03-joint/checkpoints/best.pt"}
+  ],
+  "datasets": [
+    {"kind": "prisma_bench", "path": "C:/Users/FITT/Documents/stage1_datasets"},
+    {"kind": "implant", "path": "C:/es/implant/bench-v1"}
+  ],
+  "scorers": [
+    {"kind": "residual_mahalanobis"},
+    {"kind": "combined"},
+    {"kind": "exclude", "classes": ["water", "cloud"], "segmenter": "FT03_ep10", "fit_on_kept": false,
+     "base": {"kind": "residual_mahalanobis"}},
+    {"kind": "exclude", "classes": ["water", "cloud"], "segmenter": "FT03_ep10", "fit_on_kept": true,
+     "base": {"kind": "residual_mahalanobis"}},
+    {"kind": "pca_rx"}
+  ],
+  "metrics": [{"kind": "roc_auc"}, {"kind": "pauc", "max_fpr": 0.01}, {"kind": "tpr_at", "fpr": 0.001},
+              {"kind": "objects_caught", "top_pct": [1.0, 0.1]}],
+  "group_by": ["tier", "source", "sensor"],
+  "output": "C:/es/eval/stage3"
+}

@@ -149,7 +149,7 @@ Three fixes, each off by default so E001-E004 checkpoints behave exactly as trai
    sensor (AVIRIS-NG, ~5 nm) needs, since thinning can only make lists sparser than SpectralEarth.
 
 Plus a rule at load time: **`trained_band_mask`** keeps bands within 15 nm of a pretraining wavelength
-(the checkpoint's normalisation curve); `scripts/evaluate_prisma_bench.py` drops the rest for spectral
+(the checkpoint's normalisation curve); the evaluator (`app/evaluation/models.py`) drops the rest for spectral
 stems (set1 native: 185 -> 165, the 20 inside SpectralEarth's water-vapour gaps and past 2445 nm).
 
 **Invariant - augmentation never trains self-completion.** The loss is taken only on pixels hidden by
@@ -201,7 +201,7 @@ never augmented.
   (SpectralEarth); mixing is for fine-tuning only, and the label-key policy for mixed batches is open.
 - **One inference method: native bands** (decided 2026-10-15). A wavelength-stem model reads each
   sensor's own band list, minus bands `trained_band_mask` rejects - never a resampled grid.
-  `scripts/evaluate_prisma_bench.py` defaults to it; resampling to SpectralEarth's 202 (`se202`) stays
+  the evaluator (`app/evaluation/models.py`, reading `auto`) defaults to it; resampling to SpectralEarth's 202 (`se202`) stays
   only for the fixed-band stems, which cannot read anything else, and for diagnosis.
 - **Rejected:** band masking for pretraining (spectral self-completion leak) - training a pixel to
   fill its *own* missing bands, which lets an anomaly rebuild itself. Band-list augmentation (below)

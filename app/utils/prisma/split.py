@@ -6,7 +6,7 @@ footprints, so centres come from reading the scenes).
 
 Why by site: PRISMA revisits places; two dates of one site on opposite sides of the split would
 leak. Scenes whose centres lie within SITE_KM of each other are one site (single-link). Why hold out
-the benchmark sites: the four labelled scenes (app/utils/evaluation/prisma_bench.py) are not in the
+the benchmark sites: the four labelled scenes (app/evaluation/datasets.py, PRISMA_SCENES) are not in the
 inventory, but their places may be, on other dates - training on them would flatter the bench.
 Deterministic: a site's side depends only on (seed, its earliest scene id).
 """

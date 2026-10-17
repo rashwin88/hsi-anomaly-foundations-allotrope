@@ -111,4 +111,9 @@ thread that connects them.
 - **2026-10-17 - Class-aware scoring: not shipped.** Per-class whitening + same-class ring removed cloud false alarms
   (implant 8% -> 1%) but water's tight statistics made water noise dominate (set1 water share of false alarms 14% ->
   92%; PRISMA pAUC 0.158 -> 0.134). User: "we don't detect anything on water and cloud" - next, exclude them.
+- **2026-10-17 - Evaluation became one subsystem** (app/evaluation, scripts/evaluate.py, docs/lld/evaluation.md);
+  stage-3 run reproduced every earlier number. Water / cloud exclusion (FT03 masks, zeroed after scoring) lifts the
+  top of the ranking on every model (FT03 PRISMA: caught top 0.1% 14.3% -> 16.5%, pAUC 0.158 -> 0.165). A model-free
+  PCA-RX beats all models on the implant bench but loses on the real one: bench-v1 is biased, a v2 comes before any
+  detection-supervised fine-tuning ([implant-bench](../implant-bench/README.md)).
 

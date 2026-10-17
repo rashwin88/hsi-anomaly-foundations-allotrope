@@ -84,3 +84,28 @@ Objects caught in the top 1% (top 0.1%) of scores, 1-pixel tolerance; pAUC <= 1%
   pretraining on SpectralEarth (EnMAP) already gave everything there was.
 - Signature and material implants score alike (25% vs 29% for FT02c), so transplanted real signatures are not what
   makes the bench easy or hard.
+
+## Stage-3 evaluation through app/evaluation (2026-10-17, `configs/eval/stage3.json`, output C:/es/eval/stage3)
+
+Reproduced every earlier number (PRISMA bench pAUC / ROC-AUC / caught: v0.2.0 0.159 / 0.854 / 402, F001 0.148 /
+0.861 / 400, FT03 0.158 / 0.853 / 413; implant v0.2.0 19.0% / 7.7%). New:
+
+| implant bench | caught top 1% | top 0.1% | pAUC <= 1% | easy pAUC | medium pAUC |
+|---|---|---|---|---|---|
+| FT03 + residual Mahalanobis | 26.9% | 9.9% | 0.172 | 0.371 | 0.121 |
+| FT03 + RM, water / cloud excluded | 27.2% | 10.3% | 0.174 | 0.378 | 0.118 |
+| **PCA-RX on the cube (no model)** | **30.2%** | **10.5%** | **0.209** | **0.423** | **0.168** |
+
+| PRISMA real bench | caught top 1% | top 0.1% | pAUC <= 1% | TPR @ 0.1% |
+|---|---|---|---|---|
+| FT03 + residual Mahalanobis | 45.4% | 14.3% | 0.158 | 0.058 |
+| FT03 + RM, water / cloud excluded | 46.1% | 16.5% | 0.165 | 0.065 |
+| PCA-RX on the cube (no model) | 39.7% | 8.1% | 0.128 | 0.029 |
+
+**bench-v1 is biased toward cube-level spectral oddity.** A model-free PCA-RX beats every model on the implants and
+loses clearly on the real objects (half the detection rate at 0.1%). Implants are linear blends of a foreign spectrum
+into otherwise untouched pixels - hard edges, no texture, no blur - which suits a cube detector; real objects are
+spatially structured. bench-v1 still orders the models consistently (v0.2.0 < F001 < FT02c ~ FT03) but must not be a
+training target. v2: spatially coherent implants (PSF-blurred footprint, within-object texture), calibrated on a
+second statistic, accepted only if it reproduces the real bench's ordering (models above PCA-RX).
+

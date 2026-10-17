@@ -2,7 +2,7 @@
 import numpy as np
 import pytest
 
-from app.utils.evaluation.implant import (
+from app.evaluation.implant import (
     contrast_z, grow_blob, implant_material, implant_signature, ring_mask, solve_strength, tier_of)
 
 

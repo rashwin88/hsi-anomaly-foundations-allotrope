@@ -13,7 +13,7 @@ objects - their size, their background, their contrast - in three difficulty tie
 ## Interfaces
 
 ```python
-# app/utils/evaluation/implant.py
+# app/evaluation/implant.py
 TIER_EDGES = (0.502, 0.934);  TIERS = ("subtle", "medium", "easy");  tier_of(z) -> str
 ring_mask(obj, valid, exclude=None) -> (H, W) bool         # 4-neighbour dilation, steps 2-3 (a diamond)
 contrast_z(cube, band_valid, obj, ring) -> float           # mean |o - r| / mean sigma over usable bands
@@ -27,7 +27,7 @@ solve_strength(o0, r, sigma, step, z, s_max=None) -> (s, z) # realised z: o0 + s
 ```bash
 python scripts/build_implant_bench.py real  <stage1_datasets> <work>/real.json
 python scripts/build_implant_bench.py build <test shards> <work>/real.json <bench> [--seed 0]
-python scripts/evaluate_implant_bench.py <bench> NAME=ckpt [NAME=ckpt ...]
+python scripts/evaluate.py configs/eval/<name>.json     # dataset {"kind": "implant"}; docs/lld/evaluation.md
 ```
 
 ## Data flow

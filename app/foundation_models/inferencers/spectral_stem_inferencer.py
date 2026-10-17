@@ -2,7 +2,7 @@
 Full-scene inference for spectral-stem checkpoints (SpectralStemSegFormerMAE: linear / gate /
 cross_attention / reduced_attention), with exactly the product's patching and masking.
 
-Used by scripts/evaluate_prisma_bench.py; not yet wired into the product's anomaly_scoring.
+Used by app/evaluation/models.py (scripts/evaluate.py); not yet wired into the product's anomaly_scoring.
 
 Why a subclass of the product's SegFormer inferencer: a detection comparison is only fair if every
 model is tiled, masked and stitched the same way. SegFormerMAEInferencer owns all of that - sliding
