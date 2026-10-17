@@ -195,7 +195,7 @@ class SpectralStemFinetuneConfig(SpectralStemMAEConfig):
                                     "the spatial gradients of reconstruction and input on hidden pixels (0 = off).")
 
     @model_validator(mode="after")
-    def _mixed_batches_in_adapt_only(self):
+    def _mixed_batches_not_in_probe(self):
         if self.mixed_batches and self.mode == "probe":
             raise ValueError("mixed_batches is implemented for modes 'adapt' and 'joint'")
         if self.grad_loss_weight and not self.mixed_batches:

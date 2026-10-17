@@ -58,3 +58,29 @@ def test_existing_methods_unchanged_by_the_new_argument(scene):
     keep = np.ones((H, W), bool)
     for m in ("L1", "MSE", "SAM", "combined"):
         assert np.array_equal(compute_score(x, r, keep, method=m), compute_score(x, r, keep, method=m, local_window=None))
+
+
+def test_class_aware_one_class_equals_plain():
+    from app.utils.anomaly_detection.residual_mahalanobis import class_aware_residual_mahalanobis, residual_mahalanobis
+    rng = np.random.default_rng(0)
+    x, xh = rng.random((6, 80, 80)), rng.random((6, 80, 80))
+    keep = np.ones((80, 80), bool)
+    a = class_aware_residual_mahalanobis(x, xh, keep, np.zeros((80, 80), int), d=4, local_window=(5, 15))
+    assert np.allclose(a, residual_mahalanobis(x, xh, keep, d=4, local_window=(5, 15)), rtol=1e-5)
+
+
+def test_class_aware_finds_land_anomaly_hidden_by_noisy_water():
+    """Left half "water" with residual noise std 1, right half "land" std 0.05; one land pixel off by 0.6 in band 0.
+    Pooled whitening is dominated by the water's variance, so noisy water pixels outrank the land pixel; with a
+    separate normal per class the land pixel is 12 land sigmas out and ranks first."""
+    from app.utils.anomaly_detection.residual_mahalanobis import class_aware_residual_mahalanobis, residual_mahalanobis
+    rng = np.random.default_rng(1)
+    H, W, C = 100, 140, 5
+    classes = np.zeros((H, W), int); classes[:, :70] = 1
+    r = np.where(classes == 1, 1.0, 0.05)[None] * rng.standard_normal((C, H, W))
+    r[0, 50, 105] += 0.6
+    keep = np.ones((H, W), bool)
+    plain = residual_mahalanobis(r, np.zeros_like(r), keep, d=3, local_window=None)
+    aware = class_aware_residual_mahalanobis(r, np.zeros_like(r), keep, classes, d=3, local_window=None)
+    assert np.unravel_index(aware.argmax(), aware.shape) == (50, 105)
+    assert (plain > plain[50, 105]).sum() > 100

@@ -30,7 +30,7 @@ _SequentialLoader(loaders)            # validation: every test source in turn
 # app/models/training/training_config.py
 SpectralStemFinetuneConfig(sources=[FinetuneSource(name, train_dir, test_dir, share, band_list_path,
                            labels, skip_scenes_path)], init_from, mode, seg_*, label policy fields,
-                           finetune_metrics_csv, mixed_batches=False,   # mixed_batches: mode adapt only
+                           finetune_metrics_csv, mixed_batches=False,   # mixed_batches: adapt or joint
                            grad_loss_weight=0.0)                        # edge term: mixed_batches only
 ```
 
@@ -41,7 +41,7 @@ per source: local shards -> decode (.i16dz) -> keep_sample (skip scenes) -> prep
             (align onto the source's band list; EnMAP label_* + meta -> seg_targets, seg_known; drop
              meta.json and label_*) -> DataLoader
 train, default: _MixedLoader draws one source per batch by share (endless; restarts an exhausted source)
-train, mixed_batches (adapt only): _AllSourcesLoader - one DataLoader per source with batch size
+train, mixed_batches (adapt / joint): _AllSourcesLoader - one DataLoader per source with batch size
        max(1, round(share x batch_size)); each step takes one sub-batch from every source
        (batch_size 8, shares 0.40 / 0.35 / 0.25 -> 3 / 3 / 2)
   -> _mixed_loss: per source, drop thin samples, own MAE mask, own band-augmentation draw

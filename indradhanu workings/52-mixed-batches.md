@@ -106,8 +106,10 @@ return total / kept, kept
 
 Weighting by `n` means every tile counts equally, whichever sensor it is from. The config validator
 (`SpectralStemFinetuneConfig._mixed_batches_in_adapt_only` in `app/models/training/training_config.py`)
-allows `mixed_batches` in `mode: adapt` only: joint mode's segmentation pass (part 47) is a second,
-unmasked pass that was not built for mixed groups.
+allowed `mixed_batches` in `mode: adapt` only when this part was written: joint mode's segmentation pass
+(part 47) is a second, unmasked pass that was not built for mixed groups. **Update, 2026-10-17:** commit
+ea4652c built it (`segment_mixed`), and the validator now rejects only `probe` - its name,
+`_mixed_batches_in_adapt_only`, was not changed. Part 55 covers it.
 
 ## Why this fixes two things at once
 
@@ -164,19 +166,34 @@ The SAM weight follows `sam_weight x min(1, epoch / sam_ramp_epochs)` with a 0-b
 SAM weight (part 41), so `best.pt` is still ranked on one ruler. But if FT02b moves, mixed batches
 are not the only change, and its README should be read with that in mind.
 
-## Status
+## Status, and what FT02b showed
 
-FT02b launched on 2026-10-16 at 10:15 UTC. Its pass criteria, written before launch: bench >= 0.861;
-reconstruction no worse than FT02's epoch 8 on any sensor; per-sensor validation moving together (no
-epoch where one sensor improves by more than 0.3 degrees of SAM while another worsens by more than
-0.3). Scored at epochs 3, 6 and 10. **Results: pending** - when they arrive, they go in the FT02b
-README and the log.
+FT02b launched on 2026-10-16 at 10:15 UTC and finished at 12:25 UTC (2.2 hours, exit 0); `best.pt` is
+epoch 9. Its pass criteria, written before launch: bench >= 0.861; reconstruction no worse than FT02's
+epoch 8 on any sensor; per-sensor validation moving together (no epoch where one sensor improves by
+more than 0.3 degrees of SAM while another worsens by more than 0.3). The plan said "scored at epochs 3,
+6 and 10"; the README reports epochs 4 and 9 instead. From `FT02b-mixed/README.md` (bench = mean ROC-AUC
+over the four PRISMA scenes, objects caught of 909 in brackets):
 
 | epoch | SAM EnMAP / PRISMA / AVIRIS-NG | residual Mahalanobis | combined |
 |---|---|---|---|
-| 3 | pending | pending | pending |
-| 6 | pending | pending | pending |
-| 10 | pending | pending | pending |
+| FT02 ep8 (start) | 4.17 / 5.93 / 6.07 | 0.855 (401) | 0.824 (335) |
+| 4 | 4.10 / 4.52 / 5.62 | 0.857 (418) | 0.811 (324) |
+| 9 (best.pt) | 3.99 / 4.37 / 5.57 | 0.856 (411) | 0.819 (320) |
+
+- **Reconstruction: better than FT02 on every sensor**, and by a lot on PRISMA: 5.93 to 4.37 degrees.
+  Most of PRISMA's drop arrived in the first epoch (4.70 at epoch 1). That is what this part predicted
+  ("expect the BatchNorm effect to be the larger of the two") - consistent with it, not a proof.
+- **The see-saw is gone**, by the README's account: epochs 1-4 improved on all three sensors, with one
+  step back (AVIRIS-NG 6.19 degrees at epoch 2, from 5.88). That step is itself 0.31 degrees, slightly over
+  the criterion's 0.3; the README does not give the other two sensors at epoch 2, so whether that epoch
+  breaks the "moving together" rule cannot be checked from the record.
+- **Gate not met:** 0.856 against 0.861.
+- **Every other bench measure tied as well.** The FT02b README rescored all models with part 16 of the
+  anomaly course's measures (pAUC to 1% false alarms, detection rate at 0.1%, objects caught at two
+  budgets): v0.2.0, F001, FT02 and FT02b all fall within the four scenes' noise. Its conclusion: "Under
+  the default score the bench cannot tell these models apart", and a larger benchmark is needed. Part 56
+  reads that larger benchmark.
 
 ## Common confusions
 

@@ -2,7 +2,8 @@
 
 **Purpose** - a labelled anomaly benchmark large enough to tell Indradhanu versions apart, on the satellite sensors
 the product serves, at real reflectance. No public one exists: the standard HAD benchmarks (ABU, HAD100) are airborne
-radiance, and no labelled PRISMA / EnMAP / Gaofen-5 anomaly set was found (research/experiments/benchmarks/README.md).
+radiance (research/experiments/benchmarks/README.md), and a search on 2026-10-17 found no labelled PRISMA / EnMAP /
+Gaofen-5 anomaly set (only a methane-plume set, which labels gas, not surface objects).
 The 4 labelled PRISMA scenes (909 objects) cannot separate models under residual Mahalanobis: every measure ties
 within scene-to-scene noise (research/experiments/indradhanu-finetune/FT02b-mixed/README.md).
 
@@ -19,7 +20,8 @@ contrast_z(cube, band_valid, obj, ring) -> float           # mean |o - r| / mean
 grow_blob(rng, size) -> (size, 2) offsets                  # compact 4-connected blob
 implant_signature(cube, obj, d, a)                         # x' = max(x + a d, 0)
 implant_material(cube, obj, t, f)                          # x' = (1 - f) x + f t
-strength_for_z(z, step, sigma) -> s                        # s = z mean(sigma) / mean|step|
+solve_strength(o0, r, sigma, step, z, s_max=None) -> (s, z) # realised z: o0 + s step; None if the spot is
+                                                           # already above z (choose another)
 ```
 
 ```bash
@@ -36,7 +38,8 @@ build: test shards (EnMAP / PRISMA native-v1z, AVIRIS-NG native-v1)
          -> reassemble 6 scenes per sensor from 128 px tiles (meta x0 / y0); AVIRIS-NG lines cut to 1152 rows
          -> placement: >= 90% bands valid, not water, not cloud (EnMAP: provider labels; others: index rules),
             eroded 4 px; weighted to the real NDVI mix; real density (objects per valid pixel)
-         -> per object: tier round-robin, size from the real sizes (cap 20), compact blob, >= 10 px apart;
+         -> per object: tier round-robin, size from the real sizes (cap 20), compact blob, ~15 px apart
+            (the object's box grown by 4, then blocked 10 further);
             source alternates: signature (a real object's d, interpolated to the host bands, none farther than
             15 nm from a bench band) or material (USGS splib07 slim, resampled to the host bands; chapter drawn
             uniformly, then a spectrum); strength solved for a z drawn from the tier's real values; realised z
@@ -52,7 +55,8 @@ evaluate: product exclusions; per-band nearest-valid fill; each model's band rea
    edges are the real objects' z terciles. Changing either breaks the "like the real ones" calibration.
 2. **One seeded generator** draws everything, in a fixed host order: the same seed and inputs give the same bench.
 3. **Hosts are held out**: test-split scenes only, which were never trained on (split by datatake / site / line).
-4. **Objects never touch**: >= 10 px apart, so a ring (steps 2-3) never contains another object.
+4. **Objects never touch**: each blocks its box grown by 4 + 10 px (about 15 px between objects), so a ring
+   (steps 2-3) never contains another object.
 
 ## Failure modes
 

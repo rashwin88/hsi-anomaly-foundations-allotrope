@@ -29,7 +29,11 @@ def test_perfect_and_random_and_sklearn():
 
 
 def test_score_metrics_counts_objects_at_both_budgets():
+    # Background uniform in [0, 0.5): the 1% cut (100 px) falls inside it, so it is a real threshold. Object A
+    # scores 5, object B 0.9 (above every background pixel, so inside the top 1% = 100 px), and 10 decoys score 3:
+    # the top 0.1% (10 px) is A plus 9 decoys - B is caught at 1% but not at 0.1%.
+    rng = np.random.default_rng(0)
     gt = np.zeros((100, 100), np.uint8); gt[10, 10] = gt[50, 50] = 1
-    score = np.zeros((100, 100)); score[10, 10] = 5; score[50, 50] = 1; score[np.arange(30, 40), 70] = 3
+    score = rng.random((100, 100)) * 0.5; score[10, 10] = 5; score[50, 50] = 0.9; score[np.arange(30, 40), 70] = 3
     m = score_metrics(score, gt, np.ones_like(gt))
     assert (m["objects"], m["objects_caught"], m["objects_caught_0p1"]) == (2, 2, 1)

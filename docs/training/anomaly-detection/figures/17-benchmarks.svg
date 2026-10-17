@@ -1,0 +1,57 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 320" font-family="Helvetica, Arial, sans-serif" role="img" aria-label="What each anomaly benchmark supplies: platform, values, wavelengths, labels, sensors">
+<title>What each anomaly benchmark supplies: platform, values, wavelengths, labels, sensors</title>
+<defs><marker id="ah" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0.8 L9,5 L0,9.2 L2.2,5 Z" fill="#4b535d"/></marker><pattern id="hatch" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="6" stroke="#8f979f" stroke-width="1.1"/></pattern></defs>
+<rect x="0" y="0" width="900" height="320" fill="#ffffff"/>
+<text x="18.0" y="24.0" font-size="12.5" text-anchor="start" fill="#1f2328" font-weight="700" xml:space="preserve" style="white-space:pre">What each benchmark supplies (amber = why it cannot test this product as it is)</text>
+<text x="240.0" y="62.0" font-size="11.5" text-anchor="middle" fill="#1f2328" font-weight="700" xml:space="preserve" style="white-space:pre">HAD100</text>
+<text x="428.0" y="62.0" font-size="11.5" text-anchor="middle" fill="#1f2328" font-weight="700" xml:space="preserve" style="white-space:pre">ABU</text>
+<text x="616.0" y="62.0" font-size="11.5" text-anchor="middle" fill="#1f2328" font-weight="700" xml:space="preserve" style="white-space:pre">PRISMA bench</text>
+<text x="804.0" y="62.0" font-size="11.5" text-anchor="middle" fill="#1f2328" font-weight="700" xml:space="preserve" style="white-space:pre">implanted bench-v1</text>
+<text x="18.0" y="97.0" font-size="11" text-anchor="start" fill="#4b535d" font-weight="700" xml:space="preserve" style="white-space:pre">platform</text>
+<rect x="149.0" y="76.0" width="182.0" height="34.0" rx="4" fill="#f2f4f6" stroke="none" stroke-width="1"/>
+<text x="240.0" y="97.0" font-size="10.5" text-anchor="middle" fill="#4b535d" xml:space="preserve" style="white-space:pre">airborne (AVIRIS-NG)</text>
+<rect x="337.0" y="76.0" width="182.0" height="34.0" rx="4" fill="#f2f4f6" stroke="none" stroke-width="1"/>
+<text x="428.0" y="97.0" font-size="10.5" text-anchor="middle" fill="#4b535d" xml:space="preserve" style="white-space:pre">airborne (AVIRIS, ROSIS)</text>
+<rect x="525.0" y="76.0" width="182.0" height="34.0" rx="4" fill="#e3f3f1" stroke="none" stroke-width="1"/>
+<text x="616.0" y="97.0" font-size="10.5" text-anchor="middle" fill="#4b535d" xml:space="preserve" style="white-space:pre">satellite (PRISMA)</text>
+<rect x="713.0" y="76.0" width="182.0" height="34.0" rx="4" fill="#e3f3f1" stroke="none" stroke-width="1"/>
+<text x="804.0" y="97.0" font-size="10.5" text-anchor="middle" fill="#4b535d" xml:space="preserve" style="white-space:pre">2 satellites + AVIRIS-NG</text>
+<text x="18.0" y="137.0" font-size="11" text-anchor="start" fill="#4b535d" font-weight="700" xml:space="preserve" style="white-space:pre">values</text>
+<rect x="149.0" y="116.0" width="182.0" height="34.0" rx="4" fill="#fdf1e1" stroke="#b45f06" stroke-width="1"/>
+<text x="240.0" y="137.0" font-size="10.5" text-anchor="middle" fill="#b45f06" font-weight="700" xml:space="preserve" style="white-space:pre">L1B radiance</text>
+<rect x="337.0" y="116.0" width="182.0" height="34.0" rx="4" fill="#fdf1e1" stroke="#b45f06" stroke-width="1"/>
+<text x="428.0" y="137.0" font-size="10.5" text-anchor="middle" fill="#b45f06" font-weight="700" xml:space="preserve" style="white-space:pre">radiance; 1 min-max</text>
+<rect x="525.0" y="116.0" width="182.0" height="34.0" rx="4" fill="#e3f3f1" stroke="none" stroke-width="1"/>
+<text x="616.0" y="137.0" font-size="10.5" text-anchor="middle" fill="#4b535d" xml:space="preserve" style="white-space:pre">reflectance</text>
+<rect x="713.0" y="116.0" width="182.0" height="34.0" rx="4" fill="#e3f3f1" stroke="none" stroke-width="1"/>
+<text x="804.0" y="137.0" font-size="10.5" text-anchor="middle" fill="#4b535d" xml:space="preserve" style="white-space:pre">reflectance</text>
+<text x="18.0" y="177.0" font-size="11" text-anchor="start" fill="#4b535d" font-weight="700" xml:space="preserve" style="white-space:pre">wavelengths</text>
+<rect x="149.0" y="156.0" width="182.0" height="34.0" rx="4" fill="#f2f4f6" stroke="none" stroke-width="1"/>
+<text x="240.0" y="177.0" font-size="10.5" text-anchor="middle" fill="#4b535d" xml:space="preserve" style="white-space:pre">per tile, vary by line</text>
+<rect x="337.0" y="156.0" width="182.0" height="34.0" rx="4" fill="#fdf1e1" stroke="#b45f06" stroke-width="1"/>
+<text x="428.0" y="177.0" font-size="10.5" text-anchor="middle" fill="#b45f06" font-weight="700" xml:space="preserve" style="white-space:pre">none shipped</text>
+<rect x="525.0" y="156.0" width="182.0" height="34.0" rx="4" fill="#e3f3f1" stroke="none" stroke-width="1"/>
+<text x="616.0" y="177.0" font-size="10.5" text-anchor="middle" fill="#4b535d" xml:space="preserve" style="white-space:pre">yes</text>
+<rect x="713.0" y="156.0" width="182.0" height="34.0" rx="4" fill="#e3f3f1" stroke="none" stroke-width="1"/>
+<text x="804.0" y="177.0" font-size="10.5" text-anchor="middle" fill="#4b535d" xml:space="preserve" style="white-space:pre">yes</text>
+<text x="18.0" y="217.0" font-size="11" text-anchor="start" fill="#4b535d" font-weight="700" xml:space="preserve" style="white-space:pre">labelled objects</text>
+<rect x="149.0" y="196.0" width="182.0" height="34.0" rx="4" fill="#f2f4f6" stroke="none" stroke-width="1"/>
+<text x="240.0" y="217.0" font-size="10.5" text-anchor="middle" fill="#4b535d" xml:space="preserve" style="white-space:pre">460 in 100 crops</text>
+<rect x="337.0" y="196.0" width="182.0" height="34.0" rx="4" fill="#f2f4f6" stroke="none" stroke-width="1"/>
+<text x="428.0" y="217.0" font-size="10.5" text-anchor="middle" fill="#4b535d" xml:space="preserve" style="white-space:pre">196 in 13 scenes</text>
+<rect x="525.0" y="196.0" width="182.0" height="34.0" rx="4" fill="#fdf1e1" stroke="#b45f06" stroke-width="1"/>
+<text x="616.0" y="217.0" font-size="10.5" text-anchor="middle" fill="#b45f06" font-weight="700" xml:space="preserve" style="white-space:pre">909 in 4 scenes</text>
+<rect x="713.0" y="196.0" width="182.0" height="34.0" rx="4" fill="#e3f3f1" stroke="none" stroke-width="1"/>
+<text x="804.0" y="217.0" font-size="10.5" text-anchor="middle" fill="#4b535d" xml:space="preserve" style="white-space:pre">3,336 in 18 scenes</text>
+<text x="18.0" y="257.0" font-size="11" text-anchor="start" fill="#4b535d" font-weight="700" xml:space="preserve" style="white-space:pre">our sensors?</text>
+<rect x="149.0" y="236.0" width="182.0" height="34.0" rx="4" fill="#fdf1e1" stroke="#b45f06" stroke-width="1"/>
+<text x="240.0" y="257.0" font-size="10.5" text-anchor="middle" fill="#b45f06" font-weight="700" xml:space="preserve" style="white-space:pre">no</text>
+<rect x="337.0" y="236.0" width="182.0" height="34.0" rx="4" fill="#fdf1e1" stroke="#b45f06" stroke-width="1"/>
+<text x="428.0" y="257.0" font-size="10.5" text-anchor="middle" fill="#b45f06" font-weight="700" xml:space="preserve" style="white-space:pre">no</text>
+<rect x="525.0" y="236.0" width="182.0" height="34.0" rx="4" fill="#e3f3f1" stroke="none" stroke-width="1"/>
+<text x="616.0" y="257.0" font-size="10.5" text-anchor="middle" fill="#4b535d" xml:space="preserve" style="white-space:pre">PRISMA</text>
+<rect x="713.0" y="236.0" width="182.0" height="34.0" rx="4" fill="#e3f3f1" stroke="none" stroke-width="1"/>
+<text x="804.0" y="257.0" font-size="10.5" text-anchor="middle" fill="#4b535d" xml:space="preserve" style="white-space:pre">EnMAP, PRISMA, AVIRIS-NG</text>
+<text x="18.0" y="294.0" font-size="10" text-anchor="start" fill="#7d858f" xml:space="preserve" style="white-space:pre">The PRISMA bench is the right kind of data, but 4 scenes could not separate the models (part 16).</text>
+<text x="18.0" y="310.0" font-size="10" text-anchor="start" fill="#7d858f" xml:space="preserve" style="white-space:pre">Sources: research/experiments/benchmarks/README.md, research/experiments/implant-bench/README.md.</text>
+</svg>

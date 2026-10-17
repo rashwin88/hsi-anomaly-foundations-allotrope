@@ -1,6 +1,6 @@
 # FT02b - FT02 continued with mixed-sensor batches
 
-**Status:** launched 2026-10-16 on the user's go.
+**Status:** done 2026-10-16 (details under Results); launched on the user's go.
 
 ## Question
 FT02 (one sensor per batch) improved reconstruction on all three sensors but see-sawed: some epochs PRISMA got

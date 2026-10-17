@@ -28,6 +28,10 @@ gate - part 50 reads the results):
 Note what FT03 starts from: the *adapted* backbone, not the probe's head. The probe is a measurement,
 not a warm start.
 
+**Update, 2026-10-17 - the FT03 row above is the plan, not what ran.** FT03 started from FT02c's
+`best.pt`, took FT01's head as a warm start (`seg_head_from`), used mixed batches, `seg_weight` 0.1 and
+10 epochs. So the probe became a warm start after all. Part 55 gives the reasons and the results.
+
 > **Analogy.** An experienced surgeon moving to a new operating robot does not start with the new
 > procedure. First they watch through the robot's camera without operating (probe). Then they
 > repeat operations they already know, on the new machine (adapt). Only then do they learn the new
@@ -169,6 +173,9 @@ reads the run; parts 51 and 52 follow the see-saw it showed to the next run, FT0
 ```
 loss = reconstruction loss + seg_weight x segmentation loss      (seg_weight default 1.0)
 ```
+
+(FT03 set `seg_weight` to 0.1, because the segmentation loss was about eight times the reconstruction
+loss - part 55.)
 
 The segmentation term exists only on batches that carry labels - EnMAP's - and uses the second,
 unmasked pass of part 47. PRISMA and AVIRIS-NG batches contribute reconstruction only.

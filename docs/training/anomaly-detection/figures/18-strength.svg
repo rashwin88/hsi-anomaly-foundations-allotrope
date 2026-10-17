@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 360" font-family="Helvetica, Arial, sans-serif" role="img" aria-label="The strength solve: z(s) = |0.02 - 0.10 s| / 0.05 against a target of 1.0">
+<title>The strength solve: z(s) = |0.02 - 0.10 s| / 0.05 against a target of 1.0</title>
+<defs><marker id="ah" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0.8 L9,5 L0,9.2 L2.2,5 Z" fill="#4b535d"/></marker><pattern id="hatch" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="6" stroke="#8f979f" stroke-width="1.1"/></pattern></defs>
+<rect x="0" y="0" width="900" height="360" fill="#ffffff"/>
+<text x="18.0" y="24.0" font-size="12.5" text-anchor="start" fill="#1f2328" font-weight="700" xml:space="preserve" style="white-space:pre">Solving on the realised contrast: one band, r = 0.20, sigma = 0.05, o0 = 0.22, step = -0.10</text>
+<line x1="70.0" y1="300.0" x2="540.0" y2="300.0" stroke="#e3e6ea" stroke-width="1"/>
+<text x="64.0" y="304.0" font-size="10" text-anchor="end" fill="#7d858f" xml:space="preserve" style="white-space:pre">0</text>
+<line x1="70.0" y1="225.0" x2="540.0" y2="225.0" stroke="#e3e6ea" stroke-width="1"/>
+<text x="64.0" y="229.0" font-size="10" text-anchor="end" fill="#7d858f" xml:space="preserve" style="white-space:pre">0.5</text>
+<line x1="70.0" y1="150.0" x2="540.0" y2="150.0" stroke="#e3e6ea" stroke-width="1"/>
+<text x="64.0" y="154.0" font-size="10" text-anchor="end" fill="#7d858f" xml:space="preserve" style="white-space:pre">1</text>
+<line x1="70.0" y1="75.0" x2="540.0" y2="75.0" stroke="#e3e6ea" stroke-width="1"/>
+<text x="64.0" y="79.0" font-size="10" text-anchor="end" fill="#7d858f" xml:space="preserve" style="white-space:pre">1.5</text>
+<text x="70.0" y="315.0" font-size="10" text-anchor="middle" fill="#7d858f" xml:space="preserve" style="white-space:pre">0</text>
+<text x="164.0" y="315.0" font-size="10" text-anchor="middle" fill="#7d858f" xml:space="preserve" style="white-space:pre">0.2</text>
+<text x="258.0" y="315.0" font-size="10" text-anchor="middle" fill="#7d858f" xml:space="preserve" style="white-space:pre">0.4</text>
+<text x="352.0" y="315.0" font-size="10" text-anchor="middle" fill="#7d858f" xml:space="preserve" style="white-space:pre">0.6</text>
+<text x="446.0" y="315.0" font-size="10" text-anchor="middle" fill="#7d858f" xml:space="preserve" style="white-space:pre">0.8</text>
+<text x="540.0" y="315.0" font-size="10" text-anchor="middle" fill="#7d858f" xml:space="preserve" style="white-space:pre">1</text>
+<line x1="70.0" y1="300.0" x2="540.0" y2="300.0" stroke="#4b535d" stroke-width="1.2"/>
+<line x1="70.0" y1="300.0" x2="70.0" y2="60.0" stroke="#4b535d" stroke-width="1.2"/>
+<text x="305.0" y="332.0" font-size="10.5" text-anchor="middle" fill="#4b535d" xml:space="preserve" style="white-space:pre">strength s</text>
+<text x="70.0" y="50.0" font-size="10.5" text-anchor="start" fill="#4b535d" xml:space="preserve" style="white-space:pre">contrast z(s)</text>
+<polyline points="70.0,240.0 74.7,243.0 79.4,246.0 84.1,249.0 88.8,252.0 93.5,255.0 98.2,258.0 102.9,261.0 107.6,264.0 112.3,267.0 117.0,270.0 121.7,273.0 126.4,276.0 131.1,279.0 135.8,282.0 140.5,285.0 145.2,288.0 149.9,291.0 154.6,294.0 159.3,297.0 164.0,300.0 168.7,297.0 173.4,294.0 178.1,291.0 182.8,288.0 187.5,285.0 192.2,282.0 196.9,279.0 201.6,276.0 206.3,273.0 211.0,270.0 215.7,267.0 220.4,264.0 225.1,261.0 229.8,258.0 234.5,255.0 239.2,252.0 243.9,249.0 248.6,246.0 253.3,243.0 258.0,240.0 262.7,237.0 267.4,234.0 272.1,231.0 276.8,228.0 281.5,225.0 286.2,222.0 290.9,219.0 295.6,216.0 300.3,213.0 305.0,210.0 309.7,207.0 314.4,204.0 319.1,201.0 323.8,198.0 328.5,195.0 333.2,192.0 337.9,189.0 342.6,186.0 347.3,183.0 352.0,180.0 356.7,177.0 361.4,174.0 366.1,171.0 370.8,168.0 375.5,165.0 380.2,162.0 384.9,159.0 389.6,156.0 394.3,153.0 399.0,150.0 403.7,147.0 408.4,144.0 413.1,141.0 417.8,138.0 422.5,135.0 427.2,132.0 431.9,129.0 436.6,126.0 441.3,123.0 446.0,120.0 450.7,117.0 455.4,114.0 460.1,111.0 464.8,108.0 469.5,105.0 474.2,102.0 478.9,99.0 483.6,96.0 488.3,93.0 493.0,90.0 497.7,87.0 502.4,84.0 507.1,81.0 511.8,78.0 516.5,75.0 521.2,72.0 525.9,69.0 530.6,66.0 535.3,63.0 540.0,60.0" fill="none" stroke="#b45f06" stroke-width="2.4"/>
+<line x1="70.0" y1="150.0" x2="540.0" y2="150.0" stroke="#4b535d" stroke-width="1.2" stroke-dasharray="6 4"/>
+<text x="536.0" y="144.0" font-size="10" text-anchor="end" fill="#4b535d" xml:space="preserve" style="white-space:pre">target z = 1.0</text>
+<circle cx="70.0" cy="240.0" r="5" fill="#ffffff" stroke="#7d858f" stroke-width="2"/>
+<text x="78.0" y="230.0" font-size="10" text-anchor="start" fill="#7d858f" xml:space="preserve" style="white-space:pre">z(0) = 0.4: the spot's own contrast</text>
+<circle cx="164.0" cy="300.0" r="5" fill="#ffffff" stroke="#7d858f" stroke-width="2"/>
+<text x="174.0" y="292.0" font-size="10" text-anchor="start" fill="#7d858f" xml:space="preserve" style="white-space:pre">minimum at s = 0.2</text>
+<circle cx="305.0" cy="210.0" r="5" fill="#ffffff" stroke="#3a4aa8" stroke-width="2"/>
+<text x="313.0" y="226.0" font-size="10" text-anchor="start" fill="#3a4aa8" font-weight="700" xml:space="preserve" style="white-space:pre">simple formula: s = 0.5 -&gt; z = 0.6</text>
+<circle cx="399.0" cy="150.0" r="5" fill="#ffffff" stroke="#0f766e" stroke-width="2"/>
+<text x="391.0" y="138.0" font-size="10" text-anchor="end" fill="#0f766e" font-weight="700" xml:space="preserve" style="white-space:pre">solver: s = 0.7 -&gt; z = 1.0</text>
+<text x="580.0" y="80.0" font-size="10.5" text-anchor="start" fill="#1f2328" font-weight="700" xml:space="preserve" style="white-space:pre">z(s) = mean |o0 + s x step - r| / mean sigma</text>
+<text x="580.0" y="98.0" font-size="10.5" text-anchor="start" fill="#4b535d" xml:space="preserve" style="white-space:pre"></text>
+<text x="580.0" y="116.0" font-size="10.5" text-anchor="start" fill="#4b535d" xml:space="preserve" style="white-space:pre">The implant first cancels the spot's</text>
+<text x="580.0" y="134.0" font-size="10.5" text-anchor="start" fill="#4b535d" xml:space="preserve" style="white-space:pre">natural +0.02, then overshoots it.</text>
+<text x="580.0" y="152.0" font-size="10.5" text-anchor="start" fill="#4b535d" xml:space="preserve" style="white-space:pre"></text>
+<text x="580.0" y="170.0" font-size="10.5" text-anchor="start" fill="#4b535d" xml:space="preserve" style="white-space:pre">The LLD's s = z x mean(sigma) / mean|step|</text>
+<text x="580.0" y="188.0" font-size="10.5" text-anchor="start" fill="#4b535d" xml:space="preserve" style="white-space:pre">assumes o0 = r, and lands in the wrong tier.</text>
+<text x="580.0" y="206.0" font-size="10.5" text-anchor="start" fill="#4b535d" xml:space="preserve" style="white-space:pre"></text>
+<text x="580.0" y="224.0" font-size="10.5" text-anchor="start" fill="#1f2328" font-weight="700" xml:space="preserve" style="white-space:pre">Rules in solve_strength:</text>
+<text x="580.0" y="242.0" font-size="10.5" text-anchor="start" fill="#4b535d" xml:space="preserve" style="white-space:pre">- answer: first crossing at or after the minimum</text>
+<text x="580.0" y="260.0" font-size="10.5" text-anchor="start" fill="#4b535d" xml:space="preserve" style="white-space:pre">- z(0) above the target: None, try another spot</text>
+<text x="580.0" y="278.0" font-size="10.5" text-anchor="start" fill="#4b535d" xml:space="preserve" style="white-space:pre">- material out of reach at f = 1: capped, recorded</text>
+</svg>

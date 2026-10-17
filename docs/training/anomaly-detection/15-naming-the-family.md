@@ -389,16 +389,4 @@ warning if the median pixel value falls outside 0.005-1.5.
 
 ---
 
-## You have finished
-
-You can now read the source. Where to go next:
-
-- **`docs/01-orientation.md`** through **`docs/10-code-style.md`** - the reference docs
-- **`docs/lld/`** - low-level designs for individual subsystems; for this part,
-  `docs/lld/spectral-family-match.md`
-- **`docs/09-known-issues.md`** - what is currently broken, and what to check before trusting
-  a green test run
-
-One habit worth keeping from this course: **when a comment and the code disagree, the code
-wins.** You met three such disagreements here - the regularisation default, the
-`MIN_VALID_FRACTION` comment, and the discarded `units` field. There will be more.
+Next: [part 16](16-detection-measures.md) - measuring detection where the analyst looks.

@@ -91,7 +91,7 @@ Every part has the same skeleton:
 | 29 | [29-inference.md](29-inference.md) | Running it on a real scene |
 | 30 | [30-scoring-and-the-product.md](30-scoring-and-the-product.md) | Turning errors into an answer |
 
-**Sequel - the next Indradhanu: a smarter spectral bottleneck, then pretraining, scoring and fine-tuning (31-54)**
+**Sequel - the next Indradhanu: a smarter spectral bottleneck, then pretraining, scoring and fine-tuning (31-56)**
 
 Written 2026-10-14, after the decision to pretrain the next Indradhanu on SpectralEarth with a
 cross-attention spectral bottleneck. Parts 31 to 39 were written as a **design studied before
@@ -126,6 +126,8 @@ Assumes all of parts 01 to 30; leans on 08, 10, 12, 13 and 17 to 21.
 | 52 | [52-mixed-batches.md](52-mixed-batches.md) | `forward_mixed`: one stem pass per band list, one encoder pass for all - and what else FT02b changed |
 | 53 | [53-edges.md](53-edges.md) | Why correcting the score map for edges fails, and why an edge term under the blind spot is different |
 | 54 | [54-options-not-taken-yet.md](54-options-not-taken-yet.md) | Teacher head, per-sensor heads, synthetic targets, regularisation: what each costs and where it stands |
+| 55 | [55-ft03-joint.md](55-ft03-joint.md) | FT03: segmentation over the whole mixed batch, seg_weight 0.1, FT01's head as a warm start - IoU up, detection unchanged |
+| 56 | [56-what-the-implant-bench-says.md](56-what-the-implant-bench-says.md) | 3,336 implanted objects sort the stages: pretraining is the big step, subtle sits at chance, EnMAP does not move |
 
 Parts 34 to 39's numbers were first produced by a study prototype and then re-checked against
 the real modules (5,345 compressor and 6,401 decoder parameters at `d = D = 32`; 13,162 gate
@@ -152,10 +154,18 @@ but no fine-tuning run had finished. Authoritative: `docs/proposals/fine-tuning-
 Parts 50 to 54 were written later on 2026-10-16, after FT01 and FT02 had run and while FT02b (mixed
 batches) was running: the two runs' results and the decision to build on FT02 (50), the BatchNorm
 diagnosis (51), mixed batches (52), the edge diagnosis and the planned FT02c edge term (53), and the
-options set aside (54). **Values that will drift:** FT02b's results (pending when written - part 52's
-table is empty), FT02c's design (its code was being written; part 53 describes the plan), and the
-status of every option in part 54. The run READMEs under `research/experiments/indradhanu-finetune/`
+options set aside (54). **Values that will drift:** the status of every option in part 54. FT02b's and FT02c's results were
+pending when these parts were written; on 2026-10-17 they were filled in (part 52, "Status, and what FT02b
+showed"; part 53, "What FT02c showed"), and dated update notes were added to parts 49, 50 and 54 where
+later runs contradicted them. The run READMEs under `research/experiments/indradhanu-finetune/`
 and its "Log" section are authoritative; `docs/lld/finetune.md` holds the interfaces and decisions.
+
+Parts 55 and 56 were written 2026-10-17, after FT03 (joint) had run and the implanted-target benchmark
+had scored every model from v0.2.0 to FT03. **Values that will drift:** FT03's IoUs and SAMs (55), and
+every number in part 56's tables - a rebuilt benchmark (new hosts, new seed) or a new model moves them.
+The benchmark itself is taught in the anomaly-detection course, parts 16 to 18
+(`docs/training/anomaly-detection/`). Authoritative: `research/experiments/indradhanu-finetune/FT03-joint/README.md`,
+`research/experiments/implant-bench/README.md`, `docs/lld/implant-bench.md`.
 
 ## Figures
 

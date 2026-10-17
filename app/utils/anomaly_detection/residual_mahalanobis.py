@@ -69,6 +69,39 @@ def local_mean_score(X: np.ndarray, keep: np.ndarray, window: tuple[int, int] = 
     return (np.where(ok, s, (X ** 2).sum(0)) * keep).astype(np.float32)
 
 
+MIN_CLASS_PX = 5_000             # smaller classes join class 0 (land): too few pixels for a d = 30 covariance
+
+
+def class_aware_residual_mahalanobis(original: np.ndarray, reconstruction: np.ndarray, keep: np.ndarray,
+                                     classes: np.ndarray, d: int = PCA_COMPONENTS,
+                                     local_window: tuple[int, int] | None = LOCAL_WINDOW) -> np.ndarray:
+    """residual_mahalanobis with a separate normal per surface class (FT03's segmentation, stage 5 of
+    docs/proposals/fine-tuning-and-segmentation.md). classes: (H, W) int, 0 = land (the default class).
+
+    Each class gets its own whitening (PCA of the residual over that class's pixels) and its local mean is
+    taken over same-class ring pixels only, so a coastal pixel is not judged against the land
+    behind it. Every class's score is a squared distance in its own whitened space - chi-squared-like with d
+    degrees of freedom - so scores compare across classes. Classes under MIN_CLASS_PX valid pixels join class 0."""
+    keep = keep.astype(bool)
+    cls = np.where(keep, classes, -1).astype(np.int64)
+    for c in np.unique(cls[keep]):
+        if c != 0 and (cls == c).sum() < MIN_CLASS_PX:
+            cls[cls == c] = 0
+    residual = original - reconstruction
+    out = np.zeros(keep.shape, np.float32)
+    for c in np.unique(cls[keep]):
+        m = cls == c
+        if m.sum() < 2 * d:                          # too few even for class 0: leave at 0
+            continue
+        X = whitened_pca(residual, m, d)
+        if local_window is None:
+            s = (X ** 2).sum(0)
+        else:
+            s = local_mean_score(X, m, local_window)
+        out[m] = s[m]
+    return out
+
+
 def residual_mahalanobis(original: np.ndarray, reconstruction: np.ndarray, keep: np.ndarray,
                          d: int = PCA_COMPONENTS, local_window: tuple[int, int] | None = LOCAL_WINDOW) -> np.ndarray:
     """(H, W) float32 score map; 0 outside keep. local_window=None scores against the global mean."""

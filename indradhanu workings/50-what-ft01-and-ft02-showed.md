@@ -119,14 +119,16 @@ forgetting - shelved; part 54 says why.
 ## Common confusions
 
 **"FT02 forgot how to detect."** Not shown. Reconstruction improved on every sensor, and the bench
-moved 0.862 to 0.855 - smaller than some single-scene swings. "Forgetting" would predict worse
+moved 0.862 to 0.855 - smaller than some single-scene swings. The larger implanted-target benchmark,
+built the next day, settles it the other way: FT02 catches more easy implants than F001 (49% against 45%
+at the top 1%) - part 56. "Forgetting" would predict worse
 reconstruction on what F001 knew; EnMAP, the closest sensor to SpectralEarth, got better.
 
 **"Epoch 1 passed the gate, so FT02 passed."** No. The gate names the checkpoint: the best by
 validation reconstruction. Choosing a checkpoint by the bench would turn the bench into training data.
 
 **"The probe's 0.82 water IoU is the head's final quality."** It is the floor with a frozen encoder.
-FT03 (joint) is meant to beat it.
+FT03 (joint) was meant to beat it, and did: water 0.841, cloud 0.815 (part 55).
 
 **"Thin cloud failed, so the encoder cannot see thin cloud."** The labels are the likelier limit;
 part 48's audit found them surface-driven in many scenes.
@@ -159,6 +161,13 @@ part 48's audit found them surface-driven in many scenes.
    right, whatever the features.
 
 </details>
+
+---
+
+**Update, 2026-10-17.** The gate in criterion 1 was read on four scenes that, it later turned out,
+could not separate any of these models under residual Mahalanobis (FT02b README). On 3,336 implanted
+objects FT02 is ahead of F001 on easy-tier pAUC, 0.356 against 0.342. Part 56 reads those results; the
+miss by 0.006 above is a fact about the four scenes, not evidence that FT02 detects worse.
 
 ---
 

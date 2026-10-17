@@ -96,3 +96,19 @@ thread that connects them.
   and input on hidden pixels. Inference reconstructs each pixel while its token is hidden, so a boundary that
   continues across the hidden token is learnable sharply, while a target isolated inside it is not. Caveat: a
   target larger than one 4 x 4 px token is partly visible in its neighbours. Folder [FT02c-edges](FT02c-edges/README.md); code 9ff0484.
+- **2026-10-16 - FT02b done: see-saw gone, gate not met.** Per-sensor SAM 3.99 / 4.37 / 5.57 deg, all three improving
+  together; PRISMA bench residual Mahalanobis 0.856 (< 0.861). Every bench measure ties v0.2.0 - the 4-scene bench
+  cannot separate models under the default score ([FT02b-mixed](FT02b-mixed/README.md)).
+- **2026-10-16 - FT02c done: edge term had no effect.** The term itself fell 1% in 10 epochs; edge false-alarm share
+  unchanged on all 4 scenes. Decoder H/4 bottleneck: sharpening would need a masked higher-resolution decoder path
+  ([FT02c-edges](FT02c-edges/README.md)).
+- **2026-10-17 - Detection measures and the implanted-target benchmark.** pAUC <= 1% FPR, TPR at 0.1%, objects
+  caught at 0.1%; bench-v1: 3,336 implanted objects on 18 held-out hosts, tiered subtle / medium / easy on the real
+  objects' contrast. It separates the stages: easy pAUC 0.257 (v0.2.0) -> 0.342 (F001) -> 0.371 (FT02c)
+  ([implant-bench](../implant-bench/README.md), docs/lld/implant-bench.md).
+- **2026-10-17 - FT03 passed.** Joint, mixed batches, FT02c init + FT01 head, seg_weight 0.1: water / cloud IoU 0.841 /
+  0.815, reconstruction and detection held ([FT03-joint](FT03-joint/README.md)).
+- **2026-10-17 - Class-aware scoring: not shipped.** Per-class whitening + same-class ring removed cloud false alarms
+  (implant 8% -> 1%) but water's tight statistics made water noise dominate (set1 water share of false alarms 14% ->
+  92%; PRISMA pAUC 0.158 -> 0.134). User: "we don't detect anything on water and cloud" - next, exclude them.
+

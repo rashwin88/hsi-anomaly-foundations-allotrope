@@ -12,7 +12,8 @@ Part 50 read FT02's gate miss; part 51 found the BatchNorm effect; part 52 built
 (FT02b, running); part 53 planned the edge term (FT02c). On 2026-10-16 the user also weighed the
 options below. The decisions are recorded in `docs/lld/finetune.md` ("Decisions"),
 `docs/proposals/fine-tuning-and-segmentation.md` ("Open questions") and the log in
-`research/experiments/indradhanu-finetune/README.md`. None of them exists in code.
+`research/experiments/indradhanu-finetune/README.md`. None of them existed in code when this was written
+(implanted targets have since been built as a benchmark - see the update at the end).
 
 > **Analogy.** A ward round ends with a list: "start this drug now; consider these three if it
 > does not work; this one we are not doing, here is why." The list of what was *not* done is as
@@ -122,6 +123,22 @@ measured. The teacher head is the natural follow-on to both, if the bench still 
 regularisation waits for evidence of forgetting; per-sensor heads and synthetic targets would change
 what the model is, and were not chosen.
 
+## Update, 2026-10-17 - where things stand
+
+The day after this part was written, three things moved:
+
+- **The edge term failed** (part 53): it fell 1% in ten epochs and the edge false alarms did not change.
+  The FT02c README points the next attempt at the architecture - a masked, higher-resolution path into the
+  decoder - which is a fifth option, not one of the four above.
+- **Synthetic targets now exist - as a benchmark, not a training head.** `app/utils/evaluation/implant.py`
+  and `scripts/build_implant_bench.py` implant objects into held-out test scenes and score models on them
+  (part 56). Option 3's objection was about *training* on a recipe; a benchmark built from one has the same
+  weakness in a milder form, and its README says so: implants are harder than real objects at the same
+  contrast. The detection head itself is still not chosen.
+- **Joint training ran** (FT03, part 55) and passed, without any of the four options.
+
+The teacher head and regularisation are unchanged: deferred and shelved. Neither has code.
+
 ## Common confusions
 
 **"Are the teacher head and the oracle head two proposals?"** No. They were names for the same idea in the
@@ -161,6 +178,4 @@ separate output; the product's score would still have to be chosen on the bench.
 
 ---
 
-That is the course so far. The authoritative documents for this stretch are `docs/lld/finetune.md`,
-`docs/proposals/fine-tuning-and-segmentation.md` and the run READMEs under
-`research/experiments/indradhanu-finetune/`; FT02b's results and FT02c's design will land there first.
+**Next:** part 55 - FT03, reconstruction and segmentation trained together on mixed batches.

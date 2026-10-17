@@ -107,7 +107,8 @@ which edges were predictable.
 
 ## The planned edge term (FT02c)
 
-FT02c is planned to run after FT02b, from mixed batches plus an edge term. Its folder is
+FT02c was planned to run after FT02b, from mixed batches plus an edge term (it has since run - see
+"What FT02c showed" below). Its folder is
 `research/experiments/indradhanu-finetune/FT02c-edges/` (pass criteria in its README). The code landed as
 commit 9ff0484 while this part was being written: `gradient_l1` in
 `app/foundation_models/trainers/finetune_trainer.py`, added to `_mixed_loss` with weight
@@ -156,6 +157,46 @@ the patch embedding.
 **2. The term needs a weight.** Too small does nothing; too large and the model learns to draw
 sharp edges everywhere, including where the context does not justify them. The run's README must
 fix the weight and the pass criteria before launch.
+
+## What FT02c showed
+
+FT02c ran on 2026-10-16, 12:25-14:39 UTC (2.2 hours, code 9ff0484), from FT02b's `best.pt`, with
+`grad_loss_weight` 1.0 and the SAM weight held at 0.5 throughout. From `FT02c-edges/README.md`:
+
+| | FT02b ep9 | FT02c ep10 |
+|---|---|---|
+| validation SAM, EnMAP / PRISMA / AVIRIS-NG (deg) | 3.99 / 4.37 / 5.57 | 3.93 / 4.21 / 5.41 |
+| the edge term, `train_grad_l1` | - | 0.01163 (epoch 1) -> 0.01153 (epoch 10) |
+| bench ROC-AUC, residual Mahalanobis | 0.856 | 0.855 |
+| bench pAUC to 1% / caught top 1% / top 0.1% | 0.158 / 411 / 128 | 0.159 / 413 / 131 |
+| top-1% false alarms on strong edges, set1-4 | 69 / 52 / 52 / 60% | 69 / 52 / 52 / 61% |
+| bench `combined` ROC-AUC (caught) | 0.819 (320) | 0.806 (296) |
+
+**The edge term barely moved.** Work the change:
+
+```
+0.01163 - 0.01153 = 0.00010
+0.00010 / 0.01163 = 0.0086, about 1%
+```
+
+One percent in ten epochs, while L1 and SAM kept falling. **The edges did not get sharper, and the edge
+false-alarm share is unchanged on all four scenes.** Verdict: not met (the criterion was "down on at
+least 3 of 4").
+
+Why the term could not be reduced - the README's reading: the decoder fuses all stages at H/4 and
+PixelShuffle(4) turns **one** feature vector into a whole 4 x 4 pixel block
+(`app/foundation_models/components/seg_former_decoder.py`). Where an edge falls inside that block has to
+be carried in that one quarter-resolution vector, and with the loss switched on it was not learned. The
+likely fix is architectural - a higher-resolution path into the decoder, masked so it cannot see hidden
+tokens - not a loss term. Nobody has built it yet.
+
+Caveat 1 above (larger targets partly visible) did not show up as a loss of objects: caught went 411 to
+413. That is no evidence either way, since the edge term changed almost nothing.
+
+The reconstruction gains over FT02b (3.99 / 4.37 / 5.57 to 3.93 / 4.21 / 5.41) are, in the README's
+words, "more plausibly from the constant SAM weight 0.5 (FT02b ramped it from 0) than from the edge term".
+On the larger implanted benchmark FT02c has the best easy- and medium-tier pAUC of any model (0.371,
+0.124), by a small margin (part 56).
 
 ## Common confusions
 
