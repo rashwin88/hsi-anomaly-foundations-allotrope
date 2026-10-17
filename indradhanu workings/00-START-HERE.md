@@ -91,7 +91,7 @@ Every part has the same skeleton:
 | 29 | [29-inference.md](29-inference.md) | Running it on a real scene |
 | 30 | [30-scoring-and-the-product.md](30-scoring-and-the-product.md) | Turning errors into an answer |
 
-**Sequel - the next Indradhanu: a smarter spectral bottleneck, then pretraining, scoring and fine-tuning (31-56)**
+**Sequel - the next Indradhanu: a smarter spectral bottleneck, then pretraining, scoring and fine-tuning (31-57)**
 
 Written 2026-10-14, after the decision to pretrain the next Indradhanu on SpectralEarth with a
 cross-attention spectral bottleneck. Parts 31 to 39 were written as a **design studied before
@@ -128,6 +128,7 @@ Assumes all of parts 01 to 30; leans on 08, 10, 12, 13 and 17 to 21.
 | 54 | [54-options-not-taken-yet.md](54-options-not-taken-yet.md) | Teacher head, per-sensor heads, synthetic targets, regularisation: what each costs and where it stands |
 | 55 | [55-ft03-joint.md](55-ft03-joint.md) | FT03: segmentation over the whole mixed batch, seg_weight 0.1, FT01's head as a warm start - IoU up, detection unchanged |
 | 56 | [56-what-the-implant-bench-says.md](56-what-the-implant-bench-says.md) | 3,336 implanted objects sort the stages: pretraining is the big step, subtle sits at chance, EnMAP does not move |
+| 57 | [57-stage-3-and-what-comes-next.md](57-stage-3-and-what-comes-next.md) | Stage 3: water / cloud exclusion helps every model alike, a model-free PCA-RX wins on bench-v1 and loses on real objects - so bench-v2 comes before detection training |
 
 Parts 34 to 39's numbers were first produced by a study prototype and then re-checked against
 the real modules (5,345 compressor and 6,401 decoder parameters at `d = D = 32`; 13,162 gate
@@ -166,6 +167,15 @@ every number in part 56's tables - a rebuilt benchmark (new hosts, new seed) or 
 The benchmark itself is taught in the anomaly-detection course, parts 16 to 18
 (`docs/training/anomaly-detection/`). Authoritative: `research/experiments/indradhanu-finetune/FT03-joint/README.md`,
 `research/experiments/implant-bench/README.md`, `docs/lld/implant-bench.md`.
+
+Part 57 was written later on 2026-10-17, after the stage-3 evaluation through the new `app/evaluation/`
+subsystem and while implant bench-v2 was being built. **Values that will drift:** every stage-3 number, the
+foreignness and halo medians, and all of section 6 (bench-v2 had no results). The evaluation machinery is
+taught in the anomaly-detection course, part 19. Since 2026-10-17 the evaluation code that parts 42 to 56
+cite under `scripts/evaluate_prisma_bench.py`, `scripts/evaluate_implant_bench.py` and
+`app/utils/evaluation/` lives in `app/evaluation/` and `scripts/evaluate.py`; those parts keep the old
+names where they describe what was run at the time. Authoritative: `docs/lld/evaluation.md`,
+`docs/lld/implant-bench.md`, `research/experiments/implant-bench/README.md`.
 
 ## Figures
 

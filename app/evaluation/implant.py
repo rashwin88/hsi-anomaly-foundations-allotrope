@@ -102,3 +102,53 @@ def solve_strength(o0: np.ndarray, r: np.ndarray, sigma: np.ndarray, step: np.nd
     k = above[0]
     s = grid[k] if k == 0 else grid[k - 1] + (z_target - zs[k - 1]) / (zs[k] - zs[k - 1]) * (grid[k] - grid[k - 1])
     return float(s), float(z([s])[0])
+
+
+# --- bench-v2: realistic implants (2026-10-17) ---------------------------------------------------------------------
+# Measured on PRISMA (C:/es/implant/v2/diag.py): real objects' difference from their ring lies almost wholly inside
+# the scene's top-10 spectral subspace (foreign fraction median 0.006 vs 0.042 for bench-v1 implants) and bleeds into
+# the 1-px halo (halo / object contrast 0.74 vs 0.60). v2 matches both.
+
+FOREIGN_K = 10
+
+
+def background_subspace(cube: np.ndarray, valid: np.ndarray, k: int = FOREIGN_K, seed: int = 0) -> np.ndarray:
+    """(k, B) orthonormal rows: the top-k principal directions of the scene's valid pixels. Missing voxels (NaN)
+    are mean-imputed per band - a plain mean would make a band with one gap all-NaN and drop it from the subspace
+    (130-182 of 234 PRISMA host bands had gaps; found 2026-10-17)."""
+    X = cube[:, valid].T
+    rng = np.random.default_rng(seed)
+    sub = X[rng.choice(len(X), size=min(len(X), 100_000), replace=False)]
+    centred = sub - np.nanmean(sub, 0)
+    centred[~np.isfinite(centred)] = 0.0                  # gap = the band mean
+    _, _, vt = np.linalg.svd(centred, full_matrices=False)
+    return vt[:k]
+
+
+def foreign_fraction(d: np.ndarray, P: np.ndarray) -> float:
+    """Share of |d|^2 outside the subspace spanned by P's rows (NaN bands ignored)."""
+    d = np.nan_to_num(d)
+    return float(1.0 - np.sum((P @ d) ** 2) / max(np.sum(d ** 2), 1e-18))
+
+
+def match_foreignness(d: np.ndarray, P: np.ndarray, target: float) -> np.ndarray:
+    """d with its out-of-subspace part rescaled so foreign_fraction(result, P) = target (0 <= target < 1):
+    d = d_in + beta d_out, beta^2 |d_out|^2 / (|d_in|^2 + beta^2 |d_out|^2) = target."""
+    nan = ~np.isfinite(d)
+    d0 = np.nan_to_num(d)
+    d_in = P.T @ (P @ d0)
+    d_out = d0 - d_in
+    a, b = np.sum(d_in ** 2), np.sum(d_out ** 2)
+    beta = 0.0 if b < 1e-18 else np.sqrt(target / max(1 - target, 1e-9) * a / b)
+    out = d_in + beta * d_out
+    out[nan] = np.nan
+    return out
+
+
+def psf_weights(obj: np.ndarray, sigma: float) -> np.ndarray:
+    """(H, W) implant weights: the footprint blurred by a Gaussian PSF of std sigma px, scaled so the footprint's
+    mean weight is 1 (the object keeps its contrast; neighbours get the blur's tail)."""
+    if sigma <= 0:
+        return obj.astype(np.float64)
+    w = ndimage.gaussian_filter(obj.astype(np.float64), sigma, mode="constant")
+    return w / max(w[obj].mean(), 1e-12)

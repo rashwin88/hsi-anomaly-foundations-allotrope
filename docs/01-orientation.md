@@ -86,6 +86,7 @@ app/          portable science — numpy/torch/rasterio. NO database, NO FastAPI
   utils/               band filtering, patching, scoring, spectral indices, STAC
   models/              Pydantic domain types (vendables, configs)
   spectral_match/      USGS splib07 material matching
+  evaluation/          detection benchmarks: models x datasets x scorers x measures (scripts/evaluate.py)
   georef/              recover CRS/affine from the raw file at export time
 
 backend/
@@ -115,6 +116,7 @@ To trace a feature: the science lives in `app/`, but the thing that *runs* it is
 | Understand cubes, bands, vendables | [3. Data pipeline](03-data-pipeline.md) |
 | Work on the neural models | [4. Models](04-models.md) |
 | Work on RX / scoring / material matching | [5. Detectors](05-detectors.md) |
+| Measure a model's detection | [`lld/evaluation.md`](lld/evaluation.md) - `python scripts/evaluate.py configs/eval/<name>.json` |
 | Add an API endpoint or an Action | [6. Backend](06-backend.md) |
 | Touch the UI | [7. Frontend](07-frontend.md) |
 | Ship it somewhere | [8. Deploy](08-deploy.md) |

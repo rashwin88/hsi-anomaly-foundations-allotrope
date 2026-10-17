@@ -23,6 +23,8 @@ adding another.
 | `spectral-stem.md` | the swappable spectral stem (linear / gate / cross-attention / reduced attention), loader hooks, band alignment |
 | `enmap-shards.md` | EnMAP L2A at native bands with quality labels, from the inventory, for fine-tuning and a cloud/water head |
 | `spectral-family-match.md` | naming the material family of 30 m anomaly pixels: family library, Simplex ACE, calibration and the alpha / p\* bar, evaluation, integration recipe |
+| `evaluation.md` | `app/evaluation` + `scripts/evaluate.py`: models x datasets x scorers x measures from one config, score-map cache, the stage-3 reference run |
+| `implant-bench.md` | the implanted-target benchmark: contrast tiers, the strength solve, bench-v1, bench-v2 (in progress) |
 
 ## How these are written
 

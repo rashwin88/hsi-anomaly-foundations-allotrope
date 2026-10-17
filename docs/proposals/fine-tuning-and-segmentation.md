@@ -1,8 +1,10 @@
 # Fine-tuning Indradhanu with a segmentation head
 
-**Status:** agreed 2026-10-16 (classes, shared model, L40S); label policy fixed 2026-10-16. As of 2026-10-16:
-stage 1 done (FT01), stage 2 run but gate not met (FT02), stage 2b running (FT02b, mixed-sensor batches), stage 2c
-planned (FT02c, edge term), stage 3 prepared (FT03). Running log: `research/experiments/indradhanu-finetune/README.md`.
+**Status:** agreed 2026-10-16 (classes, shared model, L40S); label policy fixed 2026-10-16. As of 2026-10-17:
+stages 1-3 run (FT01, FT02, FT02b, FT02c, FT03); **FT03 (joint) passed**. Stage 5: class-aware scoring tested and
+not shipped; water / cloud **exclusion** by FT03's masks chosen instead (not yet in `backend/`). Detection-supervised
+fine-tuning deferred until implant bench-v2 passes its acceptance. Running log:
+`research/experiments/indradhanu-finetune/README.md`.
 **Starts from:** F001, the SpectralEarth-pretrained reduced-attention model
 (`research/experiments/indradhanu-se-pretrain/F001-final-pretrain/`), stopped at epoch 113 of 200 on 2026-10-16
 (bench flat: 0.861 at epoch 60, 0.862 at epoch 109); fine-tuning loads `F001_ep109.pt`.
@@ -95,17 +97,23 @@ pixels only (a per-class ignore mask), so a tile without, say, trustworthy cloud
 
 Pass criteria for each run are written in its README before launch, as for E005.
 
-**Status by stage (2026-10-16):**
+**Status by stage (2026-10-17):**
 
 | stage | run | status | result |
 |---|---|---|---|
 | 0 | - | done | code, tests, label policy, shards on the L40S |
 | 1 | FT01 | done, 1.4 h | IoU water 0.82, cloud 0.80, shadow 0.20, thin cloud 0.09 (flat all run: label ceiling), snow not measurable (1 test tile); gate (water >= 0.6) passed |
 | 2 | FT02 | done, 4.25 h, **gate not met** | bench 0.855 (best.pt, epoch 8) / 0.853 (epoch 20) vs 0.861; SAM fell on all three sensors; combined 0.706 -> 0.824; per-sensor validation see-sawed. Not discarded: built on (user decision) |
-| 2b | FT02b | running since 10:15 UTC, code 9ae3215 | pending (scored at epochs 3, 6, 10) |
-| 2c | FT02c | planned, after FT02b | - |
-| 3 | FT03 | prepared, not run | waits for a stage-2 run that passes |
-| 4, 5 | - | not started | - |
+| 2b | FT02b | done, code 9ae3215, gate not met | see-saw gone (per-sensor SAM 3.99 / 4.37 / 5.57 deg, improving together); bench 0.856 vs 0.861 - every real-bench measure ties v0.2.0 |
+| 2c | FT02c | done, code 9ff0484 | edge term fell 1% in 10 epochs, no effect on edge false alarms; bench 0.855 |
+| 3 | FT03 | **passed** | water / cloud IoU 0.841 / 0.815 (above FT01); reconstruction and detection held (PRISMA bench pAUC 0.158, implant bench-v1 easy pAUC 0.371, = FT02c) |
+| 4 | - | not started | optional |
+| 5 | - | in progress | class-aware residual Mahalanobis tested, **not shipped** (water noise dominated: set1 water share of false alarms 14% -> 92%, PRISMA pAUC 0.158 -> 0.134); **exclusion** of water and cloud by FT03's masks chosen instead (user, 2026-10-17: "we don't detect anything on water and cloud"): FT03 PRISMA bench caught top 0.1% 14.3% -> 16.5%, pAUC 0.158 -> 0.165 (stage-3 evaluation, `docs/lld/evaluation.md`). Not yet wired into `scene_segmentation` / `anomaly_scoring` |
+
+The stage-2 gates were set on the 4-scene real bench, which cannot separate these models (FT02b README). From
+2026-10-17 stages are also judged on the implanted-target benchmark (`docs/lld/implant-bench.md`), where pAUC
+rises stage by stage (easy tier 0.257 v0.2.0 -> 0.342 F001 -> 0.371 FT02c / FT03); but a model-free PCA-RX beats
+every model on that bench-v1 while losing on the real one, so bench-v1 orders models and is not a target.
 
 Why 2b: FT02's see-saw, and the stem's single BatchNorm, whose running statistics with one sensor per batch
 are set by whichever sensors ended the epoch (FT02 README, "BatchNorm sensitivity"). Mixed batches balance each
@@ -150,10 +158,15 @@ Still open:
 - **Per-sensor heads** - discussed, not chosen: more capacity per sensor, at the cost of the one band-agnostic
   decoder that lets any band list in.
 - **Synthetic-target detection head** - discussed, not chosen: implant synthetic targets and train a head to find
-  them; detection becomes a training signal, but the targets' realism decides what it learns.
-- **The edge term (stage 2c)** - weight, and whether it costs small-target detection; judged on the bench.
+  them; detection becomes a training signal, but the targets' realism decides what it learns. **Deferred
+  (2026-10-17) until implant bench-v2 passes its acceptance** (foreignness and halo within 25% of the real objects',
+  overall and per tier; models above PCA-RX): trained on bench-v1's implants, a head would learn the cube-level
+  oddity PCA-RX already finds and real objects lack.
+- **The edge term (stage 2c)** - weight, and whether it costs small-target detection; judged on the bench. FT02c:
+  no effect at the weight tried (stage table).
 
-- Whether class-aware Mahalanobis uses hard classes or soft (probability-weighted) statistics.
+- Whether class-aware Mahalanobis uses hard classes or soft (probability-weighted) statistics - moot for now:
+  class-aware scoring was not shipped (2026-10-17), exclusion was chosen.
 - Whether pseudo-labels (stage 4) are needed at all, or EnMAP-trained masks transfer well enough.
 - Per-sensor shares after stage 2; whether AVIRIS-NG needs its own scale handling (3-8 m vs 30 m).
 - Fine-tuning epochs and the LR schedule per stage (set per run, written before launch).

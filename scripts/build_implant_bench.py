@@ -1,7 +1,7 @@
 """
 Build the implanted-target anomaly benchmark (docs/lld/implant-bench.md): real held-out EnMAP / PRISMA /
 AVIRIS-NG reflectance scenes with synthetic objects whose size, background and contrast follow the 909 labelled
-objects of the PRISMA bench, in three difficulty tiers (app/utils/evaluation/implant.py).
+objects of the PRISMA bench, in three difficulty tiers (app/evaluation/implant.py).
 
     python scripts/build_implant_bench.py real  <stage1_datasets root> <work>/real.json
     python scripts/build_implant_bench.py build <test shards dir> <work>/real.json <out dir> [--seed 0]
@@ -33,13 +33,15 @@ REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO))
 
 from app.evaluation.implant import (  # noqa: E402
-    TIERS, contrast_z, grow_blob, implant_material, implant_signature, ring_mask, solve_strength, tier_of)
+    TIERS, background_subspace, contrast_z, foreign_fraction, grow_blob, implant_material, implant_signature,
+    match_foreignness, psf_weights, ring_mask, solve_strength, tier_of)
 
 NODATA, SCALE = -32768, 1e-4
 HOST_ROWS = 1152                                   # AVIRIS-NG lines are cut to this many rows
 SPACING_PX = 10                                    # minimum gap between implanted objects
 MAX_SIZE_PX = 20
-SIGNATURE_GAP_NM = 15.0                            # host bands farther than this from a bench band get no signature
+SIGNATURE_GAP_NM = 15.0
+FOREIGN_LADDER = (0.0, 0.0005, 0.001, 0.002, 0.004, 0.008, 0.016, 0.03, 0.06, 0.12, 0.25, 0.5)   # v2 signal levels                            # host bands farther than this from a bench band get no signature
 HOSTS = {   # held-out test scenes, one datatake / date / line each (chosen 2026-10-17 from the test-split scan)
     "enmap": ["ENMAP01-____L2A-DT0000172009_20251228T054749Z_012", "ENMAP01-____L2A-DT0000180775_20260224T055028Z_002",
               "ENMAP01-____L2A-DT0000183687_20260319T054949Z_006", "ENMAP01-____L2A-DT0000172638_20260106T061858Z_019",
@@ -67,17 +69,22 @@ def measure_real(root: str, out: str) -> None:
         cube, keep = cube.astype(np.float64), spatial.astype(bool)
         bv = np.ones(cube.shape, bool)
         ndvi = ndvi_map(cube, wl)
+        P = background_subspace(cube, keep)
         labels, n = ndimage.label(gt)
         valid_px += int(keep.sum())
         scene_wl[name] = [float(w) for w in wl]          # set1 has 185 bands, the others 186
         for i in range(1, n + 1):
             obj = labels == i
-            ring = ring_mask(obj, keep, exclude=gt.astype(bool))
+            s_gt = gt.astype(bool)
+            ring = ring_mask(obj, keep, exclude=s_gt)
             if ring.sum() < 8:
                 continue
             o, r = cube[:, obj].mean(1), cube[:, ring].mean(1)
-            objects.append(dict(scene=name, px=int(obj.sum()), z=contrast_z(cube, bv, obj, ring),
-                                ndvi=float(np.nanmean(ndvi[ring])), d=(o - r).round(6).tolist()))
+            z = contrast_z(cube, bv, obj, ring)
+            halo = ndimage.binary_dilation(obj) & ~obj & keep & ~s_gt
+            zh = contrast_z(cube, bv, halo, ring) if halo.sum() >= 2 else float("nan")
+            objects.append(dict(scene=name, px=int(obj.sum()), z=z, ndvi=float(np.nanmean(ndvi[ring])),
+                                foreign=foreign_fraction(o - r, P), halo=zh / max(z, 1e-6), d=(o - r).round(6).tolist()))
         print(name, n, "objects", flush=True)
     json.dump({"wavelengths_nm": scene_wl, "valid_px": valid_px, "objects": objects}, open(out, "w"))
     print(f"{len(objects)} objects; density {len(objects) / valid_px * 1e6:.0f} per Mpx")
@@ -140,8 +147,12 @@ def library_for(wl: np.ndarray, cache_dir: Path) -> list:
     return entries
 
 
-def place_and_implant(rng, refl, wl, labels, real, lib):
-    """Implant objects into refl (B, H, W float, NaN = nodata) in place. Returns (gt (H, W) int32, records)."""
+def place_and_implant(rng, refl, wl, labels, real, lib, version: int = 1, psf_sigma: float = 0.0):
+    """Implant objects into refl (B, H, W float, NaN = nodata) in place. Returns (gt (H, W) int32, records).
+
+    version 2 (docs/lld/implant-bench.md, "bench-v2"): z and foreignness drawn as a pair from one real object; the
+    difference spectrum's out-of-scene part rescaled to that foreignness; a third source, a material from elsewhere
+    in the same host; additive implant through a PSF-blurred footprint; z solved on the realised ring contrast."""
     finite = np.isfinite(refl)
     valid = finite.mean(0) >= 0.9
     vis, nir = band_means(refl, wl, 450, 650), band_means(refl, wl, 800, 900)
@@ -166,29 +177,45 @@ def place_and_implant(rng, refl, wl, labels, real, lib):
     blocked = np.zeros_like(eligible)
     records, H, W = [], *refl.shape[1:]
     flat_w = weight.ravel()
+    sources = ("signature", "material") if version == 1 else ("signature", "material", "host")
+    margin = 4 if version == 1 else 7
+    # v2 measures and matches on the bands the evaluation reads (app/evaluation/datasets.load_implant_host): the
+    # product exclusions out, bands mostly empty over valid pixels out. The real objects were measured on the
+    # product reading; the noisy absorption / edge bands would otherwise swamp foreignness and contrast.
+    from app.evaluation.datasets import PRODUCT_EXCLUSIONS
+    ev = np.array([not any(lo <= w <= hi for lo, hi in PRODUCT_EXCLUSIONS) for w in wl]) & (finite[:, valid].mean(1) >= 0.6)
+    P = background_subspace(refl[ev], valid) if version == 2 else None
+    land = np.flatnonzero(eligible.ravel())
     for k in range(n_obj):
-        tier, source = TIERS[k % 3], ("signature", "material")[(k // 3) % 2]
+        tier, source = TIERS[k % 3], sources[(k // 3) % len(sources)]
         size = int(min(rng.choice([o["px"] for o in real["objects"]]), MAX_SIZE_PX))
-        z_target = float(rng.choice([o["z"] for o in by_tier[tier]]))
+        if version == 1:
+            z_target, f_target = float(rng.choice([o["z"] for o in by_tier[tier]])), None
+        else:                                       # contrast and foreignness as a pair, from one real object
+            pick = by_tier[tier][int(rng.integers(len(by_tier[tier])))]
+            z_target, f_target = float(pick["z"]), float(pick["foreign"])
         if source == "signature":
             j = int(rng.integers(len(real["objects"])))
             rw = real_wl[real["objects"][j]["scene"]]
             near = np.abs(wl[:, None] - rw[None]).min(1) <= SIGNATURE_GAP_NM
             spectrum = np.where(near, np.interp(wl, rw, real["objects"][j]["d"]), np.nan)
             what = f"real:{real['objects'][j]['scene']}#{j}"
-        else:
+        elif source == "material":
             chapter = chapters[int(rng.integers(len(chapters)))]
             pool = [x for x in usable_lib if x.chapter == chapter]
             e = pool[int(rng.integers(len(pool)))]
             spectrum, what = e.refl, f"{e.chapter}:{e.name}"
+        else:                                       # host: a material from elsewhere in this scene (v2)
+            spectrum, what = None, "host"
         for _ in range(200):                        # a free, eligible spot where the target contrast is reachable
             c = rng.choice(flat_w.size, p=flat_w / flat_w.sum())
             cy, cx = divmod(int(c), W)
             off = grow_blob(rng, size) + (cy, cx)
-            if not ((off.min() >= 4) and off[:, 0].max() < H - 4 and off[:, 1].max() < W - 4
+            if not ((off.min() >= margin) and off[:, 0].max() < H - margin and off[:, 1].max() < W - margin
                     and eligible[off[:, 0], off[:, 1]].all() and not blocked[off[:, 0], off[:, 1]].any()):
                 continue
-            y0, y1, x0, x1 = off[:, 0].min() - 4, off[:, 0].max() + 5, off[:, 1].min() - 4, off[:, 1].max() + 5
+            y0, y1 = off[:, 0].min() - margin, off[:, 0].max() + margin + 1
+            x0, x1 = off[:, 1].min() - margin, off[:, 1].max() + margin + 1
             win = (slice(None), slice(y0, y1), slice(x0, x1))
             obj = np.zeros((y1 - y0, x1 - x0), bool)
             obj[off[:, 0] - y0, off[:, 1] - x0] = True
@@ -196,23 +223,67 @@ def place_and_implant(rng, refl, wl, labels, real, lib):
             ring = ring_mask(obj, valid[y0:y1, x0:x1], exclude=gt[y0:y1, x0:x1] > 0)
             rpx = np.where(fin[:, ring], sub[:, ring], np.nan)
             r, sigma, o0 = np.nanmean(rpx, 1), np.nanstd(rpx, 1), np.nanmean(sub[:, obj], 1)
-            step = spectrum if source == "signature" else spectrum - o0
-            strength, _ = solve_strength(o0, r, sigma, step, z_target, s_max=None if source == "signature" else 1.0)
+            if version == 1:
+                step = spectrum if source == "signature" else spectrum - o0
+                strength, _ = solve_strength(o0, r, sigma, step, z_target, s_max=None if source == "signature" else 1.0)
+            else:
+                rpx_e = np.where(fin[ev][:, ring], sub[ev][:, ring], np.nan)
+                r_e, sigma_e, o0_e = np.nanmean(rpx_e, 1), np.nanstd(rpx_e, 1), np.nanmean(sub[ev][:, obj], 1)
+                if source == "host":                # a land pixel >= 100 px away
+                    py, px = divmod(int(land[int(rng.integers(len(land)))]), W)
+                    if abs(py - cy) + abs(px - cx) < 100:
+                        continue
+                    d0, what = refl[:, py, px] - r, f"host:{py},{px}"
+                else:
+                    d0 = spectrum if source == "signature" else spectrum - r
+                # Solve on the REALISED object: its difference from the ring is the spot's own natural offset
+                # plus the implant, so try a ladder of signal foreignness levels, solve the strength for z at
+                # each, and keep the level whose realised foreignness is closest to the real object's; reject
+                # the spot if none comes within a factor 1.5 (its own offset is too foreign).
+                wgt = psf_weights(obj, psf_sigma)
+                shrink = 1.0 - wgt[ring].mean()            # the ring takes the PSF tail too
+                best = None
+                for t in FOREIGN_LADDER:
+                    d_ev = match_foreignness(d0[ev], P, t)
+                    a_t, _ = solve_strength(o0_e, r_e, sigma_e, shrink * d_ev, z_target)
+                    if a_t is None:
+                        break
+                    f_real = foreign_fraction(o0_e - r_e + a_t * shrink * d_ev, P)
+                    gap = abs(np.log(max(f_real, 1e-6) / max(f_target, 1e-6)))
+                    if best is None or gap < best[0]:
+                        best = (gap, a_t, d_ev)
+                if best is None or best[0] > np.log(1.5):
+                    continue
+                _, strength, d_ev = best
+                d = np.array(d0, dtype=np.float64)
+                d[ev] = d_ev
             if strength is not None:
                 break
         else:
             continue
-        if source == "signature":
+        if version == 2:
+            sub += strength * wgt[None] * np.nan_to_num(d)[:, None, None]
+            np.maximum(sub, 0.0, out=sub, where=np.isfinite(sub))
+        elif source == "signature":
             implant_signature(sub, obj, spectrum, strength)
         else:
             implant_material(sub, obj, spectrum, strength)
-        z = contrast_z(sub, np.isfinite(sub), obj, ring)
+        se = sub[ev] if version == 2 else sub
+        z = contrast_z(se, np.isfinite(se), obj, ring)
+        extra = {}
+        if version == 2:
+            halo = ndimage.binary_dilation(obj) & ~obj & valid[y0:y1, x0:x1] & ~(gt[y0:y1, x0:x1] > 0)
+            o_new = np.nanmean(se[:, obj], 1)
+            r_new = np.nanmean(np.where(np.isfinite(se[:, ring]), se[:, ring], np.nan), 1)
+            extra = dict(foreign_target=round(f_target, 5), foreign=round(foreign_fraction(o_new - r_new, P), 5),
+                         halo=round(contrast_z(se, np.isfinite(se), halo, ring) / max(z, 1e-6), 4)
+                         if halo.sum() >= 2 else None)
         oid = len(records) + 1
         gt[y0:y1, x0:x1][obj] = oid
         blocked[max(0, y0 - SPACING_PX):y1 + SPACING_PX, max(0, x0 - SPACING_PX):x1 + SPACING_PX] = True
         records.append(dict(id=oid, y=cy, x=cx, px=size, source=source, what=what, tier_target=tier,
                             z_target=round(z_target, 4), strength=round(strength, 5), z=round(z, 4), tier=tier_of(z),
-                            ndvi=round(float(np.nanmean(ndvi[y0:y1, x0:x1][ring])), 3)))
+                            ndvi=round(float(np.nanmean(ndvi[y0:y1, x0:x1][ring])), 3), **extra))
     return gt, records
 
 
@@ -224,18 +295,20 @@ def sha256(path: Path) -> str:
     return h.hexdigest()
 
 
-def build(shards: str, real_path: str, out: str, seed: int) -> None:
+def build(shards: str, real_path: str, out: str, seed: int, version: int = 1, psf_sigma: float = 0.0,
+          hosts: dict | None = None) -> None:
     real = json.load(open(real_path))
     rng = np.random.default_rng(seed)
     out_dir = Path(out)
-    manifest = {"seed": seed, "real": Path(real_path).name, "real_sha256": sha256(Path(real_path)), "hosts": []}
-    for sensor, prefixes in HOSTS.items():
+    manifest = {"seed": seed, "version": version, "psf_sigma": psf_sigma, "real": Path(real_path).name,
+                "real_sha256": sha256(Path(real_path)), "hosts": []}
+    for sensor, prefixes in (hosts or HOSTS).items():
         for prefix in prefixes:
             cube, wl, labels = reassemble(Path(shards), sensor, prefix)
             refl = np.where(cube == NODATA, np.nan, cube.astype(np.float32) * SCALE)
             del cube
             lib = library_for(wl, out_dir / "libcache")
-            gt, records = place_and_implant(rng, refl, wl, labels, real, lib)
+            gt, records = place_and_implant(rng, refl, wl, labels, real, lib, version, psf_sigma)
             host = out_dir / sensor / prefix
             host.mkdir(parents=True, exist_ok=True)
             np.save(host / "cube.npy", np.where(np.isfinite(refl), np.round(refl / SCALE), NODATA).astype(np.int16))
@@ -257,8 +330,15 @@ def main() -> None:
     r = sub.add_parser("real"); r.add_argument("root"); r.add_argument("out")
     b = sub.add_parser("build"); b.add_argument("shards"); b.add_argument("real"); b.add_argument("out")
     b.add_argument("--seed", type=int, default=0)
+    b.add_argument("--version", type=int, choices=(1, 2), default=1)
+    b.add_argument("--psf-sigma", type=float, default=0.0, help="v2: Gaussian PSF std in px")
+    b.add_argument("--hosts", help="sensor=prefix,prefix;sensor=... subset (calibration runs)")
     a = p.parse_args()
-    measure_real(a.root, a.out) if a.cmd == "real" else build(a.shards, a.real, a.out, a.seed)
+    if a.cmd == "real":
+        measure_real(a.root, a.out)
+    else:
+        hosts = None if not a.hosts else {k: v.split(",") for k, v in (x.split("=") for x in a.hosts.split(";"))}
+        build(a.shards, a.real, a.out, a.seed, a.version, a.psf_sigma, hosts)
 
 
 if __name__ == "__main__":

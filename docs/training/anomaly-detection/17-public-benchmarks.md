@@ -151,7 +151,8 @@ Its size is not the problem; its missing wavelengths are. Without them, a wavele
 is reading bands it cannot place.
 
 **"Our 4 PRISMA scenes are enough if we use better measures."**
-Part 16's measures were tried on them (`app/utils/evaluation/prisma_bench.py`, `SCENES`), and every
+Part 16's measures were tried on them (then `app/utils/evaluation/prisma_bench.py`, `SCENES`; now
+`app/evaluation/datasets.py`, `PRISMA_SCENES`), and every
 one tied. The limit is the number of scenes and objects, not the measure.
 
 ## Check yourself

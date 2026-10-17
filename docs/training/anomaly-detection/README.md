@@ -3,7 +3,7 @@
 A course for someone who has never worked with hyperspectral data and has never opened this
 repository. Start at part 1 knowing nothing; finish able to read the source.
 
-Eighteen parts, each finishable in a sitting. **Read them in order.** Part N assumes parts
+Nineteen parts, each finishable in a sitting. **Read them in order.** Part N assumes parts
 1 to N-1 and nothing else, so skipping ahead will cost you more time than it saves.
 
 | part | one-sentence purpose |
@@ -26,6 +26,7 @@ Eighteen parts, each finishable in a sitting. **Read them in order.** Part N ass
 | [16](16-detection-measures.md) | Measuring detection where the analyst looks: pAUC, TPR at 0.1%, objects caught, and chance |
 | [17](17-public-benchmarks.md) | The public benchmarks (HAD100, ABU), and why none of them tests this product |
 | [18](18-the-implant-benchmark.md) | The implanted-target benchmark: real held-out scenes, synthetic objects like the real ones |
+| [19](19-running-an-evaluation.md) | Running an evaluation: one config, scene-major loop, cached score maps, chance - and a classical baseline that wins on the implants and loses on real objects |
 
 ## How to use this
 
@@ -63,6 +64,7 @@ relying on them:
 | 16 | `compute_roc`'s threshold count formula, the FT02b bench measures |
 | 17 | the state of HAD100 / ABU (ABU's page was already 404 on 2026-10-16), the leakage distances |
 | 18 | bench-v1's object counts and every results row - a rebuild (new hosts, new seed) or a new model moves them; the tier edges 0.502 / 0.934 |
+| 19 | every stage-3 number (exclusion, PCA-RX), the foreignness and halo medians, and the state of bench-v2 (in progress on 2026-10-17) |
 
 Structural claims - what a vendable is, why masking works the way it does - will outlive
 the numbers.

@@ -31,7 +31,7 @@ arithmetic of the measures and of the implanting.
   objects: median 2 pixels, 41% single pixels. Half are a real object's difference spectrum added in
   (**signature**), half a USGS library material mixed in (**material**).
 - **Contrast z:** the object's mean absolute difference from a ring of pixels 2-3 steps away, divided
-  by the ring's mean standard deviation (`contrast_z` in `app/utils/evaluation/implant.py`).
+  by the ring's mean standard deviation (`contrast_z` in `app/evaluation/implant.py`).
 - **Tiers:** cut at the real objects' z terciles, 0.502 and 0.934: **subtle**, **medium**, **easy**.
 - **Measures:** objects **caught** - at least one pixel within one step of a pixel in the top 1% (or
   0.1%) of scores - and **pAUC**, the area under the ROC curve up to 1% false alarms divided by 0.01.
@@ -39,7 +39,7 @@ arithmetic of the measures and of the implanting.
   one-pixel tolerance gives every object several chances); random pAUC is **0.005**.
 - **Each model reads the hosts its own way:** the wavelength models read the bands their
   trained-wavelength record covers (part 49); v0.2.0 reads a linear resample onto its fixed 165-band
-  grid (`scripts/evaluate_implant_bench.py`).
+  grid (then `scripts/evaluate_implant_bench.py`; now `scripts/evaluate.py`, part 57).
 
 ## The results
 
@@ -57,7 +57,7 @@ top 1% on each sensor's hosts:
 | FT03 ep10 | joint (55) | 27% (10%) | 10% (1%) | 21% (4%) | 50% (25%) | 0.371 | 0.121 | 15% | 33% | 33% |
 
 And on the four real PRISMA scenes, the same models (FT02b and FT03 READMEs; FT03's ROC-AUC was not
-reported):
+reported there - the stage-3 evaluation of part 57 measured it at 0.853):
 
 | model | ROC-AUC | pAUC to 1% | caught of 909, top 1% |
 |---|---|---|---|
@@ -191,6 +191,8 @@ scene-to-scene noise.
 
 ---
 
-That is the course so far. The authoritative records for this stretch are the run READMEs under
+Next: [part 57](57-stage-3-and-what-comes-next.md) - the stage-3 evaluation, water and cloud, and bench-v2.
+
+The authoritative records for this stretch are the run READMEs under
 `research/experiments/indradhanu-finetune/`, `research/experiments/implant-bench/README.md` and
 `docs/lld/implant-bench.md`; new results will land there first.

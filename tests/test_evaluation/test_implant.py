@@ -1,4 +1,4 @@
-"""app/utils/evaluation/implant.py: tiers, contrast z by hand, blob shapes, implant arithmetic."""
+"""app/evaluation/implant.py: tiers, contrast z by hand, blob shapes, implant arithmetic."""
 import numpy as np
 import pytest
 
@@ -55,3 +55,32 @@ def test_solve_strength_by_hand():
     # a material barely different from the pixel cannot reach z 2 with f <= 1: capped at 1, z(1) = 0.01 / 0.05 = 0.2
     s, z = solve_strength(r.copy(), r, sigma, np.array([0.01, 0.01, 0.01]), 2.0, s_max=1.0)
     assert s == 1.0 and z == pytest.approx(0.2, rel=1e-3)
+
+
+def test_foreignness_by_hand_and_matching():
+    from app.evaluation.implant import foreign_fraction, match_foreignness
+    P = np.array([[1.0, 0.0, 0.0]])                   # the background subspace is band 0
+    d = np.array([3.0, 4.0, 0.0])                     # |d|^2 = 25, 16 of it outside: 0.64
+    assert foreign_fraction(d, P) == pytest.approx(0.64)
+    for t in (0.0, 0.1, 0.5):
+        assert foreign_fraction(match_foreignness(d, P, t), P) == pytest.approx(t, abs=1e-9)
+    m = match_foreignness(d, P, 0.2)
+    assert m[0] == 3.0                                # the in-subspace part is untouched
+
+
+def test_psf_weights():
+    from app.evaluation.implant import psf_weights
+    obj = np.zeros((15, 15), bool); obj[7, 7] = True
+    w = psf_weights(obj, 0.6)
+    assert w[7, 7] == pytest.approx(1.0) and 0 < w[7, 8] < 1 and w[7, 8] == pytest.approx(w[8, 7])
+    assert np.array_equal(psf_weights(obj, 0), obj.astype(float))
+
+
+def test_background_subspace_ignores_gaps():
+    """A band with one missing voxel must still count: the subspace of a cube varying only in band 2 is band 2."""
+    from app.evaluation.implant import background_subspace
+    rng = np.random.default_rng(0)
+    cube = np.zeros((4, 50, 50)); cube[2] = rng.standard_normal((50, 50))
+    cube[2, 3, 3] = np.nan
+    P = background_subspace(cube, np.ones((50, 50), bool), k=1)
+    assert abs(P[0, 2]) == pytest.approx(1.0, abs=1e-6)

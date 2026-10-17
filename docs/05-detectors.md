@@ -145,6 +145,33 @@ spacing wastes almost all its resolution.
 Thresholding is not done here — it happens in the `anomaly_detection_prep` action, which
 combines each model's map and then waits at status `needs_threshold` for a human to choose.
 
+## Measuring detection - `scripts/evaluate.py`
+
+Every detection number in this repo since 2026-10-17 comes from one subsystem, `app/evaluation/`
+([`lld/evaluation.md`](lld/evaluation.md)). A JSON config names models (checkpoints, local or `s3://`),
+datasets (the 4 labelled PRISMA scenes; the implanted-target bench, [`lld/implant-bench.md`](lld/implant-bench.md)),
+scorers and measures; one command runs every combination:
+
+```bash
+python scripts/evaluate.py configs/eval/stage3.json [--output <dir>]
+```
+
+It reconstructs through the product's inferencers and scores through the product's `compute_score` /
+`residual_mahalanobis`, so its numbers are the product's. Measures look at the top of the ranking (pAUC to 1% FPR,
+TPR at 0.1% FPR, objects caught in the top 1% / 0.1% beside their analytic chance level) as well as the product's
+ROC-AUC. Two scorers exist only here: `exclude` (zero chosen classes using a segmentation head) and `pca_rx` (the
+same whitened-PCA distance on the cube, no model - the classical baseline every benchmark should be checked against).
+
+Two results from the reference run (stage 3, 2026-10-17):
+
+- **Excluding water and cloud** with FT03's segmentation masks, zeroed after scoring, lifts the top of the ranking
+  on every model (FT03, PRISMA bench: caught top 0.1% 14.3% -> 16.5%, pAUC 0.158 -> 0.165). This is the planned
+  product default (user, 2026-10-17: "we don't detect anything on water and cloud"); it is **not in `backend/`
+  yet**. Today `anomaly_scoring` excludes water and cloud only when an upstream `scene_segmentation` (NDWI /
+  brightness thresholds) or `cloud_mask` supplies a `keep_mask`; FT03's learned masks are not used.
+- **The implant bench-v1 is biased**: PCA-RX beats every model on it but loses on the real objects (pAUC 0.128 vs
+  0.158). Read bench-v1 numbers as an ordering of models, never on their own ([known issues](09-known-issues.md)).
+
 ## Naming the material — spectral matching
 
 Hyperspectral only, and the payoff for having 165 bands.

@@ -13,7 +13,9 @@ the AUC. Until 2026-10-16 that number was how every model and score in this repo
 that date a second function arrived beside it, `detection_measures` in
 `app/utils/evaluation/prisma_bench.py`, with its hand-worked test in
 `tests/test_utils/test_detection_measures.py`. This part explains why it was needed and what each
-of its numbers means.
+of its numbers means. (Since 2026-10-17 the same measures live in `app/evaluation/metrics.py`, keyed
+`pauc_0.01`, `tpr_at_0.001`, `hit_1` / `hit_0.1`, tested in `tests/test_evaluation/test_metrics.py`;
+part 19 runs them. The names below are the originals.)
 
 You need part 12's percentile threshold and part 1's point that anomalies are rare. Nothing else.
 

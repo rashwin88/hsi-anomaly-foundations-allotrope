@@ -14,10 +14,10 @@ similar to the ones we do have", in "subtle, medium, easy" categories. The piece
 | file | what it holds |
 |---|---|
 | `docs/lld/implant-bench.md` | the design: interfaces, data flow, invariants, decisions |
-| `app/utils/evaluation/implant.py` | the core: ring, contrast, tiers, blob shapes, the two implants, the strength solve |
+| `app/evaluation/implant.py` | the core: ring, contrast, tiers, blob shapes, the two implants, the strength solve (in `app/utils/evaluation/implant.py` until 2026-10-17) |
 | `scripts/build_implant_bench.py` | `real` measures the real objects; `build` makes the benchmark |
-| `scripts/evaluate_implant_bench.py` | scores models on it |
-| `tests/test_utils/test_implant.py` | hand-worked tests of the core |
+| `scripts/evaluate.py` with a `{"kind": "implant"}` dataset | scores models on it (part 19; `scripts/evaluate_implant_bench.py` until 2026-10-17) |
+| `tests/test_evaluation/test_implant.py` | hand-worked tests of the core |
 | `research/experiments/implant-bench/README.md` | bench-v1: the build, the comparison with the real objects, the results |
 
 > **Analogy.** To test proofreaders, a publisher takes real pages and plants thirty typos of known
@@ -142,9 +142,9 @@ window with the most tiles.
   (class 2 water, class 0 or the cloud layer for cloud); the others use rules: water where `nir < 0.08`
   and NDVI below 0, cloud where `vis > 0.35`;
 - that area shrunk by 4 pixels, so no object touches a gap or the edge;
-- not within the blocked zone of an earlier object. The LLD says ">= 10 px apart"; the code blocks the
-  object's box grown by 4, then by 10 more, so the real gap is at least about 15 pixels. The source wins;
-  either way no ring can reach another object (invariant 4).
+- not within the blocked zone of an earlier object. The LLD first said ">= 10 px apart"; the code blocks
+  the object's box grown by 4, then by 10 more, so the real gap is at least about 15 pixels. The source
+  won, and the LLD now says so; either way no ring can reach another object (invariant 4).
 
 **How many.** The real density: objects per valid pixel in the four PRISMA scenes, times the host's
 eligible pixels.
@@ -206,9 +206,9 @@ implanting is
 z(s) = mean |o0 + s x step - r|  /  mean sigma
 ```
 
-The LLD's interface list still gives the simpler formula `s = z x mean(sigma) / mean|step|`
-(`strength_for_z`). **That function does not exist in the source**; the code has `solve_strength`, and
-the difference is the point of this step. The simple formula assumes `o0 = r` - that the spot looked
+The LLD's interface list first gave the simpler formula `s = z x mean(sigma) / mean|step|`
+(`strength_for_z`). **That function never existed in the source** (the LLD now lists `solve_strength`),
+and the difference is the point of this step. The simple formula assumes `o0 = r` - that the spot looked
 exactly like its ring before anything was added. Real pixels never do.
 
 Work one band. Ring mean `r = 0.20`, `sigma = 0.05`. The spot's own value is `o0 = 0.22` - 0.02 above
@@ -303,7 +303,7 @@ false alarms, equally for every model.
 
 ## Step 8 - scoring a model
 
-`evaluate_implant_bench.py`, per host: apply the product's default band exclusions; drop bands that are
+The evaluation (then `evaluate_implant_bench.py`, now `scripts/evaluate.py`, part 19), per host: apply the product's default band exclusions; drop bands that are
 mostly empty; fill missing values per band from the nearest valid pixel; let each model read the scene
 its own way (wavelength-reading models read the bands their trained-wavelength record covers; the
 shipped v0.2.0 reads a linear resample onto the 165-band grid - "close to, not identical with" the
@@ -425,17 +425,4 @@ the real objects".
 
 ---
 
-## You have finished
-
-You can now read the source. Where to go next:
-
-- **`docs/01-orientation.md`** through **`docs/10-code-style.md`** - the reference docs
-- **`docs/lld/`** - low-level designs for individual subsystems; for the last three parts,
-  `docs/lld/implant-bench.md`
-- **`docs/09-known-issues.md`** - what is currently broken, and what to check before trusting
-  a green test run
-
-One habit worth keeping from this course: **when a comment and the code disagree, the code
-wins.** You met several such disagreements - the regularisation default, the `MIN_VALID_FRACTION`
-comment and the discarded `units` field in parts 1 to 15; `compute_roc`'s threshold docstring in part
-16; the LLD's `strength_for_z` and its "10 px apart" in this part. There will be more.
+Next: [part 19](19-running-an-evaluation.md) - running an evaluation, and what the first full run said about this benchmark.

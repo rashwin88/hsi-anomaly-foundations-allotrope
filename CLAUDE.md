@@ -126,6 +126,7 @@ still reference ports 3000/8000 while compose binds 3010/8010; bare directory pa
 docker compose -f docker/docker-compose.yml up -d      # full stack → http://localhost:3010
 python -m pytest -m "not large_files and not large_benchmarks and not network_access"
 python scripts/train_foundation_model.py configs/<exp>.json
+python scripts/evaluate.py configs/eval/<name>.json         # detection measures; docs/lld/evaluation.md
 ```
 
 `tests/test_payloads/` is gitignored — the `large_files` marker gates the tests that need it.

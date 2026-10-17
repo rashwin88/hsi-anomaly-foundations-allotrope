@@ -55,6 +55,7 @@ class EvalScene:
     attrs: dict = field(default_factory=dict)       # object id -> {attribute: value}
     units: str = "reflectance"
     reader: Callable | None = None   # mode -> (cube, wavelengths, valid), for an exact non-native reading
+    fingerprint: str = ""            # identity of the scene's source files (part of the score-cache key)
 
     @property
     def key(self) -> str:
@@ -155,8 +156,10 @@ class PrismaBench:
             objects, _ = ndimage.label(gt)
             valid = spatial.astype(bool)
             reader = lambda mode, n=name: (lambda c, _, w, sp, __: (c, w, sp.astype(bool)))(*load_prisma_scene(self.root, n, mode))
+            he5 = Path(self.root) / PRISMA_SCENES[name][0]
             yield EvalScene("prisma_bench", name, "prisma", cube, wl, valid, objects.astype(np.int32),
-                            object_attributes(cube, valid, objects), reader=reader)
+                            object_attributes(cube, valid, objects), reader=reader,
+                            fingerprint=f"{he5.stat().st_size}-{he5.stat().st_mtime_ns}")
 
 
 # --- implant bench ----------------------------------------------------------------------------------------------
@@ -178,7 +181,8 @@ class ImplantBench:
             attrs = {o["id"]: {"tier": o["tier"], "source": o["source"], "size": o["px"], "sensor": h["sensor"]}
                      for o in objs}
             yield EvalScene("implant", h["scene"], h["sensor"], cube, wl, valid,
-                            np.load(d / "gt.npy").astype(np.int32), attrs)
+                            np.load(d / "gt.npy").astype(np.int32), attrs,
+                            fingerprint=h["files"].get("cube.npy", "") + h["files"].get("gt.npy", ""))
 
 
 def load_implant_host(host: Path) -> tuple[np.ndarray, np.ndarray, np.ndarray]:

@@ -131,7 +131,7 @@ The day after this part was written, three things moved:
   The FT02c README points the next attempt at the architecture - a masked, higher-resolution path into the
   decoder - which is a fifth option, not one of the four above.
 - **Synthetic targets now exist - as a benchmark, not a training head.** `app/utils/evaluation/implant.py`
-  and `scripts/build_implant_bench.py` implant objects into held-out test scenes and score models on them
+  (now `app/evaluation/implant.py`) and `scripts/build_implant_bench.py` implant objects into held-out test scenes and score models on them
   (part 56). Option 3's objection was about *training* on a recipe; a benchmark built from one has the same
   weakness in a milder form, and its README says so: implants are harder than real objects at the same
   contrast. The detection head itself is still not chosen.

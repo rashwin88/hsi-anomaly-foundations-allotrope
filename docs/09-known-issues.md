@@ -201,9 +201,6 @@ Rationale and results in [`lld/spectral-family-match.md`](lld/spectral-family-ma
 Added 2026-10-14 with the `spectral_stem_mae` trainer and the EnMAP native shards. Rationale in
 [`lld/spectral-stem.md`](lld/spectral-stem.md) and [`lld/enmap-shards.md`](lld/enmap-shards.md).
 
-- **No PRISMA evaluation for `spectral_stem_mae` checkpoints yet.** The A/B/C decision rule needs
-  ROC-AUC on the 4 labelled PRISMA scenes; the existing scoring path loads only today's
-  Indradhanu. Until it exists, runs are compared on reconstruction alone.
 - **Mixed-sensor batches have no label-key policy.** `band_list_path` aligns bands, but EnMAP
   samples carry `label_*`/`meta.json` and SpectralEarth/PRISMA samples do not, so default
   collation fails on a mixed batch. Pre-training is single-sensor; this blocks only mixed
@@ -213,6 +210,28 @@ Added 2026-10-14 with the `spectral_stem_mae` trainer and the EnMAP native shard
   plateau scenes whose cirrus/cloud labels are false) is unbuilt.
 - **No PRISMA shards.** PRISMA L2D (223 scenes, in the inventory) needs its own native-band
   reader before it can be sharded.
+
+## Evaluation - known limits
+
+Added 2026-10-17 with `app/evaluation/` and the stage-3 run. Rationale in [`lld/evaluation.md`](lld/evaluation.md)
+and [`lld/implant-bench.md`](lld/implant-bench.md).
+
+- **Implant bench-v1 is biased toward cube-level spectral oddity.** A model-free PCA-RX beats every model on it
+  (objects caught top 1% 30.2% vs FT03's 26.9%) and loses clearly on the real PRISMA bench (pAUC 0.128 vs 0.158,
+  TPR at 0.1% FPR 0.029 vs 0.058). The implants' difference from their ring lies outside the scene's main spectral
+  directions far more than real objects' does (foreign fraction median 0.042 vs 0.006), and their edges are hard
+  (halo / object contrast 0.60 vs 0.74). bench-v1 still orders the models consistently; it must not be a training
+  target or the only judge. bench-v2 is in progress.
+- **Water / cloud exclusion is not in the product.** Chosen 2026-10-17 as the default (FT03's masks, scored 0 after
+  scoring); today it exists only as the `exclude` scorer in `app/evaluation/scorers.py`. In the product, water and
+  cloud are left out only through an optional upstream `keep_mask` from `scene_segmentation` (NDWI / brightness
+  thresholds) or `cloud_mask`. Under exclusion, 39 of the 909 real
+  labelled objects (27 in PRISMA set1) cannot be found, because FT03 calls their every pixel water or cloud.
+- **The score-map cache does not know the dataset's content.** A bench rebuilt in place under the same scene names,
+  evaluated into the same output directory, is silently measured with the old score maps. Use a new bench path and
+  output directory per version.
+- **`provenance.json`'s `dirty` flag is always false** (the git pathspecs resolve under `app/evaluation/`), so the
+  stage-3 run records commit 060aabc although it ran on the then-uncommitted `app/evaluation/`.
 
 ## Config knobs that do nothing
 

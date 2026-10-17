@@ -130,13 +130,14 @@ class Evaluation:
         return f"{model.name}-" + hashlib.sha1(f"{model.path.resolve()}|{st.st_size}|{st.st_mtime_ns}|{model.mode}".encode()).hexdigest()[:10]
 
     def _score_path(self, scene, model, spec) -> Path:
-        key = hashlib.sha1(spec.model_dump_json().encode()).hexdigest()[:10]
+        key = hashlib.sha1((spec.model_dump_json() + "|" + scene.fingerprint).encode()).hexdigest()[:10]
         return self.cache / "scores" / scene.dataset / scene.name / self._model_id(model) / f"{key}.npz"
 
     def _write_provenance(self, models: dict) -> None:
         def git(*a):
             try:
-                return subprocess.run(["git", *a], capture_output=True, text=True, cwd=Path(__file__).parent).stdout.strip()
+                return subprocess.run(["git", *a], capture_output=True, text=True,
+                                      cwd=Path(__file__).resolve().parents[2]).stdout.strip()   # repo root
             except OSError:
                 return None
         prov = {"commit": git("rev-parse", "HEAD"), "dirty": bool(git("status", "--porcelain", "--", "app", "scripts")),
