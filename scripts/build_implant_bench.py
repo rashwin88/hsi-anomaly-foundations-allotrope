@@ -34,14 +34,13 @@ sys.path.insert(0, str(REPO))
 
 from app.evaluation.implant import (  # noqa: E402
     TIERS, background_subspace, contrast_z, foreign_fraction, grow_blob, implant_material, implant_signature,
-    match_foreignness, psf_weights, ring_mask, solve_strength, tier_of)
+    match_foreignness, psf_weights, ring_mask, solve_realised, solve_strength, tier_of)
 
 NODATA, SCALE = -32768, 1e-4
 HOST_ROWS = 1152                                   # AVIRIS-NG lines are cut to this many rows
 SPACING_PX = 10                                    # minimum gap between implanted objects
 MAX_SIZE_PX = 20
-SIGNATURE_GAP_NM = 15.0
-FOREIGN_LADDER = (0.0, 0.0005, 0.001, 0.002, 0.004, 0.008, 0.016, 0.03, 0.06, 0.12, 0.25, 0.5)   # v2 signal levels                            # host bands farther than this from a bench band get no signature
+SIGNATURE_GAP_NM = 15.0                            # host bands farther than this from a bench band get no signature
 HOSTS = {   # held-out test scenes, one datatake / date / line each (chosen 2026-10-17 from the test-split scan)
     "enmap": ["ENMAP01-____L2A-DT0000172009_20251228T054749Z_012", "ENMAP01-____L2A-DT0000180775_20260224T055028Z_002",
               "ENMAP01-____L2A-DT0000183687_20260319T054949Z_006", "ENMAP01-____L2A-DT0000172638_20260106T061858Z_019",
@@ -236,25 +235,11 @@ def place_and_implant(rng, refl, wl, labels, real, lib, version: int = 1, psf_si
                     d0, what = refl[:, py, px] - r, f"host:{py},{px}"
                 else:
                     d0 = spectrum if source == "signature" else spectrum - r
-                # Solve on the REALISED object: its difference from the ring is the spot's own natural offset
-                # plus the implant, so try a ladder of signal foreignness levels, solve the strength for z at
-                # each, and keep the level whose realised foreignness is closest to the real object's; reject
-                # the spot if none comes within a factor 1.5 (its own offset is too foreign).
-                wgt = psf_weights(obj, psf_sigma)
-                shrink = 1.0 - wgt[ring].mean()            # the ring takes the PSF tail too
-                best = None
-                for t in FOREIGN_LADDER:
-                    d_ev = match_foreignness(d0[ev], P, t)
-                    a_t, _ = solve_strength(o0_e, r_e, sigma_e, shrink * d_ev, z_target)
-                    if a_t is None:
-                        break
-                    f_real = foreign_fraction(o0_e - r_e + a_t * shrink * d_ev, P)
-                    gap = abs(np.log(max(f_real, 1e-6) / max(f_target, 1e-6)))
-                    if best is None or gap < best[0]:
-                        best = (gap, a_t, d_ev)
-                if best is None or best[0] > np.log(1.5):
+                wgt = psf_weights(obj, psf_sigma)       # solve on the realised object (implant.solve_realised)
+                got = solve_realised(o0_e, r_e, sigma_e, d0[ev], P, z_target, f_target, 1.0 - wgt[ring].mean())
+                if got is None:
                     continue
-                _, strength, d_ev = best
+                strength, d_ev = got
                 d = np.array(d0, dtype=np.float64)
                 d[ev] = d_ev
             if strength is not None:

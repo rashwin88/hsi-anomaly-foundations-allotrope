@@ -169,3 +169,25 @@ def test_segment_mixed_matches_segment_per_group():
         la, lb = m.segment_mixed([(a, a_wl, None), (b, b_wl, None)])
         assert torch.allclose(la, m.segment(a, a_wl), atol=1e-5) and torch.allclose(lb, m.segment(b, b_wl), atol=1e-5)
     assert la.shape == (2, 5, 64, 64)
+
+
+def test_implant_sample_keeps_clean_target_and_marks_near_pixels(tmp_path):
+    from app.foundation_models.trainers.finetune_trainer import implant_sample
+    rng = np.random.default_rng(0)
+    wl = np.linspace(460, 2400, 40)
+    # shared brightness structure plus a little band noise, as in a real scene (pure band noise is all "foreign")
+    pix = (2000 + 500 * rng.standard_normal((1, 128, 128)) + 20 * rng.standard_normal((40, 128, 128))).astype(np.int16)
+    real = {"wavelengths_nm": {"s": wl.tolist()},
+            "objects": [{"scene": "s", "px": 2, "z": z, "foreign": 0.01, "d": list(0.02 * np.sin(wl / 200))} for z in (0.3, 0.7, 1.4)]}
+    cfg = {"prob": 1.0, "max_objects": 3, "psf_sigma": 1.4, "sources": ["signature"], "seed": 1, "real": real,
+           "lib_cache": str(tmp_path)}
+    out = implant_sample({"pixels.npy": pix.copy(), "wavelengths.npy": wl, "__key__": "t1"}, cfg)
+    assert np.array_equal(out["clean.npy"], pix)                       # the target is the untouched tile
+    assert out["implant.npy"].any() and (out["pixels.npy"] != pix).any()
+    from scipy import ndimage                                         # the PSF tail reaches a little past the
+    dist = ndimage.distance_transform_edt(out["implant.npy"] == 0)    # 3-px weighting zone (measured 2.8 px), no further
+    assert dist[(out["pixels.npy"] != pix).any(0)].max() <= 3.0
+    again = implant_sample({"pixels.npy": pix.copy(), "wavelengths.npy": wl, "__key__": "t1"}, cfg)
+    assert np.array_equal(again["pixels.npy"], out["pixels.npy"])      # seeded by the key: same implants each epoch
+    off = implant_sample({"pixels.npy": pix.copy(), "wavelengths.npy": wl, "__key__": "t1"}, {**cfg, "prob": 0.0})
+    assert np.array_equal(off["pixels.npy"], pix) and not off["implant.npy"].any()   # keys present, nothing implanted

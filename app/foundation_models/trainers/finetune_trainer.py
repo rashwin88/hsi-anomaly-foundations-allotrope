@@ -37,6 +37,7 @@ import os
 import random
 from pathlib import Path
 
+import numpy as np
 import torch
 import torch.nn as nn
 import webdataset as wds
@@ -51,9 +52,12 @@ logger = logging.getLogger("FinetuneTrainer")
 LABEL_KEYS = ("label_cloud", "label_cirrus", "label_haze", "label_cloud_shadow", "label_snow", "label_classes")
 
 
-def prepare_sample(sample: dict, target_nm=None, labels: str | None = None, policy: LabelPolicy = LabelPolicy()) -> dict:
+def prepare_sample(sample: dict, target_nm=None, labels: str | None = None, policy: LabelPolicy = LabelPolicy(),
+                   implant: dict | None = None) -> dict:
     """Loader-worker transform: align onto a band list (optional), turn EnMAP labels into seg_targets /
-    seg_known, drop meta.json and label_* so batches collate. Module-level so workers can pickle it."""
+    seg_known, drop meta.json and label_* so batches collate; with `implant` (training only), add implanted
+    objects to the pixels and keep the clean tile as clean.npy and a 3-px near-implant mask as implant.npy.
+    Module-level so workers can pickle it."""
     if target_nm is not None:
         sample = align_sample(sample, target_nm)
     meta = sample.pop("meta.json", None) or {}
@@ -62,7 +66,48 @@ def prepare_sample(sample: dict, target_nm=None, labels: str | None = None, poli
         sample["seg_targets.npy"], sample["seg_known.npy"] = t, k
     for key in LABEL_KEYS:
         sample.pop(f"{key}.npy", None)
+    if implant is not None:
+        sample = implant_sample(sample, implant)
     return sample
+
+
+_LIBRARIES: dict = {}                               # per worker: band list -> library spectra on it
+
+
+def implant_sample(sample: dict, cfg: dict) -> dict:
+    """FT05 augmentation: with probability cfg["prob"], up to cfg["max_objects"] bench-v2 implants
+    (app/evaluation/implant.implant_tile). Always adds clean.npy and implant.npy, so batches collate. The
+    generator is seeded from the sample key, so a tile gets the same implants every epoch."""
+    import zlib
+    from scipy import ndimage
+    from app.evaluation.implant import implant_tile
+    key = "pixels.npy" if "pixels.npy" in sample else "pixels.i16dz"
+    pix = np.asarray(sample[key])
+    sample["clean.npy"] = pix
+    near = np.zeros(pix.shape[1:], np.uint8)
+    rng = np.random.default_rng([cfg["seed"], zlib.crc32(str(sample.get("__key__", "")).encode())])
+    if rng.random() < cfg["prob"]:
+        wl = np.asarray(sample["wavelengths.npy"], dtype=np.float64)
+        refl = np.where(pix == NODATA, np.nan, pix.astype(np.float64) * 1e-4)
+        gt = implant_tile(rng, refl, wl, cfg["real"], _library(wl, cfg), int(rng.integers(1, cfg["max_objects"] + 1)),
+                          cfg["psf_sigma"], tuple(cfg["sources"]))
+        if gt.any():
+            sample[key] = np.where(np.isfinite(refl), np.clip(np.round(refl * 1e4), -32767, 32767), NODATA).astype(np.int16)
+            near = ndimage.binary_dilation(gt > 0, iterations=3).astype(np.uint8)
+    sample["implant.npy"] = near
+    return sample
+
+
+def _library(wl: np.ndarray, cfg: dict) -> list:
+    k = tuple(np.round(wl, 1))
+    if k not in _LIBRARIES:
+        from app.spectral_match.library import build_sensor_cache, load_slim_bundle
+        root = Path(__file__).resolve().parents[3]
+        entries, _ = build_sensor_cache(bundle=load_slim_bundle(root / "data" / "splib07_slim"), sensor_id="implant",
+                                        target_wl_nm=wl, target_fwhm_nm=np.clip(np.gradient(wl), 4.0, 15.0),
+                                        cache_dir=cfg["lib_cache"], min_coverage=0.9, progress=False)
+        _LIBRARIES[k] = [e.refl for e in entries if np.isfinite(e.refl).mean() >= 0.95]
+    return _LIBRARIES[k]
 
 
 def gradient_l1(x_hat: torch.Tensor, x: torch.Tensor, band_valid: torch.Tensor, loss_mask: torch.Tensor) -> torch.Tensor:
@@ -152,6 +197,12 @@ class FinetuneTrainer(SpectralStemMAETrainer):
             self.optimizer = torch.optim.Adam([p for p in self.model.parameters() if p.requires_grad], lr=config.learning_rate)
             self.scheduler = self._build_scheduler()
         self._policy = LabelPolicy(cfg.plateau_elevation_m, cfg.low_water_vapour, cfg.cirrus_min_level)
+        self._implant = None
+        if cfg.implant_prob:                             # FT05: implanted input, clean target
+            self._implant = {"prob": cfg.implant_prob, "max_objects": cfg.implant_max_objects,
+                             "psf_sigma": cfg.implant_psf_sigma, "sources": list(cfg.implant_sources),
+                             "seed": cfg.implant_seed, "real": json.loads(Path(cfg.implant_real_path).read_text()),
+                             "lib_cache": str(Path(config.checkpoint.checkpoint_dir) / "implant_lib")}
 
     # --- model ---------------------------------------------------------------------------------
 
@@ -204,7 +255,8 @@ class FinetuneTrainer(SpectralStemMAETrainer):
         if not shards:
             raise FileNotFoundError(f"{src.name}: no shards in {folder}")
         target = load_band_list(src.band_list_path) if src.band_list_path else None
-        transform = functools.partial(prepare_sample, target_nm=target, labels=src.labels, policy=self._policy)
+        transform = functools.partial(prepare_sample, target_nm=target, labels=src.labels, policy=self._policy,
+                                      implant=self._implant if split == "train" else None)
         skip = frozenset(json.loads(Path(src.skip_scenes_path).read_text())) if src.skip_scenes_path else frozenset()
         urls = [f"file:{p.as_posix()}" if os.name == "nt" else str(p) for p in shards]   # as the base trainer
         dataset = (wds.WebDataset(urls, shardshuffle=self.config.data.shardshuffle if split == "train" else False,
@@ -283,11 +335,18 @@ class FinetuneTrainer(SpectralStemMAETrainer):
         for _, batch in groups:
             wl = torch.as_tensor(batch["wavelengths.npy"])
             self._note_band_list(wl[0] if wl.dim() == 2 else wl)
-            pixels, band_valid, wl, mask, n = self._keep_samples(*self._decode_batch(batch))
+            decoded = self._decode_batch(batch)
+            keep = decoded[3].flatten(1).mean(dim=1) >= MIN_VALID_PIXEL_FRACTION
+            pixels, band_valid, wl, mask, n = self._keep_samples(*decoded)
             if n == 0:
                 continue
             if wl.dim() != 1:
                 raise ValueError("mixed batches need one band list per source - set band_list_path")
+            target, target_valid, near = pixels, band_valid, None
+            if "clean.npy" in batch:                     # FT05: the model reads the implanted tile, learns the clean one
+                target, target_valid, _, _ = self._decode_batch({**batch, "pixels.npy": batch["clean.npy"]})
+                target, target_valid = target[keep], target_valid[keep]
+                near = torch.as_tensor(batch["implant.npy"]).to(self.device)[keep][:, None].float()
             keep_mask, pred_mask = self._build_prediction_mask(mask, cfg.mask_ratio)
             x, wl_in, bv, out_wl = pixels, wl, band_valid, None
             if cfg.band_augment_prob > 0 and torch.rand(()).item() < cfg.band_augment_prob:
@@ -296,8 +355,10 @@ class FinetuneTrainer(SpectralStemMAETrainer):
                 x, bv, out_wl = pixels[:, idx], band_valid[:, idx], wl
             loss_mask = (self._pred_mask_to_pixel_mask(pred_mask, *pixels.shape[2:])
                          * TokenMasking.erode_mask(mask, kernel_size=cfg.erosion_kernel_size))
+            if near is not None:                         # implants are ~0.02% of pixels: weight what is near them
+                loss_mask = loss_mask * (1.0 + (cfg.implant_near_weight - 1.0) * near)
             inputs.append((x, wl_in, bv, keep_mask, out_wl))
-            truth.append((pixels, band_valid, loss_mask, n))
+            truth.append((target, target_valid, loss_mask, n))
         if not inputs:
             return torch.tensor(0.0, device=self.device, requires_grad=True), 0
         bf16 = cfg.amp_bf16 and self.device.type == "cuda"

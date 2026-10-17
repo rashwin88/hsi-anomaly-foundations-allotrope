@@ -191,6 +191,13 @@ class SpectralStemFinetuneConfig(SpectralStemMAEConfig):
 
     seg_head_from: str | None = Field(default=None, description="Checkpoint (local or s3://) whose seg_head.* weights "
                                       "replace the fresh head after init_from (e.g. FT01's probe).")
+    implant_prob: float = Field(default=0.0, ge=0, le=1, description="mixed batches: share of training tiles given implanted objects, trained against the clean tile (docs/proposals/detection-supervised-finetuning.md).")
+    implant_max_objects: int = Field(default=4, ge=1)
+    implant_near_weight: float = Field(default=5.0, ge=1, description="loss weight on hidden pixels within 3 px of an implant.")
+    implant_real_path: str | None = Field(default=None, description="real.json from build_implant_bench.py real.")
+    implant_psf_sigma: float = 1.4
+    implant_sources: list[Literal["signature", "material"]] = Field(default_factory=lambda: ["signature", "material"])
+    implant_seed: int = 1
     grad_loss_weight: float = Field(default=0.0, ge=0, description="mixed batches: weight of the edge term - L1 between "
                                     "the spatial gradients of reconstruction and input on hidden pixels (0 = off).")
 
@@ -198,6 +205,8 @@ class SpectralStemFinetuneConfig(SpectralStemMAEConfig):
     def _mixed_batches_not_in_probe(self):
         if self.mixed_batches and self.mode == "probe":
             raise ValueError("mixed_batches is implemented for modes 'adapt' and 'joint'")
+        if self.implant_prob and not (self.mixed_batches and self.implant_real_path):
+            raise ValueError("implant_prob needs mixed_batches and implant_real_path")
         if self.grad_loss_weight and not self.mixed_batches:
             raise ValueError("grad_loss_weight is implemented for mixed_batches only")
         return self

@@ -84,3 +84,32 @@ def test_background_subspace_ignores_gaps():
     cube[2, 3, 3] = np.nan
     P = background_subspace(cube, np.ones((50, 50), bool), k=1)
     assert abs(P[0, 2]) == pytest.approx(1.0, abs=1e-6)
+
+
+def test_solve_realised_hits_both_targets():
+    from app.evaluation.implant import foreign_fraction, solve_realised
+    P = np.array([[1.0, 0.0, 0.0, 0.0]])
+    r, sigma, o0 = np.full(4, 0.2), np.full(4, 0.05), np.full(4, 0.2)    # the spot equals its ring
+    d0 = np.array([0.1, 0.05, 0.0, 0.0])                                   # foreign 0.0025 / 0.0125 = 0.2
+    s, d = solve_realised(o0, r, sigma, d0, P, z_target=1.0, f_target=0.002, shrink=1.0)
+    z = np.abs(s * d).mean() / 0.05
+    assert z == pytest.approx(1.0, rel=1e-2)
+    assert 0.002 / 1.5 <= foreign_fraction(s * d, P) <= 0.002 * 1.5
+    assert solve_realised(r + 0.1, r, sigma, d0, P, 1.0, 0.002, 1.0) is None              # already above z 1
+
+
+def test_implant_tile_places_objects_and_keeps_nodata():
+    from app.evaluation.implant import implant_tile
+    rng = np.random.default_rng(0)
+    wl = np.linspace(460, 2400, 40)
+    refl = (0.2 + 0.01 * rng.standard_normal((40, 128, 128)) + 0.05 * rng.standard_normal((1, 128, 128))).astype(np.float64)
+    refl[:, :10, :10] = np.nan
+    real = {"wavelengths_nm": {"s": wl.tolist()},
+            "objects": [{"scene": "s", "px": 2, "z": z, "foreign": 0.01, "d": list(0.02 * np.sin(wl / 200))}
+                        for z in (0.3, 0.7, 1.4)]}
+    clean = refl.copy()
+    gt = implant_tile(rng, refl, wl, real, [np.full(40, 0.4)], n_objects=4)
+    assert 1 <= gt.max() <= 4
+    assert np.isnan(refl[:, :10, :10]).all()                       # nodata untouched
+    changed = np.abs(np.nan_to_num(refl - clean)).sum(0) > 1e-9
+    assert changed[gt > 0].all() and (changed & (gt == 0)).any()  # objects changed, and the PSF reaches neighbours

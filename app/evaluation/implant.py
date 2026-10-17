@@ -152,3 +152,99 @@ def psf_weights(obj: np.ndarray, sigma: float) -> np.ndarray:
         return obj.astype(np.float64)
     w = ndimage.gaussian_filter(obj.astype(np.float64), sigma, mode="constant")
     return w / max(w[obj].mean(), 1e-12)
+
+
+FOREIGN_LADDER = (0.0, 0.0005, 0.001, 0.002, 0.004, 0.008, 0.016, 0.03, 0.06, 0.12, 0.25, 0.5)   # signal levels tried
+
+
+def solve_realised(o0, r, sigma, d0, P, z_target, f_target, shrink, tol: float = 1.5):
+    """v2 strength and signal for one object, solved on the REALISED object: its difference from the ring is the
+    spot's own natural offset (o0 - r) plus shrink * s * d, so a ladder of signal foreignness levels is tried, the
+    strength solved for z at each, and the level whose realised foreignness is closest to f_target kept. Returns
+    (s, d) or None when the spot is already above z_target or no level comes within a factor tol of f_target
+    (its own offset is too foreign). All arrays over the evaluation bands; shrink = 1 - the ring's mean PSF weight."""
+    best = None
+    for t in FOREIGN_LADDER:
+        d = match_foreignness(d0, P, t)
+        s, _ = solve_strength(o0, r, sigma, shrink * d, z_target)
+        if s is None:                                   # higher levels only get harder: keep the best so far
+            break
+        gap = abs(np.log(max(foreign_fraction(o0 - r + s * shrink * d, P), 1e-6) / max(f_target, 1e-6)))
+        if best is None or gap < best[0]:
+            best = (gap, s, d)
+    return None if best is None or best[0] > np.log(tol) else (best[1], best[2])
+
+
+def evaluation_bands(wl: np.ndarray, finite: np.ndarray, valid: np.ndarray) -> np.ndarray:
+    """(B,) bool: the bands the evaluator reads - product exclusions out, bands mostly empty over valid pixels out."""
+    from app.evaluation.datasets import PRODUCT_EXCLUSIONS
+    keep = np.array([not any(lo <= w <= hi for lo, hi in PRODUCT_EXCLUSIONS) for w in wl])
+    return keep & (finite[:, valid].mean(1) >= 0.6 if valid.any() else keep)
+
+
+def implant_tile(rng: np.random.Generator, refl: np.ndarray, wl: np.ndarray, real: dict, library: list,
+                 n_objects: int, psf_sigma: float = 1.4, sources: tuple = ("signature", "material"),
+                 max_size: int = 20, spacing: int = 10) -> np.ndarray:
+    """Training-time implants (docs/proposals/detection-supervised-finetuning.md): up to n_objects bench-v2-style
+    objects into one tile, in place. refl (B, H, W) float reflectance, NaN = nodata. real: the build script's
+    real.json (objects with px, z, foreign, d, scene; wavelengths_nm per scene). library: (B,) spectra on wl, NaN
+    where uncovered. Placement anywhere valid (vessels on water are in scope, user 2026-10-17). Returns (H, W) int32
+    object ids; an object whose spot cannot reach its targets in 30 tries is skipped."""
+    B, H, W = refl.shape
+    finite = np.isfinite(refl)
+    valid = finite.mean(0) >= 0.9
+    gt = np.zeros((H, W), np.int32)
+    margin = 7
+    eligible = ndimage.binary_erosion(valid, iterations=margin)
+    if eligible.sum() < 50 or not real["objects"]:
+        return gt
+    ev = evaluation_bands(wl, finite, valid)
+    P = background_subspace(refl[ev], valid)
+    by_tier = {t: [o for o in real["objects"] if tier_of(o["z"]) == t] for t in TIERS}
+    blocked = np.zeros((H, W), bool)
+    for _ in range(n_objects):
+        pool = by_tier[TIERS[int(rng.integers(3))]]
+        if not pool:
+            continue
+        pick = pool[int(rng.integers(len(pool)))]
+        size = int(min(real["objects"][int(rng.integers(len(real["objects"])))]["px"], max_size))
+        source = sources[int(rng.integers(len(sources)))]
+        for _ in range(30):
+            free = np.flatnonzero((eligible & ~blocked).ravel())
+            if not len(free):
+                break
+            cy, cx = divmod(int(free[int(rng.integers(len(free)))]), W)
+            off = grow_blob(rng, size) + (cy, cx)
+            if off.min() < margin or off[:, 0].max() >= H - margin or off[:, 1].max() >= W - margin \
+                    or not eligible[off[:, 0], off[:, 1]].all() or blocked[off[:, 0], off[:, 1]].any():
+                continue
+            y0, y1 = off[:, 0].min() - margin, off[:, 0].max() + margin + 1
+            x0, x1 = off[:, 1].min() - margin, off[:, 1].max() + margin + 1
+            sub = refl[:, y0:y1, x0:x1]
+            obj = np.zeros((y1 - y0, x1 - x0), bool)
+            obj[off[:, 0] - y0, off[:, 1] - x0] = True
+            ring = ring_mask(obj, valid[y0:y1, x0:x1], exclude=gt[y0:y1, x0:x1] > 0)
+            if ring.sum() < 8:
+                continue
+            rpx = np.where(np.isfinite(sub[:, ring]), sub[:, ring], np.nan)
+            r, sigma, o0 = np.nanmean(rpx, 1), np.nanstd(rpx, 1), np.nanmean(sub[:, obj], 1)
+            if source == "signature":
+                rw = np.asarray(real["wavelengths_nm"][pick["scene"]])
+                near = np.abs(wl[:, None] - rw[None]).min(1) <= 15.0
+                d0 = np.where(near, np.interp(wl, rw, pick["d"]), np.nan)
+            else:
+                d0 = library[int(rng.integers(len(library)))] - r
+            wgt = psf_weights(obj, psf_sigma)
+            got = solve_realised(o0[ev], r[ev], sigma[ev], np.nan_to_num(d0[ev]), P, float(pick["z"]),
+                                 float(pick["foreign"]), 1.0 - wgt[ring].mean())
+            if got is None:
+                continue
+            s, d_ev = got
+            d = np.where(np.isfinite(d0), d0, 0.0)
+            d[ev] = d_ev
+            sub += s * wgt[None] * d[:, None, None]
+            np.maximum(sub, 0.0, out=sub, where=np.isfinite(sub))
+            gt[y0:y1, x0:x1][obj] = gt.max() + 1
+            blocked[max(0, y0 - spacing):y1 + spacing, max(0, x0 - spacing):x1 + spacing] = True
+            break
+    return gt
