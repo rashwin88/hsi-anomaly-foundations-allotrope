@@ -116,4 +116,9 @@ thread that connects them.
   top of the ranking on every model (FT03 PRISMA: caught top 0.1% 14.3% -> 16.5%, pAUC 0.158 -> 0.165). A model-free
   PCA-RX beats all models on the implant bench but loses on the real one: bench-v1 is biased, a v2 comes before any
   detection-supervised fine-tuning ([implant-bench](../implant-bench/README.md)).
+- **2026-10-17 - bench-v2 accepted.** Implants matched to the real objects' contrast, foreignness and halo; on 2,913
+  objects FT02c / FT03 beat PCA-RX (caught 32.8% / 32.3% vs 30.2%, pAUC 0.166 / 0.164 vs 0.154), consistent with the
+  real bench. Detection-supervised fine-tuning is unblocked. 39 real objects lie inside FT03's water / cloud mask
+  (13 offshore in set1, likely vessels; 4 on bright desert FT03 calls cloud) - exclusion waits on the user's scope
+  call and a mask fine-tune (FT04).
 

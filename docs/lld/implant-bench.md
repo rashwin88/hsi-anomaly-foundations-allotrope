@@ -83,9 +83,11 @@ evaluate: product exclusions; per-band nearest-valid fill; each model's band rea
   materials (beyond the bench's materials).
 - **Unlabelled real anomalies in the hosts** count as false alarms, equally for every model; not removed.
 - **Not done**: sub-pixel objects smaller than one pixel (fill fraction already covers sub-pixel abundance within
-  each object pixel); shadows; water hosts (no real object sits on water - but 39 of the 909 real objects, 27 of
-  them in set1, lie wholly inside FT03's water / cloud mask: boats, shoreline objects or FT03 errors, not checked;
-  docs/lld/evaluation.md, reference run).
+  each object pixel); shadows; water hosts. Real objects DO sit on water: 39 of the 909 lie wholly inside FT03's
+  water / cloud mask (checked 2026-10-17): set1 27 single pixels on water-dark NIR (median 0.040), 13 of them > 3 px
+  offshore - likely vessels; set2 / set3 8 on shorelines; set4 4 on bright desert that FT03 calls cloud (11% of
+  that scene - a mask error). The first real-object scan used VIS < 0.04 as "water", which misses turbid coastal
+  water (VIS ~0.08).
 
 ## bench-v2 (in progress, 2026-10-17)
 

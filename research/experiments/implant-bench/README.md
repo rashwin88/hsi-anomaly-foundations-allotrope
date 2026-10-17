@@ -109,3 +109,31 @@ spatially structured. bench-v1 still orders the models consistently (v0.2.0 < F0
 training target. v2: spatially coherent implants (PSF-blurred footprint, within-object texture), calibrated on a
 second statistic, accepted only if it reproduces the real bench's ordering (models above PCA-RX).
 
+## bench-v2 (2026-10-17) - accepted
+
+Built with `build_implant_bench.py build ... --version 2 --psf-sigma 1.4 --seed 0` from `real_v2.json` (real objects
+re-measured with foreignness and halo); C:/es/implant/bench-v2, 18 hosts, 2,913 objects (EnMAP 942, PRISMA 1,197,
+AVIRIS-NG 774); sources signature / material / host in thirds.
+
+**Acceptance 1 - looks like the real objects** (2 PRISMA calibration hosts, medians real / v2): foreignness 0.0071 /
+0.0081, halo 0.643 / 0.642, z 0.69 / 0.74; every tier within 0.90-1.15x (limit 25%). Fixes needed on the way: measure
+on the evaluator's bands; NaN-safe background subspace; solve foreignness on the realised object (a spot's own
+pixel-vs-ring difference is already foreign 0.009-0.045, so matching the implanted signal alone overshot 7x).
+
+**Acceptance 2 - models beat PCA-RX, as on the real bench** (`configs/eval/bench_v2.json`, C:/es/eval/v2):
+
+| residual Mahalanobis | caught top 1% (0.1%) | pAUC <= 1% | TPR @ 0.1% | easy | medium | subtle |
+|---|---|---|---|---|---|---|
+| v0.2.0 | 22.1% (8.6%) | 0.118 | 0.067 | 38.3% | 15.2% | 10.9% |
+| F001 ep109 | 29.2% (10.2%) | 0.145 | 0.075 | 48.5% | 23.1% | 13.1% |
+| FT02c ep10 | 32.8% (11.4%) | 0.166 | 0.086 | 52.9% | 27.6% | 14.7% |
+| FT03 ep10 | 32.3% (11.4%) | 0.164 | 0.086 | 52.7% | 26.9% | 14.2% |
+| PCA-RX (no model) | 30.2% (9.1%) | 0.154 | 0.072 | 47.7% | 24.9% | 15.2% |
+
+Met: fine-tuned models above PCA-RX on every headline measure (subtle ~tie). Pretraining alone (F001) does not beat
+PCA-RX here; fine-tuning on the real sensors does. By host sensor: PRISMA 16.5% (v0.2.0) -> 35.2% (F001) -> 40.2%
+(FT02c); EnMAP flat ~16% for every model and PCA-RX (unexplained, as in v1). Water / cloud exclusion: +1-3 points,
+most on EnMAP hosts (FT03 15.7% -> 18.7%).
+
+**v2 replaces v1 as the implant benchmark** (v1 kept reproducible by `--version 1 --seed 0`).
+
