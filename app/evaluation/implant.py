@@ -121,7 +121,10 @@ def background_subspace(cube: np.ndarray, valid: np.ndarray, k: int = FOREIGN_K,
     sub = X[rng.choice(len(X), size=min(len(X), 100_000), replace=False)]
     centred = sub - np.nanmean(sub, 0)
     centred[~np.isfinite(centred)] = 0.0                  # gap = the band mean
-    _, _, vt = np.linalg.svd(centred, full_matrices=False)
+    # the top eigenvectors of the (B, B) covariance span the same subspace as an SVD of the pixels, at a fraction
+    # of the cost (0.25 s -> ~0.02 s per 128 px tile; FT05 implants in the loader workers)
+    evals, evecs = np.linalg.eigh(centred.T @ centred)
+    vt = evecs[:, ::-1].T
     return vt[:k]
 
 
