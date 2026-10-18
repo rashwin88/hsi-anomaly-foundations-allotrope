@@ -116,7 +116,7 @@ def _library(wl: np.ndarray, cfg: dict) -> list:
         from app.spectral_match.library import build_sensor_cache, load_slim_bundle
         root = Path(__file__).resolve().parents[3]
         entries, _ = build_sensor_cache(bundle=load_slim_bundle(root / "data" / "splib07_slim"), sensor_id="implant",
-                                        target_wl_nm=wl, target_fwhm_nm=np.clip(np.gradient(wl), 4.0, 15.0),
+                                        target_wl_nm=wl, target_fwhm_nm=np.clip(np.abs(np.gradient(wl)), 4.0, 15.0),
                                         cache_dir=cfg["lib_cache"], min_coverage=0.9, progress=False)
         _LIBRARIES[k] = [e.refl for e in entries if np.isfinite(e.refl).mean() >= 0.95]
     return _LIBRARIES[k]

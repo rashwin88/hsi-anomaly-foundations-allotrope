@@ -81,8 +81,12 @@ def target_grid(mode: str) -> np.ndarray:
 
 
 def resample(cube: np.ndarray, wl: np.ndarray, grid: np.ndarray) -> np.ndarray:
-    """Linear interpolation along wavelength, (C, H, W) -> (G, H, W) float32."""
-    M = np.stack([np.interp(grid, wl, np.eye(len(wl))[i]) for i in range(len(wl))], 1)
+    """Linear interpolation along wavelength, (C, H, W) -> (G, H, W) float32. wl in any order: np.interp needs
+    ascending sample points, and PRISMA lists its bands descending (2477 -> 453 nm) - unsorted, this gave v0.2.0
+    garbage cubes on every PRISMA scene (found 2026-10-18)."""
+    order = np.argsort(wl)
+    M = np.zeros((len(grid), len(wl)))
+    M[:, order] = np.stack([np.interp(grid, wl[order], np.eye(len(wl))[i]) for i in range(len(wl))], 1)
     return np.einsum("gb,bhw->ghw", M, cube, optimize=True).astype(np.float32)
 
 

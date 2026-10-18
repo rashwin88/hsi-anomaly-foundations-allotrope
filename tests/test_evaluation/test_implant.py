@@ -113,3 +113,15 @@ def test_implant_tile_places_objects_and_keeps_nodata():
     assert np.isnan(refl[:, :10, :10]).all()                       # nodata untouched
     changed = np.abs(np.nan_to_num(refl - clean)).sum(0) > 1e-9
     assert changed[gt > 0].all() and (changed & (gt == 0)).any()  # objects changed, and the PSF reaches neighbours
+
+
+def test_descending_band_lists():
+    """PRISMA lists bands descending; interpolation and resampling must not depend on the order."""
+    from app.evaluation.implant import interp_spectrum
+    from app.evaluation.datasets import resample
+    up = np.array([500.0, 600.0, 700.0]); vals = np.array([1.0, 2.0, 4.0])
+    assert np.allclose(interp_spectrum([550.0, 650.0], up[::-1], vals[::-1]), [1.5, 3.0])
+    cube = np.arange(3, dtype=np.float32)[:, None, None] * np.ones((3, 2, 2), np.float32) + 1   # bands 1, 2, 3
+    grid = np.array([550.0, 650.0])
+    assert np.allclose(resample(cube[::-1], up[::-1], grid), resample(cube, up, grid))
+    assert np.allclose(resample(cube, up, grid)[:, 0, 0], [1.5, 2.5])

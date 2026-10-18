@@ -34,7 +34,7 @@ sys.path.insert(0, str(REPO))
 
 from app.evaluation.implant import (  # noqa: E402
     TIERS, background_subspace, contrast_z, foreign_fraction, grow_blob, implant_material, implant_signature,
-    match_foreignness, psf_weights, ring_mask, solve_realised, solve_strength, tier_of)
+    interp_spectrum, match_foreignness, psf_weights, ring_mask, solve_realised, solve_strength, tier_of)
 
 NODATA, SCALE = -32768, 1e-4
 HOST_ROWS = 1152                                   # AVIRIS-NG lines are cut to this many rows
@@ -139,14 +139,15 @@ def reassemble(shard_dir: Path, sensor: str, prefix: str):
 
 def library_for(wl: np.ndarray, cache_dir: Path) -> list:
     from app.spectral_match.library import build_sensor_cache, load_slim_bundle
-    fwhm = np.clip(np.gradient(wl), 4.0, 15.0)      # band spacing as width: the shards carry no FWHM
+    fwhm = np.clip(np.abs(np.gradient(wl)), 4.0, 15.0)   # band spacing as width (PRISMA lists bands descending)
     entries, _ = build_sensor_cache(bundle=load_slim_bundle(REPO / "data" / "splib07_slim"), sensor_id="implant",
                                     target_wl_nm=wl, target_fwhm_nm=fwhm, cache_dir=cache_dir,
                                     chapters=list(LIB_CHAPTERS), min_coverage=0.9, progress=False)
     return entries
 
 
-def place_and_implant(rng, refl, wl, labels, real, lib, version: int = 1, psf_sigma: float = 0.0):
+def place_and_implant(rng, refl, wl, labels, real, lib, version: int = 1, psf_sigma: float = 0.0,
+                      foreign_tol: float = 1.5):
     """Implant objects into refl (B, H, W float, NaN = nodata) in place. Returns (gt (H, W) int32, records).
 
     version 2 (docs/lld/implant-bench.md, "bench-v2"): z and foreignness drawn as a pair from one real object; the
@@ -197,7 +198,7 @@ def place_and_implant(rng, refl, wl, labels, real, lib, version: int = 1, psf_si
             j = int(rng.integers(len(real["objects"])))
             rw = real_wl[real["objects"][j]["scene"]]
             near = np.abs(wl[:, None] - rw[None]).min(1) <= SIGNATURE_GAP_NM
-            spectrum = np.where(near, np.interp(wl, rw, real["objects"][j]["d"]), np.nan)
+            spectrum = np.where(near, interp_spectrum(wl, rw, real["objects"][j]["d"]), np.nan)
             what = f"real:{real['objects'][j]['scene']}#{j}"
         elif source == "material":
             chapter = chapters[int(rng.integers(len(chapters)))]
@@ -236,7 +237,8 @@ def place_and_implant(rng, refl, wl, labels, real, lib, version: int = 1, psf_si
                 else:
                     d0 = spectrum if source == "signature" else spectrum - r
                 wgt = psf_weights(obj, psf_sigma)       # solve on the realised object (implant.solve_realised)
-                got = solve_realised(o0_e, r_e, sigma_e, d0[ev], P, z_target, f_target, 1.0 - wgt[ring].mean())
+                got = solve_realised(o0_e, r_e, sigma_e, d0[ev], P, z_target, f_target, 1.0 - wgt[ring].mean(),
+                                     tol=foreign_tol)
                 if got is None:
                     continue
                 strength, d_ev = got
@@ -281,11 +283,12 @@ def sha256(path: Path) -> str:
 
 
 def build(shards: str, real_path: str, out: str, seed: int, version: int = 1, psf_sigma: float = 0.0,
-          hosts: dict | None = None) -> None:
+          hosts: dict | None = None, foreign_tol: float = 1.5) -> None:
     real = json.load(open(real_path))
     rng = np.random.default_rng(seed)
     out_dir = Path(out)
-    manifest = {"seed": seed, "version": version, "psf_sigma": psf_sigma, "real": Path(real_path).name,
+    manifest = {"seed": seed, "version": version, "psf_sigma": psf_sigma, "foreign_tol": foreign_tol,
+                "real": Path(real_path).name,
                 "real_sha256": sha256(Path(real_path)), "hosts": []}
     for sensor, prefixes in (hosts or HOSTS).items():
         for prefix in prefixes:
@@ -293,7 +296,7 @@ def build(shards: str, real_path: str, out: str, seed: int, version: int = 1, ps
             refl = np.where(cube == NODATA, np.nan, cube.astype(np.float32) * SCALE)
             del cube
             lib = library_for(wl, out_dir / "libcache")
-            gt, records = place_and_implant(rng, refl, wl, labels, real, lib, version, psf_sigma)
+            gt, records = place_and_implant(rng, refl, wl, labels, real, lib, version, psf_sigma, foreign_tol)
             host = out_dir / sensor / prefix
             host.mkdir(parents=True, exist_ok=True)
             np.save(host / "cube.npy", np.where(np.isfinite(refl), np.round(refl / SCALE), NODATA).astype(np.int16))
@@ -317,13 +320,14 @@ def main() -> None:
     b.add_argument("--seed", type=int, default=0)
     b.add_argument("--version", type=int, choices=(1, 2), default=1)
     b.add_argument("--psf-sigma", type=float, default=0.0, help="v2: Gaussian PSF std in px")
+    b.add_argument("--foreign-tol", type=float, default=1.5, help="v2: accept a spot only if its realised foreignness is within this factor")
     b.add_argument("--hosts", help="sensor=prefix,prefix;sensor=... subset (calibration runs)")
     a = p.parse_args()
     if a.cmd == "real":
         measure_real(a.root, a.out)
     else:
         hosts = None if not a.hosts else {k: v.split(",") for k, v in (x.split("=") for x in a.hosts.split(";"))}
-        build(a.shards, a.real, a.out, a.seed, a.version, a.psf_sigma, hosts)
+        build(a.shards, a.real, a.out, a.seed, a.version, a.psf_sigma, hosts, a.foreign_tol)
 
 
 if __name__ == "__main__":

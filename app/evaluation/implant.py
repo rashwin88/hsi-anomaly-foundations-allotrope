@@ -157,6 +157,15 @@ def psf_weights(obj: np.ndarray, sigma: float) -> np.ndarray:
     return w / max(w[obj].mean(), 1e-12)
 
 
+def interp_spectrum(wl: np.ndarray, src_wl, values) -> np.ndarray:
+    """values sampled at src_wl, linearly interpolated to wl. Either list in any order: np.interp needs ascending
+    sample points and the PRISMA bench lists its bands descending (found 2026-10-18 - before, every transplanted
+    real signature in bench-v1, bench-v2 and FT05 was garbled)."""
+    src_wl, values = np.asarray(src_wl, float), np.asarray(values, float)
+    order = np.argsort(src_wl)
+    return np.interp(wl, src_wl[order], values[order])
+
+
 FOREIGN_LADDER = (0.0, 0.0005, 0.001, 0.002, 0.004, 0.008, 0.016, 0.03, 0.06, 0.12, 0.25, 0.5)   # signal levels tried
 
 
@@ -234,7 +243,7 @@ def implant_tile(rng: np.random.Generator, refl: np.ndarray, wl: np.ndarray, rea
             if source == "signature":
                 rw = np.asarray(real["wavelengths_nm"][pick["scene"]])
                 near = np.abs(wl[:, None] - rw[None]).min(1) <= 15.0
-                d0 = np.where(near, np.interp(wl, rw, pick["d"]), np.nan)
+                d0 = np.where(near, interp_spectrum(wl, rw, pick["d"]), np.nan)
             else:
                 d0 = library[int(rng.integers(len(library)))] - r
             wgt = psf_weights(obj, psf_sigma)
