@@ -148,3 +148,29 @@ most on EnMAP hosts (FT03 15.7% -> 18.7%).
   calibration (within 0.90-1.15x) drew different random choices. Acceptance 2 (models above PCA-RX) and the model
   ordering stand. Candidate fix: tighten solve_realised's tolerance from 1.5x to 1.2x and rebuild.
 
+## bench-v2.1 (2026-10-18) - fixed signatures, v0.2.0 read correctly
+
+Built `--version 2 --psf-sigma 1.4 --foreign-tol 1.2 --seed 0` after the descending-wavelength fix (b94dbfd):
+C:/es/implant/bench-v2.1, 18 hosts, 2,817 objects (signature 985, material 927, host 905). Per-tier foreignness vs real
+(PRISMA hosts): 1.05x / 1.15x / **1.60x** (subtle / medium / easy) - the tighter tolerance skips low-foreignness easy
+targets, so the survivors skew high (v2 at tol 1.5: 1.10 / 1.28 / 1.27). Halo 0.92-1.06x.
+
+`configs/eval/bench_v2_1.json` (C:/es/eval/v2.1), residual Mahalanobis:
+
+| model | caught top 1% (0.1%) | pAUC <= 1% | TPR @ 0.1% | easy | medium | subtle |
+|---|---|---|---|---|---|---|
+| v0.2.0 (product165, now correct) | 35.5% (12.6%) | 0.168 | 0.082 | 53.7% | 29.1% | 19.5% |
+| F001 ep109 | 33.1% (11.7%) | 0.157 | 0.078 | 51.7% | 26.7% | 16.9% |
+| FT02c ep10 | 35.1% (12.8%) | 0.169 | 0.086 | 53.7% | 28.7% | 18.6% |
+| FT03 ep10 | 34.9% (12.7%) | 0.168 | 0.086 | 53.7% | 28.3% | 18.6% |
+| FT05 ep5 | 35.4% (12.8%) | 0.170 | 0.085 | 54.3% | 28.9% | 18.8% |
+| PCA-RX (no model) | 33.2% (9.8%) | 0.154 | 0.069 | 50.4% | 26.9% | 18.4% |
+
+Cloud exclusion (FT03 masks) adds ~1 point to every model (FT03 34.9% -> 36.0%). EnMAP hosts ~21% for every model.
+
+**What changes:** the earlier "pretraining is the big step" (v0.2.0 19-22% -> F001 25-29%) was the reading bug. Read
+correctly, v0.2.0 ties or beats every new model here, as it ties them on the real bench (pAUC 0.159 vs FT03 0.158).
+No new model measurably beats the shipped one on detection; fine-tuned models lead only at TPR @ 0.1% (0.086 vs
+0.082), within noise. All models stay above PCA-RX at the top 0.1% (12.6-12.8% vs 9.8%), as on the real bench.
+What the new models add is masks (cloud exclusion, +~1 point for any model), native bands and reconstruction.
+

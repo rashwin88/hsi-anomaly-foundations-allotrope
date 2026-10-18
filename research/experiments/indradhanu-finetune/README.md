@@ -131,4 +131,10 @@ thread that connects them.
   the mask follows. Set4's pixels are bluish (NIR / blue 0.54-0.65 for 75%), not red. A bright-and-flat cloud guard
   built on the desert reading rejected 69% of EnMAP's labelled clouds and was dropped. FT04's purpose is masks on
   all three sensors (pseudo-labels) and rare classes, not a desert fix.
+- **2026-10-18 - bench-v2.1: no new model beats the shipped v0.2.0 on detection.** With the descending-wavelength fix,
+  v0.2.0 scores 35.5% caught (pAUC 0.168) against FT02c / FT03 / FT05 35.1 / 34.9 / 35.4% (0.169 / 0.168 / 0.170) and
+  F001 33.1% - consistent with the real bench tie. The earlier pretraining gain on the implant bench was the bug.
+  Residual Mahalanobis absorbs what better reconstruction changes; detection gains need another lever (scoring,
+  masks, detection-targeted training). The new models' measurable wins: masks for cloud exclusion (+~1 point, any
+  model), native bands, reconstruction.
 
