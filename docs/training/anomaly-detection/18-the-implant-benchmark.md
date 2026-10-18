@@ -6,6 +6,13 @@
 > medium, easy" tiers, as long as you read every result against chance and remember the implants
 > are harder than real objects at the same contrast.
 
+> **Update, 2026-10-17 (later).** This part teaches bench-v1, which has since been **replaced**. Part 19
+> shows that bench-v1 is biased (a model-free PCA-RX beats every model on it and loses on real objects);
+> part 20 teaches bench-v2, which fixes that. Two readings below are bench-v1's only: on bench-v2 the
+> subtle tier is above chance (13-15% against 10.1%), and placement still excludes water, which since
+> 2026-10-17 is in scope for detection (part 21). The mechanics taught here - ring, z, tiers, strength
+> solve - carry over unchanged.
+
 ## Where we are
 
 Part 17 closed the public options. On 2026-10-17 the user asked for implanted targets "somewhat

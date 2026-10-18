@@ -3,7 +3,7 @@
 A course for someone who has never worked with hyperspectral data and has never opened this
 repository. Start at part 1 knowing nothing; finish able to read the source.
 
-Nineteen parts, each finishable in a sitting. **Read them in order.** Part N assumes parts
+Twenty-one parts, each finishable in a sitting. **Read them in order.** Part N assumes parts
 1 to N-1 and nothing else, so skipping ahead will cost you more time than it saves.
 
 | part | one-sentence purpose |
@@ -27,6 +27,8 @@ Nineteen parts, each finishable in a sitting. **Read them in order.** Part N ass
 | [17](17-public-benchmarks.md) | The public benchmarks (HAD100, ABU), and why none of them tests this product |
 | [18](18-the-implant-benchmark.md) | The implanted-target benchmark: real held-out scenes, synthetic objects like the real ones |
 | [19](19-running-an-evaluation.md) | Running an evaluation: one config, scene-major loop, cached score maps, chance - and a classical baseline that wins on the implants and loses on real objects |
+| [20](20-bench-v2.md) | bench-v2: copying contrast, foreignness and halo from the real objects, solving on the realised object, and the ordering test that lets a benchmark be trusted |
+| [21](21-scope-and-masks.md) | Scope: cloud excluded, water kept for vessels, and what a mask costs - the 39 real objects inside FT03's mask |
 
 ## How to use this
 
@@ -64,7 +66,9 @@ relying on them:
 | 16 | `compute_roc`'s threshold count formula, the FT02b bench measures |
 | 17 | the state of HAD100 / ABU (ABU's page was already 404 on 2026-10-16), the leakage distances |
 | 18 | bench-v1's object counts and every results row - a rebuild (new hosts, new seed) or a new model moves them; the tier edges 0.502 / 0.934 |
-| 19 | every stage-3 number (exclusion, PCA-RX), the foreignness and halo medians, and the state of bench-v2 (in progress on 2026-10-17) |
+| 19 | every stage-3 number (exclusion, PCA-RX), the diagnosis medians (0.006 / 0.74); dated update notes record what changed since (cache key, `dirty` flag, the 39 objects, bench-v2 accepted) |
+| 20 | every bench-v2 number (2,913 objects, the model and PCA-RX rows), the `real_v2.json` medians (0.0071 / 0.643), the per-tier ratios recomputed from `objects.json`, sigma 1.4, the 0.25 -> 0.02 s subspace timing; the v0.2.0 reading question is open |
+| 21 | the cloud-only and water + cloud numbers, the per-scene object counts, the 39-object breakdown and FT03's 11% desert-as-cloud; all move with a new segmentation head (FT04) |
 
 Structural claims - what a vendable is, why masking works the way it does - will outlive
 the numbers.

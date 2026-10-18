@@ -1,6 +1,12 @@
 # Detection-supervised fine-tuning (FT05)
 
-**Status:** proposed 2026-10-17, for agreement. **Starts from:** FT03 (joint reconstruction + segmentation).
+**Status:** proposed 2026-10-17; agreed and launched the same night (user: "Go for it"), relaunched at commit 558ff5e
+after a speed fix. On 2026-10-18 FT05 was at epoch 5 of 10: criterion 3 held (SAM 3.94 / 4.20 / 5.33 deg against
+FT03's 3.92 / 4.21 / 5.48; IoU water 0.838, cloud 0.818 against 0.841 / 0.815). Detection at epoch 5
+(`configs/eval/ft05_ep5.json`): real PRISMA bench ties FT03 (pAUC 0.15801 vs 0.15805, TPR at 0.1% 0.0594 vs 0.0582,
+caught top 0.1% 130 vs 130 - criterion 1 not met yet: above on one of three); bench-v2 above (caught top 1% 32.8% vs
+32.3%, pAUC 0.167 vs 0.164; `host` source 29.6% vs 29.4% - criterion 2 met).
+**Starts from:** FT03 (joint reconstruction + segmentation).
 **Runs in:** research/experiments/indradhanu-finetune/FT05-implant-denoise/.
 
 ## Why
@@ -51,6 +57,19 @@ score and a higher risk of learning the implants' appearance rather than anomali
 
 FT05: FT03 epoch 10 continued, joint mode as FT03 (segmentation weight 0.1, so the head stays), mixed batches,
 10 epochs, LR 1e-4 cosine, SAM weight 0.5, w_near 5 (fixed before launch). About 3.5 h on the L40S.
+
+**As built (2026-10-18).**
+- The near term is a **weight on the loss mask**, not an added L1 term: `_mixed_loss` multiplies the hidden-pixel
+  mask by `1 + (w_near - 1) x near`, and `_masked_l1_sam` divides by the mask's sum, so both L1 and SAM are
+  weighted means with near pixels counted 5 times (`finetune_trainer.py`). Same intent, different arithmetic from
+  the formula above.
+- Implants are seeded by the tile key (`implant_sample`): a tile gets the same implants every epoch.
+- Placement anywhere valid, water included (`implant_tile`; vessels in scope, user 2026-10-17). bench-v2's builder
+  still places on land only.
+- **Speed:** ~2 h 40 min per epoch, not ~21 min: the GPU sits at 0-7% while the loader workers do the implanting
+  on the CPU (g6e.2xlarge, 8 vCPUs; `num_workers` 6 per sensor loader, three loaders in lockstep). The background
+  subspace was moved from an SVD to a covariance eigendecomposition first (558ff5e, 0.25 -> ~0.02 s per tile, same
+  subspace); the loader is still CPU-bound and was being diagnosed on 2026-10-18.
 
 ## Pass criteria (written before launch)
 

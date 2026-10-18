@@ -70,8 +70,16 @@ but the head it trained now lifts the top of every model's ranking.
 Two costs, both from `docs/lld/evaluation.md`: ROC-AUC falls (FT03 0.853 -> 0.830, mostly on set1,
 which FT03 calls 55% water - excluded pixels all tie at 0), and **39 of the 909 real objects lie wholly
 inside FT03's water / cloud mask** (27 in set1), so they cannot be found any more. Whether those are
-boats, shoreline objects or FT03's mistakes is unchecked. And it is not in the product yet: `backend/`
+boats, shoreline objects or FT03's mistakes was unchecked when this was written. And it is not in the product yet: `backend/`
 excludes water and cloud only through the older threshold-based `keep_mask`.
+
+> **Update, 2026-10-17 (later).** Checked: 13 of set1's 27 are single pixels more than 3 px offshore -
+> likely vessels; 8 more sit on shorelines in set2 and set3; 4 are on bright desert in set4 that FT03
+> wrongly calls cloud (11% of that scene). The earlier record that "no real object sits on water" was
+> wrong - its water test (visible reflectance below 0.04) misses turbid coastal water near 0.08. The user
+> then put **vessels on water in scope: only cloud is excluded**. FT03, cloud only: pAUC 0.158 -> 0.166,
+> caught top 0.1% 14.3% -> 15.8%, ROC-AUC 0.853 -> 0.850. The anomaly-detection course, part 21, works
+> it through; a mask fine-tune (FT04) is proposed before exclusion ships.
 
 ## 3. The model-free detector
 
@@ -113,6 +121,11 @@ exactly that (part 45's argument for residual Mahalanobis, turned round).
 Real **0.74**, bench-v1 **0.60**; easy tier real 0.70, bench-v1 **0.38**. Real objects bleed into their
 neighbours - the sensor's blur and light mixed in from next door. Implants stop dead at their edge.
 
+> **Update, 2026-10-17 (later).** These medians come from `diag.py`, which used every band and a ring
+> at distance 3-4. bench-v2's acceptance re-measured the real objects on the evaluator's bands and the
+> bench's own ring (`real_v2.json`): foreign 0.0071, halo 0.643. Same idea, different ruler; the worked
+> band checks below use the diagnosis ruler.
+
 ![Figure 57.1 - What bench-v2 must match](figures/57-what-v2-must-match.svg)
 
 *Figure 57.1 - Medians on PRISMA, real objects (grey) against bench-v1 implants (amber), overall and
@@ -128,7 +141,18 @@ rewards finding bench-v1's implants rewards foreign directions and hard edges. T
 network to lower that loss is to become a better PCA-RX - which the real bench says is the wrong
 direction. And a benchmark built the same way would then grade the model on the quirk it was taught.
 
-## 6. bench-v2, in progress
+> **Update, 2026-10-18.** bench-v2 passed, and detection-supervised training started the same night -
+> as implant-denoising (FT05: implanted input, clean target), not as a head. Part 58.
+
+## 6. bench-v2, as planned
+
+> **Update, 2026-10-17 (later).** Built and **accepted** (`C:/es/implant/bench-v2`, 2,913 objects): on it
+> FT02c / FT03 beat PCA-RX (caught top 1% 32.8% / 32.3% against 30.2%; pAUC 0.166 / 0.164 against 0.154),
+> as on the real bench; F001 alone does not (29.2%). Three bugs were fixed on the way - measure on the
+> evaluator's bands, a NaN-safe background subspace, and solve foreignness on the *realised* object,
+> because a spot's own offset from its ring is already foreign 0.009-0.045. The final PSF sigma is 1.4,
+> not the 1 used below. The anomaly-detection course, part 20, teaches the finished bench; this section is
+> the plan as it stood.
 
 Four changes, in `app/evaluation/implant.py` and `scripts/build_implant_bench.py` (being written on
 2026-10-17; no v2 bench built, no results):
@@ -211,7 +235,8 @@ then says about FT02c against FT03 is open.
 
 **"The 25% band is on the absolute number."**
 It is read here as relative to the real median (0.006 +/- 0.0015, not +/- 0.25). The plan states
-"within 25% of real"; the code that checks it is not yet written.
+"within 25% of real"; the code that checks it was not yet written. (Update: the README records the check
+as a ratio, "every tier within 0.90-1.15x (limit 25%)" - relative, as read here.)
 
 ## Check yourself
 
@@ -245,5 +270,4 @@ It is read here as relative to the real median (0.006 +/- 0.0015, not +/- 0.25).
 
 ---
 
-That is the course so far. New results will land first in `research/experiments/implant-bench/README.md`
-(bench-v2), `docs/lld/implant-bench.md` and the log in `research/experiments/indradhanu-finetune/README.md`.
+Next: [part 58](58-ft05-implant-denoising.md) - FT05, training with implants in the input and the clean tile as the target.

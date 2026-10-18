@@ -327,6 +327,14 @@ scored 0.795 against the plain local mean's 0.854 in the dual-window research (s
 different method (local covariance), so it does not refute this one, but it is a reason the gate says
 "ships only if it beats the default on the bench".
 
+> **Update, 2026-10-17/18 - how stage 5 actually went.** Class-aware scoring was tested and **not
+> shipped**: water's tight statistics made water noise dominate (set1 water share of false alarms 14% ->
+> 92%; part 57). Exclusion by FT03's masks was chosen instead, first of water and cloud, then - once 13
+> real objects turned out to be likely vessels offshore - of **cloud only** (FT03 real-bench pAUC 0.158
+> -> 0.166). Neither is in `backend/` yet; a mask fine-tune (FT04) is proposed first because FT03 calls
+> 11% of the desert scene set4 cloud. A detection-driven fine-tune, FT05, was added after stage 3
+> (part 58). Parts 57 to 59 carry the story on.
+
 ## Open questions
 
 From the proposal, to be decided as the stages report: hard or soft class statistics; whether

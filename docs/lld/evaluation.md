@@ -13,7 +13,7 @@ and counting slightly differently.
 EvaluationConfig.from_file(path)            # config.py - pydantic; ModelSpec, DatasetSpec, ScorerSpec, MetricSpec
 Evaluation(config, datasets=None, models=None).run() -> summary dict      # runner.py; overrides for tests
 PrismaBench(root, scenes=None), ImplantBench(path, hosts=None)            # datasets.py - yield EvalScene
-EvalScene(dataset, name, sensor, cube, wavelengths_nm, valid, objects, attrs, units, reader).read(mode)
+EvalScene(dataset, name, sensor, cube, wavelengths_nm, valid, objects, attrs, units, reader, fingerprint).read(mode)
 EvalModel(spec, cache_dir).reconstruct(scene) / .segment(scene)          # models.py
 score(spec, cube, recon, valid, classes) -> (H, W)                       # scorers.py
 scene_metrics(score, valid, objects, attrs, metrics, group_by)           # metrics.py
@@ -59,8 +59,9 @@ for each dataset scene (one in memory):
 4. **Chance is analytic** per object: 1 - (1 - q)^m, m its dilated pixel count (4-neighbour, the 1-px tolerance).
 5. **Datasets are never pooled** in the summary: their objects are different populations.
 6. **Cache keys** are dataset kind + scene name + model file identity (path, size, mtime, reading) + the full scorer
-   spec; changing any of them recomputes. The dataset's path and content are **not** in the key (failure modes).
-   Class maps are keyed by scene + segmenter identity. Reconstructions are never cached (0.25-1 GB each - they
+   spec + the scene's `fingerprint` (PRISMA: the .he5 file's size and mtime; implant host: the sha256s of
+   `cube.npy` and `gt.npy` from manifest.json; since 229d423); changing any of them recomputes. Class maps are
+   keyed by scene name + segmenter identity only - no fingerprint (failure modes). Reconstructions are never cached (0.25-1 GB each - they
    filled the laptop once).
 7. **Excluded pixels stay in the measures.** `exclude` scores its classes 0 but leaves them valid: they remain
    negatives (tied at 0, at the bottom of the ranking) and any labelled object inside them remains a positive that
@@ -78,8 +79,8 @@ for each dataset scene (one in memory):
 | segmenter checkpoint without a head | `ValueError` from `EvalModel.segment` |
 | duplicate model names or scorer labels | config `ValueError` |
 | s3:// checkpoint without credentials | boto3 error at start (set AWS_PROFILE) |
-| a dataset rebuilt in place (same kind, same scene names) with the same `output` | **silent**: cached score maps from the old data are measured against the new ground truth. Give each bench version its own path and output dir, or delete `<output>/cache/scores` |
-| `provenance.json` `dirty` | always `false` today: `_write_provenance` runs `git status -- app scripts` with cwd `app/evaluation/`, so the pathspecs resolve to `app/evaluation/app` and `app/evaluation/scripts`. The stage-3 run records commit 060aabc, which does not contain `app/evaluation/` at all. Trust `commit` only together with the file times |
+| a dataset rebuilt in place (same kind, same scene names) with the same `output` | score maps: recomputed since 229d423 (fingerprint in the key). Class maps (`cache/classes`): **silent**, the old map is reused. Give each bench version its own path and output dir, or delete `<output>/cache/classes` |
+| `provenance.json` `dirty` | fixed in 229d423 (git now runs from the repo root). Runs before it - the stage-3 run, which records commit 060aabc - always say `false`; trust their `commit` only together with the file times |
 
 ## Reference run: stage 3 (2026-10-17)
 
@@ -104,6 +105,15 @@ summary.json, per_object.csv, per_scene.csv, provenance.json); summarised in
    caught top 0.1% 8.1% vs 14.3%. bench-v1 is biased toward cube-level spectral oddity
    (docs/lld/implant-bench.md, "bench-v2").
 
+## Later runs (2026-10-17 / 18)
+
+| config | output (dev laptop) | what it showed |
+|---|---|---|
+| `configs/eval/bench_v2.json` | `C:/es/eval/v2` | bench-v2 acceptance: FT02c / FT03 above PCA-RX (caught top 1% 32.8% / 32.3% vs 30.2%; docs/lld/implant-bench.md, "bench-v2") |
+| `configs/eval/cloud_only.json` | `C:/es/eval/cloud_only` | FT03, plain vs cloud-only vs water + cloud. PRISMA bench: pAUC 0.158 / 0.166 / 0.165, caught top 0.1% 14.3% / 15.8% / 16.5%, ROC-AUC 0.853 / 0.850 / 0.830. bench-v2 caught top 1%: 32.3% / 33.4% / 33.7%. Cloud-only leaves set1 unchanged; its gain is set3 and set4 |
+| `C:/es/eval/resample_check.py` (one-off, not in the repo) | `C:/es/eval/resample_check` | v0.2.0 on the PRISMA bench read through the generic linear resample instead of band_filter_apply: caught top 1% 15.8%, pAUC 0.094, ROC-AUC 0.752 (vs 44.2% / 0.159 / 0.854). Bears on why v0.2.0 trails on implant hosts; unresolved |
+| `configs/eval/ft05_ep5.json` | `C:/es/eval/ft05_ep5` | FT05 epoch 5 vs FT03, plain and cloud-only. PRISMA bench: pAUC 0.15801 vs 0.15805, TPR at 0.1% 0.0594 vs 0.0582, caught top 0.1% 130 vs 130 - a tie. bench-v2: caught top 1% 32.8% vs 32.3%, pAUC 0.167 vs 0.164, `host` source 29.6% vs 29.4% |
+
 ## Decisions
 
 - **Scene-major, then model-major** loops: one scene and one reconstruction in memory - the old scripts ran out of
@@ -114,10 +124,13 @@ summary.json, per_object.csv, per_scene.csv, provenance.json); summarised in
 - **Classical baseline as a scorer** (`pca_rx`: `residual_mahalanobis` with a zero reconstruction, so the
   whitened top-30 PCA distance from the 21/61 ring mean on the native cube itself - a local PCA-RX) - no model, run
   once per scene. It is the check that a benchmark rewards what a model adds over the cube's own statistics.
-- **Water and cloud excluded by masking after scoring** (user, 2026-10-17: "we don't detect anything on water and
-  cloud"), with FT03's head as the segmenter; class-aware scoring (per-class whitening) was tested first and not
-  shipped (log, research/experiments/indradhanu-finetune/README.md: set1 water share of false alarms 14% -> 92%,
-  PRISMA pAUC 0.158 -> 0.134). Not yet in `backend/`: there, water and cloud are left out only by an optional
-  upstream `keep_mask` from the threshold-based `scene_segmentation` or `cloud_mask` actions.
+- **Cloud excluded by masking after scoring; water kept** (user, 2026-10-17). First "we don't detect anything on
+  water and cloud"; then, after 13 of the 39 real objects inside FT03's water / cloud mask turned out to be single
+  pixels > 3 px offshore (likely vessels), vessels on water were put in scope. FT03's head is the segmenter. Before
+  this ships, a mask fine-tune (FT04) is proposed: FT03 calls 11% of set4's bright desert cloud. Class-aware
+  scoring (per-class whitening) was tested first and not shipped (log, research/experiments/indradhanu-finetune/
+  README.md: set1 water share of false alarms 14% -> 92%, PRISMA pAUC 0.158 -> 0.134). Water + cloud exclusion is
+  kept as a scorer variant for comparison. Not yet in `backend/`: there, water and cloud are left out only by an
+  optional upstream `keep_mask` from the threshold-based `scene_segmentation` or `cloud_mask` actions.
 - **Not done**: HAD100 / ABU adapters (radiance; ABU has no wavelengths - research/experiments/benchmarks/README.md);
   MNF-RX as a scorer; an HTML report.

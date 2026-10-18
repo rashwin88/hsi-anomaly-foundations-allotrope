@@ -220,6 +220,12 @@ and that is what happened.
 `scene_segmentation`'s threshold rules, and class-aware scoring if it beats the default. FT03 produced
 the head for that; it was never the step meant to raise detection.
 
+> **Update, 2026-10-18.** Stage 5 went differently: class-aware scoring was not shipped, and the head's
+> first job became a **cloud exclusion mask** (water was kept, because vessels are in scope), which lifts
+> FT03's real-bench pAUC 0.158 -> 0.166. The same head over-fires on bright desert (11% of set4 called
+> cloud), so a mask fine-tune (FT04) is proposed before it ships. Parts 57 and 59; anomaly-detection
+> course, part 21.
+
 ## Common confusions
 
 **"Joint means the PRISMA and AVIRIS-NG tiles are trained to segment too."**

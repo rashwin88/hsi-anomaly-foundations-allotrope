@@ -6,6 +6,13 @@
 > it; and three things limit the reading: subtle objects sit at chance for every model, EnMAP hosts do
 > not move at all, and the later steps are small enough that you should ask whether they are noise.
 
+> **Update, 2026-10-17 (later).** The benchmark this part reads, bench-v1, was found biased (part 57: a
+> model-free PCA-RX beats every model on it and loses on real objects) and has been **replaced by
+> bench-v2**. On bench-v2 the training-order reading holds (v0.2.0 22.1% -> F001 29.2% -> FT02c 32.8%
+> caught at the top 1%), the fine-tuned models beat PCA-RX, and the subtle tier is above chance (13-15%
+> against 10.1%), so limit 1 below was bench-v1's. Limit 2 is unchanged: EnMAP hosts sit near 16% for
+> every model on bench-v2 too. Part 59 has the current tables.
+
 ## Where we are
 
 Part 50 onwards judged every run on the four labelled PRISMA scenes, and from FT02 on those scenes

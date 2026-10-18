@@ -91,7 +91,7 @@ Every part has the same skeleton:
 | 29 | [29-inference.md](29-inference.md) | Running it on a real scene |
 | 30 | [30-scoring-and-the-product.md](30-scoring-and-the-product.md) | Turning errors into an answer |
 
-**Sequel - the next Indradhanu: a smarter spectral bottleneck, then pretraining, scoring and fine-tuning (31-57)**
+**Sequel - the next Indradhanu: a smarter spectral bottleneck, then pretraining, scoring and fine-tuning (31-59)**
 
 Written 2026-10-14, after the decision to pretrain the next Indradhanu on SpectralEarth with a
 cross-attention spectral bottleneck. Parts 31 to 39 were written as a **design studied before
@@ -129,6 +129,8 @@ Assumes all of parts 01 to 30; leans on 08, 10, 12, 13 and 17 to 21.
 | 55 | [55-ft03-joint.md](55-ft03-joint.md) | FT03: segmentation over the whole mixed batch, seg_weight 0.1, FT01's head as a warm start - IoU up, detection unchanged |
 | 56 | [56-what-the-implant-bench-says.md](56-what-the-implant-bench-says.md) | 3,336 implanted objects sort the stages: pretraining is the big step, subtle sits at chance, EnMAP does not move |
 | 57 | [57-stage-3-and-what-comes-next.md](57-stage-3-and-what-comes-next.md) | Stage 3: water / cloud exclusion helps every model alike, a model-free PCA-RX wins on bench-v1 and loses on real objects - so bench-v2 comes before detection training |
+| 58 | [58-ft05-implant-denoising.md](58-ft05-implant-denoising.md) | FT05: implanted input, clean target - why it teaches "draw the background", the x5 near weight, the held-out source, and a CPU-bound loader |
+| 59 | [59-the-scoreboard.md](59-the-scoreboard.md) | Every model on every benchmark in four tables, read against chance and PCA-RX - and three results nobody can explain yet |
 
 Parts 34 to 39's numbers were first produced by a study prototype and then re-checked against
 the real modules (5,345 compressor and 6,401 decoder parameters at `d = D = 32`; 13,162 gate
@@ -170,12 +172,25 @@ The benchmark itself is taught in the anomaly-detection course, parts 16 to 18
 
 Part 57 was written later on 2026-10-17, after the stage-3 evaluation through the new `app/evaluation/`
 subsystem and while implant bench-v2 was being built. **Values that will drift:** every stage-3 number, the
-foreignness and halo medians, and all of section 6 (bench-v2 had no results). The evaluation machinery is
+foreignness and halo medians, and all of section 6 (bench-v2 had no results). Dated update notes were added
+on 2026-10-18 to parts 49, 54, 56 and 57: bench-v2 accepted, the 39 real objects inside FT03's mask checked
+(13 likely vessels; "no real object sits on water" was wrong), scope narrowed to cloud-only exclusion, and
+FT05 launched. The evaluation machinery is
 taught in the anomaly-detection course, part 19. Since 2026-10-17 the evaluation code that parts 42 to 56
 cite under `scripts/evaluate_prisma_bench.py`, `scripts/evaluate_implant_bench.py` and
 `app/utils/evaluation/` lives in `app/evaluation/` and `scripts/evaluate.py`; those parts keep the old
 names where they describe what was run at the time. Authoritative: `docs/lld/evaluation.md`,
 `docs/lld/implant-bench.md`, `research/experiments/implant-bench/README.md`.
+
+Parts 58 and 59 were written 2026-10-18, while FT05 was at epoch 5 of 10. **Values that will drift:**
+everything about FT05 - the epoch-5 detection rows (`C:/es/eval/ft05_ep5/report.md`: a tie with FT03 on
+the real bench, half a point ahead on bench-v2), the epoch-5 SAMs and IoUs, the 2 h 40 min epoch and the
+0-7% GPU and the loader diagnosis (all in the FT05 README's Results, "Epoch 5" and "Pace"); its final
+results will supersede them. Part 59's other rows move with any new model or a rebuilt benchmark. Two open disagreements are
+recorded in part 59: the saved v0.2.0 reading check, and bench-v2's per-tier foreignness. The benchmarks
+themselves are taught in the anomaly-detection course, parts 20 and 21. Authoritative:
+`research/experiments/indradhanu-finetune/FT05-implant-denoise/README.md`,
+`docs/proposals/detection-supervised-finetuning.md`, `research/experiments/implant-bench/README.md`.
 
 ## Figures
 

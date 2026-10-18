@@ -137,3 +137,14 @@ most on EnMAP hosts (FT03 15.7% -> 18.7%).
 
 **v2 replaces v1 as the implant benchmark** (v1 kept reproducible by `--version 1 --seed 0`).
 
+**Corrections (2026-10-18):**
+- **v0.2.0's implant-bench numbers (v1 19.0%, v2 22.1%) are a reading artefact - disregard them.** On the real bench,
+  v0.2.0 through the generic linear resample that implant hosts get scores 15.8% caught / pAUC 0.094 / ROC-AUC 0.752,
+  against 44.2% / 0.159 / 0.854 through the product's band_filter_apply (C:/es/eval/resample_check/report.md). An
+  earlier note here that the two readings were identical was a misread. Fix: read implant hosts for fixed-grid models
+  through the product path. Native-band models (F001, FT0x) are unaffected.
+- **The final bench-v2 misses acceptance 1 marginally in two tiers.** On all 6 PRISMA hosts foreignness is 1.10x /
+  1.28x / 1.27x real (subtle / medium / easy; 1.25x overall) against a 1.25x limit; halo 0.93-1.07x. The 2-host
+  calibration (within 0.90-1.15x) drew different random choices. Acceptance 2 (models above PCA-RX) and the model
+  ordering stand. Candidate fix: tighten solve_realised's tolerance from 1.5x to 1.2x and rebuild.
+

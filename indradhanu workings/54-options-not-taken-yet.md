@@ -139,6 +139,17 @@ The day after this part was written, three things moved:
 
 The teacher head and regularisation are unchanged: deferred and shelved. Neither has code.
 
+## Update, 2026-10-18 - option 3, in a different form
+
+Option 3's objection - the head learns whatever the implanting recipe makes easy - was measured on
+bench-v1 (part 57) and then answered by bench-v2, whose implants copy the real objects' contrast,
+foreignness and halo (anomaly course, part 20). Detection-supervised training then went ahead, but **not
+as a head**: FT05 (part 58) keeps the model and the score unchanged, puts implants in the input, and
+trains against the clean tile. The proposal (`docs/proposals/detection-supervised-finetuning.md`) keeps
+the detection head as a second alternative, "more direct, but a new score and a higher risk of learning
+the implants' appearance". The recipe risk is guarded by holding one implant source (`host`) out of
+training and letting only the real bench pass the run.
+
 ## Common confusions
 
 **"Are the teacher head and the oracle head two proposals?"** No. They were names for the same idea in the

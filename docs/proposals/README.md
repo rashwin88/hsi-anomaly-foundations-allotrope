@@ -19,3 +19,5 @@ numbered doc explains the design that won.
 |---|---|
 | `spectral-attention-bottleneck.md` | **accepted, not built** - cross-attention spectral stem, SpectralEarth shards, and the A/B/C experiment that decides it |
 | `inference-harness-adoption.md` | adopting or deleting `InferenceHarness`, which is fully built, tested, and unused |
+| `fine-tuning-and-segmentation.md` | **agreed, stages 1-3 run** - Indradhanu fine-tuning on EnMAP / PRISMA / AVIRIS-NG with a segmentation head; stage table, cloud-only exclusion, FT04 proposed |
+| `detection-supervised-finetuning.md` | **agreed, running** - FT05 implant-denoising (implanted input, clean target) |

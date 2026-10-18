@@ -29,4 +29,20 @@ halo); bench-v2 improves more (same generator family - optimistic); reconstructi
    0.02 of FT03 (0.841 / 0.815).
 
 ## Results
+
+**Pace:** ~2 h 40 min per epoch (FT03: ~18 min) - the loader workers are CPU-bound on the implant generation
+(GPU 0-7%, ~12 workers on 8 vCPUs); being diagnosed. A first launch was restarted after a subspace speed fix (558ff5e).
+
+**Epoch 5** (`configs/eval/ft05_ep5.json`, C:/es/eval/ft05_ep5), residual Mahalanobis:
+
+| | real bench pAUC <= 1% | TPR @ 0.1% | caught top 0.1% | caught top 1% | bench-v2 caught top 1% | v2 pAUC | v2 `host` (held out) |
+|---|---|---|---|---|---|---|---|
+| FT03 ep10 | 0.158 | 0.058 | 14.3% | 45.4% | 32.3% | 0.164 | 29.4% |
+| FT05 ep5 | 0.158 | 0.059 | 14.3% | 44.8% | 32.8% | 0.167 | 29.6% |
+
+With cloud exclusion: real pAUC 0.166 / 0.166, caught top 0.1% 15.8% / 15.6%. Validation SAM 3.94 / 4.20 / 5.33 deg
+(FT03 3.92 / 4.21 / 5.48); IoU water / cloud 0.838 / 0.818 (FT03 0.841 / 0.815).
+
+At epoch 5: criterion 1 not met (above FT03 on one of three measures, by 0.001); criterion 2 a small rise, the
+held-out source holds; criterion 3 met. Implant-denoising has not moved real detection by mid-run.
 ## Observations

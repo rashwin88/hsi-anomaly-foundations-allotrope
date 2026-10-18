@@ -143,6 +143,14 @@ the same scene names, evaluate into the same output directory, and the old score
 against the new ground truth - with no error. The LLD lists this under failure modes; the fix is a new
 path and output directory per benchmark version.
 
+> **Update, 2026-10-18.** Fixed for score maps in commit 229d423, the same day this part was written:
+> `EvalScene` gained a `fingerprint` (the PRISMA `.he5` file's size and modification time; an implant
+> host's `cube.npy` and `gt.npy` sha256s from `manifest.json`), and `_score_path` hashes it into the key
+> (`app/evaluation/runner.py`). Class maps for `exclude` are still keyed by scene name and segmenter only
+> (`runner.py`, the `classes` cache path), so a host rebuilt in place keeps the class map computed on its
+> old pixels. The implants change only a few hundred pixels per host, so the effect is small, but it is
+> not zero.
+
 ## Step 4 - chance, per object
 
 Part 16 gave the chance level of "objects caught": with random scores, an object whose pixels after the
@@ -175,8 +183,10 @@ populations (LLD, invariant 5). In each:
 `roc_auc` is the product's sampled `compute_roc` (part 12), kept for continuity with every older table;
 the others are exact. The run also writes `per_object.csv` (one row per object per score map: hit or
 not, chance, tier, size), `per_scene.csv`, `summary.json` and `provenance.json` (commit, checkpoint
-sha256s). One caution the LLD records: `provenance.json`'s `dirty` flag is always false today, because
-the git command runs from `app/evaluation/` with paths that do not exist there.
+sha256s). One caution the LLD recorded: `provenance.json`'s `dirty` flag was always false, because
+the git command ran from `app/evaluation/` with paths that did not exist there. **Update, 2026-10-18:**
+fixed in commit 229d423 - the command now runs from the repository root (`runner.py`,
+`_write_provenance`), and later runs record `"dirty": true` when they should.
 
 ## Step 6 - what stage 3 found: exclusion
 
@@ -207,7 +217,12 @@ ROC-AUC went 0.932 -> 0.851. Two things happen when a large area is set to 0:
 2. any labelled object inside it is scored 0 as well. 39 of the 909 objects (27 of them in set1) lie
    wholly inside FT03's water / cloud mask. Plain residual Mahalanobis caught 13 of them at the top 1%;
    exclusion catches 4 (their 1-pixel tolerance touches a kept pixel). Whether those 39 are boats,
-   shoreline objects or FT03's mistakes has not been checked.
+   shoreline objects or FT03's mistakes had not been checked when this was written.
+
+> **Update, 2026-10-17 (later).** They were checked, and the product rule changed: 13 of them are single
+> pixels more than 3 px offshore (likely vessels), so vessels on water are in scope and **only cloud is
+> excluded**. Part 21 teaches the check, the corrected claim that "no real object sits on water", and the
+> cloud-only numbers (FT03 pAUC 0.158 -> 0.166, ROC-AUC 0.853 -> 0.850).
 
 Work the mechanism in miniature. Two targets, A (land) and B (on water); four background pixels, one
 of them a bright water glint. ROC-AUC is the share of (target, background) pairs in which the target
@@ -293,7 +308,12 @@ the difference spectrum's outside part is rescaled to match (`match_foreignness`
 takes a material from elsewhere in the same scene, the footprint is blurred by a point-spread function
 (`psf_weights`), and the bench is accepted only if its foreignness and halo medians fall within 25% of
 the real objects', overall and per tier, **and** the models beat PCA-RX on it, as they do on real
-objects. No v2 results exist yet.
+objects. No v2 results existed when this part was written.
+
+> **Update, 2026-10-17 (later).** bench-v2 was built and accepted: on 2,913 implants FT02c and FT03 beat
+> PCA-RX (caught top 1% 32.8% / 32.3% against 30.2%). Part 20 teaches it, including three bugs found on
+> the way and why the medians above (0.006, 0.74, measured on every band with a ring at distance 3-4)
+> differ from bench-v2's (0.0071, 0.643, on the evaluator's bands and the bench's ring).
 
 ## Common confusions
 
@@ -306,7 +326,8 @@ It moved 55% of set1 to a tie at 0 and lost 39 objects that sit inside the mask;
 where the analyst looks, improved on every model. Judge it by pAUC, TPR at 0.1% and objects caught.
 
 **"I added a measure and re-ran; the numbers can't be stale."**
-They are fresh unless you rebuilt a dataset in place: the cache key does not see dataset content.
+When this part was written they could be, if you rebuilt a dataset in place. Since commit 229d423 the
+score-map key includes the scene's file fingerprint; class maps still do not (Step 3, update).
 
 **"`exclude` with `segmenter: FT03_ep10` only applies to FT03."**
 It applies to every model in the config. The segmenter only supplies the class map.
@@ -370,20 +391,4 @@ not be used to train or rank models; if it won on both, the models really would 
 kind of object.
 </details>
 
----
-
-## You have finished
-
-You can now read the source. Where to go next:
-
-- **`docs/01-orientation.md`** through **`docs/10-code-style.md`** - the reference docs
-- **`docs/lld/`** - low-level designs for individual subsystems; for the last four parts,
-  `docs/lld/evaluation.md` and `docs/lld/implant-bench.md`
-- **`docs/09-known-issues.md`** - what is currently broken, and what to check before trusting
-  a green test run
-
-One habit worth keeping from this course: **when a comment and the code disagree, the code
-wins.** You met several such disagreements - the regularisation default, the `MIN_VALID_FRACTION`
-comment and the discarded `units` field in parts 1 to 15; `compute_roc`'s threshold docstring in part
-16; the LLD's old `strength_for_z` and "10 px apart" in part 18; the always-false `dirty` flag in this
-part. There will be more.
+Next: [part 20](20-bench-v2.md) - bench-v2, the implant benchmark rebuilt to look like the real objects, and the test that let it be trusted.
