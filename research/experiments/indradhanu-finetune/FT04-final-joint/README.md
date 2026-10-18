@@ -1,6 +1,6 @@
 # FT04 - the final joint run: masks on all three sensors
 
-**Status:** prepared 2026-10-18 on the user's go ("Go"). Curriculum stage 4 (docs/proposals/fine-tuning-and-segmentation.md).
+**Status:** done 2026-10-18 21:38 UTC, code 25c4069, exit 0, best.pt = epoch 10. **Passed all three criteria.** Launched on the user's go ("Go"). Curriculum stage 4 (docs/proposals/fine-tuning-and-segmentation.md).
 
 ## Question
 FT03's segmentation head learned only from EnMAP's labels. Taught also from its own confident calls on PRISMA and
@@ -26,4 +26,29 @@ FT04's masks as on FT03's.
 3. **Reconstruction:** per-sensor validation SAM within 0.1 deg of FT03 (3.92 / 4.21 / 5.48).
 
 ## Results
+
+**Masks and reconstruction (epoch 10):** IoU water 0.839, cloud 0.810 (FT03 0.841 / 0.815 - within 0.01), shadow
+0.223 (0.205), thin cloud 0.110; SAM 3.88 / 4.11 / 5.46 deg (FT03 3.92 / 4.21 / 5.48 - better on all three).
+
+**Detection** (`configs/eval/ft04.json`, C:/es/eval/ft04), real PRISMA bench:
+
+| | pAUC <= 1% | TPR @ 0.1% | caught top 0.1% | caught top 1% | ROC-AUC |
+|---|---|---|---|---|---|
+| v0.2.0, default (stage-3 run) | 0.159 | 0.058 | 14.1% | 44.2% | 0.854 |
+| FT03, default | 0.158 | 0.058 | 14.3% | 45.4% | 0.853 |
+| FT04, default | 0.162 | 0.061 | 14.9% | 45.7% | 0.853 |
+| FT03 + cloud excluded (FT03 masks) | 0.166 | 0.064 | 15.8% | 46.1% | 0.850 |
+| FT04 + cloud excluded (FT04 masks) | **0.170** | **0.065** | 15.8% | 46.0% | 0.852 |
+
+bench-v2.1: FT04 35.1% caught top 1% (FT03 34.9%), with cloud exclusion 36.2% (36.0%).
+
+Criteria: 1 met; 2 met (default at or above FT03 on all three measures; exclusion with FT04's masks as good as with
+FT03's, with less ROC-AUC cost - its masks exclude less); 3 met.
+
+## Observations
+
+- **Release candidate: FT04 + cloud exclusion with its own masks.** Against the shipped v0.2.0 on the real bench:
+  pAUC 0.159 -> 0.170, TPR @ 0.1% 0.058 -> 0.065. Small, on 4 scenes; most of it is the exclusion (the model alone
+  +0.003 pAUC). On bench-v2.1 v0.2.0 and the fine-tuned models tie.
+- Pseudo-labels did not cost EnMAP IoU; the 3x rare-class weight lifted shadow by 0.02.
 ## Observations

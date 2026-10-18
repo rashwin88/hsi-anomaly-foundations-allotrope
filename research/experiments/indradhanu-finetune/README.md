@@ -137,4 +137,8 @@ thread that connects them.
   Residual Mahalanobis absorbs what better reconstruction changes; detection gains need another lever (scoring,
   masks, detection-targeted training). The new models' measurable wins: masks for cloud exclusion (+~1 point, any
   model), native bands, reconstruction.
+- **2026-10-18 - FT04 (final joint) passed - the release candidate.** Pseudo-labels for PRISMA / AVIRIS-NG plus rare-
+  class weights: masks held, reconstruction better on all three sensors, detection at or above FT03; with cloud
+  exclusion on its own masks the best real-bench result so far (pAUC 0.170, TPR @ 0.1% 0.065 vs shipped v0.2.0
+  0.159 / 0.058). Next: product wiring (FT04 checkpoint + masks + cloud exclusion in anomaly_scoring).
 

@@ -1,0 +1,77 @@
+{
+  "name": "FT04 vs FT03: real bench and bench-v2.1, cloud exclusion with each model's own masks",
+  "models": [
+    {
+      "name": "FT03_ep10",
+      "checkpoint": "C:/es/models/FT03_best.pt"
+    },
+    {
+      "name": "FT04_ep10",
+      "checkpoint": "C:/es/models/FT04_best.pt"
+    }
+  ],
+  "datasets": [
+    {
+      "kind": "prisma_bench",
+      "path": "C:/Users/FITT/Documents/stage1_datasets"
+    },
+    {
+      "kind": "implant",
+      "path": "C:/es/implant/bench-v2.1"
+    }
+  ],
+  "scorers": [
+    {
+      "kind": "residual_mahalanobis"
+    },
+    {
+      "kind": "exclude",
+      "name": "cloud-excluded, FT03 masks",
+      "classes": [
+        "cloud"
+      ],
+      "segmenter": "FT03_ep10",
+      "fit_on_kept": false,
+      "base": {
+        "kind": "residual_mahalanobis"
+      }
+    },
+    {
+      "kind": "exclude",
+      "name": "cloud-excluded, FT04 masks",
+      "classes": [
+        "cloud"
+      ],
+      "segmenter": "FT04_ep10",
+      "fit_on_kept": false,
+      "base": {
+        "kind": "residual_mahalanobis"
+      }
+    }
+  ],
+  "metrics": [
+    {
+      "kind": "roc_auc"
+    },
+    {
+      "kind": "pauc",
+      "max_fpr": 0.01
+    },
+    {
+      "kind": "tpr_at",
+      "fpr": 0.001
+    },
+    {
+      "kind": "objects_caught",
+      "top_pct": [
+        1.0,
+        0.1
+      ]
+    }
+  ],
+  "group_by": [
+    "tier",
+    "sensor"
+  ],
+  "output": "C:/es/eval/ft04"
+}
