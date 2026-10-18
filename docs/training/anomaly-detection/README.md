@@ -3,7 +3,7 @@
 A course for someone who has never worked with hyperspectral data and has never opened this
 repository. Start at part 1 knowing nothing; finish able to read the source.
 
-Twenty-one parts, each finishable in a sitting. **Read them in order.** Part N assumes parts
+Twenty-two parts, each finishable in a sitting. **Read them in order.** Part N assumes parts
 1 to N-1 and nothing else, so skipping ahead will cost you more time than it saves.
 
 | part | one-sentence purpose |
@@ -28,7 +28,8 @@ Twenty-one parts, each finishable in a sitting. **Read them in order.** Part N a
 | [18](18-the-implant-benchmark.md) | The implanted-target benchmark: real held-out scenes, synthetic objects like the real ones |
 | [19](19-running-an-evaluation.md) | Running an evaluation: one config, scene-major loop, cached score maps, chance - and a classical baseline that wins on the implants and loses on real objects |
 | [20](20-bench-v2.md) | bench-v2: copying contrast, foreignness and halo from the real objects, solving on the realised object, and the ordering test that lets a benchmark be trusted |
-| [21](21-scope-and-masks.md) | Scope: cloud excluded, water kept for vessels, and what a mask costs - the 39 real objects inside FT03's mask |
+| [21](21-scope-and-masks.md) | Scope: cloud excluded, water kept for vessels, and what a mask costs - the 39 real objects inside FT03's mask, and set4's "desert" that was haze |
+| [22](22-the-sorting-bug.md) | How a sorting bug rewrote the scoreboard: `np.interp` needs ascending wavelengths, PRISMA lists them descending, and the cross-check against the product path that found it |
 
 ## How to use this
 
@@ -65,10 +66,11 @@ relying on them:
 | 15 | family counts in the library, `family_alpha`, the ~2.5 ms per pixel cost, PRISMA results |
 | 16 | `compute_roc`'s threshold count formula, the FT02b bench measures |
 | 17 | the state of HAD100 / ABU (ABU's page was already 404 on 2026-10-16), the leakage distances |
-| 18 | bench-v1's object counts and every results row - a rebuild (new hosts, new seed) or a new model moves them; the tier edges 0.502 / 0.934 |
-| 19 | every stage-3 number (exclusion, PCA-RX), the diagnosis medians (0.006 / 0.74); dated update notes record what changed since (cache key, `dirty` flag, the 39 objects, bench-v2 accepted) |
-| 20 | every bench-v2 number (2,913 objects, the model and PCA-RX rows), the `real_v2.json` medians (0.0071 / 0.643), the per-tier ratios recomputed from `objects.json`, sigma 1.4, the 0.25 -> 0.02 s subspace timing; the v0.2.0 reading question is open |
-| 21 | the cloud-only and water + cloud numbers, the per-scene object counts, the 39-object breakdown and FT03's 11% desert-as-cloud; all move with a new segmentation head (FT04) |
+| 18 | bench-v1's object counts and every results row - a rebuild (new hosts, new seed) or a new model moves them; the tier edges 0.502 / 0.934. Since 2026-10-18 its v0.2.0 row is void and its signature implants are known garbled (part 22) |
+| 19 | every stage-3 number (exclusion, PCA-RX), the diagnosis medians (0.006 / 0.74); dated update notes record what changed since (cache key, `dirty` flag, the 39 objects, bench-v2 accepted, the resample bug) |
+| 20 | every bench-v2 number (2,913 objects, the model and PCA-RX rows), the `real_v2.json` medians (0.0071 / 0.643), the per-tier ratios recomputed from `objects.json`, sigma 1.4, the 0.25 -> 0.02 s subspace timing. The v0.2.0 reading question was resolved on 2026-10-18 (part 22): its v0.2.0 row is void and bench-v2 is superseded by bench-v2.1 |
+| 21 | the cloud-only and water + cloud numbers, the per-scene object counts, the 39-object breakdown and FT03's 11% set4 "cloud" (haze, corrected 2026-10-18); all move with a new segmentation head - FT04 passed on 2026-10-18 and its masks are the release candidate's |
+| 22 | every bench-v2.1 number (2,817 objects, the model rows, the 1.05 / 1.15 / 1.60x foreignness), the resample-check rows, the PRISMA band orders quoted from the dev laptop's files, NumPy 2.5.2's `np.interp` behaviour on unsorted input (undefined by contract - another version may differ) |
 
 Structural claims - what a vendable is, why masking works the way it does - will outlive
 the numbers.

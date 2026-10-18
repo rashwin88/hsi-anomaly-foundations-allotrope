@@ -103,15 +103,6 @@ def band_mean(refl: np.ndarray, wl: np.ndarray, lo: float, hi: float) -> np.ndar
     return np.nanmean(refl[sel], axis=0) if sel.any() else np.full(refl.shape[1:], np.nan)
 
 
-def cloud_plausible(refl: np.ndarray, wl: np.ndarray) -> np.ndarray:
-    """(H, W) bool: the label QA's cloud test (research/experiments/indradhanu-finetune/README.md) - mean 450-650 nm
-    reflectance > 0.2 and spectrally flat (min / max of the 460-500 / 540-580 / 640-680 / 840-880 nm means >= 0.7).
-    Bright desert is red - it rises with wavelength - and fails the flatness test."""
-    windows = np.stack([band_mean(refl, wl, lo, hi) for lo, hi in ((460, 500), (540, 580), (640, 680), (840, 880))])
-    flat = np.nanmin(windows, 0) / np.maximum(np.nanmax(windows, 0), 1e-6)
-    return (band_mean(refl, wl, 450, 650) > 0.2) & (flat >= 0.7)
-
-
 def pseudo_targets(probs: np.ndarray, refl: np.ndarray, wl: np.ndarray, valid: np.ndarray,
                    conf: float = PSEUDO_CONF) -> tuple[np.ndarray, np.ndarray]:
     """Teacher probabilities (K, H, W) uint8 (0-255) or float -> (targets float32, known bool) for a sensor with no

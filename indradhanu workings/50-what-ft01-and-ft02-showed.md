@@ -121,7 +121,9 @@ forgetting - shelved; part 54 says why.
 **"FT02 forgot how to detect."** Not shown. Reconstruction improved on every sensor, and the bench
 moved 0.862 to 0.855 - smaller than some single-scene swings. The larger implanted-target benchmark,
 built the next day, settles it the other way: FT02 catches more easy implants than F001 (49% against 45%
-at the top 1%) - part 56. "Forgetting" would predict worse
+at the top 1%) - part 56. (Both rows were read on bench-v1, half of whose implants had garbled
+signatures - anomaly course, part 22; FT02 itself was not re-run on bench-v2.1, where its descendant
+FT02c leads F001 by 2 points.) "Forgetting" would predict worse
 reconstruction on what F001 knew; EnMAP, the closest sensor to SpectralEarth, got better.
 
 **"Epoch 1 passed the gate, so FT02 passed."** No. The gate names the checkpoint: the best by
@@ -166,7 +168,8 @@ part 48's audit found them surface-driven in many scenes.
 
 **Update, 2026-10-17.** The gate in criterion 1 was read on four scenes that, it later turned out,
 could not separate any of these models under residual Mahalanobis (FT02b README). On 3,336 implanted
-objects FT02 is ahead of F001 on easy-tier pAUC, 0.356 against 0.342. Part 56 reads those results; the
+objects FT02 is ahead of F001 on easy-tier pAUC, 0.356 against 0.342 (on bench-v1, later found to
+carry garbled signature implants; part 59 has the corrected board). Part 56 reads those results; the
 miss by 0.006 above is a fact about the four scenes, not evidence that FT02 detects worse.
 
 ---

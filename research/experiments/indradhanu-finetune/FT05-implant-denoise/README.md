@@ -31,7 +31,7 @@ halo); bench-v2 improves more (same generator family - optimistic); reconstructi
 ## Results
 
 **Pace:** ~2 h 40 min per epoch (FT03: ~18 min) - the loader workers are CPU-bound on the implant generation
-(GPU 0-7%, ~12 workers on 8 vCPUs); being diagnosed. A first launch was restarted after a subspace speed fix (558ff5e).
+(GPU 0-7%); diagnosed and fixed at the epoch-6 resume - see below. A first launch was restarted after a subspace speed fix (558ff5e).
 
 **Epoch 5** (`configs/eval/ft05_ep5.json`, C:/es/eval/ft05_ep5), residual Mahalanobis:
 

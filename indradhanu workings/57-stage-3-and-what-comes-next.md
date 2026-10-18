@@ -75,11 +75,13 @@ excludes water and cloud only through the older threshold-based `keep_mask`.
 
 > **Update, 2026-10-17 (later).** Checked: 13 of set1's 27 are single pixels more than 3 px offshore -
 > likely vessels; 8 more sit on shorelines in set2 and set3; 4 are on bright desert in set4 that FT03
-> wrongly calls cloud (11% of that scene). The earlier record that "no real object sits on water" was
+> wrongly calls cloud (11% of that scene). *(Corrected 2026-10-18: set4's 11% is a cloud / smoke streak
+> and haze, which the mask follows - not desert; the 4 objects sit under haze. Anomaly course, part 21.)* The earlier record that "no real object sits on water" was
 > wrong - its water test (visible reflectance below 0.04) misses turbid coastal water near 0.08. The user
 > then put **vessels on water in scope: only cloud is excluded**. FT03, cloud only: pAUC 0.158 -> 0.166,
 > caught top 0.1% 14.3% -> 15.8%, ROC-AUC 0.853 -> 0.850. The anomaly-detection course, part 21, works
-> it through; a mask fine-tune (FT04) is proposed before exclusion ships.
+> it through; a mask fine-tune (FT04) is proposed before exclusion ships. *(FT04 ran and passed on 2026-10-18 -
+part 60.)*
 
 ## 3. The model-free detector
 
@@ -103,7 +105,8 @@ Two readings for the model:
 - **A caution, about part 56:** bench-v1 rewards something PCA-RX has more of than any model. When a
   stage rose on bench-v1, some of that rise may be the model getting *more like PCA-RX*, not better at
   real objects. Part 56's ordering is still the best evidence there is, but it is evidence about
-  implants.
+  implants. *(Corrected 2026-10-18: part of that ordering was a bug - v0.2.0's place at the bottom was a
+  broken resample, and half the implants carried garbled signatures. Anomaly course, part 22.)*
 
 ## 4. What is wrong with the implants
 

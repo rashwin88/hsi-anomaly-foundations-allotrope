@@ -68,6 +68,12 @@ PRISMA scenes a non-native reading reloads the scene through the product's band-
 exact; implant hosts are linearly resampled, "close to, not identical with" the product (the
 docstring's words).
 
+> **Correction, 2026-10-18.** On PRISMA hosts that resample was far from close: PRISMA lists its bands
+> descending and `np.interp` was called unsorted, so every grid band v0.2.0 read was a copy of one of
+> two near-infrared bands (on the real bench, read the same way, of one blue band). Fixed in
+> commit b94dbfd; read through the fixed resample, v0.2.0 scores exactly its product-path numbers on the
+> real bench (44.2% / 0.159). Every v0.2.0 implant number in this part and the next is void. Part 22.
+
 **Two new scorers.** `exclude` takes any base scorer, runs it, then sets chosen classes to 0, using a
 segmentation head to find them (FT03's, here). `pca_rx` is the classical baseline: residual
 Mahalanobis (part 12) handed a reconstruction of all zeros, so the "residual" is the cube itself:

@@ -136,6 +136,12 @@ recipe** rather than anomalies in general. The guards:
    not fall** (criterion 2);
 3. bench-v2 overall is reported but cannot pass the run on its own: same generator family, optimistic.
 
+> **Update, 2026-10-18.** Every `signature` implant FT05 trained on - half of them - was garbled: the
+> real objects' spectra are listed descending (2477 -> 453 nm) and `np.interp` was called unsorted, so each
+> arrived as a flat step (anomaly course, part 22; fixed in b94dbfd, after FT05's launch). They still
+> matched real contrast and foreignness. The FT05 README calls a rerun with correct signatures "the fair
+> test" and adds that "nothing here suggests it would flip the result".
+
 Do not confuse the two "held-outs". Held-out **hosts** means the benchmark's scenes were never in
 training. Held-out **source** means one way of making an implant was never in training.
 
@@ -171,6 +177,12 @@ singular vectors of `X` are the eigenvectors of `X^T X` (B x B), with eigenvalue
 values. For a 128 px tile, N = 16,384 and B = 224, so the eigendecomposition works on a 224 x 224 matrix
 instead of the 16,384 x 224 one. The loader is still CPU-bound after that fix; the cause was being
 diagnosed on 2026-10-18.
+
+> **Update, 2026-10-18 (later) - the cause and the fix.** Each of the 18 worker processes had its own
+> pool of maths-library (BLAS) threads, so the 8 vCPUs were "oversubscribed ... about 8-fold" and the
+> implant transform ran 4.7 s per tile instead of 1.8 s (`single_thread_worker`'s docstring). FT05 resumed
+> at epoch 6 with single-thread workers, 2 per source (`loader_workers_per_source: 2`): **43 min per
+> epoch**, down from 2 h 41 min. FT04 uses the same setting (part 60).
 
 ![Figure 58.1 - One FT05 training step](figures/58-ft05-step.svg)
 
@@ -231,6 +243,13 @@ to its end, and to the FT05 README, which records the same epoch-5 reading: "Imp
 moved real detection by mid-run."
 With cloud excluded the picture is the same: real-bench pAUC 0.166 for both, caught top 0.1% 142 against
 FT03's 144.
+
+> **Update, 2026-10-18 (later) - the verdict: not passed.** FT05 finished at epoch 10; best.pt stayed at
+> epoch 5 (lowest validation loss), whose detection is the tie above, so criterion 1 is not met. Epoch 10
+> then failed criterion 3: AVIRIS-NG SAM 5.67 deg against FT03's 5.48 (+0.19, limit 0.1); EnMAP 3.90,
+> PRISMA 4.20, IoU water / cloud 0.844 / 0.814. On bench-v2.1 (fixed signatures) epoch 5 scores 35.4%
+> caught at the top 1% against FT03's 34.9% - a tie. Implant-denoising did not move real detection.
+> Part 59 has the full board.
 
 ## Common confusions
 

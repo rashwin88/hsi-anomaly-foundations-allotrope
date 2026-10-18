@@ -13,6 +13,16 @@
 > 2026-10-17 is in scope for detection (part 21). The mechanics taught here - ring, z, tiers, strength
 > solve - carry over unchanged.
 
+> **Correction, 2026-10-18.** Two bugs, both from `np.interp` meeting PRISMA's descending band list, are
+> taught in part 22. (1) The v0.2.0 row below is a reading artefact: the evaluator's resample handed
+> v0.2.0, on every PRISMA host, a 165-band cube made of copies of just two near-infrared bands (977
+> and 943 nm) - disregard it. Read correctly, on
+> bench-v2.1, v0.2.0 ties the best new models (35.5% against FT03's 34.9%). Reading 1 below ("it separates
+> models", with v0.2.0 at the bottom) therefore does not hold for v0.2.0. (2) Every **signature** implant
+> was garbled into a flat step, so reading 4's "signature and material
+> score alike" compares a broken source with a working one (the interpolation in Step 5 below). The
+> mechanics of this part are unaffected.
+
 ## Where we are
 
 Part 17 closed the public options. On 2026-10-17 the user asked for implanted targets "somewhat
@@ -183,7 +193,8 @@ implant_material:   x' = (1 - f) x x + f x t      # t = a USGS library spectrum,
 
 **Signature** (additive): take a real object's `o - r` from step 1, carry it to the host's bands by
 interpolation (bands more than 15 nm from any PRISMA bench band are left untouched), and add `a`
-times it. The `max(..., 0)` stops reflectance going negative.
+times it. (Until commit b94dbfd that interpolation was garbled, because the bench's bands are listed
+descending - part 22.) The `max(..., 0)` stops reflectance going negative.
 
 **Material** (linear mixing): the pixel becomes a fraction `f` of a library material and `1 - f` of
 what was there - the sub-pixel mix of part 15. The library is `data/splib07_slim`, a chapter drawn
@@ -314,7 +325,8 @@ The evaluation (then `evaluate_implant_bench.py`, now `scripts/evaluate.py`, par
 mostly empty; fill missing values per band from the nearest valid pixel; let each model read the scene
 its own way (wavelength-reading models read the bands their trained-wavelength record covers; the
 shipped v0.2.0 reads a linear resample onto the 165-band grid - "close to, not identical with" the
-product's `band_filter_apply`, as its docstring warns); reconstruct; score with residual Mahalanobis
+product's `band_filter_apply`, as its docstring warns; on PRISMA hosts it was not close at all until
+commit b94dbfd, part 22); reconstruct; score with residual Mahalanobis
 and `combined` (part 12). Then part 16's measures: objects caught at the top 1% and 0.1% by tier, by
 source, by sensor, and pAUC to 1% FPR per tier - that tier's object pixels as positives, all
 non-object pixels as negatives.
@@ -326,7 +338,7 @@ over hosts. **Chance is 10% (1%) in every tier** (part 16):
 
 | model | all | subtle | medium | easy | easy pAUC | medium pAUC | EnMAP | PRISMA | AVIRIS-NG |
 |---|---|---|---|---|---|---|---|---|---|
-| v0.2.0 (shipped) | 19% (8%) | 9% (1%) | 14% (4%) | 34% (18%) | 0.257 | 0.091 | 16% | 15% | 30% |
+| v0.2.0 (shipped) - void, reading bug (part 22) | 19% (8%) | 9% (1%) | 14% (4%) | 34% (18%) | 0.257 | 0.091 | 16% | 15% | 30% |
 | F001 ep109 | 25% (10%) | 11% (1%) | 21% (5%) | 45% (22%) | 0.342 | 0.112 | 15% | 30% | 32% |
 | FT02 ep8 | 26% (10%) | 10% (1%) | 20% (5%) | 49% (24%) | 0.356 | 0.115 | 15% | 32% | 32% |
 | FT02b ep9 | 27% (10%) | 10% (1%) | 22% (5%) | 50% (25%) | 0.367 | 0.121 | 15% | 34% | 33% |

@@ -187,7 +187,7 @@ mechanism: `joint` trains everything from the first step. The source won, and th
 
 Stage 4 (optional) would add the stage-3 head's most confident predictions on PRISMA and AVIRIS-NG as
 extra labels, so-called **pseudo-labels**, if EnMAP-trained masks do not transfer well enough on their
-own.
+own. (It ran on 2026-10-18 as FT04, the release candidate - part 60.)
 
 ## Mixing sensors by share
 
@@ -332,7 +332,8 @@ different method (local covariance), so it does not refute this one, but it is a
 > 92%; part 57). Exclusion by FT03's masks was chosen instead, first of water and cloud, then - once 13
 > real objects turned out to be likely vessels offshore - of **cloud only** (FT03 real-bench pAUC 0.158
 > -> 0.166). Neither is in `backend/` yet; a mask fine-tune (FT04) is proposed first because FT03 calls
-> 11% of the desert scene set4 cloud. A detection-driven fine-tune, FT05, was added after stage 3
+> 11% of the desert scene set4 cloud. *(Corrected 2026-10-18: set4's "cloud" is haze, not desert. Stage 4
+> ran as FT04 - pseudo-labels for PRISMA and AVIRIS-NG plus rare-class weights - and passed: part 60.)* A detection-driven fine-tune, FT05, was added after stage 3
 > (part 58). Parts 57 to 59 carry the story on.
 
 ## Open questions

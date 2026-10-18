@@ -24,7 +24,8 @@ adding another.
 | `enmap-shards.md` | EnMAP L2A at native bands with quality labels, from the inventory, for fine-tuning and a cloud/water head |
 | `spectral-family-match.md` | naming the material family of 30 m anomaly pixels: family library, Simplex ACE, calibration and the alpha / p\* bar, evaluation, integration recipe |
 | `evaluation.md` | `app/evaluation` + `scripts/evaluate.py`: models x datasets x scorers x measures from one config, score-map cache, the stage-3 reference run |
-| `implant-bench.md` | the implanted-target benchmark: contrast tiers, the strength solve, bench-v1, bench-v2 (in progress) |
+| `implant-bench.md` | the implanted-target benchmark: contrast tiers, the strength solve, bench-v1, bench-v2, the 2026-10-18 descending-wavelength corrections and bench-v2.1 |
+| `finetune.md` | the fine-tuning trainer and segmentation head: stages, mixed batches, pseudo-labels, class weights, implants, loader workers |
 
 ## How these are written
 

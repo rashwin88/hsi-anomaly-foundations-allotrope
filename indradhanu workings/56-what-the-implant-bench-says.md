@@ -13,6 +13,17 @@
 > against 10.1%), so limit 1 below was bench-v1's. Limit 2 is unchanged: EnMAP hosts sit near 16% for
 > every model on bench-v2 too. Part 59 has the current tables.
 
+> **Correction, 2026-10-18 - read this first.** This part's headline is wrong. The v0.2.0 row was a
+> reading bug, not a model: the evaluator resampled PRISMA hosts onto v0.2.0's 165-band grid with
+> `np.interp` on a descending band list, so v0.2.0 saw copies of two near-infrared bands on every PRISMA
+> host (anomaly-detection course, part 22). Every `signature` implant - half of this bench - was garbled
+> by the same mistake, for every model. Rebuilt with the fix (bench-v2.1), v0.2.0 catches 35.5% at the top
+> 1% against F001's 33.1% and FT03's 34.9%: **pretraining was not the big step; the step was the bug.**
+> Section "Stage by stage" below foresaw half of this - it says the model and the band reading changed
+> together - and then credited the model. The fine-tuning steps (F001 -> FT02c) survive, smaller: +2.0
+> points on bench-v2.1. Limit 2 (EnMAP flat) still holds, at about 21%. Part 59 has the corrected
+> scoreboard; part 60 the honest reading.
+
 ## Where we are
 
 Part 50 onwards judged every run on the four labelled PRISMA scenes, and from FT02 on those scenes
@@ -79,11 +90,13 @@ reported there - the stage-3 evaluation of part 57 measured it at 0.853):
 
 *Figure 56.1 - Easy-tier and medium-tier pAUC on the implanted benchmark (amber, solid and dashed)
 rise from v0.2.0 to FT02c and stay at FT03; the real bench's pAUC (grey) wanders between 0.148 and
-0.159 with no order. Random pAUC is 0.005, at the bottom of the axis.*
+0.159 with no order. Random pAUC is 0.005, at the bottom of the axis. v0.2.0's implant points are a
+reading bug (corrected 2026-10-18; anomaly course, part 22).*
 
 ## Stage by stage
 
-**Pretraining is the big step.** v0.2.0 to F001: easy caught 34% to 45%, easy pAUC 0.257 to 0.342,
+**Pretraining is the big step.** *(Wrong - corrected 2026-10-18: this step is the reading bug; see the
+note at the top.)* v0.2.0 to F001: easy caught 34% to 45%, easy pAUC 0.257 to 0.342,
 and on PRISMA hosts 15% to 30% - double. Two things changed at once, and the bench cannot separate
 them: a new model (SpectralEarth pretraining, the reduced-attention stem of part 40) and a new way of
 reading the scene (the host's own bands, against v0.2.0's resample onto 165). The README's own words:
@@ -131,6 +144,7 @@ sqrt(0.000232)      = 0.0152       about 1.5 points
 ```
 
 So F001 to FT02c on easy, 45% to 50%, is about `5 / 1.5 = 3.3` standard errors - unlikely to be luck.
+(On bench-v2.1, F001 to FT02c on easy is 51.7% to 53.7%: 2 points, smaller but in the same direction.)
 FT02 to FT02b, 49% to 50%, is under one. Every model is scored on the **same** objects, which makes
 differences between models less noisy than this single-model figure suggests, so it is a cautious
 check, not a test. It is this course's arithmetic, not a figure from the README. The safe summary:
@@ -165,7 +179,9 @@ same contrast are easier, and the real bench did not move.
 10% is nothing: it is chance, because of the one-pixel tolerance.
 
 **"F001 beat v0.2.0 because pretraining on SpectralEarth is better."**
-That and a different band reading changed together. The benchmark measures the pair.
+That and a different band reading changed together. The benchmark measures the pair - and on
+2026-10-18 the reading turned out to be the whole of it: read correctly, F001 is a little below v0.2.0
+(bench-v2.1 33.1% against 35.5%).
 
 **"The real bench was wrong."**
 It was too small, not wrong. Its 909 objects in four scenes give differences smaller than the

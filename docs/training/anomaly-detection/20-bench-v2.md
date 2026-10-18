@@ -6,6 +6,15 @@
 > (contrast, foreignness, halo) and by solving for them on the object as it really ends up, not on the
 > signal that was added.
 
+> **Correction, 2026-10-18.** Two of this part's readings rested on a bug (part 22): the v0.2.0 row of
+> Step 6 and the PRISMA-host climb "16.5% (v0.2.0) -> 35.2% (F001)" in Step 7 are a reading artefact, and
+> every `signature` implant (a third of bench-v2) was garbled. Step 7's first explanation, the reading
+> artefact, was right. bench-v2 has been rebuilt as **bench-v2.1** (fixed signatures, `--foreign-tol 1.2`):
+> there v0.2.0 ties the fine-tuned models (35.5% against FT03's 34.9%), all models stay above PCA-RX at
+> the top 0.1%, and "pretraining alone does not beat PCA-RX" softens to a tie at the top 1% (F001 33.1%
+> against 33.2%). The method taught here - copied properties, the realised solve, the ordering test -
+> stands.
+
 ## Where we are
 
 Part 19 ended with a warning. On bench-v1 the model-free PCA-RX beat every model; on the 909 real
@@ -211,7 +220,7 @@ bench-v2 is only allowed to judge models if it says the same. `configs/eval/benc
 | | caught top 1% | top 0.1% | pAUC to 1% | easy | medium | subtle |
 |---|---|---|---|---|---|---|
 | *chance* | 10.1% | 1.1% | 0.005 | | | |
-| v0.2.0 | 22.1% | 8.6% | 0.118 | 38.3% | 15.2% | 10.9% |
+| v0.2.0 - void, reading bug (part 22) | 22.1% | 8.6% | 0.118 | 38.3% | 15.2% | 10.9% |
 | F001 ep109 | 29.2% | 10.2% | 0.145 | 48.5% | 23.1% | 13.1% |
 | FT02c ep10 | **32.8%** | **11.4%** | **0.166** | 52.9% | 27.6% | 14.7% |
 | FT03 ep10 | 32.3% | 11.4% | 0.164 | 52.7% | 26.9% | 14.2% |
@@ -258,7 +267,8 @@ behind (22.1% against 32.3%). Two explanations have been raised:
   real bench through the generic resample and got caught top 1% **15.8%**, pAUC 0.094 - against 44.2% and
   0.159 through the product path. If that run is right, the generic resample is what sinks v0.2.0 on the
   implant hosts. The disagreement is unresolved; until it is, do not read v0.2.0's implant numbers as a
-  verdict on the model.
+  verdict on the model. **Resolved 2026-10-18: it was the resample**, a descending band list fed to
+  `np.interp` unsorted. Part 22 works it through.
 - *Training overlap.* v0.2.0 may have trained on scenes from the bench sites, which would flatter it on
   the real bench only. Unverified.
 

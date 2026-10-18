@@ -91,7 +91,7 @@ Every part has the same skeleton:
 | 29 | [29-inference.md](29-inference.md) | Running it on a real scene |
 | 30 | [30-scoring-and-the-product.md](30-scoring-and-the-product.md) | Turning errors into an answer |
 
-**Sequel - the next Indradhanu: a smarter spectral bottleneck, then pretraining, scoring and fine-tuning (31-59)**
+**Sequel - the next Indradhanu: a smarter spectral bottleneck, then pretraining, scoring and fine-tuning (31-60)**
 
 Written 2026-10-14, after the decision to pretrain the next Indradhanu on SpectralEarth with a
 cross-attention spectral bottleneck. Parts 31 to 39 were written as a **design studied before
@@ -127,10 +127,11 @@ Assumes all of parts 01 to 30; leans on 08, 10, 12, 13 and 17 to 21.
 | 53 | [53-edges.md](53-edges.md) | Why correcting the score map for edges fails, and why an edge term under the blind spot is different |
 | 54 | [54-options-not-taken-yet.md](54-options-not-taken-yet.md) | Teacher head, per-sensor heads, synthetic targets, regularisation: what each costs and where it stands |
 | 55 | [55-ft03-joint.md](55-ft03-joint.md) | FT03: segmentation over the whole mixed batch, seg_weight 0.1, FT01's head as a warm start - IoU up, detection unchanged |
-| 56 | [56-what-the-implant-bench-says.md](56-what-the-implant-bench-says.md) | 3,336 implanted objects sort the stages: pretraining is the big step, subtle sits at chance, EnMAP does not move |
+| 56 | [56-what-the-implant-bench-says.md](56-what-the-implant-bench-says.md) | 3,336 implanted objects seemed to sort the stages, with pretraining the big step - **corrected 2026-10-18: that step was a band-order bug**; subtle sits at chance, EnMAP does not move |
 | 57 | [57-stage-3-and-what-comes-next.md](57-stage-3-and-what-comes-next.md) | Stage 3: water / cloud exclusion helps every model alike, a model-free PCA-RX wins on bench-v1 and loses on real objects - so bench-v2 comes before detection training |
-| 58 | [58-ft05-implant-denoising.md](58-ft05-implant-denoising.md) | FT05: implanted input, clean target - why it teaches "draw the background", the x5 near weight, the held-out source, and a CPU-bound loader |
-| 59 | [59-the-scoreboard.md](59-the-scoreboard.md) | Every model on every benchmark in four tables, read against chance and PCA-RX - and three results nobody can explain yet |
+| 58 | [58-ft05-implant-denoising.md](58-ft05-implant-denoising.md) | FT05: implanted input, clean target - why it teaches "draw the background", the x5 near weight, the held-out source, a CPU-bound loader and its fix; did not pass |
+| 59 | [59-the-scoreboard.md](59-the-scoreboard.md) | Every model on every benchmark, read against chance and PCA-RX and with v0.2.0 read correctly: no new model beats the shipped one on detection alone (rewritten 2026-10-19) |
+| 60 | [60-ft04-the-release-candidate.md](60-ft04-the-release-candidate.md) | FT04: pseudo-labels with confidence thresholds and a water guard, why the cloud guard was dropped, rare-class weights - and what the model did and did not buy |
 
 Parts 34 to 39's numbers were first produced by a study prototype and then re-checked against
 the real modules (5,345 compressor and 6,401 decoder parameters at `d = D = 32`; 13,162 gate
@@ -187,10 +188,27 @@ everything about FT05 - the epoch-5 detection rows (`C:/es/eval/ft05_ep5/report.
 the real bench, half a point ahead on bench-v2), the epoch-5 SAMs and IoUs, the 2 h 40 min epoch and the
 0-7% GPU and the loader diagnosis (all in the FT05 README's Results, "Epoch 5" and "Pace"); its final
 results will supersede them. Part 59's other rows move with any new model or a rebuilt benchmark. Two open disagreements are
-recorded in part 59: the saved v0.2.0 reading check, and bench-v2's per-tier foreignness. The benchmarks
+recorded in part 59: the saved v0.2.0 reading check, and bench-v2's per-tier foreignness (the first
+resolved and the second superseded on 2026-10-18 - see the next paragraph). The benchmarks
 themselves are taught in the anomaly-detection course, parts 20 and 21. Authoritative:
 `research/experiments/indradhanu-finetune/FT05-implant-denoise/README.md`,
 `docs/proposals/detection-supervised-finetuning.md`, `research/experiments/implant-bench/README.md`.
+
+**The 2026-10-18 corrections, and part 60 (written 2026-10-19).** Two findings on 2026-10-18 changed
+earlier parts. (1) PRISMA lists its bands descending and `np.interp` was called unsorted in the
+evaluator's resample and in signature implants: v0.2.0's implant-bench rows were a reading artefact and
+every transplanted signature was garbled (anomaly-detection course, part 22). Read correctly, on
+bench-v2.1, v0.2.0 ties every new model; "pretraining is the big step" was the bug. (2) Set4's "11%
+cloud" is haze and a cloud / smoke streak, not bright desert. Dated correction notes were added to parts
+49, 50, 53, 54, 55, 56 (and its figure), 57 and 58; part 59 was rewritten; FT05's final verdict (not
+passed) and the loader fix were added to part 58. Part 60 teaches FT04, the release candidate. **Values
+that will drift:** every number in parts 59 and 60 - FT04's IoUs and SAMs, the real-bench and bench-v2.1
+rows, the 0.159 -> 0.170 decomposition, the 0.875 / 0.82 pre-launch pseudo-label checks, the 69% cloud-guard
+rejection, `PSEUDO_CONF` 0.9, the NIR 0.15 guard and the `[1, 1, 1, 3, 3]` weights (run configuration, but a
+next run may change them), and the 43-minute epoch. The open questions now are part 59's: EnMAP hosts flat
+at about 21%, bench-v2.1's easy-tier foreignness (1.60x), and training overlap for v0.2.0. Authoritative:
+`research/experiments/indradhanu-finetune/README.md` (the log), `FT04-final-joint/README.md`,
+`research/experiments/implant-bench/README.md` ("Corrections" and "bench-v2.1"), `docs/lld/finetune.md`.
 
 ## Figures
 

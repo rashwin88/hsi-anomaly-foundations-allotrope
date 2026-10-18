@@ -12,7 +12,7 @@
 <text x="390" y="184" font-size="11" text-anchor="end" fill="#1f2328">set2 / set3, shorelines</text>
 <rect x="400" y="164" width="224" height="30" fill="#b45f06"/>
 <text x="632" y="184" font-size="12" fill="#1f2328" font-weight="700">8</text>
-<text x="390" y="236" font-size="11" text-anchor="end" fill="#1f2328">set4, bright desert called cloud (mask error)</text>
+<text x="390" y="236" font-size="11" text-anchor="end" fill="#1f2328">set4, under haze FT03 calls cloud</text>
 <rect x="400" y="216" width="112" height="30" fill="#b45f06"/>
 <rect x="400" y="216" width="112" height="30" fill="url(#hatch)" stroke="#0f766e" stroke-width="2.5"/>
 <text x="520" y="236" font-size="12" fill="#1f2328" font-weight="700">4</text>
@@ -20,6 +20,6 @@
 <rect x="60" y="282" width="18" height="14" fill="#b45f06"/>
 <text x="84" y="294" font-size="11" fill="#1f2328">hidden by water + cloud exclusion (all 39)</text>
 <rect x="400" y="282" width="18" height="14" fill="url(#hatch)" stroke="#0f766e" stroke-width="2.5"/>
-<text x="424" y="294" font-size="11" fill="#1f2328">also hidden by cloud-only exclusion (4) - the scope chosen</text>
-<text x="60" y="318" font-size="10.5" fill="#7d858f">Sources: docs/lld/implant-bench.md "Decisions"; 13 offshore of set1's 27 water objects; 14 = 27 - 13.</text>
+<text x="424" y="294" font-size="11" fill="#1f2328">also hidden by cloud-only exclusion (4) - objects seen through haze</text>
+<text x="60" y="318" font-size="10.5" fill="#7d858f">Sources: docs/lld/implant-bench.md "Decisions"; 13 offshore of set1's 27 water objects; 14 = 27 - 13. set4: haze, not desert (2026-10-18).</text>
 </svg>

@@ -196,7 +196,8 @@ Caveat 1 above (larger targets partly visible) did not show up as a loss of obje
 The reconstruction gains over FT02b (3.99 / 4.37 / 5.57 to 3.93 / 4.21 / 5.41) are, in the README's
 words, "more plausibly from the constant SAM weight 0.5 (FT02b ramped it from 0) than from the edge term".
 On the larger implanted benchmark FT02c has the best easy- and medium-tier pAUC of any model (0.371,
-0.124), by a small margin (part 56).
+0.124), by a small margin (part 56). (That was bench-v1. On bench-v2.1, read correctly, FT02c ties
+v0.2.0 and FT03: 35.1% caught at the top 1% against 35.5% and 34.9% - part 59.)
 
 ## Common confusions
 

@@ -5,6 +5,13 @@
 > mask gets wrong is thrown away - so decide the scope first (cloud out, water in, because vessels
 > matter), then count the objects it costs and audit the mask before it ships.
 
+> **Correction, 2026-10-18.** This part first said FT03 over-fires on **bright desert** in set4 (11% of
+> the scene called cloud) and called the 4 set4 objects inside it a mask error. That reading was wrong. A
+> true-colour view of set4 shows a bright cloud / smoke streak and a large hazy patch, and FT03's mask
+> follows them; set4's "cloud" pixels are bluish, not red (Step 4 works the colour test). The 4 objects
+> sit under haze. The rows, figure and Step 4 below are corrected; the FT04 mask fine-tune it proposed
+> has since run and passed (Indradhanu course, part 60). The scope lesson stands.
+
 ## Where we are
 
 Part 19 introduced `exclude`: score a scene, then set chosen classes to 0 using a segmentation head's
@@ -62,12 +69,13 @@ inside it**:
 | set1, on water, more than 3 px offshore | 13 | single pixels, NIR median 0.040 for set1's 27 - likely vessels |
 | set1, on water, within 3 px of shore | 14 | single pixels near the coast |
 | set2 and set3, shorelines | 8 | objects on the land-water edge |
-| set4, bright desert that FT03 calls cloud | 4 | **a mask error** - FT03 calls 11% of set4 cloud |
+| set4, under the haze and cloud streak FT03 calls cloud | 4 | **a scope question at the haze edge** - FT03 calls 11% of set4 cloud, and the mask follows real haze (corrected 2026-10-18; first read as bright desert) |
 
 ![Figure 21.1 - The 39 real objects inside FT03's mask](figures/21-the-39.svg)
 
 *Figure 21.1 - The 39 labelled objects lying wholly inside FT03's water / cloud mask, by kind. Excluding
-water and cloud hides all 39 (amber); excluding cloud only hides the 4 that the mask wrongly calls cloud.*
+water and cloud hides all 39 (amber); excluding cloud only hides the 4 in set4 that sit under haze FT03
+calls cloud (first read as a desert mask error; corrected 2026-10-18).*
 
 Any part of this course or the Indradhanu course written before this check that says no real object
 sits on water is wrong; the dated notes in those parts point here.
@@ -102,27 +110,49 @@ list.** With vessels in scope, that is a bad trade, and pAUC - the measure the a
 is no better for it (0.165 against 0.166).
 
 On bench-v2 cloud exclusion lifts FT03 from 32.3% to 33.4% caught at the top 1% (pAUC 0.164 -> 0.169),
-most of it on EnMAP hosts (15.7% -> 18.6%). bench-v2 places no implant on water (part 20), so it cannot
+most of it on EnMAP hosts (15.7% -> 18.6%). On bench-v2.1, rebuilt after part 22's bug fix, it adds about a point to
+every model alike (FT03 34.9% -> 36.0%, v0.2.0 35.5% -> 36.7%). bench-v2 places no implant on water (part 20), so it cannot
 show the vessel cost at all - one more reason the real bench decides.
 
-## Step 4 - what a mask error costs
+## Step 4 - what a mask's call costs, and the claim that was wrong twice
 
-Cloud-only exclusion still hides the 4 set4 objects that sit on bright desert. That is not a scope
-choice; it is the mask being wrong. FT03's head was trained only on EnMAP's provider labels (Indradhanu
-course, parts 47 and 48), and bright bare ground looks like cloud in the visible: bright and flat.
+Cloud-only exclusion still hides the 4 set4 objects. On 2026-10-17 that was read as a mask error:
+FT03's head was trained only on EnMAP's provider labels (Indradhanu course, parts 47 and 48), and bright
+bare ground looks like cloud in the visible - bright and flat. Set4 looked like a bright, bare scene, so
+"FT03 calls bright desert cloud" was the story.
 
-Count what an error of that size means. If a mask wrongly covers 11% of a scene, then
+It did not survive a look at the picture (log, 2026-10-18). A true-colour view shows a bright cloud /
+smoke streak and a large hazy patch, and FT03's 11% follows them. The colour test settles it. Bright
+desert is red: its reflectance rises with wavelength, so near-infrared (NIR) over blue is above 1. Haze
+scatters blue light most, so NIR over blue falls below 1. Work one pixel of each:
+
+```
+desert-like:  blue 0.20, NIR 0.35   ->  0.35 / 0.20 = 1.75   red
+set4 "cloud": blue 0.30, NIR 0.18   ->  0.18 / 0.30 = 0.60   blue
+```
+
+For 75% of set4's "cloud" pixels the ratio is 0.54 to 0.65 (log). That is haze, not desert. So the 4
+objects are not lost to a fault in the mask; they are objects a labeller could see through haze, and
+the question is one of scope - should the product look under thin cloud? - not of mask quality.
+
+The arithmetic of a wrong mask still matters, because the next mask may be wrong. Had 11% of the scene
+been called cloud wrongly:
 
 ```
 share of the scene the analyst can no longer see:   11%
 real objects there on set4 (from the check above):   4 of 230 = 1.7%
 ```
 
-Small on this scene. But a desert scene full of targets would lose them in proportion, silently - the
-score is 0, not "unknown". That is why the log proposes a mask fine-tune (FT04, the proposal's stage 4)
-before exclusion is wired into `backend/`. Today the product excludes water and cloud only through the
-optional threshold-based `keep_mask` from the `scene_segmentation` or `cloud_mask` actions (evaluation
-LLD, "Decisions"); FT03's head is not used there.
+Small on this scene. But a scene full of targets under a wrong mask would lose them in proportion,
+silently - the score is 0, not "unknown". That is why the log proposed a mask fine-tune before
+exclusion is wired into `backend/`. It ran as FT04 on 2026-10-18 and passed: masks held, and cloud
+exclusion on its own masks is the release candidate (Indradhanu course, part 60). Today the product
+still excludes water and cloud only through the optional threshold-based `keep_mask` from the
+`scene_segmentation` or `cloud_mask` actions (evaluation LLD, "Decisions"); no head's mask is used
+there yet.
+
+**A negative claim about a picture ("that is desert") deserves the same check as a positive one: look
+at the picture.**
 
 ## Step 5 - the order of questions
 
@@ -131,7 +161,8 @@ When someone proposes excluding a class, ask in this order:
 1. **Scope.** Is anything we must find ever on that class? (Vessels: yes, so water stays.)
 2. **Price.** How many labelled objects are inside the mask? Count them by hand on the real bench, as
    in Step 2. A metric that falls without telling you why is not enough.
-3. **Mask quality.** Where does the mask fire wrongly? (Bright desert as cloud.)
+3. **Mask quality.** Where does the mask fire wrongly? Check against a true-colour view before you
+   call it wrong: set4's "bright desert as cloud" turned out to be haze.
 4. **Measure.** Judge the result on the top of the list - pAUC, TPR at 0.1%, objects caught - and
    report ROC-AUC beside it, knowing that ties at 0 lower it by construction (part 19).
 
@@ -141,8 +172,8 @@ When someone proposes excluding a class, ask in this order:
 The model is unchanged. The same mask lifts v0.2.0 as much as FT03 (part 19). It is a change of scope.
 
 **"Cloud-only lost the 39 objects too."**
-No. By the LLD's breakdown 35 of the 39 sit inside FT03's *water* mask; cloud-only hides only the 4 on
-desert that FT03 calls cloud.
+No. By the LLD's breakdown 35 of the 39 sit inside FT03's *water* mask; cloud-only hides only the 4 in
+set4 that sit under the haze FT03 calls cloud.
 
 **"The water claim was a small slip."**
 It decided a product rule. The rule was reversed once the 39 objects were actually looked at. Check a
@@ -152,7 +183,12 @@ negative claim ("nothing is there") with the same care as a positive one.
 bench-v2 has no implants on water, so it cannot show the cost. Only the real bench has vessels.
 
 **"Exclusion is in the product now."**
-Not yet. It runs in `app/evaluation/` only. FT04 (mask fine-tune) is proposed first.
+Not yet. It runs in `app/evaluation/` only. FT04 (the mask fine-tune) passed on 2026-10-18; wiring its
+checkpoint, masks and cloud exclusion into `anomaly_scoring` is the next step (log).
+
+**"Set4's 11% cloud is a desert mask error."**
+That was the first reading, and it was wrong: the mask follows a cloud / smoke streak and haze, and
+set4's "cloud" pixels are bluish (NIR / blue 0.54-0.65 for 75%). See Step 4.
 
 ## Check yourself
 
@@ -202,22 +238,15 @@ mask quality (where does it call bright rock or cloud snow?), then measure at th
 ROC-AUC reported beside it. Note that FT03's snow class has never been measurable (one test tile).
 </details>
 
----
+<details>
+<summary>6. A pixel FT03 calls cloud reads blue 0.25 and NIR 0.40; another reads blue 0.32 and NIR 0.19. Which looks like bright bare ground and which like haze?</summary>
 
-## You have finished
+```
+first:   0.40 / 0.25 = 1.60   rises with wavelength -> red, ground-like
+second:  0.19 / 0.32 = 0.59   falls with wavelength -> bluish, haze-like (inside set4's 0.54-0.65)
+```
 
-You can now read the source. Where to go next:
+Only the first would support a "desert called cloud" reading. Set4's pixels look like the second.
+</details>
 
-- **`docs/01-orientation.md`** through **`docs/10-code-style.md`** - the reference docs
-- **`docs/lld/`** - low-level designs for individual subsystems; for the last six parts,
-  `docs/lld/evaluation.md` and `docs/lld/implant-bench.md`
-- **`docs/09-known-issues.md`** - what is currently broken, and what to check before trusting
-  a green test run
-
-One habit worth keeping from this course: **when a comment and the code disagree, the code
-wins**, and when a summary and the data disagree, the data wins. You met several such disagreements -
-the regularisation default, the `MIN_VALID_FRACTION` comment and the discarded `units` field in parts 1
-to 15; `compute_roc`'s threshold docstring in part 16; the LLD's old `strength_for_z` and "10 px apart" in
-part 18; the cache key and `dirty` flag in part 19, both fixed since; bench-v2's per-tier foreignness and
-the saved v0.2.0 reading check in part 20; and "no real object sits on water" in this part. There will be
-more.
+Next: [part 22](22-the-sorting-bug.md) - how a sorting bug rewrote the scoreboard.

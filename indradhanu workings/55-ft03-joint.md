@@ -223,13 +223,16 @@ the head for that; it was never the step meant to raise detection.
 > **Update, 2026-10-18.** Stage 5 went differently: class-aware scoring was not shipped, and the head's
 > first job became a **cloud exclusion mask** (water was kept, because vessels are in scope), which lifts
 > FT03's real-bench pAUC 0.158 -> 0.166. The same head over-fires on bright desert (11% of set4 called
-> cloud), so a mask fine-tune (FT04) is proposed before it ships. Parts 57 and 59; anomaly-detection
+> cloud), so a mask fine-tune (FT04) is proposed before it ships. *(Corrected later on 2026-10-18: set4's
+> 11% is haze and a cloud / smoke streak that the mask follows, not desert. FT04 ran anyway - for masks on
+> all three sensors and the rare classes - and passed; part 60.)* Parts 57 and 59; anomaly-detection
 > course, part 21.
 
 ## Common confusions
 
 **"Joint means the PRISMA and AVIRIS-NG tiles are trained to segment too."**
 They pass through the segmentation pass but no loss reads their logits. They are there for BatchNorm.
+(From FT04 on they are taught too, from FT03's own confident calls - part 60.)
 
 **"seg_weight 0.1 means segmentation hardly matters."**
 It makes the segmentation term about 0.04 against reconstruction's 0.05 - comparable, not negligible.

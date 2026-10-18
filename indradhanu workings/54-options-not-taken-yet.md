@@ -150,6 +150,11 @@ the detection head as a second alternative, "more direct, but a new score and a 
 the implants' appearance". The recipe risk is guarded by holding one implant source (`host`) out of
 training and letting only the real bench pass the run.
 
+**Later on 2026-10-18:** FT05 did not pass - it tied FT03 on the real bench and its last epochs cost
+AVIRIS-NG reconstruction (part 58). Option 1's teacher idea did run, in another form: FT04 used FT03 as a
+teacher for segmentation pseudo-labels on PRISMA and AVIRIS-NG (part 60) - a teacher for masks, not the
+cross-sensor reconstruction distillation described in section 1, which is still deferred.
+
 ## Common confusions
 
 **"Are the teacher head and the oracle head two proposals?"** No. They were names for the same idea in the

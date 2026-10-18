@@ -13,6 +13,7 @@ and counting slightly differently.
 EvaluationConfig.from_file(path)            # config.py - pydantic; ModelSpec, DatasetSpec, ScorerSpec, MetricSpec
 Evaluation(config, datasets=None, models=None).run() -> summary dict      # runner.py; overrides for tests
 PrismaBench(root, scenes=None), ImplantBench(path, hosts=None)            # datasets.py - yield EvalScene
+resample(cube, wl, grid) -> (G, H, W)       # datasets.py - linear, wl in any order (sorted first since b94dbfd)
 EvalScene(dataset, name, sensor, cube, wavelengths_nm, valid, objects, attrs, units, reader, fingerprint).read(mode)
 EvalModel(spec, cache_dir).reconstruct(scene) / .segment(scene)          # models.py
 score(spec, cube, recon, valid, classes) -> (H, W)                       # scorers.py
@@ -54,6 +55,10 @@ for each dataset scene (one in memory):
 2. **Each model reads a scene its own way** (reading `auto`): wavelength stems native bands within their
    trained-wavelength record; fixed stems se202; v0.2.0 product165. PRISMA scenes reload through the product's
    band_filter_apply for non-native modes; other datasets are linearly resampled (close, not identical).
+   `resample` must sort the wavelengths first: PRISMA lists its bands descending, and before b94dbfd the unsorted
+   `np.interp` turned every PRISMA implant host into copies of two bands for v0.2.0. Since the fix the generic
+   path reproduces the product path on the real bench exactly (`C:/es/eval/resample_check_fixed`); keep that
+   check as the test of this invariant (docs/lld/implant-bench.md, "Corrections").
 3. **Real and implanted objects are tiered by the same contrast function** (`implant.contrast_z`, diamond ring,
    tier edges 0.502 / 0.934), so `group_by: tier` means the same on both benchmarks.
 4. **Chance is analytic** per object: 1 - (1 - q)^m, m its dilated pixel count (4-neighbour, the 1-px tolerance).
@@ -111,8 +116,11 @@ summary.json, per_object.csv, per_scene.csv, provenance.json); summarised in
 |---|---|---|
 | `configs/eval/bench_v2.json` | `C:/es/eval/v2` | bench-v2 acceptance: FT02c / FT03 above PCA-RX (caught top 1% 32.8% / 32.3% vs 30.2%; docs/lld/implant-bench.md, "bench-v2") |
 | `configs/eval/cloud_only.json` | `C:/es/eval/cloud_only` | FT03, plain vs cloud-only vs water + cloud. PRISMA bench: pAUC 0.158 / 0.166 / 0.165, caught top 0.1% 14.3% / 15.8% / 16.5%, ROC-AUC 0.853 / 0.850 / 0.830. bench-v2 caught top 1%: 32.3% / 33.4% / 33.7%. Cloud-only leaves set1 unchanged; its gain is set3 and set4 |
-| `C:/es/eval/resample_check.py` (one-off, not in the repo) | `C:/es/eval/resample_check` | v0.2.0 on the PRISMA bench read through the generic linear resample instead of band_filter_apply: caught top 1% 15.8%, pAUC 0.094, ROC-AUC 0.752 (vs 44.2% / 0.159 / 0.854). Bears on why v0.2.0 trails on implant hosts; unresolved |
-| `configs/eval/ft05_ep5.json` | `C:/es/eval/ft05_ep5` | FT05 epoch 5 vs FT03, plain and cloud-only. PRISMA bench: pAUC 0.15801 vs 0.15805, TPR at 0.1% 0.0594 vs 0.0582, caught top 0.1% 130 vs 130 - a tie. bench-v2: caught top 1% 32.8% vs 32.3%, pAUC 0.167 vs 0.164, `host` source 29.6% vs 29.4% |
+| `C:/es/eval/resample_check.py` (one-off, not in the repo) | `C:/es/eval/resample_check` | v0.2.0 on the PRISMA bench read through the generic linear resample instead of band_filter_apply: caught top 1% 15.8%, pAUC 0.094, ROC-AUC 0.752 (vs 44.2% / 0.159 / 0.854). **Resolved 2026-10-18:** the descending-wavelength bug (b94dbfd) |
+| the same script, after b94dbfd | `C:/es/eval/resample_check_fixed` | generic resample = product path: 44.2% / 14.1% / 0.159 / 0.854 / 0.058 |
+| `configs/eval/ft05_ep5.json` | `C:/es/eval/ft05_ep5` | FT05 epoch 5 vs FT03, plain and cloud-only. PRISMA bench: pAUC 0.15801 vs 0.15805, TPR at 0.1% 0.0594 vs 0.0582, caught top 0.1% 130 vs 130 - a tie. bench-v2: caught top 1% 32.8% vs 32.3%, pAUC 0.167 vs 0.164, `host` source 29.6% vs 29.4% (signature implants garbled - before b94dbfd) |
+| `configs/eval/bench_v2_1.json` | `C:/es/eval/v2.1` | bench-v2.1 (fixed signatures, foreign tol 1.2), all models, PCA-RX, cloud exclusion by FT03's masks. Caught top 1%: v0.2.0 35.5%, F001 33.1%, FT02c 35.1%, FT03 34.9%, FT05 ep5 35.4%, PCA-RX 33.2%; exclusion ~+1 point for every model. No new model beats v0.2.0 (docs/lld/implant-bench.md, "bench-v2.1") |
+| `configs/eval/ft04.json` | `C:/es/eval/ft04` | FT04 vs FT03, real bench and bench-v2.1, cloud exclusion with each model's own masks and swapped. Real bench pAUC / TPR at 0.1%: FT04 0.162 / 0.061, FT04 + own masks 0.170 / 0.065 (the release candidate), FT03 + own masks 0.166 / 0.064; masks interchangeable (FT04 + FT03 masks 0.170, FT03 + FT04 masks 0.165) |
 
 ## Decisions
 
@@ -126,8 +134,10 @@ summary.json, per_object.csv, per_scene.csv, provenance.json); summarised in
   once per scene. It is the check that a benchmark rewards what a model adds over the cube's own statistics.
 - **Cloud excluded by masking after scoring; water kept** (user, 2026-10-17). First "we don't detect anything on
   water and cloud"; then, after 13 of the 39 real objects inside FT03's water / cloud mask turned out to be single
-  pixels > 3 px offshore (likely vessels), vessels on water were put in scope. FT03's head is the segmenter. Before
-  this ships, a mask fine-tune (FT04) is proposed: FT03 calls 11% of set4's bright desert cloud. Class-aware
+  pixels > 3 px offshore (likely vessels), vessels on water were put in scope. FT03's head was the segmenter; FT04's
+  is the release candidate's (FT04 + cloud exclusion on its own masks, 2026-10-18). FT04 was first proposed as a
+  mask fix because FT03 called 11% of set4 "bright desert" cloud; corrected 2026-10-18, that 11% is haze and a
+  cloud / smoke streak the mask follows, and FT04 ran for masks on all three sensors and the rare classes. Class-aware
   scoring (per-class whitening) was tested first and not shipped (log, research/experiments/indradhanu-finetune/
   README.md: set1 water share of false alarms 14% -> 92%, PRISMA pAUC 0.158 -> 0.134). Water + cloud exclusion is
   kept as a scorer variant for comparison. Not yet in `backend/`: there, water and cloud are left out only by an

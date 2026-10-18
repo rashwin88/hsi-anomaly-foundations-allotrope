@@ -34,12 +34,16 @@ evaluation_bands(wl, finite, valid) -> (B,) bool           # the bands the evalu
                                                            # >= 60% finite over valid pixels)
 implant_tile(rng, refl, wl, real, library, n, psf_sigma=1.4, sources=...) -> (H, W) ids   # training-time (FT05):
                                                            # v2 implants into one tile, placed anywhere valid
+interp_spectrum(wl, src_wl, values) -> (len(wl),)          # np.interp with src_wl sorted first (b94dbfd): the
+                                                           # PRISMA bench lists 2477 -> 453 nm (see Invariant 5)
 ```
 
 ```bash
 python scripts/build_implant_bench.py real  <stage1_datasets> <work>/real.json
 python scripts/build_implant_bench.py build <test shards> <work>/real.json <bench> [--seed 0]
-    [--version 2 --psf-sigma <px> --hosts "sensor=prefix,prefix;..."]     # v2: --version 2 --psf-sigma 1.4 --seed 0
+    [--version 2 --psf-sigma <px> --foreign-tol <x> --hosts "sensor=prefix,prefix;..."]
+    # v2:   --version 2 --psf-sigma 1.4 --seed 0                    (foreign-tol default 1.5)
+    # v2.1: --version 2 --psf-sigma 1.4 --foreign-tol 1.2 --seed 0  (after b94dbfd)
 python scripts/evaluate.py configs/eval/<name>.json     # dataset {"kind": "implant"}; docs/lld/evaluation.md
 ```
 
@@ -70,6 +74,12 @@ evaluate: product exclusions; per-band nearest-valid fill; each model's band rea
 3. **Hosts are held out**: test-split scenes only, which were never trained on (split by datatake / site / line).
 4. **Objects never touch**: each blocks its box grown by 4 + 10 px (about 15 px between objects), so a ring
    (steps 2-3) never contains another object.
+5. **Never pass a band list to `np.interp` unsorted.** NumPy does not check, and "if the sequence `xp` is
+   non-increasing, interpolation results are meaningless" (its docstring). The PRISMA bench's evaluated bands run
+   2477 -> 453 nm; a PRISMA host's `wavelengths.npy` is two descending runs (977 -> 407 nm, then 2497 -> 943 nm).
+   Unsorted, every query above the last listed wavelength returns the last listed value. Use `interp_spectrum`
+   (or sort as `app/evaluation/datasets.resample` and the product's `spectral_resampler.py` do);
+   `tests/test_evaluation/test_implant.py::test_descending_band_lists` pins it.
 
 ## Failure modes
 
@@ -92,8 +102,10 @@ evaluate: product exclusions; per-band nearest-valid fill; each model's band rea
 - **Not done**: sub-pixel objects smaller than one pixel (fill fraction already covers sub-pixel abundance within
   each object pixel); shadows; water hosts. Real objects DO sit on water: 39 of the 909 lie wholly inside FT03's
   water / cloud mask (checked 2026-10-17): set1 27 single pixels on water-dark NIR (median 0.040), 13 of them > 3 px
-  offshore - likely vessels; set2 / set3 8 on shorelines; set4 4 on bright desert that FT03 calls cloud (11% of
-  that scene - a mask error). The first real-object scan used VIS < 0.04 as "water", which misses turbid coastal
+  offshore - likely vessels; set2 / set3 8 on shorelines; set4 4 inside the 11% of that scene FT03 calls cloud.
+  That 11% was first recorded as "bright desert - a mask error"; corrected 2026-10-18: a true-colour view shows a
+  bright cloud / smoke streak and a large hazy patch that the mask follows, and the pixels are bluish (NIR / blue
+  0.54-0.65 for 75%), so the 4 are objects under haze (research/experiments/indradhanu-finetune/README.md, log). The first real-object scan used VIS < 0.04 as "water", which misses turbid coastal
   water (VIS ~0.08).
 
 ## bench-v2 (accepted 2026-10-17)
@@ -161,14 +173,57 @@ the evaluator's bands and the bench ring: foreign 0.0071, halo 0.643, z 0.687 - 
    change between the builds; not investigated.
 2. *Models beat PCA-RX, as on the real bench* - `configs/eval/bench_v2.json`, `C:/es/eval/v2`: caught top 1%
    v0.2.0 22.1%, F001 29.2%, FT02c 32.8%, FT03 32.3%, PCA-RX 30.2%; pAUC 0.118 / 0.145 / 0.166 / 0.164 / 0.154.
-   Met for the fine-tuned models; F001 alone is below PCA-RX.
+   Met for the fine-tuned models; F001 alone is below PCA-RX. (v0.2.0's figures are void - reading bug, below;
+   every `signature` implant was garbled.)
 
-v2 replaces v1 (v1 reproducible with `--version 1 --seed 0`). Open: EnMAP hosts ~16% for every model and PCA-RX;
-v0.2.0 ties FT03 on the real bench but trails on v2 - the saved reading check (`C:/es/eval/resample_check`,
-2026-10-17) scores v0.2.0 on the real bench through the generic linear resample at 15.8% caught top 1% (pAUC
-0.094) vs 44.2% through band_filter_apply, which points at the implant hosts' resample rather than the model;
-a claim that this was ruled out has no saved output; training overlap with the bench sites is unverified.
+v2 replaces v1 (v1 reproducible with `--version 1 --seed 0`); v2.1 replaces v2 (below). Open at the time: EnMAP
+hosts ~16% for every model and PCA-RX; v0.2.0 ties FT03 on the real bench but trails on v2. The second was
+resolved on 2026-10-18 (Corrections, below).
+
+## Corrections (2026-10-18)
+
+**Bug: descending band lists fed to `np.interp`** (fixed in b94dbfd; Invariant 5). Two places:
+
+- `app/evaluation/datasets.resample`, the generic resample fixed-grid models (v0.2.0) get on implant hosts. On a
+  PRISMA host every grid band became a copy of the 977 nm or the 943 nm band (the first and last listed). On the
+  real bench read the same way (`C:/es/eval/resample_check`), v0.2.0 scored 15.8% caught top 1% / pAUC 0.094 /
+  ROC-AUC 0.752 against 44.2% / 0.159 / 0.854 through band_filter_apply; after the fix the generic path gives
+  exactly the product-path numbers (`C:/es/eval/resample_check_fixed`). An earlier note that the two readings were
+  identical was a misread. **v0.2.0's bench-v1 (19.0%) and bench-v2 (22.1%) numbers are void.** Native-band
+  models were never resampled and are unaffected. EnMAP and AVIRIS-NG hosts list ascending and were read
+  correctly.
+- the `signature` source, in the builder's `place_and_implant` and in `implant_tile` (`np.interp(wl, rw, d)` ->
+  `interp_spectrum`): the real objects' `d` is
+  sampled at the bench's descending 185 bands, so every host band above 453 nm received `d(453 nm)` - a flat step.
+  Garbled in bench-v1 (half the implants), bench-v2 (a third) and FT05's training (half). Contrast and
+  foreignness were still matched, on the flat step.
+- Also fixed: the library FWHM on descending host lists (`np.gradient` was negative, so the 4-15 nm clip always
+  gave 4 nm) - now `np.abs(np.gradient(wl))`, in the builder and in `finetune_trainer._library`. Material spectra
+  on PRISMA hosts had been resampled with a 4 nm width rather than the band spacing; their effect was not measured
+  separately.
+
+**What changes.** The "pretraining is the big step" reading (v0.2.0 19-22% -> F001 25-29%) was the bug. bench-v2's
+marginal acceptance-1 miss (all 6 PRISMA hosts: foreignness 1.10x / 1.28x / 1.27x real against a 1.25x limit)
+motivated the tighter `--foreign-tol` of v2.1.
+
+## bench-v2.1 (2026-10-18) - the implant benchmark now
+
+Built `--version 2 --psf-sigma 1.4 --foreign-tol 1.2 --seed 0` after b94dbfd: `C:/es/implant/bench-v2.1` (dev
+laptop), 18 hosts, 2,817 objects (signature 985, material 927, host 905). Per-tier foreignness vs real (PRISMA
+hosts) 1.05x / 1.15x / **1.60x** (subtle / medium / easy): the tighter tolerance skips low-foreignness easy
+targets, so the survivors skew high - acceptance 1's 25% limit is missed in the easy tier by a selection effect,
+recorded, not fixed. Halo 0.92-1.06x.
+
+`configs/eval/bench_v2_1.json` (`C:/es/eval/v2.1`), residual Mahalanobis, caught top 1% (0.1%) / pAUC <= 1%:
+v0.2.0 35.5% (12.6%) / 0.168; F001 33.1% (11.7%) / 0.157; FT02c 35.1% (12.8%) / 0.169; FT03 34.9% (12.7%) / 0.168;
+FT05 ep5 35.4% (12.8%) / 0.170; FT04 35.1% (12.7%) / 0.169 (`C:/es/eval/ft04`); PCA-RX 33.2% (9.8%) / 0.154.
+Cloud exclusion adds ~1 point to every model (v0.2.0 35.5 -> 36.7, FT03 34.9 -> 36.0, FT04 own masks 35.1 ->
+36.2). EnMAP hosts ~21% for every model and PCA-RX (unexplained).
+
+Acceptance 2 holds at the top 0.1% (every model above PCA-RX: 11.7-12.8% vs 9.8%; at the top 1% F001 ties it).
+**No new model measurably beats the shipped v0.2.0** - as on the real bench (pAUC 0.159 vs FT03 0.158).
+The new models' measurable wins are masks (cloud exclusion), native bands and reconstruction.
 
 **Scope gap.** Vessels on water are in scope (user, 2026-10-17), but `place_and_implant` still removes water and
-cloud from the eligible area, so v2 holds no water objects and cannot measure a water exclusion's cost. The
-training-time `implant_tile` (FT05) does place on water.
+cloud from the eligible area, so v2 and v2.1 hold no water objects and cannot measure a water exclusion's cost.
+The training-time `implant_tile` (FT05) does place on water.

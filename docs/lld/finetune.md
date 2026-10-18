@@ -15,13 +15,21 @@ SpectralStemSegFormerMAE(..., seg_classes=0, seg_decoder_dim=128)
   .trained_band_mask(wl, tol_nm=15) -> (N,) bool                  # reads trained_wl
   .forward_mixed([(x, wl, band_valid, keep_mask, out_wl), ...])     # one (B_g, M_g, H, W) per group
       -> [x_hat_g, ...]                                             # wavelength stems only
+  .segment_mixed([(x, wl, band_valid), ...]) -> [logits_g, ...]     # joint + mixed batches (FT03 on)
 # app/utils/segmentation/targets.py
 CLASSES = ("water", "cloud", "thin_cloud", "shadow", "snow")
 LabelPolicy(plateau_elevation_m=3500, low_water_vapour=750, cirrus_min_level=2)
 enmap_targets(labels, meta, policy) -> (targets (5,H,W) float32, known (5,H,W) bool)
-masked_bce_dice(logits, targets, known) -> loss;  IoUTally().add(...).iou()
+PSEUDO_CONF = 0.9
+pseudo_targets(probs (5,H,W) uint8|float, refl, wl, valid, conf=PSEUDO_CONF) -> (targets, known)   # FT04
+masked_bce_dice(logits, targets, known, dice_weight=1.0, class_weights=None) -> loss;  IoUTally().add(...).iou()
+cloud_plausible(refl, wl) -> (H, W) bool          # label-QA cloud test; no caller since FT04 dropped the cloud guard
 # app/foundation_models/trainers/finetune_trainer.py   (registered as spectral_stem_finetune)
-FinetuneTrainer;  prepare_sample(sample, target_nm, labels, policy);  keep_sample(sample, skip)
+FinetuneTrainer;  prepare_sample(sample, target_nm, labels, policy, implant, pseudo_dir);  keep_sample(sample, skip)
+pseudo_sample_targets(sample, pseudo_dir) -> (targets, known)   # <pseudo_dir>/<key>.npy -> pseudo_targets; all unknown
+                                                               # if the tile has no teacher file (test split)
+implant_sample(sample, cfg)                    # FT05: implants into the pixels, clean.npy + implant.npy (3-px near mask)
+single_thread_worker(worker_id)                # DataLoader worker_init_fn: one BLAS / torch thread per worker
 gradient_l1(x_hat, x, band_valid, loss_mask) -> scalar   # edge term: |d x_hat - d x|, neighbour pairs both in mask
   ._mixed_loss(groups, model) -> (loss, kept)    # compute_loss routes a {"_groups": ...} batch here
 _MixedLoader(loaders, shares, seed)   # one source per batch, drawn by share
@@ -29,17 +37,29 @@ _AllSourcesLoader(loaders)            # every source per batch: {"_groups": [(na
 _SequentialLoader(loaders)            # validation: every test source in turn
 # app/models/training/training_config.py
 SpectralStemFinetuneConfig(sources=[FinetuneSource(name, train_dir, test_dir, share, band_list_path,
-                           labels, skip_scenes_path)], init_from, mode, seg_*, label policy fields,
+                           labels: "enmap" | "pseudo" | None, pseudo_dir, skip_scenes_path)],
+                           init_from, mode, seg_*, label policy fields, seg_head_from,
                            finetune_metrics_csv, mixed_batches=False,   # mixed_batches: adapt or joint
-                           grad_loss_weight=0.0)                        # edge term: mixed_batches only
+                           grad_loss_weight=0.0,                        # edge term: mixed_batches only
+                           seg_class_weights=None,                      # FT04: [1, 1, 1, 3, 3]
+                           implant_prob=0.0, implant_max_objects=4, implant_near_weight=5.0,
+                           implant_real_path, implant_psf_sigma=1.4, implant_sources, implant_seed=1,   # FT05
+                           loader_workers_per_source=None)              # FT05 from epoch 6, FT04: 2
+```
+
+```bash
+python scripts/pseudo_label.py <checkpoint> <shard dir> <out dir> [--band-list <json>] [--batch 32]
+    # teacher pass: <out>/<tile key>.npy, (5, 128, 128) uint8 = round(255 x sigmoid); resumes (skips written tiles)
 ```
 
 ## Data flow
 
 ```
 per source: local shards -> decode (.i16dz) -> keep_sample (skip scenes) -> prepare_sample
-            (align onto the source's band list; EnMAP label_* + meta -> seg_targets, seg_known; drop
-             meta.json and label_*) -> DataLoader
+            (align onto the source's band list; EnMAP label_* + meta -> seg_targets, seg_known, or, for a
+             "pseudo" source, the teacher's <key>.npy -> pseudo_targets -> seg_targets, seg_known; FT05:
+             implant_sample; drop meta.json and label_*) -> DataLoader (worker_init_fn single_thread_worker,
+             loader_workers_per_source or data.num_workers workers)
 train, default: _MixedLoader draws one source per batch by share (endless; restarts an exhausted source)
 train, mixed_batches (adapt / joint): _AllSourcesLoader - one DataLoader per source with batch size
        max(1, round(share x batch_size)); each step takes one sub-batch from every source
@@ -51,7 +71,11 @@ train, mixed_batches (adapt / joint): _AllSourcesLoader - one DataLoader per sou
         the edge term is logged as train_grad_l1 in finetune_metrics.csv, kept out of train L1
   probe   seg loss only, on labelled batches; backbone frozen, eval() so BatchNorm stats stay fixed
   adapt   SpectralStemMAETrainer.compute_loss (MAE + band augmentation)
-  joint   MAE loss + seg_weight x seg loss on labelled batches (second, unmasked encoder pass)
+  joint   MAE loss + seg_weight x seg loss on labelled batches (second, unmasked encoder pass; with
+          mixed_batches, segment_mixed over every source that carries targets, masked_bce_dice per source with
+          seg_class_weights, averaged over sources)
+  FT05    implanted input, MAE loss against clean.npy; hidden pixels within 3 px of an implant weighted
+          implant_near_weight in the loss mask
 validation: every test source in turn; per-sensor L1/SAM and per-class IoU -> finetune_metrics.csv
             probe ranks epochs by seg loss, adapt/joint by the full-SAM reconstruction score
 ```
@@ -68,6 +92,14 @@ validation: every test source in turn; per-sensor L1/SAM and per-class IoU -> fi
 4. **Old checkpoints keep working:** no `trained_wl` -> record = the curve's wavelengths; no `seg_head` keys ->
    loaded with the head absent (pretrained) or fresh (fine-tuning).
 5. **The record only grows**, and wavelengths within 0.5 nm of one already recorded (or of each other) count once.
+6. **Pseudo-labels teach only what the teacher is sure of.** `pseudo_targets` sets known where p > 0.9 or p < 0.1
+   (stored bytes >= 230 or <= 25) on pixels with >= 90% of bands finite, for water and cloud only (thin cloud,
+   shadow, snow always unknown); a confident water with mean 800-900 nm reflectance > 0.15 becomes a known
+   not-water (target 0, still known). Thresholds live in the loader, not the teacher's files, so they can change
+   without re-running `pseudo_label.py`.
+7. **Class weights form a weighted mean over the classes present**: `(w x per)[has].sum() / w[has].sum()`. A class
+   with no known pixel in the batch drops out of numerator and denominator; on a pseudo-labelled sub-batch only
+   water and cloud are present, so the rare-class weights act on EnMAP sub-batches only.
 
 ## Failure modes
 
@@ -77,7 +109,10 @@ validation: every test source in turn; per-sensor L1/SAM and per-class IoU -> fi
 | a source folder with no `.tar` | `FileNotFoundError` naming the source |
 | `segment` on a model without a head | `ValueError` |
 | probe on a source without labels | its batches are skipped (no loss), so give probe labelled sources only |
-| `mixed_batches` with mode probe or joint | `ValueError` from the config validator |
+| `mixed_batches` with mode probe | `ValueError` from the config validator (adapt and joint are allowed) |
+| `implant_prob` without `mixed_batches` and `implant_real_path` | `ValueError` from the config validator |
+| a "pseudo" source tile with no `<key>.npy` in `pseudo_dir` (or no `pseudo_dir`) | silent: the tile is all unknown, reconstruction only. Check the teacher pass covered the shards |
+| loader workers with their own BLAS pools | not an error: on the g6e.2xlarge, 18 workers ran the implant transform at 4.7 s per tile instead of 1.8 s (FT05 2 h 41 min per epoch). `single_thread_worker` is always installed; keep `loader_workers_per_source` x sources at or under the vCPUs |
 | `mixed_batches` on a source without `band_list_path` whose samples carry differing band lists | `ValueError` ("mixed batches need one band list per source") |
 | `keep_mask` given for some groups of `forward_mixed` and not others | not checked: group 0 decides - if it has none, the others' masks are ignored; if it has one, `torch.cat` fails on the `None`. `_mixed_loss` always sets all |
 
@@ -120,7 +155,8 @@ validation: every test source in turn; per-sensor L1/SAM and per-class IoU -> fi
   BatchNorm statistics, with one code path. The alternatives FT02's README named were keeping BatchNorm in eval
   mode during adapt (statistics stay F001's, from SpectralEarth) and re-estimating it on a balanced mix before
   each validation (fixes what evaluation sees, not the per-sensor normalisation during training).
-  Adapt only: joint's segmentation pass is a second, unmasked pass and is not mixed yet.
+  At first adapt only; from FT03 joint mode mixes too (`segment_mixed`), with FT01's head as a warm start
+  (`seg_head_from`).
 - **Sub-batch sizes by rounding** (`max(1, round(share x batch_size))`): at batch 8 the effective shares are
   3/8, 3/8, 2/8 = 0.375 / 0.375 / 0.25, not 0.40 / 0.35 / 0.25 - PRISMA gains, EnMAP loses 2.5 points.
   Accepted; the sizes need not sum to batch_size for other shares or batch sizes.
@@ -136,5 +172,20 @@ validation: every test source in turn; per-sensor L1/SAM and per-class IoU -> fi
   directly but on targets someone has to invent. Study notes: course part 54 (`indradhanu workings/`).
 - **Score-map edge correction rejected** (2026-10-16): see Findings. A training-time edge term on hidden pixels
   (gradient matching, FT02c) is planned after FT02b.
-- **Not done:** class weighting / oversampling for rare classes (shadow, snow) - decided after FT01's IoUs; a
-  held-out snow set (EnMAP test has one snow tile).
+- **Pseudo-labels for PRISMA and AVIRIS-NG (FT04, 2026-10-18)**: FT03 is the teacher (`scripts/pseudo_label.py`
+  over the training shards; FT04 starts from FT03's own weights). Checked before launch on 150 EnMAP tiles against
+  EnMAP's labels: guarded pseudo water IoU 0.875, the teacher's raw confident cloud 0.82. **No cloud guard:**
+  `cloud_plausible` (bright and flat, from the label QA) rejected 69% of EnMAP's labelled clouds on a test shard,
+  and set4's "11% cloud" it was aimed at is haze and a cloud / smoke streak, not bright desert (log, 2026-10-18).
+  Result: IoU water / cloud 0.839 / 0.810 (FT03 0.841 / 0.815), SAM 3.88 / 4.11 / 5.46 deg (FT03 3.92 / 4.21 /
+  5.48); the release candidate (research/experiments/indradhanu-finetune/FT04-final-joint/README.md).
+- **Rare-class weights `[1, 1, 1, 3, 3]` (FT04)**: shadow IoU 0.205 -> 0.223; water / cloud held.
+- **Implant-denoising (FT05, 2026-10-17/18)**: 50% of training tiles get 1-4 bench-v2 implants (`signature` and
+  `material` sources; `host` held out), loss against the clean tile, x5 near implants. Did not pass: epoch 5 ties
+  FT03 on the real bench, epoch 10 costs AVIRIS-NG SAM (5.67 vs 5.48). Half its implants had garbled signatures
+  (descending-wavelength `np.interp` bug, fixed in b94dbfd after launch; docs/lld/implant-bench.md, "Corrections").
+- **Single-thread loader workers, 2 per source (2026-10-18)**: FT05's loaders ran 18 processes each with its own
+  BLAS thread pool on 8 vCPUs; one thread per worker and 2 workers per source took an epoch from 2 h 41 min to
+  43 min. FT04 uses the same setting.
+- **Not done:** oversampling for rare classes (weighting is done, FT04); a held-out snow set (EnMAP test has one
+  snow tile); thin cloud, shadow and snow pseudo-labels (the teacher is not good enough at them to copy).

@@ -1,11 +1,13 @@
 # Fine-tuning Indradhanu with a segmentation head
 
-**Status:** agreed 2026-10-16 (classes, shared model, L40S); label policy fixed 2026-10-16. As of 2026-10-17:
-stages 1-3 run (FT01, FT02, FT02b, FT02c, FT03); **FT03 (joint) passed**. Stage 5: class-aware scoring tested and
-not shipped; **exclusion** by FT03's masks chosen instead - cloud only since 2026-10-17 (vessels on water are in
-scope), not yet in `backend/`; a mask fine-tune (FT04) is proposed first. Implant bench-v2 passed its acceptance on
-2026-10-17 and detection-supervised fine-tuning (FT05, `detection-supervised-finetuning.md`) is running. Running log:
-`research/experiments/indradhanu-finetune/README.md`.
+**Status:** agreed 2026-10-16 (classes, shared model, L40S); label policy fixed 2026-10-16. As of 2026-10-19:
+stages 1-4 run (FT01, FT02, FT02b, FT02c, FT03, FT04); **FT04 (final joint, pseudo-labels) passed - the release
+candidate**: FT04 + cloud exclusion on its own masks, real-bench pAUC 0.170 / TPR at 0.1% 0.065 against the shipped
+v0.2.0's 0.159 / 0.058 (most of it the exclusion; the model alone +0.003). Stage 5: class-aware scoring tested and
+not shipped; **cloud exclusion** chosen instead (vessels on water are in scope), not yet in `backend/` - product
+wiring (FT04 checkpoint, masks, exclusion in `anomaly_scoring`) is next. Detection-supervised fine-tuning (FT05,
+`detection-supervised-finetuning.md`) did not pass. On bench-v2.1 (2026-10-18, after the descending-wavelength fix)
+no new model measurably beats v0.2.0 on detection. Running log: `research/experiments/indradhanu-finetune/README.md`.
 **Starts from:** F001, the SpectralEarth-pretrained reduced-attention model
 (`research/experiments/indradhanu-se-pretrain/F001-final-pretrain/`), stopped at epoch 113 of 200 on 2026-10-16
 (bench flat: 0.861 at epoch 60, 0.862 at epoch 109); fine-tuning loads `F001_ep109.pt`.
@@ -108,16 +110,19 @@ Pass criteria for each run are written in its README before launch, as for E005.
 | 2b | FT02b | done, code 9ae3215, gate not met | see-saw gone (per-sensor SAM 3.99 / 4.37 / 5.57 deg, improving together); bench 0.856 vs 0.861 - every real-bench measure ties v0.2.0 |
 | 2c | FT02c | done, code 9ff0484 | edge term fell 1% in 10 epochs, no effect on edge false alarms; bench 0.855 |
 | 3 | FT03 | **passed** | water / cloud IoU 0.841 / 0.815 (above FT01); reconstruction and detection held (PRISMA bench pAUC 0.158, implant bench-v1 easy pAUC 0.371, = FT02c) |
-| 4 | FT04 | proposed, not started | now proposed as the mask fine-tune that must precede shipping exclusion: FT03 calls 11% of set4's bright desert cloud, hiding 4 real objects |
+| 4 | FT04 | **passed** (2026-10-18, code 25c4069) - release candidate | FT03 continued 10 epochs with pseudo-labels for PRISMA / AVIRIS-NG (FT03's confident water / cloud, p > 0.9 or < 0.1; water vetoed where NIR 800-900 nm > 0.15; no cloud guard - it rejected 69% of labelled clouds) and rare-class weights [1, 1, 1, 3, 3]. IoU water / cloud / shadow 0.839 / 0.810 / 0.223; SAM 3.88 / 4.11 / 5.46 (better on all three); real bench 0.162, with cloud exclusion on its own masks 0.170. First proposed as a fix for "FT03 calls 11% of set4's bright desert cloud" - corrected 2026-10-18: set4's 11% is haze, not desert |
 | 5 | - | in progress | class-aware residual Mahalanobis tested, **not shipped** (water noise dominated: set1 water share of false alarms 14% -> 92%, PRISMA pAUC 0.158 -> 0.134); **exclusion** of water and cloud by FT03's masks chosen instead (user, 2026-10-17: "we don't detect anything on water and cloud"): FT03 PRISMA bench caught top 0.1% 14.3% -> 16.5%, pAUC 0.158 -> 0.165 (stage-3 evaluation, `docs/lld/evaluation.md`). **Narrowed to cloud only** (user, 2026-10-17: vessels on water are in scope; 13 of the 39 real objects inside FT03's mask are > 3 px offshore): FT03 pAUC 0.158 -> 0.166, caught top 0.1% 14.3% -> 15.8%, ROC-AUC 0.853 -> 0.850 (`configs/eval/cloud_only.json`). Not yet wired into `scene_segmentation` / `anomaly_scoring` |
-| - | FT05 | running (epoch 5 of 10 on 2026-10-18) | detection-supervised fine-tuning as implant-denoising (implanted input, clean target, x5 near implants), from FT03; design and criteria in `detection-supervised-finetuning.md`. Epoch 5: reconstruction and IoU held; real bench ties FT03 (pAUC 0.158, caught top 0.1% 130 = 130), bench-v2 +0.5 points |
+| - | FT05 | **did not pass** (2026-10-18) | detection-supervised fine-tuning as implant-denoising (implanted input, clean target, x5 near implants), from FT03; design and criteria in `detection-supervised-finetuning.md`. Epoch 5 (best.pt) ties FT03 on the real bench (pAUC 0.158); epoch 10 costs AVIRIS-NG SAM (5.67 vs 5.48). Half its training implants had garbled signatures (descending-wavelength bug) |
 
 The stage-2 gates were set on the 4-scene real bench, which cannot separate these models (FT02b README). From
 2026-10-17 stages are also judged on the implanted-target benchmark (`docs/lld/implant-bench.md`), where pAUC
 rises stage by stage (easy tier 0.257 v0.2.0 -> 0.342 F001 -> 0.371 FT02c / FT03); but a model-free PCA-RX beats
 every model on that bench-v1 while losing on the real one, so bench-v1 orders models and is not a target.
 bench-v2 (accepted 2026-10-17) replaced it: there FT02c / FT03 beat PCA-RX (caught top 1% 32.8% / 32.3% vs 30.2%), as
-on the real bench (`docs/lld/implant-bench.md`, "bench-v2").
+on the real bench (`docs/lld/implant-bench.md`, "bench-v2"). **Corrected 2026-10-18:** v0.2.0's rows on both
+benches were a reading bug (PRISMA's descending band list fed to `np.interp` unsorted), and signature implants were
+garbled. On bench-v2.1 v0.2.0 scores 35.5% against FT03's 34.9%: the stage-by-stage rise from v0.2.0 was the bug,
+and no new model measurably beats v0.2.0 on detection (`docs/lld/implant-bench.md`, "Corrections", "bench-v2.1").
 
 Why 2b: FT02's see-saw, and the stem's single BatchNorm, whose running statistics with one sensor per batch
 are set by whichever sensors ended the epoch (FT02 README, "BatchNorm sensitivity"). Mixed batches balance each
@@ -173,6 +178,8 @@ Still open:
 
 - Whether class-aware Mahalanobis uses hard classes or soft (probability-weighted) statistics - moot for now:
   class-aware scoring was not shipped (2026-10-17), exclusion was chosen.
-- Whether pseudo-labels (stage 4) are needed at all, or EnMAP-trained masks transfer well enough.
+- Whether pseudo-labels (stage 4) are needed at all, or EnMAP-trained masks transfer well enough - answered by
+  running them: FT04 passed, and its masks are interchangeable with FT03's on the real bench (exclusion 0.170 with
+  either on FT04, 0.165-0.166 with either on FT03).
 - Per-sensor shares after stage 2; whether AVIRIS-NG needs its own scale handling (3-8 m vs 30 m).
 - Fine-tuning epochs and the LR schedule per stage (set per run, written before launch).

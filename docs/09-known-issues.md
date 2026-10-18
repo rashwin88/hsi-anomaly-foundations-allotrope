@@ -221,17 +221,25 @@ and [`lld/implant-bench.md`](lld/implant-bench.md).
   TPR at 0.1% FPR 0.029 vs 0.058). The implants' difference from their ring lies outside the scene's main spectral
   directions far more than real objects' does (foreign fraction median 0.042 vs 0.006), and their edges are hard
   (halo / object contrast 0.60 vs 0.74). bench-v1 still orders the models consistently; it must not be a training
-  target or the only judge. bench-v2 is in progress.
-- **Water / cloud exclusion is not in the product.** Chosen 2026-10-17 as the default (FT03's masks, scored 0 after
-  scoring); today it exists only as the `exclude` scorer in `app/evaluation/scorers.py`. In the product, water and
+  target or the only judge. bench-v2 replaced it (2026-10-17), and bench-v2.1 replaced bench-v2 (2026-10-18).
+- **`np.interp` on descending band lists (fixed 2026-10-18, b94dbfd).** PRISMA lists its bands descending; the
+  evaluator's `resample` and the signature implants called `np.interp` unsorted, which NumPy does not check. v0.2.0's
+  bench-v1 / bench-v2 numbers are void and every signature implant in bench-v1, bench-v2 and FT05's training was
+  garbled. Any new interpolation over a sensor's band list must sort first (`app/evaluation/implant.interp_spectrum`);
+  see [`lld/implant-bench.md`](lld/implant-bench.md), Invariant 5.
+- **Cloud exclusion is not in the product.** Chosen 2026-10-17 (first water and cloud, then cloud only - vessels are
+  in scope); the release candidate since 2026-10-18 is FT04 with cloud excluded on its own masks. Today it exists
+  only as the `exclude` scorer in `app/evaluation/scorers.py`. In the product, water and
   cloud are left out only through an optional upstream `keep_mask` from `scene_segmentation` (NDWI / brightness
   thresholds) or `cloud_mask`. Under exclusion, 39 of the 909 real
   labelled objects (27 in PRISMA set1) cannot be found, because FT03 calls their every pixel water or cloud.
-- **The score-map cache does not know the dataset's content.** A bench rebuilt in place under the same scene names,
-  evaluated into the same output directory, is silently measured with the old score maps. Use a new bench path and
-  output directory per version.
-- **`provenance.json`'s `dirty` flag is always false** (the git pathspecs resolve under `app/evaluation/`), so the
-  stage-3 run records commit 060aabc although it ran on the then-uncommitted `app/evaluation/`.
+- **The class-map cache does not know the dataset's content.** Score maps are keyed by the scene's file
+  fingerprint since 229d423; class maps (`cache/classes`) are not, so a bench rebuilt in place under the same scene
+  names, evaluated into the same output directory, silently reuses old masks. Use a new bench path and output
+  directory per version.
+- **`provenance.json`'s `dirty` flag was always false before 229d423** (the git pathspecs resolved under
+  `app/evaluation/`), so the stage-3 run records commit 060aabc although it ran on the then-uncommitted
+  `app/evaluation/`.
 
 ## Config knobs that do nothing
 
