@@ -1,5 +1,5 @@
 {
-  "_description": "FT05: FT03 continued with implant-denoising - half the training tiles get 1-4 bench-v2-style implants (signature and material sources only; host held out), trained against the clean tile, loss x5 within 3 px of an implant. Joint as FT03 (seg_weight 0.1), mixed batches, 10 epochs. 2026-10-17.",
+  "_description": "FT05: FT03 continued with implant-denoising - half the training tiles get 1-4 bench-v2-style implants (signature and material sources only; host held out), trained against the clean tile, loss x5 within 3 px of an implant. Joint as FT03 (seg_weight 0.1), mixed batches, 10 epochs. 2026-10-17. Resumed from epoch 5 on 2026-10-18 with single-thread loader workers, 2 per source (was 6, oversubscribed).",
   "foundation_model_name": "spectral_stem_finetune",
   "version": "0.5.0",
   "device": "cuda",
@@ -99,7 +99,8 @@
       "signature",
       "material"
     ],
-    "implant_seed": 1
+    "implant_seed": 1,
+    "loader_workers_per_source": 2
   },
   "data": {
     "num_epochs": 10,

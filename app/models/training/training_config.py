@@ -198,6 +198,8 @@ class SpectralStemFinetuneConfig(SpectralStemMAEConfig):
     implant_psf_sigma: float = 1.4
     implant_sources: list[Literal["signature", "material"]] = Field(default_factory=lambda: ["signature", "material"])
     implant_seed: int = 1
+    loader_workers_per_source: int | None = Field(default=None, ge=0, description="DataLoader workers per source "
+                                                  "(default data.num_workers); the mixed loader runs one per source.")
     grad_loss_weight: float = Field(default=0.0, ge=0, description="mixed batches: weight of the edge term - L1 between "
                                     "the spatial gradients of reconstruction and input on hidden pixels (0 = off).")
 

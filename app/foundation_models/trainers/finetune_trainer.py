@@ -74,6 +74,18 @@ def prepare_sample(sample: dict, target_nm=None, labels: str | None = None, poli
 _LIBRARIES: dict = {}                               # per worker: band list -> library spectra on it
 
 
+def single_thread_worker(_worker_id: int) -> None:
+    """DataLoader worker init: one BLAS / torch thread per worker. With a thread pool each, 18 workers (3 sources x 6)
+    on 8 vCPUs oversubscribed the CPU about 8-fold; the implant transform ran 4.7 s per tile instead of 1.8 s
+    (measured on the L40S box, 2026-10-18)."""
+    try:
+        from threadpoolctl import threadpool_limits
+        threadpool_limits(1)
+    except ImportError:
+        pass
+    torch.set_num_threads(1)
+
+
 def implant_sample(sample: dict, cfg: dict) -> dict:
     """FT05 augmentation: with probability cfg["prob"], up to cfg["max_objects"] bench-v2 implants
     (app/evaluation/implant.implant_tile). Always adds clean.npy and implant.npy, so batches collate. The
@@ -262,8 +274,10 @@ class FinetuneTrainer(SpectralStemMAETrainer):
         dataset = (wds.WebDataset(urls, shardshuffle=self.config.data.shardshuffle if split == "train" else False,
                                   handler=wds.warn_and_continue)
                    .decode(*self._sample_decoders()).select(functools.partial(keep_sample, skip=skip)).map(transform))
+        workers = self.config.model_config_.loader_workers_per_source
         return torch.utils.data.DataLoader(dataset, batch_size=batch_size or self.config.data.batch_size,
-                                           num_workers=self.config.data.num_workers)
+                                           num_workers=self.config.data.num_workers if workers is None else workers,
+                                           worker_init_fn=single_thread_worker)
 
     def _train_with_hot_storage(self) -> None:
         cfg = self.config.model_config_
