@@ -51,4 +51,3 @@ FT03's, with less ROC-AUC cost - its masks exclude less); 3 met.
   pAUC 0.159 -> 0.170, TPR @ 0.1% 0.058 -> 0.065. Small, on 4 scenes; most of it is the exclusion (the model alone
   +0.003 pAUC). On bench-v2.1 v0.2.0 and the fine-tuned models tie.
 - Pseudo-labels did not cost EnMAP IoU; the 3x rare-class weight lifted shadow by 0.02.
-## Observations
