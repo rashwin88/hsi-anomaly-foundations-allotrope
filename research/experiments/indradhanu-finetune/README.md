@@ -121,4 +121,14 @@ thread that connects them.
   real bench. Detection-supervised fine-tuning is unblocked. 39 real objects lie inside FT03's water / cloud mask
   (13 offshore in set1, likely vessels; 4 on bright desert FT03 calls cloud) - exclusion waits on the user's scope
   call and a mask fine-tune (FT04).
+- **2026-10-18 - FT05 (implant-denoising) did not pass.** Epoch 5 ties FT03 on the real bench (pAUC 0.158 / 0.158);
+  epoch 10 costs AVIRIS-NG reconstruction (5.67 vs 5.48 deg). Loader fix: single-thread workers, 2 per source (2 h 41
+  -> 43 min per epoch). Bug found: PRISMA lists bands descending and np.interp was used unsorted - v0.2.0's implant-
+  bench numbers were garbage on PRISMA hosts (the real-bench generic reading now equals the product path) and every
+  transplanted signature implant was garbled (bench-v1, v2, FT05). bench-v2.1 rebuilt with the fix.
+- **2026-10-18 - Correction: set4 is hazy, not a desert mask error.** FT03's "11% cloud" on PRISMA set4 was read as
+  bright desert called cloud; a true-colour view shows a bright cloud / smoke streak and a large hazy patch, which
+  the mask follows. Set4's pixels are bluish (NIR / blue 0.54-0.65 for 75%), not red. A bright-and-flat cloud guard
+  built on the desert reading rejected 69% of EnMAP's labelled clouds and was dropped. FT04's purpose is masks on
+  all three sensors (pseudo-labels) and rare classes, not a desert fix.
 

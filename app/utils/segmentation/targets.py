@@ -74,9 +74,10 @@ def enmap_targets(labels: dict[str, np.ndarray], meta: dict, policy: LabelPolicy
 
 
 def masked_bce_dice(logits: torch.Tensor, targets: torch.Tensor, known: torch.Tensor,
-                    dice_weight: float = 1.0) -> torch.Tensor:
+                    dice_weight: float = 1.0, class_weights=None) -> torch.Tensor:
     """Per-class binary cross-entropy + soft Dice over known pixels, averaged over classes that have any
-    known pixel in the batch. logits, targets: (B, K, H, W); known: (B, K, H, W) bool."""
+    known pixel in the batch - weighted by class_weights (K,) if given (rare classes, FT04).
+    logits, targets: (B, K, H, W); known: (B, K, H, W) bool."""
     k = known.float()
     bce = F.binary_cross_entropy_with_logits(logits, targets, reduction="none")
     n = k.sum(dim=(0, 2, 3))                                        # (K,) known pixels per class
@@ -87,7 +88,47 @@ def masked_bce_dice(logits: torch.Tensor, targets: torch.Tensor, known: torch.Te
     p = torch.sigmoid(logits) * k
     inter, denom = (p * targets).sum(dim=(0, 2, 3)), (p + targets * k).sum(dim=(0, 2, 3))
     dice_c = 1 - (2 * inter + 1) / (denom + 1)
-    return (bce_c + dice_weight * dice_c)[has].mean()
+    per = bce_c + dice_weight * dice_c
+    if class_weights is None:
+        return per[has].mean()
+    w = torch.as_tensor(class_weights, dtype=per.dtype, device=per.device)
+    return (w * per)[has].sum() / w[has].sum()
+
+
+PSEUDO_CONF = 0.9          # a pseudo-label counts only where the teacher's probability is > 0.9 or < 0.1
+
+
+def band_mean(refl: np.ndarray, wl: np.ndarray, lo: float, hi: float) -> np.ndarray:
+    sel = (wl >= lo) & (wl <= hi)
+    return np.nanmean(refl[sel], axis=0) if sel.any() else np.full(refl.shape[1:], np.nan)
+
+
+def cloud_plausible(refl: np.ndarray, wl: np.ndarray) -> np.ndarray:
+    """(H, W) bool: the label QA's cloud test (research/experiments/indradhanu-finetune/README.md) - mean 450-650 nm
+    reflectance > 0.2 and spectrally flat (min / max of the 460-500 / 540-580 / 640-680 / 840-880 nm means >= 0.7).
+    Bright desert is red - it rises with wavelength - and fails the flatness test."""
+    windows = np.stack([band_mean(refl, wl, lo, hi) for lo, hi in ((460, 500), (540, 580), (640, 680), (840, 880))])
+    flat = np.nanmin(windows, 0) / np.maximum(np.nanmax(windows, 0), 1e-6)
+    return (band_mean(refl, wl, 450, 650) > 0.2) & (flat >= 0.7)
+
+
+def pseudo_targets(probs: np.ndarray, refl: np.ndarray, wl: np.ndarray, valid: np.ndarray,
+                   conf: float = PSEUDO_CONF) -> tuple[np.ndarray, np.ndarray]:
+    """Teacher probabilities (K, H, W) uint8 (0-255) or float -> (targets float32, known bool) for a sensor with no
+    labels (FT04, PRISMA / AVIRIS-NG). Only water and cloud are taught, where the teacher is confident (> conf or
+    < 1 - conf); a confident water with NIR (800-900 nm) above 0.15 becomes a known NOT-water. Thin cloud, shadow and
+    snow stay unknown (EnMAP's labels teach them).
+
+    No cloud guard: cloud_plausible (bright and flat) rejected 69% of EnMAP's labelled clouds on a test shard, while the
+    teacher's confident clouds matched them at IoU 0.82; and PRISMA set4's "11% cloud", first read as bright desert, is
+    haze and cloud on inspection (2026-10-18)."""
+    p = probs.astype(np.float32) / (255.0 if probs.dtype == np.uint8 else 1.0)
+    targets = (p > conf).astype(np.float32)
+    known = ((p > conf) | (p < 1 - conf)) & valid[None]
+    known[2:] = False
+    not_water = (targets[0] > 0) & (band_mean(refl, wl, 800, 900) > 0.15)
+    targets[0][not_water] = 0.0
+    return targets, known
 
 
 class IoUTally:

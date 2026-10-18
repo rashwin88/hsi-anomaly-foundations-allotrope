@@ -191,3 +191,36 @@ def test_implant_sample_keeps_clean_target_and_marks_near_pixels(tmp_path):
     assert np.array_equal(again["pixels.npy"], out["pixels.npy"])      # seeded by the key: same implants each epoch
     off = implant_sample({"pixels.npy": pix.copy(), "wavelengths.npy": wl, "__key__": "t1"}, {**cfg, "prob": 0.0})
     assert np.array_equal(off["pixels.npy"], pix) and not off["implant.npy"].any()   # keys present, nothing implanted
+
+
+def test_pseudo_targets_guards_by_hand():
+    """Four pixels the teacher calls: cloud on a flat white spectrum and on a reddish one - both kept (no cloud guard:
+    it rejected most real clouds); water with NIR 0.03 - kept; water with NIR 0.3 - becomes NOT water."""
+    from app.utils.segmentation.targets import pseudo_targets
+    wl = np.array([480.0, 560.0, 660.0, 860.0])
+    refl = np.zeros((4, 1, 4))
+    refl[:, 0, 0] = 0.5
+    refl[:, 0, 1] = [0.25, 0.3, 0.35, 0.5]
+    refl[:, 0, 2] = [0.05, 0.04, 0.03, 0.03]
+    refl[:, 0, 3] = [0.2, 0.2, 0.2, 0.3]
+    probs = np.zeros((5, 1, 4), np.uint8)
+    probs[1, 0, :2] = 250                                 # teacher: cloud at 0, 1
+    probs[0, 0, 2:] = 250                                 # teacher: water at 2, 3
+    t, k = pseudo_targets(probs, refl, wl, np.ones((1, 4), bool))
+    assert t[1, 0].tolist() == [1, 1, 0, 0] and k[1, 0].all()          # both teacher clouds taught as cloud
+    assert t[0, 0].tolist() == [0, 0, 1, 0] and k[0, 0].all()          # bright "water" -> known not-water
+    assert not k[2:].any()                                             # thin cloud, shadow, snow untaught
+    probs[1, 0, 0] = 128                                               # an unsure teacher teaches nothing
+    assert not pseudo_targets(probs, refl, wl, np.ones((1, 4), bool))[1][1, 0, 0]
+
+
+def test_class_weights_by_hand():
+    from app.utils.segmentation.targets import masked_bce_dice
+    logits = torch.zeros(1, 2, 1, 1)                       # p = 0.5 for both classes
+    targets = torch.tensor([[[[1.0]], [[0.0]]]])
+    known = torch.ones(1, 2, 1, 1, dtype=torch.bool)
+    # per class: BCE = ln 2 = 0.6931; Dice class 0: 1 - (2*0.5 + 1) / (0.5 + 1 + 1) = 0.2, class 1: 1 - 1 / 1.5 = 0.3333
+    plain = masked_bce_dice(logits, targets, known)
+    assert plain.item() == pytest.approx(0.6931 + (0.2 + 0.3333) / 2, abs=1e-3)
+    w = masked_bce_dice(logits, targets, known, class_weights=[1.0, 3.0])
+    assert w.item() == pytest.approx(0.6931 + (0.2 * 1 + 0.3333 * 3) / 4, abs=1e-3)

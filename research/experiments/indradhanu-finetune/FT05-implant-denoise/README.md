@@ -1,6 +1,6 @@
 # FT05 - implant-denoising: learn to reconstruct the background under an anomaly
 
-**Status:** launched 2026-10-17 on the user's go ("Go for it"). Design: docs/proposals/detection-supervised-finetuning.md.
+**Status:** done 2026-10-18 14:46 UTC, exit 0; **did not pass** (criterion 1). best.pt = epoch 5 (lowest validation loss). Launched 2026-10-17 on the user's go. Design: docs/proposals/detection-supervised-finetuning.md.
 
 ## Question
 The detection score is how badly the model reconstructs a pixel from its surroundings. Trained with anomalies in
@@ -45,4 +45,21 @@ With cloud exclusion: real pAUC 0.166 / 0.166, caught top 0.1% 15.8% / 15.6%. Va
 
 At epoch 5: criterion 1 not met (above FT03 on one of three measures, by 0.001); criterion 2 a small rise, the
 held-out source holds; criterion 3 met. Implant-denoising has not moved real detection by mid-run.
+
+**Resumed at epoch 6** (2026-10-18 11:54, f472aa8) with single-thread loader workers, 2 per source: 43 min per epoch
+(was 2 h 41 min; the loaders had been ~8x oversubscribed - 18 workers each with its own BLAS thread pool on 8 vCPUs).
+
+| epoch | SAM EnMAP / PRISMA / AVIRIS-NG | IoU water / cloud | validation loss |
+|---|---|---|---|
+| 5 (best.pt) | 3.94 / 4.20 / 5.33 | 0.838 / 0.818 | 0.0559 |
+| 10 (last.pt) | 3.90 / 4.20 / **5.67** | 0.844 / 0.814 | 0.0570 |
+
+Epoch 10 fails criterion 3 on AVIRIS-NG (+0.19 deg over FT03's 5.48).
+
+**Verdict: not passed.** Implant-denoising did not lift real detection by mid-run (criterion 1: above FT03 on one of
+three measures, by 0.001) and later epochs cost AVIRIS-NG reconstruction. **Caveat:** half the training implants were
+`signature` implants, whose spectra were garbled by a descending-wavelength np.interp bug (fixed in b94dbfd); they
+still matched real contrast and foreignness. A rerun with correct signatures would be the fair test; nothing here
+suggests it would flip the result.
+
 ## Observations

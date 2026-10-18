@@ -161,7 +161,10 @@ class FinetuneSource(BaseModel):
     test_dir: str
     share: float = Field(gt=0)
     band_list_path: str | None = None
-    labels: Literal["enmap"] | None = Field(default=None, description="'enmap': label_* layers -> segmentation targets.")
+    labels: Literal["enmap", "pseudo"] | None = Field(default=None, description="'enmap': label_* layers -> segmentation "
+                                                    "targets; 'pseudo': teacher probabilities from pseudo_dir (FT04).")
+    pseudo_dir: str | None = Field(default=None, description="pseudo: folder of <tile key>.npy (5, H, W) uint8 teacher "
+                                   "probabilities (scripts/pseudo_label.py); a tile without one is unlabelled.")
     skip_scenes_path: str | None = Field(default=None, description="JSON list of meta.json scene_id values to leave out "
                                          "(e.g. the older copy of a scene processed twice).")
 
@@ -191,6 +194,8 @@ class SpectralStemFinetuneConfig(SpectralStemMAEConfig):
 
     seg_head_from: str | None = Field(default=None, description="Checkpoint (local or s3://) whose seg_head.* weights "
                                       "replace the fresh head after init_from (e.g. FT01's probe).")
+    seg_class_weights: list[float] | None = Field(default=None, description="Training segmentation loss weights per "
+                                                  "class (water, cloud, thin_cloud, shadow, snow); None = equal.")
     implant_prob: float = Field(default=0.0, ge=0, le=1, description="mixed batches: share of training tiles given implanted objects, trained against the clean tile (docs/proposals/detection-supervised-finetuning.md).")
     implant_max_objects: int = Field(default=4, ge=1)
     implant_near_weight: float = Field(default=5.0, ge=1, description="loss weight on hidden pixels within 3 px of an implant.")

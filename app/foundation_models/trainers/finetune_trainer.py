@@ -53,7 +53,7 @@ LABEL_KEYS = ("label_cloud", "label_cirrus", "label_haze", "label_cloud_shadow",
 
 
 def prepare_sample(sample: dict, target_nm=None, labels: str | None = None, policy: LabelPolicy = LabelPolicy(),
-                   implant: dict | None = None) -> dict:
+                   implant: dict | None = None, pseudo_dir: str | None = None) -> dict:
     """Loader-worker transform: align onto a band list (optional), turn EnMAP labels into seg_targets /
     seg_known, drop meta.json and label_* so batches collate; with `implant` (training only), add implanted
     objects to the pixels and keep the clean tile as clean.npy and a 3-px near-implant mask as implant.npy.
@@ -64,6 +64,8 @@ def prepare_sample(sample: dict, target_nm=None, labels: str | None = None, poli
     if labels == "enmap":
         t, k = enmap_targets({key: sample[f"{key}.npy"] for key in LABEL_KEYS}, meta, policy)
         sample["seg_targets.npy"], sample["seg_known.npy"] = t, k
+    elif labels == "pseudo":                            # FT04: guarded teacher labels for PRISMA / AVIRIS-NG
+        sample["seg_targets.npy"], sample["seg_known.npy"] = pseudo_sample_targets(sample, pseudo_dir)
     for key in LABEL_KEYS:
         sample.pop(f"{key}.npy", None)
     if implant is not None:
@@ -72,6 +74,20 @@ def prepare_sample(sample: dict, target_nm=None, labels: str | None = None, poli
 
 
 _LIBRARIES: dict = {}                               # per worker: band list -> library spectra on it
+
+
+def pseudo_sample_targets(sample: dict, pseudo_dir: str | None):
+    """(targets (5, H, W) float32, known bool) from <pseudo_dir>/<key>.npy through targets.pseudo_targets; all
+    unknown when the tile has no teacher file (e.g. the test split)."""
+    from app.utils.segmentation.targets import pseudo_targets
+    pix = np.asarray(sample["pixels.npy"] if "pixels.npy" in sample else sample["pixels.i16dz"])
+    H, W = pix.shape[1:]
+    path = Path(pseudo_dir or "") / f"{sample.get('__key__', '')}.npy"
+    if not pseudo_dir or not path.exists():
+        return np.zeros((len(CLASSES), H, W), np.float32), np.zeros((len(CLASSES), H, W), bool)
+    refl = np.where(pix == NODATA, np.nan, pix.astype(np.float32) * 1e-4)
+    valid = np.isfinite(refl).mean(0) >= 0.9
+    return pseudo_targets(np.load(path), refl, np.asarray(sample["wavelengths.npy"], np.float64), valid)
 
 
 def single_thread_worker(_worker_id: int) -> None:
@@ -268,7 +284,8 @@ class FinetuneTrainer(SpectralStemMAETrainer):
             raise FileNotFoundError(f"{src.name}: no shards in {folder}")
         target = load_band_list(src.band_list_path) if src.band_list_path else None
         transform = functools.partial(prepare_sample, target_nm=target, labels=src.labels, policy=self._policy,
-                                      implant=self._implant if split == "train" else None)
+                                      implant=self._implant if split == "train" else None,
+                                      pseudo_dir=src.pseudo_dir if split == "train" else None)
         skip = frozenset(json.loads(Path(src.skip_scenes_path).read_text())) if src.skip_scenes_path else frozenset()
         urls = [f"file:{p.as_posix()}" if os.name == "nt" else str(p) for p in shards]   # as the base trainer
         dataset = (wds.WebDataset(urls, shardshuffle=self.config.data.shardshuffle if split == "train" else False,
@@ -421,7 +438,8 @@ class FinetuneTrainer(SpectralStemMAETrainer):
         bf16 = self.config.model_config_.amp_bf16 and self.device.type == "cuda"
         with torch.autocast("cuda", dtype=torch.bfloat16, enabled=bf16):
             logits = model.segment_mixed([(p[0], p[2], p[1]) for p in parts])   # (x, wl, band_valid)
-        losses = [masked_bce_dice(lg.float(), p[3], p[4]) for lg, p in zip(logits, parts) if p[3] is not None]
+        w = self.config.model_config_.seg_class_weights
+        losses = [masked_bce_dice(lg.float(), p[3], p[4], class_weights=w) for lg, p in zip(logits, parts) if p[3] is not None]
         return sum(losses) / len(losses)
 
     def compute_validation_loss(self, batch: dict, model: nn.Module):
