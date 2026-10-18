@@ -51,3 +51,10 @@ FT03's, with less ROC-AUC cost - its masks exclude less); 3 met.
   pAUC 0.159 -> 0.170, TPR @ 0.1% 0.058 -> 0.065. Small, on 4 scenes; most of it is the exclusion (the model alone
   +0.003 pAUC). On bench-v2.1 v0.2.0 and the fine-tuned models tie.
 - Pseudo-labels did not cost EnMAP IoU; the 3x rare-class weight lifted shadow by 0.02.
+- **Like for like** (`configs/eval/release_like_for_like.json`, 2026-10-19), real bench, both with cloud exclusion on
+  FT04's masks: v0.2.0 0.165 / 0.062 / 14.9% / 45.4% vs FT04 0.170 / 0.065 / 15.8% / 46.0% (pAUC / TPR @ 0.1% / caught
+  top 0.1% / top 1%) - FT04 ahead on all four, by ~8 of 909 objects at the top 0.1%; on bench-v2.1 v0.2.0 + exclusion
+  is slightly ahead (36.7% vs 36.2%). A detection tie. Exclusion needs a segmentation head, which v0.2.0 lacks, so the
+  masks come from FT04 either way; shipping FT04 alone (reconstruction + masks) is the simpler product, with native
+  bands and better reconstruction - not a detection win.
+
