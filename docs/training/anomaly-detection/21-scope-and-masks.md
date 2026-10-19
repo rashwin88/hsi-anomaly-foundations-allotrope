@@ -149,7 +149,8 @@ exclusion is wired into `backend/`. It ran as FT04 on 2026-10-18 and passed: mas
 exclusion on its own masks is the release candidate (Indradhanu course, part 60). Today the product
 still excludes water and cloud only through the optional threshold-based `keep_mask` from the
 `scene_segmentation` or `cloud_mask` actions (evaluation LLD, "Decisions"); no head's mask is used
-there yet.
+there yet. *(Update 2026-10-19: FT04 now ships as the opt-in "Indradhanu V2", which zeros its own cloud
+after scoring - part 23.)*
 
 **A negative claim about a picture ("that is desert") deserves the same check as a positive one: look
 at the picture.**
@@ -184,7 +185,8 @@ bench-v2 has no implants on water, so it cannot show the cost. Only the real ben
 
 **"Exclusion is in the product now."**
 Not yet. It runs in `app/evaluation/` only. FT04 (the mask fine-tune) passed on 2026-10-18; wiring its
-checkpoint, masks and cloud exclusion into `anomaly_scoring` is the next step (log).
+checkpoint, masks and cloud exclusion into `anomaly_scoring` is the next step (log). *(Update
+2026-10-19: done, opt-in, as "Indradhanu V2" - part 23.)*
 
 **"Set4's 11% cloud is a desert mask error."**
 That was the first reading, and it was wrong: the mask follows a cloud / smoke streak and haze, and

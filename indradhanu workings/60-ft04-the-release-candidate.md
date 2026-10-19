@@ -214,6 +214,10 @@ Small, on four scenes. And the comparison is not like for like: v0.2.0 + cloud e
 on the real bench. On bench-v2.1, where it was, v0.2.0 + cloud exclusion (FT03's masks) catches 36.7% at
 the top 1% and FT04 + its own masks 36.2% - a tie.
 
+*Update 2026-10-19:* the like-for-like run has since been made (`configs/eval/release_like_for_like.json`,
+FT04 README): on the real bench, both with cloud exclusion on FT04's masks, v0.2.0 0.165 against FT04
+0.170 pAUC - still a tie. FT04 then shipped as "Indradhanu V2" (part 61).
+
 ![Figure 60.1 - Pseudo-labels and the scoreboard](figures/60-ft04.svg)
 
 *Figure 60.1 - (a) How one teacher probability becomes a target: taught "yes" above 0.9, "no" below
@@ -296,12 +300,11 @@ exist; the 69% made it harmful.
 5. `0.19 / 0.26 = 0.73`, at least 0.7: it passes flatness (and its visible mean, about 0.24, passes
    brightness). Haze that falls this little survives; set4-like haze at 0.54-0.65 would not.
 6. v0.2.0 was scored without exclusion. The like-for-like number is v0.2.0 + cloud exclusion on the real
-   bench, which has not been run; on bench-v2.1, where it was, the two tie (36.7% against 36.2%).
+   bench, which had not been run when this part was written; on bench-v2.1, where it was, the two tie
+   (36.7% against 36.2%). (Since run, 2026-10-19: 0.165 against 0.170 - a tie.)
 
 </details>
 
 ---
 
-That is the course so far. The scoreboard of part 59 holds every model on every benchmark; new results
-land first in the log of `research/experiments/indradhanu-finetune/README.md` and in
-`research/experiments/implant-bench/README.md`.
+Next: part 61, shipping FT04 in the product as Indradhanu V2.

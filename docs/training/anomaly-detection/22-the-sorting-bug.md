@@ -373,21 +373,4 @@ that `interp_spectrum` returns 1.5 and 3.0 at 550 and 650 nm from a descending l
 
 ---
 
-## You have finished
-
-You can now read the source. Where to go next:
-
-- **`docs/01-orientation.md`** through **`docs/10-code-style.md`** - the reference docs
-- **`docs/lld/`** - low-level designs for individual subsystems; for the last seven parts,
-  `docs/lld/evaluation.md` and `docs/lld/implant-bench.md`
-- **`docs/09-known-issues.md`** - what is currently broken, and what to check before trusting
-  a green test run
-
-One habit worth keeping from this course: **when a comment and the code disagree, the code
-wins**, and when a summary and the data disagree, the data wins. You met several such disagreements -
-the regularisation default, the `MIN_VALID_FRACTION` comment and the discarded `units` field in parts 1
-to 15; `compute_roc`'s threshold docstring in part 16; the LLD's old `strength_for_z` and "10 px apart" in
-part 18; the cache key and `dirty` flag in part 19, both fixed since; bench-v2's per-tier foreignness in
-part 20; "no real object sits on water" and "set4 is bright desert" in part 21; and, in this part, a
-"close to, not identical" docstring that was hiding a factor of nearly three (15.8% against 44.2%), and a cross-check whose result
-was misread. There will be more.
+Next: part 23, using the fine-tuned model in the product - Indradhanu V2 in an action chain.

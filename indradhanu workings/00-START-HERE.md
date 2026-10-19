@@ -91,7 +91,7 @@ Every part has the same skeleton:
 | 29 | [29-inference.md](29-inference.md) | Running it on a real scene |
 | 30 | [30-scoring-and-the-product.md](30-scoring-and-the-product.md) | Turning errors into an answer |
 
-**Sequel - the next Indradhanu: a smarter spectral bottleneck, then pretraining, scoring and fine-tuning (31-60)**
+**Sequel - the next Indradhanu: a smarter spectral bottleneck, then pretraining, scoring, fine-tuning and shipping (31-61)**
 
 Written 2026-10-14, after the decision to pretrain the next Indradhanu on SpectralEarth with a
 cross-attention spectral bottleneck. Parts 31 to 39 were written as a **design studied before
@@ -132,6 +132,7 @@ Assumes all of parts 01 to 30; leans on 08, 10, 12, 13 and 17 to 21.
 | 58 | [58-ft05-implant-denoising.md](58-ft05-implant-denoising.md) | FT05: implanted input, clean target - why it teaches "draw the background", the x5 near weight, the held-out source, a CPU-bound loader and its fix; did not pass |
 | 59 | [59-the-scoreboard.md](59-the-scoreboard.md) | Every model on every benchmark, read against chance and PCA-RX and with v0.2.0 read correctly: no new model beats the shipped one on detection alone (rewritten 2026-10-19) |
 | 60 | [60-ft04-the-release-candidate.md](60-ft04-the-release-candidate.md) | FT04: pseudo-labels with confidence thresholds and a water guard, why the cloud guard was dropped, rare-class weights - and what the model did and did not buy |
+| 61 | [61-shipping-indradhanu-v2.md](61-shipping-indradhanu-v2.md) | Shipping FT04 as Indradhanu V2: a new codename (routing is last-wins), the embedded model config, the band-grid check, `read_bands`, cloud zeroed after scoring, and the parity run that guards it |
 
 Parts 34 to 39's numbers were first produced by a study prototype and then re-checked against
 the real modules (5,345 compressor and 6,401 decoder parameters at `d = D = 32`; 13,162 gate
@@ -209,6 +210,15 @@ next run may change them), and the 43-minute epoch. The open questions now are p
 at about 21%, bench-v2.1's easy-tier foreignness (1.60x), and training overlap for v0.2.0. Authoritative:
 `research/experiments/indradhanu-finetune/README.md` (the log), `FT04-final-joint/README.md`,
 `research/experiments/implant-bench/README.md` ("Corrections" and "bench-v2.1"), `docs/lld/finetune.md`.
+
+**Part 61 (written 2026-10-19)** teaches FT04's shipping as **Indradhanu V2** (Phase 1 of
+`docs/proposals/ship-ft04.md`: opt-in, v0.2.0 stays the default). Part 60 got a dated note: the
+like-for-like v0.2.0 + exclusion run (0.165 against 0.170) has been made. **Values that will drift:** the
+manifest figures (`v2.0.0`, epoch 10, 5,886,451 parameters, val 0.05578), the parity numbers (set1 0.2460,
+set4 0.2106 / 0.2199, 11.83% excluded, 185 / 186 bands read), and everything Phase 2 would change - the
+defaults, `band_filter_apply`'s grid default, and the "one action cannot run both models" limit.
+Authoritative: `docs/lld/spectral-stem.md` ("Serving"), `docs/04-models.md` (Inference),
+`docs/09-known-issues.md` ("Spectral-stem models - open gaps"), `final design/ROADMAP.md` (OB-14).
 
 ## Figures
 
