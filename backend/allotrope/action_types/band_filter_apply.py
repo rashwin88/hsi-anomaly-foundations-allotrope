@@ -99,8 +99,8 @@ class BandFilterApplyConfig(BaseModel):
         default=True,
         description=(
             "If true, resample to the 10 nm common grid "
-            "(DEFAULT_COMMON_WAVELENGTH_GRID). Required for cross-sensor "
-            "models like Indradhanu."
+            "(DEFAULT_COMMON_WAVELENGTH_GRID). Required by Indradhanu "
+            "(v0.2.0); Indradhanu V2 needs it false (native bands)."
         ),
     )
 

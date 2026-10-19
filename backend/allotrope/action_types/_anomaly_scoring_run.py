@@ -90,6 +90,22 @@ _MODELS_DIR_NAME = "models"
 # without buying more usable detail than panzoom can address.
 
 
+def _check_band_grid(codename: str, band_grid: str, wavelengths: Any) -> None:
+    """A 165-grid model (v0.2.0) needs band_filter_apply's common grid; a native-band model (Indradhanu V2) needs
+    use_common_wavelength_grid=false. The vendable's wavelengths say which one the upstream band filter applied."""
+    import numpy as np
+    from app.models.dataset.vendables import DEFAULT_COMMON_WAVELENGTH_GRID
+
+    grid = np.asarray(DEFAULT_COMMON_WAVELENGTH_GRID, dtype=np.float64)
+    on_grid = len(wavelengths) == len(grid) and np.allclose(wavelengths, grid)
+    if band_grid == "native" and on_grid:
+        raise ValueError(f"model {codename!r} reads native bands: run band_filter_apply with "
+                         "use_common_wavelength_grid=false (this one resampled to the 165-band grid)")
+    if band_grid == "common165" and not on_grid:
+        raise ValueError(f"model {codename!r} needs the 165-band grid: run band_filter_apply with "
+                         "use_common_wavelength_grid=true (this one kept native bands)")
+
+
 def run(ctx: Any) -> None:
     """Top-level entrypoint. See module docstring."""
     import numpy as np
@@ -277,6 +293,8 @@ def run(ctx: Any) -> None:
         m = by_codename.get(codename.strip().lower())
         if m is None:
             raise ValueError(f"unknown codename at run time: {codename!r}")
+        if not is_thermal and m.family == "foundation":
+            _check_band_grid(codename, m.band_grid, wavelengths)
 
         ovr = model_overrides.get(codename, {}) or {}
         method = ovr.get("scoring_method") or m.default_scoring_method
@@ -326,6 +344,7 @@ def run(ctx: Any) -> None:
         # copy of the input cube — visually meaningful, lets the
         # viewer's three-panel layout stay the same).
         is_classical = m.family == "classical"
+        model_wl, exclusion = wavelengths, None
 
         if is_classical:
             from app.models.ad_models.ad_model import ADModel
@@ -419,11 +438,18 @@ def run(ctx: Any) -> None:
             inferencer = get_inferencer(inference_cfg)
             load_s = time.time() - t0
 
+            # Native-band models (band_grid "native") read only the bands they have trained on and need the
+            # scene's wavelengths set before predicting (docs/lld/spectral-stem.md).
+            model_cube, model_wl, model_scene = cube_np, wavelengths, scene_tensor
+            if m.band_grid == "native":
+                model_cube, model_wl, _ = inferencer.read_bands(cube_np, wavelengths)
+                model_scene = torch.from_numpy(np.ascontiguousarray(model_cube)).float()
+
             ctx.on_step(f"model={codename} Â· predict_full_scene")
             t0 = time.time()
             with torch.no_grad():
                 reconstruction = inferencer.predict_full_scene(
-                    scene_tensor, mask_tensor
+                    model_scene, mask_tensor
                 )
             infer_s = time.time() - t0
             recon_np = reconstruction.detach().cpu().numpy().astype(np.float32, copy=False)
@@ -435,18 +461,30 @@ def run(ctx: Any) -> None:
             # (we want ROC computed over the user's stated ROI, not
             # the eroded one) and for percentile stats.
             score = compute_score(
-                cube_np.astype(np.float32, copy=False),
+                model_cube.astype(np.float32, copy=False),
                 recon_np,
                 eroded_keep_mask,
                 method=method,
                 combined_weight=sam_l1_alpha,
             )
 
+            # Classes the model excludes (Indradhanu V2: cloud) are zeroed AFTER scoring, from its own
+            # segmentation - the evaluated semantics (docs/proposals/ship-ft04.md; app/evaluation/scorers.py).
+            if m.exclude_classes:
+                ctx.on_step(f"model={codename} Â· segment")
+                class_map, _ = inferencer.segment_full_scene(model_cube, spatial_valid.astype(bool))
+                excluded = np.isin(class_map, [inferencer.CLASS_NAMES.index(c) for c in m.exclude_classes])
+                score = np.where(excluded, 0.0, score).astype(np.float32)
+                exclusion = {"classes": list(m.exclude_classes), "class_map": class_map, "mask": excluded}
+
         # Write per-model rasters + rendered previews.
         model_dir = models_root / _safe_dirname(codename)
         model_dir.mkdir(parents=True, exist_ok=True)
 
         _save_raster_2d(score, model_dir / "anomaly_score.tif", "float32")
+        if exclusion is not None:
+            _save_raster_2d(exclusion["mask"].astype(np.uint8), model_dir / "mask_cloud.tif", "uint8")
+            _save_raster_2d(exclusion["class_map"].astype(np.uint8), model_dir / "class_map.tif", "uint8")
         _save_raster_3d(recon_np, model_dir / "reconstruction.tif", "float32")
 
         ctx.on_step(f"model={codename} Â· render")
@@ -471,7 +509,7 @@ def run(ctx: Any) -> None:
         )
         _render_recon_png(
             recon=recon_np,
-            wavelengths=wavelengths,
+            wavelengths=model_wl,
             spatial_valid=spatial_valid,
             out_path=model_dir / "reconstruction.png",
         )
@@ -551,6 +589,12 @@ def run(ctx: Any) -> None:
                 "p99_9": score_percentiles[5],
             },
             "auc": (roc or {}).get("auc"),
+            # Additive keys (the frontend reads stats by key): bands the model read, and what it excluded.
+            "bands_read": None if is_classical else int(len(model_wl)),
+            "excluded_classes": exclusion["classes"] if exclusion else [],
+            "excluded_percent": (
+                round(100.0 * float(exclusion["mask"].sum()) / float(spatial_valid.sum() or 1), 3) if exclusion else 0.0
+            ),
         }
         _write_json(model_dir / "stats.json", stats)
         per_model_records.append(stats)

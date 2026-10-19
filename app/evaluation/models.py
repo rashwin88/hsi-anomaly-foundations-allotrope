@@ -19,7 +19,6 @@ from pathlib import Path
 import numpy as np
 
 PATCH, STRIDE, BATCH = 128, 32, 8           # backend/allotrope/foundation_models/resolver.py defaults
-SEG_TILE, SEG_STRIDE, SEG_BATCH = 128, 64, 16
 REPO = Path(__file__).resolve().parents[2]
 
 
@@ -89,50 +88,24 @@ class EvalModel:
     def _read(self, scene, mode: str):
         cube, wl, valid = scene.read(mode)
         if self.is_stem:
-            bm = self.inferencer.model.inner.trained_band_mask(wl).cpu().numpy()
-            cube, wl = cube[bm], wl[bm]
+            cube, wl, _ = self.inferencer.read_bands(cube, wl)
         return cube, wl, valid
 
     def reconstruct(self, scene) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         """(cube the model read, its reconstruction, valid) - both (C, H, W) float32."""
         import torch
         cube, wl, valid = self._read(scene, self.mode)
-        if self.is_stem:
-            self.inferencer.set_wavelengths(wl)
         with torch.no_grad():
             recon = self.inferencer.predict_full_scene(torch.from_numpy(cube), torch.from_numpy(valid[None].astype(np.float32)))
         return cube, recon.detach().cpu().numpy().astype(np.float32), valid
 
     def segment(self, scene) -> np.ndarray:
-        """(H, W) int class map (config.CLASS_IDS), 0 outside valid."""
-        import torch
+        """(H, W) int class map (config.CLASS_IDS), 0 outside valid - SpectralStemInferencer.segment_full_scene,
+        the same code the product's anomaly_scoring runs."""
         if not self.has_segmentation:
             raise ValueError(f"{self.name}: checkpoint has no segmentation head")
-        cube, wl, valid = self._read(scene, "native")
-        net = self.inferencer.model.inner.eval()
-        dev = next(net.parameters()).device
-        C, H, W = cube.shape
-        pad = [(-(n - SEG_TILE) % SEG_STRIDE) if n > SEG_TILE else SEG_TILE - n for n in (H, W)]
-        x = np.pad(cube, ((0, 0), (0, pad[0]), (0, pad[1])))
-        acc, cnt = np.zeros((5,) + x.shape[1:], np.float32), np.zeros(x.shape[1:], np.float32)
-        wl_t = torch.as_tensor(wl, dtype=torch.float32, device=dev)
-        pos = [(y, z) for y in range(0, x.shape[1] - SEG_TILE + 1, SEG_STRIDE)
-               for z in range(0, x.shape[2] - SEG_TILE + 1, SEG_STRIDE)]
-        for i in range(0, len(pos), SEG_BATCH):
-            chunk = pos[i:i + SEG_BATCH]
-            xb = torch.from_numpy(np.stack([x[:, y:y + SEG_TILE, z:z + SEG_TILE] for y, z in chunk])).to(dev)
-            with torch.no_grad(), torch.autocast("cuda", dtype=torch.bfloat16, enabled=dev.type == "cuda"):
-                p = torch.sigmoid(net.segment(xb, wl_t).float()).cpu().numpy()
-            for (y, z), pp in zip(chunk, p):
-                acc[:, y:y + SEG_TILE, z:z + SEG_TILE] += pp
-                cnt[y:y + SEG_TILE, z:z + SEG_TILE] += 1
-        prob = (acc / np.maximum(cnt, 1))[:, :H, :W]          # water, cloud, thin_cloud, shadow, snow
-        cls = np.zeros((H, W), np.int64)
-        cls[prob[0] > 0.5] = 1
-        cls[prob[3] > 0.5] = 3
-        cls[prob[4] > 0.5] = 4
-        cls[np.maximum(prob[1], prob[2]) > 0.5] = 2
-        return cls * valid
+        cube, _, valid = self._read(scene, "native")
+        return self.inferencer.segment_full_scene(cube, valid)[0]
 
     def release(self) -> None:
         import torch

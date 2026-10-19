@@ -74,6 +74,12 @@ class ModelCapabilities:
     # `app.__file__` so it works in both the worker container (where
     # app/ sits at /srv/app/) and local dev.
     pixel_stats_relpath: str | None = None
+    # Band grid the model reads: "common165" (band_filter_apply's default resample) or "native" (the sensor's own
+    # bands, band_filter_apply with use_common_wavelength_grid=False). anomaly_scoring refuses a mismatch.
+    band_grid: str = "common165"
+    # Segmentation classes scored 0 AFTER scoring (the evaluated semantics, docs/proposals/ship-ft04.md); only for
+    # models with a segmentation head. Classes: water, cloud, shadow, snow.
+    exclude_classes: tuple[str, ...] = ()
 
 
 _THERMAL_STATS = "constants/thermal_pixel_consts.json"
@@ -151,6 +157,20 @@ _CAPABILITIES: dict[str, ModelCapabilities] = {
         default_stride=32,
         pixel_stats_relpath=_HSI_STATS,
     ),
+    # Indradhanu V2 (FT04, research/experiments/indradhanu-finetune/FT04-final-joint/): the reduced-attention
+    # spectral stem at each sensor's native bands, with a segmentation head whose cloud mask is excluded after
+    # scoring. Normalisation travels in the checkpoint's buffers (no pixel_stats file).
+    "spectral_stem_finetune": ModelCapabilities(
+        architecture="spectral_stem_finetune",
+        foundation_model_name="spectral_stem_finetune",
+        scoring_methods=("residual_mahalanobis", "combined", "L1", "SAM"),
+        default_scoring_method="residual_mahalanobis",
+        default_patch_size=128,
+        default_stride=32,
+        pixel_stats_relpath=None,
+        band_grid="native",
+        exclude_classes=("cloud",),
+    ),
     # --- Classical statistical detectors -----------------------------
     # Closed-form, no learned weights. The worker dispatches via
     # app.utils.anomaly_detection.detector_factory and skips the
@@ -223,6 +243,8 @@ class ResolvedModel:
     pixel_stats_abs_path: str | None     # absolute path; None when arch has no baked-in normalize
     family: str = "foundation"           # "foundation" | "classical"
     detector_key: str | None = None      # ADModel value when family == "classical"
+    band_grid: str = "common165"         # "common165" | "native" (ModelCapabilities.band_grid)
+    exclude_classes: tuple[str, ...] = () # segmentation classes zeroed after scoring
 
 
 _SCENE_SENSOR_FAMILY: dict[str, str] = {
@@ -361,6 +383,8 @@ def _from_manifest(arch_dir: Path, manifest_path: Path) -> ResolvedModel:
         pixel_stats_abs_path=resolve_pixel_stats_path(caps.pixel_stats_relpath),
         family=caps.family,
         detector_key=caps.detector_key,
+        band_grid=caps.band_grid,
+        exclude_classes=caps.exclude_classes,
     )
 
 
@@ -463,6 +487,15 @@ def _model_config_from_manifest(arch: str, current: dict) -> dict:
             "expansion_ratio": 4,
             "drop_rate": 0.0,
         }
+
+    if arch in ("spectral_stem_finetune", "spectral_stem_mae"):
+        # The stem configs carry far more than a manifest summary can rebuild (sources, band weighting, the stem
+        # variant), and the api cannot torch.load; the manifest therefore embeds the checkpoint's full
+        # config.model_config (scripts/make_model_manifest.py).
+        cfg = current.get("model_config")
+        if not isinstance(cfg, dict) or cfg.get("model_type") != arch:
+            raise KeyError(f"{arch}: current.json must embed the checkpoint's model_config")
+        return cfg
 
     raise KeyError(f"no model_config builder for architecture {arch!r}")
 

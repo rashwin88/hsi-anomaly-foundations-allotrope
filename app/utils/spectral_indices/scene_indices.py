@@ -203,9 +203,11 @@ def compute_scene_segmentation(
     ndwi = (green - nir) / (green + nir + 1e-8)
     ndwi[spatial_valid == 0] = 0.0
 
-    # Brightness = mean VNIR reflectance from band 0 to the VNIR upper
-    # edge (typically ~910 nm). Index inclusive.
-    brightness = cube[: b_vnir_end + 1].mean(axis=0).astype(np.float32)
+    # Brightness = mean VNIR reflectance over every band up to the VNIR upper
+    # edge (typically ~910 nm), chosen by wavelength: native PRISMA lists its
+    # bands in descending order, so "band 0 to the edge" would be the SWIR.
+    vnir = np.asarray(wavelengths, dtype=np.float64) <= wavelengths[b_vnir_end]
+    brightness = cube[vnir].mean(axis=0).astype(np.float32)
     brightness[spatial_valid == 0] = 0.0
 
     # Threshold masks. uint8 for cheap on-disk + downstream OR.

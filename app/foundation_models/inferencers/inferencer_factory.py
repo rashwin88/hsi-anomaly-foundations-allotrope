@@ -21,6 +21,7 @@ from app.foundation_models.inferencers.segformer_mae_inferencer import (
 from app.foundation_models.inferencers.hyperspectral_segformer_mae_inferencer import (
     HyperspectralSegFormerMAEInferencer,
 )
+from app.foundation_models.inferencers.spectral_stem_inferencer import SpectralStemInferencer
 from app.models.training.inference_config import InferenceConfig
 from app.models.training.training_config import FoundationModelName
 
@@ -30,6 +31,9 @@ _REGISTRY: dict[FoundationModelName, type[FoundationInferencer]] = {
     FoundationModelName.NORMALIZED_MASKED_AUTOENCODER: NormalizedMaskedAutoencoderInferencer,
     FoundationModelName.SEGFORMER_MAE: SegFormerMAEInferencer,
     FoundationModelName.HYPERSPECTRAL_SEGFORMER_MAE: HyperspectralSegFormerMAEInferencer,
+    # Native-band models (Indradhanu V2 = FT04): the caller must set_wavelengths() before predicting.
+    FoundationModelName.SPECTRAL_STEM_MAE: SpectralStemInferencer,
+    FoundationModelName.SPECTRAL_STEM_FINETUNE: SpectralStemInferencer,
 }
 
 

@@ -2,7 +2,8 @@
 Full-scene inference for spectral-stem checkpoints (SpectralStemSegFormerMAE: linear / gate /
 cross_attention / reduced_attention), with exactly the product's patching and masking.
 
-Used by app/evaluation/models.py (scripts/evaluate.py); not yet wired into the product's anomaly_scoring.
+Used by the product's anomaly_scoring (Indradhanu V2) and by app/evaluation/models.py (scripts/evaluate.py) -
+one implementation of band reading, reconstruction and segmentation for both.
 
 Why a subclass of the product's SegFormer inferencer: a detection comparison is only fair if every
 model is tiled, masked and stitched the same way. SegFormerMAEInferencer owns all of that - sliding
@@ -17,6 +18,7 @@ Gotchas:
     `stats.*` buffers and saved config), so `pixel_stats_path` is not needed.
 """
 
+import numpy as np
 import torch
 import torch.nn as nn
 
@@ -63,3 +65,45 @@ class SpectralStemInferencer(SegFormerMAEInferencer):
     def set_wavelengths(self, wavelengths_nm) -> None:
         """Band centres (nm) of the scene about to be predicted, in its channel order."""
         self.model.wavelengths_nm = torch.as_tensor(wavelengths_nm, dtype=torch.float32, device=self.device)
+
+    def read_bands(self, cube: np.ndarray, wavelengths_nm) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """(cube, wavelengths, kept-band index) with only the bands the model has trained on (trained_band_mask,
+        docs/lld/spectral-stem.md); also sets the wavelengths for the next predict_full_scene / segment_full_scene."""
+        wl = np.asarray(wavelengths_nm, dtype=np.float64)
+        keep = self.model.inner.trained_band_mask(wl).cpu().numpy()
+        self.set_wavelengths(wl[keep])
+        return cube[keep], wl[keep], np.flatnonzero(keep)
+
+    SEG_TILE, SEG_STRIDE, SEG_BATCH = 128, 64, 16
+    SEG_CLASSES = ("water", "cloud", "thin_cloud", "shadow", "snow")    # the head's output order
+    CLASS_NAMES = ("land", "water", "cloud", "shadow", "snow")          # segment_full_scene's class ids
+
+    def segment_full_scene(self, cube: np.ndarray, valid: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+        """(class map (H, W) int64: 0 land, 1 water, 2 cloud, 3 shadow, 4 snow; probabilities (5, H, W) float32).
+        128 px windows at stride 64, sigmoid probabilities averaged where windows overlap; classes by priority
+        cloud (cloud or thin cloud) > snow > shadow > water > land; 0 outside valid. Call read_bands first."""
+        net = self.model.inner.eval()
+        if net.seg_head is None:
+            raise ValueError("checkpoint has no segmentation head")
+        T, S = self.SEG_TILE, self.SEG_STRIDE
+        C, H, W = cube.shape
+        pad = [(-(n - T) % S) if n > T else T - n for n in (H, W)]
+        x = np.pad(cube, ((0, 0), (0, pad[0]), (0, pad[1])))
+        acc, cnt = np.zeros((5,) + x.shape[1:], np.float32), np.zeros(x.shape[1:], np.float32)
+        pos = [(y, z) for y in range(0, x.shape[1] - T + 1, S) for z in range(0, x.shape[2] - T + 1, S)]
+        for i in range(0, len(pos), self.SEG_BATCH):
+            chunk = pos[i:i + self.SEG_BATCH]
+            xb = torch.from_numpy(np.stack([x[:, y:y + T, z:z + T] for y, z in chunk])).to(self.device)
+            with torch.no_grad(), torch.autocast("cuda", dtype=torch.bfloat16, enabled=self.device.type == "cuda"):
+                p = torch.sigmoid(net.segment(xb, self.model.wavelengths_nm).float()).cpu().numpy()
+            for (y, z), pp in zip(chunk, p):
+                acc[:, y:y + T, z:z + T] += pp
+                cnt[y:y + T, z:z + T] += 1
+        prob = (acc / np.maximum(cnt, 1))[:, :H, :W]
+        cls = np.zeros((H, W), np.int64)
+        cls[prob[0] > 0.5] = 1
+        cls[prob[3] > 0.5] = 3
+        cls[prob[4] > 0.5] = 4
+        cls[np.maximum(prob[1], prob[2]) > 0.5] = 2
+        return cls * valid.astype(bool), prob
+

@@ -27,10 +27,12 @@ class name.
 | `normalized_masked_autoencoder` | **Drashta** द्रष्टा | conv MAE, explicit mask channels |
 | `segformer_mae` | **Chakshu** चक्षु | transformer MAE (thermal) |
 | `hyperspectral_segformer_mae` | **Indradhanu** इंद्रधनु | transformer MAE + spectral bottleneck |
-| `spectral_stem_mae` | *(experimental, no codename)* | Indradhanu's SegFormer with a swappable spectral stem - training only, not served |
+| `spectral_stem_mae` | *(experimental, no codename)* | Indradhanu's SegFormer with a swappable spectral stem - pretraining only |
+| `spectral_stem_finetune` | **Indradhanu V2** इंद्रधनु V2 | the stem fine-tuned on EnMAP, PRISMA and AVIRIS-NG at native bands, plus a segmentation head |
 
 Shipped checkpoints: **Chakshu** 406 k params, val 0.2565 @ epoch 495. **Indradhanu**
-5.5 M params, val 0.0435 @ epoch 200.
+5.5 M params, val 0.0435 @ epoch 200. **Indradhanu V2** (FT04, `v2.0.0`) 5.9 M params, val 0.0558 @
+epoch 10 of fine-tuning - opt-in next to Indradhanu, which stays the default (docs/proposals/ship-ft04.md).
 
 ## Why masked reconstruction
 
@@ -81,8 +83,8 @@ the decompressor's output must stay unconstrained because it feeds denormalisati
 **The next spectral stem (experimental)** - `spectral_stem_mae` keeps Indradhanu's SegFormer
 and swaps the stem: today's 1×1 compressor, a per-pixel gate, or cross-attention over band
 tokens tagged with their wavelength, which takes any band list and skips dead bands exactly.
-Normalisation is a curve over wavelength (`WavelengthStats`), not per band position. It is
-the subject of the SpectralEarth pretraining experiment and is not wired into inference -
+Normalisation is a curve over wavelength (`WavelengthStats`), not per band position. Its
+fine-tuned form is served as Indradhanu V2 (see Inference below) -
 see [docs/lld/spectral-stem.md](lld/spectral-stem.md). The variant carried forward is
 `reduced_attention`: attention over 40 nm wavelength bins plus per-band skip and output paths,
 ~6x faster than per-band attention at equal detail (measured on an L40S, 2026-10-14).
@@ -139,6 +141,17 @@ masks; results are accumulated and **overlap-averaged**. The validity mask is er
 
 Reconstruction → anomaly map is then handled by the shared scoring module, covered in
 [5. Detectors](05-detectors.md#scoring--turning-residuals-into-a-heatmap).
+
+**Native-band models (Indradhanu V2).** `SpectralStemInferencer` reads each sensor's own bands,
+so it needs `band_filter_apply` run with `use_common_wavelength_grid=false`; `anomaly_scoring`
+refuses the wrong grid for either kind of model. Before predicting it calls `read_bands`, which
+keeps only the bands the model has trained on and sets their wavelengths. Its segmentation head
+runs through `segment_full_scene` (128 px windows, stride 64; classes land, water, cloud, shadow,
+snow), and the scoring action zeros the model's `exclude_classes` (cloud) **after** scoring, the
+semantics the evaluator measured. The evaluator (`app/evaluation/models.py`) calls the same two
+methods, so product and benchmark numbers come from one implementation. Its manifest embeds the
+checkpoint's full `model_config` (the api cannot `torch.load`); `scripts/make_model_manifest.py`
+writes it.
 
 ## Adding a model
 

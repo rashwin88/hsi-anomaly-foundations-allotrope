@@ -39,6 +39,9 @@ Output layout under
         reconstruction.tif          float32 cube (C, H, W); HSI=many bands
         reconstruction.png          RGB-rendered preview of the recon
         stats.json                  per-model timing + score range
+        mask_cloud.tif, class_map.tif   uint8; only for models with exclude_classes
+                                    (Indradhanu V2): the excluded pixels, scored 0,
+                                    and the head's classes 0 land .. 4 snow
 
 `run` / `summarize` / `preview` are implemented in
 `_anomaly_scoring_run.py` to keep this module light on import (api

@@ -106,6 +106,28 @@ Measured 2026-10-14 on the L40S (one training step, bf16, real encoder, patches/
 (not storing and re-reading the per-band activations). In a full epoch (E004, batch 8, 6 workers,
 two-pass validation) it runs at ~55 patches/s, 9.2 min per 30,000 patches.
 
+## Serving (Indradhanu V2, since 2026-10-19)
+
+The fine-tuned stem (`spectral_stem_finetune`, FT04) is served as **Indradhanu V2**, opt-in next to v0.2.0
+(design: `docs/proposals/ship-ft04.md`).
+
+```python
+# app/foundation_models/inferencers/spectral_stem_inferencer.py - shared by the product and app/evaluation
+SpectralStemInferencer.read_bands(cube, wavelengths_nm) -> (cube[keep], wavelengths[keep], kept indices)
+SpectralStemInferencer.segment_full_scene(cube, valid) -> (class map (H, W), probabilities (5, H, W))
+```
+
+- `read_bands` keeps only bands inside the trained-wavelength record and sets the wavelengths for the next
+  prediction; skipping it leaves the previous scene's wavelengths on the model.
+- The manifest embeds the checkpoint's full `model_config` (`current.model_config`); the resolver refuses a manifest
+  without one or with a different `model_type` (KeyError). `pixel_stats_relpath` is None - normalisation is the
+  checkpoint's `stats.*` curve.
+- `anomaly_scoring` scores on the upstream keep mask, then zeros `exclude_classes` from the head's class map - not
+  the other way round (zeroing first would change the whitening fit; the benchmark measured this order).
+- Parity (2026-10-19, resolver manifest -> get_inferencer -> read_bands -> compute_score -> segment -> zero cloud):
+  PRISMA bench pAUC set1 0.2460, set4 0.2106 plain / 0.2199 cloud-excluded - identical to the evaluator's FT04
+  run; ROC-AUC within 0.0005.
+
 ## Invariants
 
 1. **Only the stem differs between variants.** Normalisation, the BatchNorm, encoder, decoder,

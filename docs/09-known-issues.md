@@ -196,20 +196,24 @@ Rationale and results in [`lld/spectral-family-match.md`](lld/spectral-family-ma
 - **Fill is not reported.** No estimator recovered fill on real deployed materials without an
   in-scene or field spectrum of the material.
 
-## Spectral-stem pretraining and fine-tuning — open gaps
+## Spectral-stem models — open gaps
 
-Added 2026-10-14 with the `spectral_stem_mae` trainer and the EnMAP native shards. Rationale in
+Added 2026-10-14 with the `spectral_stem_mae` trainer; rewritten 2026-10-19 when FT04 shipped as Indradhanu V2. Rationale in
 [`lld/spectral-stem.md`](lld/spectral-stem.md) and [`lld/enmap-shards.md`](lld/enmap-shards.md).
 
-- **Mixed-sensor batches have no label-key policy.** `band_list_path` aligns bands, but EnMAP
-  samples carry `label_*`/`meta.json` and SpectralEarth/PRISMA samples do not, so default
-  collation fails on a mixed batch. Pre-training is single-sensor; this blocks only mixed
-  fine-tuning.
-- **The loss does not use the EnMAP cloud labels yet.** Fine-tuning on EnMAP as-is would teach
-  cloud as normal surface; screening cloudy pixels out of the loss (except on the high, dry
-  plateau scenes whose cirrus/cloud labels are false) is unbuilt.
-- **No PRISMA shards.** PRISMA L2D (223 scenes, in the inventory) needs its own native-band
-  reader before it can be sharded.
+- **Indradhanu V2 (FT04) is opt-in, not the default** (2026-10-19, docs/proposals/ship-ft04.md, Phase 1). The
+  hyperspectral defaults still route to Indradhanu v0.2.0 and `band_filter_apply` still defaults to the 165-band grid;
+  making V2 the default is Phase 2, after it has been used in the product.
+- **One `anomaly_scoring` action cannot mix V2 and v0.2.0.** V2 needs a native-band band filter, v0.2.0 the 165-band
+  grid; both read the same upstream output, so `anomaly_scoring` refuses whichever one does not match (at run time -
+  `validate_config` cannot see the upstream band filter's settings). Classical detectors take either grid.
+- **V2's masks are written but not shown.** `models/<codename>/mask_cloud.tif` and `class_map.tif` (0 land, 1 water,
+  2 cloud, 3 shadow, 4 snow) and the stats keys `bands_read`, `excluded_classes`, `excluded_percent` are on disk; the
+  viewer has no panel for them, no erosion knob or flow diagram for the new architecture (frontend work).
+- **CPU cost on the stack is unmeasured.** Native bands (~200-370 against 165) at stride 32 plus a segmentation pass;
+  the worker has no GPU locally.
+- **EnMAP keeps the product convention.** The default EnMAP band filter removes provider cloud / shadow / haze pixels
+  before scoring, unlike the PRISMA evaluation behind V2's numbers (decision 2026-10-19).
 
 ## Evaluation - known limits
 
@@ -227,12 +231,11 @@ and [`lld/implant-bench.md`](lld/implant-bench.md).
   bench-v1 / bench-v2 numbers are void and every signature implant in bench-v1, bench-v2 and FT05's training was
   garbled. Any new interpolation over a sensor's band list must sort first (`app/evaluation/implant.interp_spectrum`);
   see [`lld/implant-bench.md`](lld/implant-bench.md), Invariant 5.
-- **Cloud exclusion is not in the product.** Chosen 2026-10-17 (first water and cloud, then cloud only - vessels are
-  in scope); the release candidate since 2026-10-18 is FT04 with cloud excluded on its own masks. Today it exists
-  only as the `exclude` scorer in `app/evaluation/scorers.py`. In the product, water and
-  cloud are left out only through an optional upstream `keep_mask` from `scene_segmentation` (NDWI / brightness
-  thresholds) or `cloud_mask`. Under exclusion, 39 of the 909 real
-  labelled objects (27 in PRISMA set1) cannot be found, because FT03 calls their every pixel water or cloud.
+- **Cloud exclusion is in the product only for Indradhanu V2** (since 2026-10-19), from its own segmentation head
+  (`exclude_classes` in the resolver). v0.2.0 has no head; for it, water and cloud are left out only through an
+  optional upstream `keep_mask` from `scene_segmentation` (NDWI / brightness thresholds) or `cloud_mask`. Under
+  exclusion, 39 of the 909 real labelled objects (27 in PRISMA set1) cannot be found, because FT03 calls their every
+  pixel water or cloud.
 - **The class-map cache does not know the dataset's content.** Score maps are keyed by the scene's file
   fingerprint since 229d423; class maps (`cache/classes`) are not, so a bench rebuilt in place under the same scene
   names, evaluated into the same output directory, silently reuses old masks. Use a new bench path and output
