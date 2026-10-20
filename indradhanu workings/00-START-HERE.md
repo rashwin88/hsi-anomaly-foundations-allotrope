@@ -91,7 +91,7 @@ Every part has the same skeleton:
 | 29 | [29-inference.md](29-inference.md) | Running it on a real scene |
 | 30 | [30-scoring-and-the-product.md](30-scoring-and-the-product.md) | Turning errors into an answer |
 
-**Sequel - the next Indradhanu: a smarter spectral bottleneck, then pretraining, scoring, fine-tuning and shipping (31-61)**
+**Sequel - the next Indradhanu: a smarter spectral bottleneck, then pretraining, scoring, fine-tuning and shipping (31-63)**
 
 Written 2026-10-14, after the decision to pretrain the next Indradhanu on SpectralEarth with a
 cross-attention spectral bottleneck. Parts 31 to 39 were written as a **design studied before
@@ -133,6 +133,8 @@ Assumes all of parts 01 to 30; leans on 08, 10, 12, 13 and 17 to 21.
 | 59 | [59-the-scoreboard.md](59-the-scoreboard.md) | Every model on every benchmark, read against chance and PCA-RX and with v0.2.0 read correctly: no new model beats the shipped one on detection alone (rewritten 2026-10-19) |
 | 60 | [60-ft04-the-release-candidate.md](60-ft04-the-release-candidate.md) | FT04: pseudo-labels with confidence thresholds and a water guard, why the cloud guard was dropped, rare-class weights - and what the model did and did not buy |
 | 61 | [61-shipping-indradhanu-v2.md](61-shipping-indradhanu-v2.md) | Shipping FT04 as Indradhanu V2: a new codename (routing is last-wins), the embedded model config, the band-grid check, `read_bands`, cloud zeroed after scoring, and the parity run that guards it |
+| 62 | [62-the-uncertainty-head-proposal.md](62-the-uncertainty-head-proposal.md) | **The proposal (run 2026-10-20 as FT06, see 63):** score-side ideas failed, so a small head predicts each pixel's expected error (Laplace likelihood, hidden pixels only) and the score divides by it |
+| 63 | [63-the-uncertainty-head-run.md](63-the-uncertainty-head-run.md) | **FT06, failed:** the head learned its own error (Spearman ~0.6) but expects large errors on targets themselves (halo in visible neighbouring tokens), so dividing by it hides anomalies - predicting your error is not detection |
 
 Parts 34 to 39's numbers were first produced by a study prototype and then re-checked against
 the real modules (5,345 compressor and 6,401 decoder parameters at `d = D = 32`; 13,162 gate
@@ -219,6 +221,22 @@ set4 0.2106 / 0.2199, 11.83% excluded, 185 / 186 bands read), and everything Pha
 defaults, `band_filter_apply`'s grid default, and the "one action cannot run both models" limit.
 Authoritative: `docs/lld/spectral-stem.md` ("Serving"), `docs/04-models.md` (Inference),
 `docs/09-known-issues.md` ("Spectral-stem models - open gaps"), `final design/ROADMAP.md` (OB-14).
+
+**Part 62 (written 2026-10-19)** is short and describes a **proposal**: `docs/proposals/uncertainty-head.md`,
+written after the scoring-gains experiment (`research/experiments/scoring-gains/`, taught in the
+anomaly-detection course's part 24) found no score-side change that beats residual Mahalanobis on real
+objects caught. Nothing in it is trained or measured except the head's parameter count (95,632, checked
+by building the decoder). **Values that will drift:** all of it - the design, the ~2.5 h estimate, the
+pass criteria (pAUC 0.170 -> 0.180, Spearman >= 0.5) - once the proposal is agreed, changed or run.
+
+**Part 63 (written 2026-10-20)** teaches the run: FT06, the uncertainty head on frozen FT04, 3 epochs,
+head only. It **failed detection and is not adopted**; part 62 got a dated note at its top and now ends
+pointing here. **Values that will drift:** the per-epoch Spearman and NLL table (0.584-0.640, -1.331 to
+-1.341), the detection table (pAUC 0.170 / 0.125 / 0.163, epoch-1 sqrt 0.176), the target / ring `b` ratios
+(1.05 / 1.12 / 1.04 at epoch 1, 1.07 / 1.19 / 1.13 at epoch 3), the 87th-90th percentile, and the status of the
+two untried rescue ideas - if either is tried, this part's verdict may change. Authoritative:
+`research/experiments/indradhanu-finetune/FT06-uncertainty/README.md` (and its `eval_report.md`,
+`b_at_targets.py`), `docs/proposals/uncertainty-head.md`, `docs/lld/finetune.md` (mode `scale`).
 
 ## Figures
 

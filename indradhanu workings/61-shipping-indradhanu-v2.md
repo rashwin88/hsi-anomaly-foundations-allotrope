@@ -330,5 +330,7 @@ checkpoint and the bench scenes and is not part of `pytest`.
 
 ---
 
-That is the course so far. The anomaly-detection course's part 23 covers the same change from the
-analyst's side: which actions to create, the error you get otherwise, and where the new outputs land.
+The anomaly-detection course's part 23 covers the same change from the analyst's side: which actions to
+create, the error you get otherwise, and where the new outputs land.
+
+Next: part 62, the model-side step proposed after the score-side ideas failed - an uncertainty head.

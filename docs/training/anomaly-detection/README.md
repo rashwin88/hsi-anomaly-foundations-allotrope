@@ -3,7 +3,7 @@
 A course for someone who has never worked with hyperspectral data and has never opened this
 repository. Start at part 1 knowing nothing; finish able to read the source.
 
-Twenty-three parts, each finishable in a sitting. **Read them in order.** Part N assumes parts
+Twenty-five parts, each finishable in a sitting. **Read them in order.** Part N assumes parts
 1 to N-1 and nothing else, so skipping ahead will cost you more time than it saves.
 
 | part | one-sentence purpose |
@@ -31,6 +31,8 @@ Twenty-three parts, each finishable in a sitting. **Read them in order.** Part N
 | [21](21-scope-and-masks.md) | Scope: cloud excluded, water kept for vessels, and what a mask costs - the 39 real objects inside FT03's mask, and set4's "desert" that was haze |
 | [22](22-the-sorting-bug.md) | How a sorting bug rewrote the scoreboard: `np.interp` needs ascending wavelengths, PRISMA lists them descending, and the cross-check against the product path that found it |
 | [23](23-using-indradhanu-v2.md) | Using Indradhanu V2 in an action chain: a native-band band filter, the codename, the error you get otherwise, the new cloud mask and class map, and why one action cannot run both Indradhanus |
+| [24](24-scoring-gains.md) | Three ways to improve the score on a fixed model - a spatial matched filter, rank fusion with PCA-RX, a mixture of backgrounds - and why each lost real objects: pixel measures against object measures, rank max's false alarms, and bench-v2.1's placement bias |
+| [25](25-gated-scene-adaptation.md) | Gated per-scene adaptation: GT-HAD's gating and early stopping transplanted onto FT04, choosing settings without ground truth (lr from the loss, N by leave-one-scene-out), and why it failed - the gate changed nothing because the targets were never learned, and a pretrained model has no early window |
 
 ## How to use this
 
@@ -73,6 +75,8 @@ relying on them:
 | 21 | the cloud-only and water + cloud numbers, the per-scene object counts, the 39-object breakdown and FT03's 11% set4 "cloud" (haze, corrected 2026-10-18); all move with a new segmentation head - FT04 passed on 2026-10-18 and its masks are the release candidate's |
 | 22 | every bench-v2.1 number (2,817 objects, the model rows, the 1.05 / 1.15 / 1.60x foreignness), the resample-check rows, the PRISMA band orders quoted from the dev laptop's files, NumPy 2.5.2's `np.interp` behaviour on unsorted input (undefined by contract - another version may differ) |
 | 23 | Indradhanu V2's status (opt-in, v0.2.0 the default - Phase 2 of `docs/proposals/ship-ft04.md` would change both defaults and the "one action cannot run both" limit), the 0.165 / 0.170 like-for-like, set4's 11.83% excluded, the missing viewer panel, the unmeasured CPU cost |
+| 24 | every scoring-gains number (FT04's 0.162 baseline, the nine scorer rows, the per-size objects caught, the 60-70% / 5% / 5.2% target-clustering figures, the 13 cache files); the verdict "RM stays" holds until a scorer or model passes the object-level criteria. The uncertainty head was run as FT06 on 2026-10-20 and failed (Indradhanu part 63; research/experiments/indradhanu-finetune/FT06-uncertainty/) |
+| 25 | every scene-adaptation number (the 0.170 bar, the four variant rows, the per-scene pAUCs and the 0.1565 leave-one-scene-out headline derived from them, the 4.55% gate coverage, the lr-probe losses, 1.6 steps/s), the GT-HAD reproduction figures (5.5% / 2.0% PD at 1e-3, 0.873 / 0.843 mean valid AUC); the verdict holds for FT04 and this adaptation recipe only - a from-scratch or differently pretrained model would need its own run |
 
 Structural claims - what a vendable is, why masking works the way it does - will outlive
 the numbers.
