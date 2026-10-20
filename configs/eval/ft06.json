@@ -1,0 +1,100 @@
+{
+ "name": "FT06 uncertainty head: RM on residual / b vs FT04 RM, with and without cloud exclusion",
+ "models": [
+  {
+   "name": "FT04_ep10",
+   "checkpoint": "C:/es/models/FT04_best.pt"
+  },
+  {
+   "name": "FT06",
+   "checkpoint": "C:/es/models/FT06_best.pt"
+  }
+ ],
+ "datasets": [
+  {
+   "kind": "prisma_bench",
+   "path": "C:/Users/FITT/Documents/stage1_datasets"
+  },
+  {
+   "kind": "implant",
+   "path": "C:/es/implant/bench-v2.1"
+  }
+ ],
+ "scorers": [
+  {
+   "kind": "residual_mahalanobis",
+   "name": "RM"
+  },
+  {
+   "kind": "exclude",
+   "name": "RM, cloud excluded",
+   "classes": [
+    "cloud"
+   ],
+   "segmenter": "FT04_ep10",
+   "fit_on_kept": false,
+   "base": {
+    "kind": "residual_mahalanobis"
+   }
+  },
+  {
+   "kind": "scaled_rm",
+   "name": "scaled RM"
+  },
+  {
+   "kind": "exclude",
+   "name": "scaled RM, cloud excluded",
+   "classes": [
+    "cloud"
+   ],
+   "segmenter": "FT04_ep10",
+   "fit_on_kept": false,
+   "base": {
+    "kind": "scaled_rm"
+   }
+  },
+  {
+   "kind": "scaled_rm",
+   "name": "scaled RM sqrt",
+   "scale_power": 0.5
+  },
+  {
+   "kind": "exclude",
+   "name": "scaled RM sqrt, cloud excluded",
+   "classes": [
+    "cloud"
+   ],
+   "segmenter": "FT04_ep10",
+   "fit_on_kept": false,
+   "base": {
+    "kind": "scaled_rm",
+    "scale_power": 0.5
+   }
+  }
+ ],
+ "metrics": [
+  {
+   "kind": "roc_auc"
+  },
+  {
+   "kind": "pauc",
+   "max_fpr": 0.01
+  },
+  {
+   "kind": "tpr_at",
+   "fpr": 0.001
+  },
+  {
+   "kind": "objects_caught",
+   "top_pct": [
+    1.0,
+    0.1
+   ]
+  }
+ ],
+ "group_by": [
+  "tier",
+  "sensor"
+ ],
+ "output": "C:/es/eval/ft06"
+}

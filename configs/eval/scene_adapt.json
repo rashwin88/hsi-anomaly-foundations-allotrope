@@ -1,0 +1,89 @@
+{
+ "name": "Gated scene adaptation of FT04: N = 50 / 200 / 1000 gated, 200 ungated; real PRISMA bench",
+ "models": [
+  {
+   "name": "FT04_ep10",
+   "checkpoint": "C:/es/models/FT04_best.pt"
+  },
+  {
+   "name": "adapt50",
+   "checkpoint": "C:/es/models/FT04_best.pt",
+   "adapt_steps": 50,
+   "adapt_lr": 3e-05,
+   "adapt_gate_pct": 1.0,
+   "adapt_halo": 2
+  },
+  {
+   "name": "adapt200",
+   "checkpoint": "C:/es/models/FT04_best.pt",
+   "adapt_steps": 200,
+   "adapt_lr": 3e-05,
+   "adapt_gate_pct": 1.0,
+   "adapt_halo": 2
+  },
+  {
+   "name": "adapt1000",
+   "checkpoint": "C:/es/models/FT04_best.pt",
+   "adapt_steps": 1000,
+   "adapt_lr": 3e-05,
+   "adapt_gate_pct": 1.0,
+   "adapt_halo": 2
+  },
+  {
+   "name": "adapt200_ungated",
+   "checkpoint": "C:/es/models/FT04_best.pt",
+   "adapt_steps": 200,
+   "adapt_lr": 3e-05,
+   "adapt_gate_pct": 0.0,
+   "adapt_halo": 2
+  }
+ ],
+ "datasets": [
+  {
+   "kind": "prisma_bench",
+   "path": "C:/Users/FITT/Documents/stage1_datasets"
+  }
+ ],
+ "scorers": [
+  {
+   "kind": "residual_mahalanobis",
+   "name": "RM"
+  },
+  {
+   "kind": "exclude",
+   "name": "RM, cloud excluded",
+   "classes": [
+    "cloud"
+   ],
+   "segmenter": "FT04_ep10",
+   "fit_on_kept": false,
+   "base": {
+    "kind": "residual_mahalanobis"
+   }
+  }
+ ],
+ "metrics": [
+  {
+   "kind": "roc_auc"
+  },
+  {
+   "kind": "pauc",
+   "max_fpr": 0.01
+  },
+  {
+   "kind": "tpr_at",
+   "fpr": 0.001
+  },
+  {
+   "kind": "objects_caught",
+   "top_pct": [
+    1.0,
+    0.1
+   ]
+  }
+ ],
+ "group_by": [
+  "tier"
+ ],
+ "output": "C:/es/eval/scene_adapt"
+}

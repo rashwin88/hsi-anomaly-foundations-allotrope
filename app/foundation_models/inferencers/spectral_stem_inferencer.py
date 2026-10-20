@@ -33,11 +33,16 @@ class _ProductCallAdapter(nn.Module):
         super().__init__()
         self.inner = inner
         self.wavelengths_nm: torch.Tensor | None = None
+        self.with_scale = False                     # predict_full_scene_with_scale: one extra (log b) channel
 
     def forward(self, x, mask=None, keep_mask=None):
         if self.wavelengths_nm is None:
             raise RuntimeError("set_wavelengths() before inference")
+        if self.with_scale:                         # the last channel is a placeholder for log b
+            x = x[:, :-1]
         band_valid = None if mask is None else mask.bool().expand(-1, x.shape[1], -1, -1)
+        if self.with_scale:
+            return torch.cat(self.inner(x, self.wavelengths_nm, band_valid, keep_mask, with_scale=True), dim=1)
         return self.inner(x, self.wavelengths_nm, band_valid, keep_mask)
 
 
@@ -55,7 +60,8 @@ class SpectralStemInferencer(SegFormerMAEInferencer):
             seg_classes=getattr(cfg, "seg_classes", 0), seg_decoder_dim=getattr(cfg, "seg_decoder_dim", 128),
             embed_dims=cfg.embed_dims, num_heads=cfg.num_heads,
             reduction_ratios=cfg.reduction_ratios, num_blocks=cfg.num_blocks, decoder_dim=cfg.decoder_dim,
-            expansion_ratio=cfg.expansion_ratio, drop_rate=0.0)
+            expansion_ratio=cfg.expansion_ratio, drop_rate=0.0,
+            scale_decoder_dim=getattr(cfg, "scale_decoder_dim", 0))
         return _ProductCallAdapter(inner)
 
     def _load_weights(self, path: str) -> None:
@@ -73,6 +79,19 @@ class SpectralStemInferencer(SegFormerMAEInferencer):
         keep = self.model.inner.trained_band_mask(wl).cpu().numpy()
         self.set_wavelengths(wl[keep])
         return cube[keep], wl[keep], np.flatnonzero(keep)
+
+    def predict_full_scene_with_scale(self, scene: torch.Tensor, mask: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        """(reconstruction (C, H, W), log b (H, W)) in one pass of predict_full_scene's tiling and two complementary
+        masks - so each pixel's log b, like its reconstruction, comes from a pass where it was hidden. Needs a
+        checkpoint with an uncertainty head (docs/proposals/uncertainty-head.md)."""
+        if self.model.inner.scale_head is None:
+            raise ValueError("checkpoint has no uncertainty head")
+        self.model.with_scale = True
+        try:
+            out = self.predict_full_scene(torch.cat([scene, torch.zeros_like(scene[:1])]), mask)
+        finally:
+            self.model.with_scale = False
+        return out[:-1], out[-1]
 
     SEG_TILE, SEG_STRIDE, SEG_BATCH = 128, 64, 16
     SEG_CLASSES = ("water", "cloud", "thin_cloud", "shadow", "snow")    # the head's output order

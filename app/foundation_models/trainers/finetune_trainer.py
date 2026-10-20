@@ -90,6 +90,17 @@ def pseudo_sample_targets(sample: dict, pseudo_dir: str | None):
     return pseudo_targets(np.load(path), refl, np.asarray(sample["wavelengths.npy"], np.float64), valid)
 
 
+def spearman(a: torch.Tensor, b: torch.Tensor, cap: int = 50_000) -> float:
+    """Rank correlation of two 1-D tensors (first `cap` values; ties broken by order)."""
+    a, b = a[:cap].float(), b[:cap].float()
+    if len(a) < 3:
+        return 0.0
+    ra = torch.argsort(torch.argsort(a)).float()
+    rb = torch.argsort(torch.argsort(b)).float()
+    ra, rb = ra - ra.mean(), rb - rb.mean()
+    return float((ra * rb).sum() / (ra.norm() * rb.norm()).clamp(min=1e-12))
+
+
 def single_thread_worker(_worker_id: int) -> None:
     """DataLoader worker init: one BLAS / torch thread per worker. With a thread pool each, 18 workers (3 sources x 6)
     on 8 vCPUs oversubscribed the CPU about 8-fold; the implant transform ran 4.7 s per tile instead of 1.8 s
@@ -216,12 +227,14 @@ class FinetuneTrainer(SpectralStemMAETrainer):
     def __init__(self, config):
         self._seen_band_lists: set = set()
         self._val_by_source: dict = {}
+        self._scale_by_source: dict = {}                 # mode scale: source -> [NLL sum, Spearman sum, batches]
         self._iou = IoUTally()
         super().__init__(config)
         cfg = config.model_config_
-        if cfg.mode == "probe":                          # only the head learns
+        if cfg.mode in ("probe", "scale"):               # only the head learns
+            head = "seg_head." if cfg.mode == "probe" else "scale_head."
             for name, p in self.model.named_parameters():
-                p.requires_grad = name.startswith("seg_head.")
+                p.requires_grad = name.startswith(head)
             self.optimizer = torch.optim.Adam([p for p in self.model.parameters() if p.requires_grad], lr=config.learning_rate)
             self.scheduler = self._build_scheduler()
         self._policy = LabelPolicy(cfg.plateau_elevation_m, cfg.low_water_vapour, cfg.cirrus_min_level)
@@ -250,12 +263,14 @@ class FinetuneTrainer(SpectralStemMAETrainer):
             gate_hidden=cfg.gate_hidden, bin_nm=cfg.bin_nm, band_weighting=cfg.band_weighting,
             seg_classes=cfg.seg_classes, seg_decoder_dim=cfg.seg_decoder_dim, embed_dims=cfg.embed_dims,
             num_heads=cfg.num_heads, reduction_ratios=cfg.reduction_ratios, num_blocks=cfg.num_blocks,
-            decoder_dim=cfg.decoder_dim, expansion_ratio=cfg.expansion_ratio, drop_rate=cfg.drop_rate)
+            decoder_dim=cfg.decoder_dim, expansion_ratio=cfg.expansion_ratio, drop_rate=cfg.drop_rate,
+            scale_decoder_dim=cfg.scale_decoder_dim)
         if state is not None:
             missing, unexpected = model.load_state_dict(state, strict=False)
-            if unexpected or any(not k.startswith("seg_head.") for k in missing):
+            if unexpected or any(not k.startswith(("seg_head.", "scale_head.")) for k in missing):
                 raise ValueError(f"init_from does not match the model: missing {missing[:5]}, unexpected {unexpected[:5]}")
-            logger.info(f"init_from {cfg.init_from}: loaded; {len(missing)} new segmentation-head tensors")
+            heads = sorted({k.split(".")[0] for k in missing})
+            logger.info(f"init_from {cfg.init_from}: loaded; {len(missing)} new tensors ({', '.join(heads) or 'none'})")
         if cfg.seg_head_from:                            # e.g. FT01's probe head instead of a fresh one
             head = {k[len("seg_head."):]: v for k, v in self._load_init_state(cfg.seg_head_from, "seg_head.pt").items()
                     if k.startswith("seg_head.")}
@@ -340,6 +355,8 @@ class FinetuneTrainer(SpectralStemMAETrainer):
 
     def compute_loss(self, batch: dict, model: nn.Module):
         cfg = self.config.model_config_
+        if cfg.mode == "scale":
+            return self._scale_loss(batch.get("_groups") or [(batch.get("_source", "?"), batch)], model)
         if "_groups" in batch:
             return self._mixed_loss(batch["_groups"], model)
         wl = torch.as_tensor(batch["wavelengths.npy"])
@@ -418,6 +435,52 @@ class FinetuneTrainer(SpectralStemMAETrainer):
                 loss = loss + cfg.seg_weight * seg
         return loss, kept
 
+    def _scale_loss(self, groups: list, model: nn.Module, validate: bool = False):
+        """mode scale (FT06, docs/proposals/uncertainty-head.md): Laplace negative log-likelihood of the uncertainty
+        head on hidden, valid, eroded pixels - backbone frozen, plain MAE masking, no band augmentation.
+
+            e(p) = mean over valid bands of |normalised residual|  (detached: the target, not something to shrink)
+            loss = mean over hidden p of  e(p) / b(p) + log b(p)    - lowest where b(p) = e(p)
+
+        validate: also adds each group's NLL and Spearman(b, e) on its hidden pixels to _scale_by_source."""
+        cfg = self.config.model_config_
+        inputs, truth = [], []
+        for source, batch in groups:
+            pixels, band_valid, wl, mask, n = self._keep_samples(*self._decode_batch(batch))
+            if n == 0:
+                continue
+            if wl.dim() == 2:                            # one band list per source (band_list_path aligns them)
+                if not (wl == wl[0]).all():
+                    raise ValueError("mode scale needs one band list per batch - set band_list_path")
+                wl = wl[0]
+            keep_mask, pred_mask = self._build_prediction_mask(mask, cfg.mask_ratio)
+            loss_mask = (self._pred_mask_to_pixel_mask(pred_mask, *pixels.shape[2:])
+                         * TokenMasking.erode_mask(mask, kernel_size=cfg.erosion_kernel_size))
+            inputs.append((pixels, wl, band_valid, keep_mask, None))
+            truth.append((source, pixels, band_valid, wl, loss_mask[:, 0] > 0, n))
+        if not inputs:
+            return torch.tensor(0.0, device=self.device, requires_grad=True), 0
+        bf16 = cfg.amp_bf16 and self.device.type == "cuda"
+        with torch.autocast("cuda", dtype=torch.bfloat16, enabled=bf16):
+            outs, log_bs = model.forward_mixed(inputs, with_scale=True)
+        total, kept = 0.0, 0
+        for x_hat, log_b, (source, x, bv, wl, hidden, n) in zip(outs, log_bs, truth):
+            if not hidden.any():
+                continue
+            with torch.no_grad():
+                stats = model.stats
+                r = (stats.normalize(x_hat.float(), wl) - stats.normalize(x, wl)).abs() * bv
+                e = r.sum(1) / bv.float().sum(1).clamp(min=1)                       # (B, H, W)
+            lb = log_b.float()[:, 0].clamp(-10.0, 5.0)
+            nll = (e / lb.exp() + lb)[hidden].mean()
+            total, kept = total + nll * n, kept + n
+            if validate:
+                acc = self._scale_by_source.setdefault(source, [0.0, 0.0, 0])
+                acc[0] += nll.item(); acc[1] += spearman(lb[hidden], e[hidden]); acc[2] += 1
+        if not kept:
+            return torch.tensor(0.0, device=self.device, requires_grad=True), 0
+        return total / kept, kept
+
     def _seg_inputs(self, batch: dict):
         """(pixels, band_valid, wl, targets or None, known or None) for the batch's usable samples, or None."""
         pixels, band_valid, wl, mask = self._decode_batch(batch)
@@ -445,6 +508,8 @@ class FinetuneTrainer(SpectralStemMAETrainer):
     def compute_validation_loss(self, batch: dict, model: nn.Module):
         cfg = self.config.model_config_
         source = batch.get("_source", "?")
+        if cfg.mode == "scale":
+            return self._scale_loss([(source, batch)], model, validate=True)
         seg = self._seg_batch(batch)
         seg_loss = None
         if seg is not None:
@@ -464,16 +529,17 @@ class FinetuneTrainer(SpectralStemMAETrainer):
     # --- per-epoch records -----------------------------------------------------------------------
 
     def _train_pass_mode(self) -> None:
-        if self.config.model_config_.mode == "probe":    # frozen backbone: keep its BatchNorm statistics
+        mode = self.config.model_config_.mode
+        if mode in ("probe", "scale"):                   # frozen backbone: keep its BatchNorm statistics
             self.model.eval()
-            self.model.seg_head.train()
+            (self.model.seg_head if mode == "probe" else self.model.scale_head).train()
 
     def _run_train_pass(self, loader, sample_cap: int):
         self._train_pass_mode()
         return super()._run_train_pass(loader, sample_cap)
 
     def _run_epoch(self, epoch, train_loaders, test_loaders):
-        self._val_by_source, self._iou = {}, IoUTally()
+        self._val_by_source, self._iou, self._scale_by_source = {}, IoUTally(), {}
         self._epoch_grad_sum, self._epoch_grad_n = 0.0, 0
         try:
             super()._run_epoch(epoch, train_loaders, test_loaders)
@@ -492,6 +558,8 @@ class FinetuneTrainer(SpectralStemMAETrainer):
             l1, sam, n = self._val_by_source.get(s.name, [0.0, 0.0, 0])
             row[f"{s.name}_val_l1"] = round(l1 / n, 6) if n else ""
             row[f"{s.name}_val_sam_deg"] = round(sam / n * deg, 4) if n else ""
+        for s, (nll, rho, k) in self._scale_by_source.items():
+            row[f"{s}_val_scale_nll"], row[f"{s}_val_scale_spearman"] = round(nll / k, 6), round(rho / k, 4)
         ious = self._iou.iou()
         row.update({f"iou_{c}": ("" if ious[c] is None else round(ious[c], 4)) for c in CLASSES})
         known = [v for v in ious.values() if v is not None]

@@ -32,7 +32,7 @@ Config (configs/eval/stage3.json is the reference):
 |---|---|
 | models | name, checkpoint (local or s3://), reading auto / native / product165 / se202 |
 | datasets | prisma_bench (path = stage1_datasets root), implant (path = bench dir); scenes subset |
-| scorers | residual_mahalanobis (d, local_window), combined, L1, SAM, class_aware (segmenter), exclude (base, classes, segmenter, fit_on_kept), pca_rx (no model) |
+| scorers | residual_mahalanobis (d, local_window), combined, L1, SAM, class_aware (segmenter), exclude (base, classes, segmenter, fit_on_kept), pca_rx (no model); since 2026-10-19 `spatial_sigma` (blur the residual before whitening), fuse (parts, rule rank_mean / rank_max), mixture (k background types by k-means on the cube) - research/experiments/scoring-gains/, none adopted; scaled_rm (scale_power, scale_floor_pct; needs a model with an uncertainty head - `needs_scale` scorers are skipped for other models; FT06, not adopted) |
 | metrics | roc_auc, pauc (max_fpr), tpr_at (fpr), objects_caught (top_pct list), three_d_roc |
 | group_by | object attributes: tier, source, sensor, size |
 
@@ -121,12 +121,17 @@ summary.json, per_object.csv, per_scene.csv, provenance.json); summarised in
 | `configs/eval/ft05_ep5.json` | `C:/es/eval/ft05_ep5` | FT05 epoch 5 vs FT03, plain and cloud-only. PRISMA bench: pAUC 0.15801 vs 0.15805, TPR at 0.1% 0.0594 vs 0.0582, caught top 0.1% 130 vs 130 - a tie. bench-v2: caught top 1% 32.8% vs 32.3%, pAUC 0.167 vs 0.164, `host` source 29.6% vs 29.4% (signature implants garbled - before b94dbfd) |
 | `configs/eval/bench_v2_1.json` | `C:/es/eval/v2.1` | bench-v2.1 (fixed signatures, foreign tol 1.2), all models, PCA-RX, cloud exclusion by FT03's masks. Caught top 1%: v0.2.0 35.5%, F001 33.1%, FT02c 35.1%, FT03 34.9%, FT05 ep5 35.4%, PCA-RX 33.2%; exclusion ~+1 point for every model. No new model beats v0.2.0 (docs/lld/implant-bench.md, "bench-v2.1") |
 | `configs/eval/ft04.json` | `C:/es/eval/ft04` | FT04 vs FT03, real bench and bench-v2.1, cloud exclusion with each model's own masks and swapped. Real bench pAUC / TPR at 0.1%: FT04 0.162 / 0.061, FT04 + own masks 0.170 / 0.065 (the release candidate), FT03 + own masks 0.166 / 0.064; masks interchangeable (FT04 + FT03 masks 0.170, FT03 + FT04 masks 0.165) |
+| `configs/eval/scoring_gains.json` | `C:/es/eval/scoring_gains` | Scoring gains A1-A3 on FT04 (2026-10-19). Spatial blur raises real pAUC 0.162 -> 0.177 but loses objects at every size; RM + PCA-RX fusion adds nothing; mixture of backgrounds +6 points on bench-v2.1 and 0.162 -> 0.111 on the real bench (real targets cluster in small built-up types). RM stays the score |
+| `configs/eval/ft06.json` | `C:/es/eval/ft06` | FT06 uncertainty head vs FT04 (2026-10-20). Real bench, cloud excluded: RM 0.170 / 46.0% caught top 1%; residual / b 0.125 / 37.8%; residual / sqrt b 0.163 / 44.8% (top 0.1% 16.6% vs 15.8%). Not adopted. ~2.3 h: two models plus the scale pass filled the 20 GB laptop GPU |
+| `configs/eval/scene_adapt.json` | `C:/es/eval/scene_adapt` | Gated per-scene adaptation of FT04 (`ModelSpec.adapt_steps / adapt_lr / adapt_gate_pct / adapt_halo`; app/foundation_models/scene_adaptation.py), 2026-10-20. Every N (50 / 200 / 1000) below FT04 (pAUC ~0.160 vs 0.170 cloud excluded); gated = ungated. Not adopted. Adapted variants carry their settings in the model id (cache key) |
 
 ## Decisions
 
 - **Scene-major, then model-major** loops: one scene and one reconstruction in memory - the old scripts ran out of
   RAM holding several (2026-10-17).
-- **Score maps cached, reconstructions not**: new metrics or groups re-run no model.
+- **Score maps cached, reconstructions not**: new metrics or groups re-run no model. Cached float16, except maps
+  past its range (> 6e4 or non-finite), kept float32 since 2026-10-19 - blurred / mixture squared distances overflowed
+  to inf. Adding a ScorerSpec field changes every key (the key is the spec's JSON), so old caches recompute.
 - **Product's sampled AUC kept as `roc_auc`** for continuity with every earlier table; the exact AUC is available
   per group (`roc_auc_exact|...`).
 - **Classical baseline as a scorer** (`pca_rx`: `residual_mahalanobis` with a zero reconstruction, so the

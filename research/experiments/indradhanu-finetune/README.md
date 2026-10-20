@@ -141,4 +141,9 @@ thread that connects them.
   class weights: masks held, reconstruction better on all three sensors, detection at or above FT03; with cloud
   exclusion on its own masks the best real-bench result so far (pAUC 0.170, TPR @ 0.1% 0.065 vs shipped v0.2.0
   0.159 / 0.058). Next: product wiring (FT04 checkpoint + masks + cloud exclusion in anomaly_scoring).
-
+- **2026-10-19 - FT04 shipped as Indradhanu V2 (opt-in); score-side gains tried and dropped.** Product path verified
+  against the evaluator (pAUC identical on PRISMA set1 / set4). Spatial blur, fusion with PCA-RX and a mixture of
+  backgrounds all fail to find more real objects than residual Mahalanobis (research/experiments/scoring-gains/).
+- **2026-10-20 - FT06 (uncertainty head) failed.** A head on frozen FT04 learns its own expected error (Spearman 0.60-
+  0.64) but expects large errors on the targets themselves (b on a target 1.07-1.19x its surroundings), so dividing
+  by it hides anomalies: pAUC 0.170 -> 0.125 (residual / b) or 0.163 (residual / sqrt b). Folder [FT06-uncertainty](FT06-uncertainty/README.md).

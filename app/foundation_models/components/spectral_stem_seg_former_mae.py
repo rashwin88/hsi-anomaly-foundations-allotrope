@@ -51,7 +51,7 @@ class SpectralStemSegFormerMAE(nn.Module):
                  band_weighting: str = "count", seg_classes: int = 0, seg_decoder_dim: int = 128,
                  embed_dims=(32, 64, 160, 256), num_heads=(1, 2, 5, 8), reduction_ratios=(8, 4, 2, 1),
                  num_blocks=(2, 2, 2, 2), decoder_dim: int = 256, expansion_ratio: int = 4,
-                 drop_rate: float = 0.0):
+                 drop_rate: float = 0.0, scale_decoder_dim: int = 0):
         super().__init__()
         if stem not in STEMS:
             raise ValueError(f"stem must be one of {STEMS}, got {stem!r}")
@@ -80,6 +80,11 @@ class SpectralStemSegFormerMAE(nn.Module):
         # predicted per pixel like the reconstruction. Absent (seg_classes = 0) in pretrained models.
         self.seg_head = (SegFormerDecoder(embed_dims=list(embed_dims), decoder_dim=seg_decoder_dim, out_channels=seg_classes)
                          if seg_classes else None)
+        # Optional uncertainty head (docs/proposals/uncertainty-head.md): log b(p), the expected size of the
+        # normalised reconstruction error at each pixel, predicted from the same (masked) encoder features - so a
+        # hidden pixel's b comes from its context, never from the pixel itself. Absent (0) before FT06.
+        self.scale_head = (SegFormerDecoder(embed_dims=list(embed_dims), decoder_dim=scale_decoder_dim, out_channels=1)
+                           if scale_decoder_dim else None)
         # Every wavelength the model has trained on, sorted: starts as the pretraining list (the
         # normalisation curve) and grows as fine-tuning reads other sensors. The curve itself stays
         # frozen (docs/lld/spectral-stem.md); this record is what trained_band_mask reads.
@@ -140,22 +145,26 @@ class SpectralStemSegFormerMAE(nn.Module):
         logits = self.seg_head(self.encoder(self.norm(z)))
         return list(torch.split(logits, [len(x) for x, _, _ in groups]))
 
-    def forward_mixed(self, groups: list) -> list:
+    def forward_mixed(self, groups: list, with_scale: bool = False):
         """One pass over samples with different band lists. groups: [(x, wavelengths_nm, band_valid, keep_mask,
         out_wavelengths_nm)], each as in forward (keep_mask set for all groups or none; out may be None). Each group
         has its own stem pass; the stem outputs share one batch through BatchNorm, encoder and decoder, so batch
-        statistics and gradients mix sensors. Returns each group's (B_g, M_g, H, W) reconstruction."""
+        statistics and gradients mix sensors. Returns each group's (B_g, M_g, H, W) reconstruction; with_scale, also
+        each group's (B_g, 1, H, W) log b from the uncertainty head."""
         if self.stem not in WAVELENGTH_STEMS:
             raise ValueError(f"{self.stem} stem reads one band list only")
         z = torch.cat([self._stem(x, wl, bv) for x, wl, bv, _, _ in groups])
         keep = None if groups[0][3] is None else torch.cat([g[3] for g in groups])
-        z_hat = self.decoder(self.encoder(self.norm(z), keep_mask=keep))
+        features = self.encoder(self.norm(z), keep_mask=keep)
+        z_hat = self.decoder(features)
         out, start = [], 0
         for x, wl, _, _, out_wl in groups:
             wl_out = wl if out_wl is None else out_wl
             part = self.spectral_out(z_hat[start:start + len(x)], wl_out)
             out.append(self.stats.denormalize(part, wl_out))
             start += len(x)
+        if with_scale:
+            return out, list(torch.split(self.scale_head(features), [len(g[0]) for g in groups]))
         return out
 
     def segment(self, x: torch.Tensor, wavelengths_nm: torch.Tensor, band_valid: torch.Tensor | None = None) -> torch.Tensor:
@@ -165,12 +174,13 @@ class SpectralStemSegFormerMAE(nn.Module):
         return self.seg_head(self.encode(x, wavelengths_nm, band_valid))
 
     def forward(self, x: torch.Tensor, wavelengths_nm: torch.Tensor, band_valid: torch.Tensor | None = None,
-                keep_mask: torch.Tensor | None = None, out_wavelengths_nm: torch.Tensor | None = None) -> torch.Tensor:
+                keep_mask: torch.Tensor | None = None, out_wavelengths_nm: torch.Tensor | None = None,
+                with_scale: bool = False):
         """x: (B, N, H, W) reflectance. wavelengths_nm: (N,) or (B, N). band_valid: (B, N, H, W)
         bool, False = dead voxel. keep_mask: (B, tokens) MAE keep mask for the encoder.
         out_wavelengths_nm: (M,) bands to reconstruct, default the input's - wavelength stems
         only (band-list augmentation reads a subset and reconstructs every band).
-        Returns (B, M, H, W) reconstructed reflectance. Raises ValueError if a fixed-band
+        Returns (B, M, H, W) reconstructed reflectance (with_scale: and the (B, 1, H, W) log b). Raises ValueError if a fixed-band
         stem gets a band count other than `bands`, or out_wavelengths_nm."""
         if out_wavelengths_nm is not None and self.stem not in WAVELENGTH_STEMS:
             raise ValueError(f"{self.stem} stem reconstructs its input bands only")
@@ -181,4 +191,5 @@ class SpectralStemSegFormerMAE(nn.Module):
             z_hat = self.spectral_out(z_hat, out_wl)                         # (B, M, H, W)
         else:
             z_hat = self.spectral_out(z_hat)
-        return self.stats.denormalize(z_hat, out_wl)
+        recon = self.stats.denormalize(z_hat, out_wl)
+        return (recon, self.scale_head(features)) if with_scale else recon

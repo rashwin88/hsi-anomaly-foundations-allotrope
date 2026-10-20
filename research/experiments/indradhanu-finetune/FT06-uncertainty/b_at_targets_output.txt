@@ -1,0 +1,7 @@
+# python b_at_targets.py (2026-10-20, laptop, PYTHONPATH=repo) - verbatim output
+FT06_ep1 set1 target b pct median 0.87  ring 0.85  target/ring b ratio 1.05
+FT06_ep1 set2 target b pct median 0.86  ring 0.73  target/ring b ratio 1.12
+FT06_ep1 set4 target b pct median 0.77  ring 0.70  target/ring b ratio 1.04
+FT06_best set1 target b pct median 0.87  ring 0.84  target/ring b ratio 1.07
+FT06_best set2 target b pct median 0.89  ring 0.74  target/ring b ratio 1.19
+FT06_best set4 target b pct median 0.90  ring 0.78  target/ring b ratio 1.13

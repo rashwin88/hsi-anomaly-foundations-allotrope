@@ -25,6 +25,12 @@ class ModelSpec(BaseModel):
     reading: Literal["auto", "native", "product165", "se202"] = Field(
         default="auto", description="auto: native for wavelength stems, se202 for fixed stems, product165 for "
         "hyperspectral_segformer_mae (v0.2.0).")
+    adapt_steps: int = Field(default=0, ge=0, description="Gated per-scene adaptation steps before reconstructing "
+                             "(app/foundation_models/scene_adaptation.py); 0 = off. Wavelength stems only.")
+    adapt_lr: float = Field(default=1e-5, gt=0)
+    adapt_gate_pct: float = Field(default=1.0, ge=0, lt=100, description="Top % of the unadapted model's residual "
+                                  "Mahalanobis score left out of the adaptation loss; 0 = no gating.")
+    adapt_halo: int = Field(default=2, ge=0, description="Gate dilation, px.")
 
 
 class DatasetSpec(BaseModel):
@@ -34,7 +40,8 @@ class DatasetSpec(BaseModel):
 
 
 class ScorerSpec(BaseModel):
-    kind: Literal["residual_mahalanobis", "combined", "L1", "SAM", "class_aware", "exclude", "pca_rx"]
+    kind: Literal["residual_mahalanobis", "combined", "L1", "SAM", "class_aware", "exclude", "pca_rx", "fuse",
+                  "mixture", "scaled_rm"]
     name: str | None = None
     d: int = 30
     local_window: tuple[int, int] | None = (21, 61)
@@ -43,11 +50,19 @@ class ScorerSpec(BaseModel):
                                                                       description="exclude: classes scored 0.")
     segmenter: str | None = Field(default=None, description="class_aware / exclude: a model name with a seg head.")
     fit_on_kept: bool = Field(default=True, description="exclude: fit the base scorer on the kept pixels only.")
+    spatial_sigma: float = Field(default=0.0, ge=0, description="residual_mahalanobis / pca_rx / mixture: Gaussian blur (px) of the residual before whitening - a spatial matched filter for PSF-blurred targets.")
+    parts: list["ScorerSpec"] = Field(default_factory=list, description="fuse: the scorers combined.")
+    rule: Literal["rank_mean", "rank_max"] = Field(default="rank_mean", description="fuse: how ranks combine.")
+    k: int = Field(default=6, ge=2, description="mixture: number of background types (k-means on the cube).")
+    scale_power: float = Field(default=1.0, gt=0, description="scaled_rm: divide the residual by b ** scale_power.")
+    scale_floor_pct: float = Field(default=5.0, ge=0, lt=100, description="scaled_rm: floor b at this percentile.")
 
     @model_validator(mode="after")
     def _check(self):
         if self.kind == "exclude" and (self.base is None or not self.classes or not self.segmenter):
             raise ValueError("exclude needs base, classes and segmenter")
+        if self.kind == "fuse" and len(self.parts) < 2:
+            raise ValueError("fuse needs at least two parts")
         if self.kind == "class_aware" and not self.segmenter:
             raise ValueError("class_aware needs segmenter")
         return self
@@ -57,14 +72,29 @@ class ScorerSpec(BaseModel):
         if self.name:
             return self.name
         w = "global" if self.local_window is None else f"{self.local_window[0]}x{self.local_window[1]}"
+        blur = f",s={self.spatial_sigma:g}" if self.spatial_sigma else ""
+        if self.kind == "scaled_rm":
+            return f"scaled_rm(p={self.scale_power:g},floor={self.scale_floor_pct:g}%,d={self.d},w={w}{blur})"
         if self.kind in ("residual_mahalanobis", "class_aware", "pca_rx"):
-            return f"{self.kind}(d={self.d},w={w})"
+            return f"{self.kind}(d={self.d},w={w}{blur})"
+        if self.kind == "mixture":
+            return f"mixture(k={self.k},d={self.d},w={w}{blur})"
+        if self.kind == "fuse":
+            return f"fuse[{self.rule}](" + "; ".join(p.label for p in self.parts) + ")"
         if self.kind == "exclude":
             return f"exclude({'+'.join(self.classes)};{'fit' if self.fit_on_kept else 'mask'})[{self.base.label}]"
         return self.kind
 
     @property
+    def needs_scale(self) -> bool:
+        """True if the scorer reads the model's uncertainty head; the runner skips it for models without one."""
+        return (self.kind == "scaled_rm" or (self.kind == "exclude" and self.base.needs_scale)
+                or (self.kind == "fuse" and any(p.needs_scale for p in self.parts)))
+
+    @property
     def needs_model(self) -> bool:
+        if self.kind == "fuse":
+            return any(p.needs_model for p in self.parts)
         return self.kind != "pca_rx" and (self.kind != "exclude" or self.base.needs_model)
 
 

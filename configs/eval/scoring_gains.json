@@ -1,0 +1,25 @@
+{
+  "name": "Scoring gains A1-A3 on FT04: spatial matched filter, RM + PCA-RX fusion, mixture of backgrounds",
+  "models": [{"name": "FT04_ep10", "checkpoint": "C:/es/models/FT04_best.pt"}],
+  "datasets": [
+    {"kind": "prisma_bench", "path": "C:/Users/FITT/Documents/stage1_datasets"},
+    {"kind": "implant", "path": "C:/es/implant/bench-v2.1"}
+  ],
+  "scorers": [
+    {"kind": "residual_mahalanobis", "name": "RM (baseline)"},
+    {"kind": "residual_mahalanobis", "name": "A1 RM blur 1.0", "spatial_sigma": 1.0},
+    {"kind": "residual_mahalanobis", "name": "A1 RM blur 1.4", "spatial_sigma": 1.4},
+    {"kind": "pca_rx", "name": "PCA-RX"},
+    {"kind": "fuse", "name": "A2 RM + PCA-RX, rank mean", "parts": [{"kind": "residual_mahalanobis"}, {"kind": "pca_rx"}]},
+    {"kind": "fuse", "name": "A2 RM + PCA-RX, rank max", "rule": "rank_max", "parts": [{"kind": "residual_mahalanobis"}, {"kind": "pca_rx"}]},
+    {"kind": "fuse", "name": "A1+ RM + RM blur 1.4, rank mean", "parts": [{"kind": "residual_mahalanobis"}, {"kind": "residual_mahalanobis", "spatial_sigma": 1.4}]},
+    {"kind": "mixture", "name": "A3 mixture k=6", "k": 6},
+    {"kind": "mixture", "name": "A3 mixture k=10", "k": 10}
+  ],
+  "metrics": [
+    {"kind": "roc_auc"}, {"kind": "pauc", "max_fpr": 0.01}, {"kind": "tpr_at", "fpr": 0.001},
+    {"kind": "objects_caught", "top_pct": [1.0, 0.1]}
+  ],
+  "group_by": ["tier", "sensor"],
+  "output": "C:/es/eval/scoring_gains"
+}

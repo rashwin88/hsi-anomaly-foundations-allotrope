@@ -91,13 +91,49 @@ class EvalModel:
             cube, wl, _ = self.inferencer.read_bands(cube, wl)
         return cube, wl, valid
 
-    def reconstruct(self, scene) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-        """(cube the model read, its reconstruction, valid) - both (C, H, W) float32."""
+    @property
+    def has_scale(self) -> bool:
+        return self.is_stem and getattr(self.inferencer.model.inner, "scale_head", None) is not None
+
+    def reconstruct(self, scene) -> tuple:
+        """(cube the model read, its reconstruction, valid, log b or None) - cube and reconstruction (C, H, W) float32;
+        log b (H, W) only for a checkpoint with an uncertainty head, from the same pass."""
         import torch
         cube, wl, valid = self._read(scene, self.mode)
+        x, m = torch.from_numpy(cube), torch.from_numpy(valid[None].astype(np.float32))
+        if self.spec.adapt_steps:
+            return self._adapted_reconstruction(cube, wl, valid, x, m)
         with torch.no_grad():
-            recon = self.inferencer.predict_full_scene(torch.from_numpy(cube), torch.from_numpy(valid[None].astype(np.float32)))
-        return cube, recon.detach().cpu().numpy().astype(np.float32), valid
+            if self.has_scale:
+                recon, log_b = self.inferencer.predict_full_scene_with_scale(x, m)
+                log_b = log_b.detach().cpu().numpy().astype(np.float32)
+            else:
+                recon, log_b = self.inferencer.predict_full_scene(x, m), None
+        return cube, recon.detach().cpu().numpy().astype(np.float32), valid, log_b
+
+    def _adapted_reconstruction(self, cube, wl, valid, x, m) -> tuple:
+        """Gated per-scene adaptation (app/foundation_models/scene_adaptation.py): gate on the unadapted model's
+        residual Mahalanobis score, adapt, reconstruct, then restore the original weights for the next scene."""
+        import torch
+        from app.foundation_models.scene_adaptation import adapt, gate_mask
+        from app.utils.anomaly_detection.residual_mahalanobis import residual_mahalanobis
+        if not self.is_stem:
+            raise ValueError(f"{self.name}: per-scene adaptation needs a wavelength stem")
+        s = self.spec
+        net = self.inferencer.model.inner
+        original = {k: v.detach().clone() for k, v in net.state_dict().items()}
+        try:
+            with torch.no_grad():
+                recon0 = self.inferencer.predict_full_scene(x, m).cpu().numpy().astype(np.float32)
+            gate = gate_mask(residual_mahalanobis(cube, recon0, valid), valid, s.adapt_gate_pct, s.adapt_halo)
+            del recon0
+            self.last_adapt_losses = adapt(net, cube, wl, valid, gate, s.adapt_steps, lr=s.adapt_lr,
+                                           device=self.inferencer.device)
+            with torch.no_grad():
+                recon = self.inferencer.predict_full_scene(x, m).cpu().numpy().astype(np.float32)
+        finally:
+            net.load_state_dict(original)
+        return cube, recon, valid, None
 
     def segment(self, scene) -> np.ndarray:
         """(H, W) int class map (config.CLASS_IDS), 0 outside valid - SpectralStemInferencer.segment_full_scene,

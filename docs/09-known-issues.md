@@ -220,6 +220,11 @@ Added 2026-10-14 with the `spectral_stem_mae` trainer; rewritten 2026-10-19 when
 Added 2026-10-17 with `app/evaluation/` and the stage-3 run. Rationale in [`lld/evaluation.md`](lld/evaluation.md)
 and [`lld/implant-bench.md`](lld/implant-bench.md).
 
+- **bench-v2.1 places implants where real targets do not occur.** Implants are spread over every surface; real
+  targets sit mostly in two or three small built-up background types (60-70% of target pixels on ~5% of a scene each).
+  A scorer that whitens per surface type (`mixture`, 2026-10-19) gains 6 points of caught objects on bench-v2.1 and
+  loses a third of its pAUC on the real bench. Judge scorers on the real bench; bench-v2.1 guards against regressions
+  only. Placement conditioned on target-bearing surfaces would fix it (not built).
 - **Implant bench-v1 is biased toward cube-level spectral oddity.** A model-free PCA-RX beats every model on it
   (objects caught top 1% 30.2% vs FT03's 26.9%) and loses clearly on the real PRISMA bench (pAUC 0.128 vs 0.158,
   TPR at 0.1% FPR 0.029 vs 0.058). The implants' difference from their ring lies outside the scene's main spectral

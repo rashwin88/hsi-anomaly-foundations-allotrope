@@ -98,18 +98,24 @@ class Evaluation:
             model = models.get(mname)
             read = None                                       # (cube, recon, valid), computed only if needed
             for spec in scorers:
+                if spec.needs_scale and not getattr(model, "has_scale", False):
+                    continue                                  # e.g. scaled_rm on a model without an uncertainty head
                 path = self._score_path(scene, model, spec)
                 if self.cfg.cache and path.exists():
                     s = np.load(path)["score"].astype(np.float32)
                 else:
                     if read is None:
-                        read = model.reconstruct(scene) if model else (scene.cube, None, scene.valid)
-                    cube, recon, valid = read
+                        read = model.reconstruct(scene) if model else (scene.cube, None, scene.valid, None)
+                    cube, recon, valid, *scale = read          # log b only from a model with an uncertainty head
+                    log_b = scale[0] if scale else None
                     cls = classes_for(spec.segmenter) if spec.segmenter else None
-                    s = score(spec, cube, recon, valid, cls)
+                    s = score(spec, cube, recon, valid, cls, log_b)
                     if self.cfg.cache:
                         path.parent.mkdir(parents=True, exist_ok=True)
-                        np.savez_compressed(path, score=s.astype(np.float16))
+                        # float16 halves the cache; scores past its range (blurred / mixture squared distances
+                        # reach 1e5+) are kept float32 so a reload does not turn the top of the ranking into inf.
+                        small = np.isfinite(s).all() and np.abs(s).max(initial=0) < 6e4
+                        np.savez_compressed(path, score=s.astype(np.float16 if small else np.float32))
                 rows, measures = scene_metrics(s, scene.valid, scene.objects, scene.attrs, self.cfg.metrics,
                                                self.cfg.group_by)
                 tag = {"dataset": scene.dataset, "scene": scene.name, "sensor": scene.sensor, "model": mname,
@@ -127,7 +133,11 @@ class Evaluation:
         if getattr(model, "identity", None):
             return model.identity
         st = model.path.stat()
-        return f"{model.name}-" + hashlib.sha1(f"{model.path.resolve()}|{st.st_size}|{st.st_mtime_ns}|{model.mode}".encode()).hexdigest()[:10]
+        key = f"{model.path.resolve()}|{st.st_size}|{st.st_mtime_ns}|{model.mode}"
+        s = getattr(model, "spec", None)
+        if s is not None and s.adapt_steps:           # adapted variants differ by their settings, not their file
+            key += f"|adapt {s.adapt_steps} {s.adapt_lr} {s.adapt_gate_pct} {s.adapt_halo}"
+        return f"{model.name}-" + hashlib.sha1(key.encode()).hexdigest()[:10]
 
     def _score_path(self, scene, model, spec) -> Path:
         key = hashlib.sha1((spec.model_dump_json() + "|" + scene.fingerprint).encode()).hexdigest()[:10]

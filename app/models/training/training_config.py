@@ -177,11 +177,13 @@ class SpectralStemFinetuneConfig(SpectralStemMAEConfig):
     model_type: Literal["spectral_stem_finetune"] = "spectral_stem_finetune"
     sources: list[FinetuneSource] = Field(min_length=1)
     init_from: str | None = Field(default=None, description="Pretrained checkpoint (local path or s3://) to start from.")
-    mode: Literal["probe", "adapt", "joint"] = Field(
+    mode: Literal["probe", "adapt", "joint", "scale"] = Field(
         default="joint", description="probe: train the segmentation head only, backbone frozen. adapt: reconstruction "
-        "only. joint: reconstruction + segmentation loss on labelled batches.")
+        "only. joint: reconstruction + segmentation loss on labelled batches. scale: train the uncertainty head only "
+        "(Laplace NLL of the expected error on hidden pixels), backbone frozen (docs/proposals/uncertainty-head.md).")
     seg_classes: int = Field(default=5, ge=0)
     seg_decoder_dim: int = 128
+    scale_decoder_dim: int = Field(default=0, ge=0, description="Uncertainty head width; 0 = no head. Mode 'scale' needs it.")
     seg_weight: float = Field(default=1.0, ge=0, description="joint: weight of the segmentation loss.")
     plateau_elevation_m: float | None = Field(default=3500.0, description="Label policy: cloud/thin-cloud unknown at or above "
                                               "this mean ground elevation (a guard; no native-v1 scene reaches it).")
@@ -214,6 +216,8 @@ class SpectralStemFinetuneConfig(SpectralStemMAEConfig):
             raise ValueError("mixed_batches is implemented for modes 'adapt' and 'joint'")
         if self.implant_prob and not (self.mixed_batches and self.implant_real_path):
             raise ValueError("implant_prob needs mixed_batches and implant_real_path")
+        if self.mode == "scale" and not self.scale_decoder_dim:
+            raise ValueError("mode 'scale' needs scale_decoder_dim > 0")
         if self.grad_loss_weight and not self.mixed_batches:
             raise ValueError("grad_loss_weight is implemented for mixed_batches only")
         return self

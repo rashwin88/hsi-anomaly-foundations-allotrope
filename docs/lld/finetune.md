@@ -76,8 +76,12 @@ train, mixed_batches (adapt / joint): _AllSourcesLoader - one DataLoader per sou
           seg_class_weights, averaged over sources)
   FT05    implanted input, MAE loss against clean.npy; hidden pixels within 3 px of an implant weighted
           implant_near_weight in the loss mask
+  scale   (FT06) uncertainty head only (scale_decoder_dim > 0), backbone frozen and eval(): Laplace NLL
+          e/b + log b on hidden, valid, eroded pixels, e = mean |normalised residual| over valid bands (detached);
+          no band augmentation; per-sensor val NLL and Spearman(b, e) -> finetune_metrics.csv. Failed detection
+          (2026-10-20): b rises on targets themselves - research/experiments/indradhanu-finetune/FT06-uncertainty/
 validation: every test source in turn; per-sensor L1/SAM and per-class IoU -> finetune_metrics.csv
-            probe ranks epochs by seg loss, adapt/joint by the full-SAM reconstruction score
+            probe ranks epochs by seg loss, scale by its NLL, adapt/joint by the full-SAM reconstruction score
 ```
 
 ## Invariants
