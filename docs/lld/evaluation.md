@@ -124,6 +124,8 @@ summary.json, per_object.csv, per_scene.csv, provenance.json); summarised in
 | `configs/eval/scoring_gains.json` | `C:/es/eval/scoring_gains` | Scoring gains A1-A3 on FT04 (2026-10-19). Spatial blur raises real pAUC 0.162 -> 0.177 but loses objects at every size; RM + PCA-RX fusion adds nothing; mixture of backgrounds +6 points on bench-v2.1 and 0.162 -> 0.111 on the real bench (real targets cluster in small built-up types). RM stays the score |
 | `configs/eval/ft06.json` | `C:/es/eval/ft06` | FT06 uncertainty head vs FT04 (2026-10-20). Real bench, cloud excluded: RM 0.170 / 46.0% caught top 1%; residual / b 0.125 / 37.8%; residual / sqrt b 0.163 / 44.8% (top 0.1% 16.6% vs 15.8%). Not adopted. ~2.3 h: two models plus the scale pass filled the 20 GB laptop GPU |
 | `configs/eval/scene_adapt.json` | `C:/es/eval/scene_adapt` | Gated per-scene adaptation of FT04 (`ModelSpec.adapt_steps / adapt_lr / adapt_gate_pct / adapt_halo`; app/foundation_models/scene_adaptation.py), 2026-10-20. Every N (50 / 200 / 1000) below FT04 (pAUC ~0.160 vs 0.170 cloud excluded); gated = ungated. Not adopted. Adapted variants carry their settings in the model id (cache key) |
+| `configs/eval/ft07.json`, `ft08.json` | `C:/es/eval/ft07`, `ft08` | FT07 gated loss / FT08 + block masking vs FT04 (2026-10-21), cloud excluded: real pAUC 0.165 / 0.164 vs 0.170 (bootstrap intervals below zero), objects tie. Not adopted |
+| `scripts/compare_scorers.py` | - | paired object bootstrap between two (model, scorer) pairs of a finished run (`app/evaluation/significance.py`); research/experiments/bench-resolution/. Real-bench resolution ~+-0.005-0.01 pAUC, ~+-1-1.5 pts caught at top 0.1% |
 
 ## Decisions
 

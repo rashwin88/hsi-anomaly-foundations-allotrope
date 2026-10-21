@@ -147,3 +147,9 @@ thread that connects them.
 - **2026-10-20 - FT06 (uncertainty head) failed.** A head on frozen FT04 learns its own expected error (Spearman 0.60-
   0.64) but expects large errors on the targets themselves (b on a target 1.07-1.19x its surroundings), so dividing
   by it hides anomalies: pAUC 0.170 -> 0.125 (residual / b) or 0.163 (residual / sqrt b). Folder [FT06-uncertainty](FT06-uncertainty/README.md).
+- **2026-10-21 - FT07 (gated training loss) and FT08 (+ 8 px block masking) failed.** Leaving the top 1% worst-
+  reconstructed pixels (+ 2 px halo) out of the loss costs a small, resolved pAUC loss (0.170 -> 0.165; FT08 0.164);
+  objects caught and bench-v2.1 tie. Reconstruction and masks held. Folder [FT07-gated](FT07-gated/README.md).
+  With bench-resolution (research/experiments/bench-resolution/): every change since FT04 except cloud exclusion moves
+  detection by less than the real bench resolves, or costs a little.
+

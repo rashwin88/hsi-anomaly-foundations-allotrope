@@ -64,6 +64,17 @@ class SpectralStemInferencer(SegFormerMAEInferencer):
             scale_decoder_dim=getattr(cfg, "scale_decoder_dim", 0))
         return _ProductCallAdapter(inner)
 
+    def _checkerboard_keep_mask(self, H: int, W: int, mask: torch.Tensor, invert: bool) -> torch.Tensor:
+        """The parent's two complementary checkerboard passes, with cells of the model's training mask_block (FT08:
+        2 x 2 tokens) unless the inference config asks for larger ones."""
+        block = getattr(self.config.model_config_, "mask_block", 1)
+        if block <= self.config.checkerboard_cell_size:
+            return super()._checkerboard_keep_mask(H, W, mask, invert)
+        from app.foundation_models.components.token_masking import TokenMasking
+        checker = TokenMasking.checkerboard_token_mask(H // 4, W // 4, cell_size=block, device=self.device, invert=invert)
+        valid = TokenMasking.pixel_mask_to_token_mask(mask, kernel_size=4, stride=4, padding=0)
+        return 1.0 - valid * (1.0 - checker)
+
     def _load_weights(self, path: str) -> None:
         ckpt = torch.load(path, map_location=self.device, weights_only=False)
         self.model.inner.load_state_dict(ckpt["model_state_dict"])

@@ -184,6 +184,14 @@ class SpectralStemFinetuneConfig(SpectralStemMAEConfig):
     seg_classes: int = Field(default=5, ge=0)
     seg_decoder_dim: int = 128
     scale_decoder_dim: int = Field(default=0, ge=0, description="Uncertainty head width; 0 = no head. Mode 'scale' needs it.")
+    gate_pct: float = Field(default=0.0, ge=0, lt=100, description="mixed batches: per source group, the hidden pixels "
+                            "with the top gate_pct % reconstruction error (dilated by gate_halo px) are left out of the "
+                            "reconstruction loss - the model never practises rebuilding rare odd pixels (FT07, GT-HAD "
+                            "style gating; research/experiments/indradhanu-finetune/FT07-gated/). 0 = off.")
+    gate_halo: int = Field(default=2, ge=0, description="Gate dilation, px.")
+    mask_block: int = Field(default=1, ge=1, description="MAE masking unit in stage-1 tokens: 1 = single 4 px tokens, "
+                            "2 = 8 px blocks, so a target and its halo are hidden together (FT08). Inference uses the "
+                            "same block as its checkerboard cell.")
     seg_weight: float = Field(default=1.0, ge=0, description="joint: weight of the segmentation loss.")
     plateau_elevation_m: float | None = Field(default=3500.0, description="Label policy: cloud/thin-cloud unknown at or above "
                                               "this mean ground elevation (a guard; no native-v1 scene reaches it).")
@@ -216,6 +224,8 @@ class SpectralStemFinetuneConfig(SpectralStemMAEConfig):
             raise ValueError("mixed_batches is implemented for modes 'adapt' and 'joint'")
         if self.implant_prob and not (self.mixed_batches and self.implant_real_path):
             raise ValueError("implant_prob needs mixed_batches and implant_real_path")
+        if self.gate_pct and not self.mixed_batches:
+            raise ValueError("gate_pct is implemented for mixed_batches")
         if self.mode == "scale" and not self.scale_decoder_dim:
             raise ValueError("mode 'scale' needs scale_decoder_dim > 0")
         if self.grad_loss_weight and not self.mixed_batches:

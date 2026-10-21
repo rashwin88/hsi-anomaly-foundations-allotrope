@@ -90,6 +90,22 @@ def pseudo_sample_targets(sample: dict, pseudo_dir: str | None):
     return pseudo_targets(np.load(path), refl, np.asarray(sample["wavelengths.npy"], np.float64), valid)
 
 
+def gate_pixels(x_hat: torch.Tensor, x: torch.Tensor, band_valid: torch.Tensor, loss_mask: torch.Tensor,
+                pct: float, halo: int) -> torch.Tensor:
+    """(B, 1, H, W) bool: the loss pixels whose per-pixel L1 (mean over valid bands) is in the group's top pct %,
+    dilated by halo px (square). These are what gate_pct leaves out of the reconstruction loss."""
+    bv = band_valid.float()
+    err = ((x_hat - x).abs() * bv).sum(1, keepdim=True) / bv.sum(1, keepdim=True).clamp(min=1)
+    on = loss_mask > 0
+    if not on.any():
+        return torch.zeros_like(on)
+    cut = torch.quantile(err[on].float()[:1_000_000], 1 - pct / 100)
+    gate = (err >= cut) & on
+    if halo:
+        gate = torch.nn.functional.max_pool2d(gate.float(), 2 * halo + 1, stride=1, padding=halo) > 0
+    return gate
+
+
 def spearman(a: torch.Tensor, b: torch.Tensor, cap: int = 50_000) -> float:
     """Rank correlation of two 1-D tensors (first `cap` values; ties broken by order)."""
     a, b = a[:cap].float(), b[:cap].float()
@@ -414,6 +430,9 @@ class FinetuneTrainer(SpectralStemMAETrainer):
             outs = model.forward_mixed(inputs)
         total, kept = 0.0, 0
         for x_hat, (pixels, band_valid, loss_mask, n) in zip(outs, truth):
+            if cfg.gate_pct:
+                loss_mask = loss_mask * ~gate_pixels(x_hat.detach().float(), pixels, band_valid, loss_mask,
+                                                     cfg.gate_pct, cfg.gate_halo)
             if loss_mask.sum() == 0:
                 continue
             l1, sam = self._masked_l1_sam(x_hat.float(), pixels, band_valid, loss_mask)
@@ -434,6 +453,21 @@ class FinetuneTrainer(SpectralStemMAETrainer):
             if seg is not None:
                 loss = loss + cfg.seg_weight * seg
         return loss, kept
+
+    def _build_prediction_mask(self, pixel_mask: torch.Tensor, mask_ratio: float):
+        """Token masks as the parent's, or with mask_block > 1 in blocks of mask_block x mask_block tokens: blocks are
+        drawn like tokens (mask_ratio of the valid blocks), then expanded to their valid tokens (FT08)."""
+        b = self.config.model_config_.mask_block
+        if b <= 1:
+            return super()._build_prediction_mask(pixel_mask, mask_ratio)
+        tokens = TokenMasking.pixel_mask_to_token_mask(pixel_mask, kernel_size=4, stride=4, padding=0)    # (B, N)
+        B, Ht, Wt = tokens.shape[0], pixel_mask.shape[-2] // 4, pixel_mask.shape[-1] // 4
+        grid = tokens.reshape(B, 1, Ht, Wt)
+        blocks = (torch.nn.functional.max_pool2d(grid, b, ceil_mode=True) > 0).float()             # (B, 1, Ht/b, Wt/b)
+        _, block_pred = TokenMasking.generate_prediction_mask(blocks.flatten(1), mask_ratio, self.device)
+        pred = torch.nn.functional.interpolate(block_pred.reshape(blocks.shape), scale_factor=b, mode="nearest")
+        pred = pred[..., :Ht, :Wt].flatten(1) * tokens
+        return 1.0 - pred, pred
 
     def _scale_loss(self, groups: list, model: nn.Module, validate: bool = False):
         """mode scale (FT06, docs/proposals/uncertainty-head.md): Laplace negative log-likelihood of the uncertainty

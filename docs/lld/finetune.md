@@ -80,6 +80,10 @@ train, mixed_batches (adapt / joint): _AllSourcesLoader - one DataLoader per sou
           e/b + log b on hidden, valid, eroded pixels, e = mean |normalised residual| over valid bands (detached);
           no band augmentation; per-sensor val NLL and Spearman(b, e) -> finetune_metrics.csv. Failed detection
           (2026-10-20): b rises on targets themselves - research/experiments/indradhanu-finetune/FT06-uncertainty/
+  gate_pct / gate_halo (FT07): per source group, the hidden pixels with the top gate_pct % L1 (+ halo, square
+          dilation) leave the reconstruction loss (gate_pixels); mixed batches only
+  mask_block (FT08): MAE masks in mask_block x mask_block-token blocks (_build_prediction_mask); inference uses the
+          same block as its checkerboard cell (SpectralStemInferencer). Both failed detection (2026-10-21)
 validation: every test source in turn; per-sensor L1/SAM and per-class IoU -> finetune_metrics.csv
             probe ranks epochs by seg loss, scale by its NLL, adapt/joint by the full-SAM reconstruction score
 ```
