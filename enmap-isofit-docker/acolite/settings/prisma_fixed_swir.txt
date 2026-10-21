@@ -1,0 +1,10 @@
+## As prisma_fixed.txt, but the dark spectrum is searched over 400-2400 nm
+## (ACOLITE's EnMAP default) instead of PRISMA's 500-970 nm: over land nothing
+## is dark in the VNIR alone, which drove AOT550 to 0.70-1.32 on our 5 scenes.
+dsf_aot_estimate=fixed
+dsf_wave_range=400,2400
+dem_pressure=True
+ancillary_data=False
+l2w_parameters=None
+l2r_export_geotiff=False
+output_rhot=False

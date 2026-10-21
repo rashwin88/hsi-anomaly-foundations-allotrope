@@ -1,0 +1,8 @@
+## PRISMA L1, one scene-wide AOT + aerosol model from MERRA-2 (GMAO_MERRA2_AER),
+## per Quinten Vanhellemont's advice (email 2026-09-08). Needs EarthData login.
+dsf_aot_estimate=ancillary_fixed
+dem_pressure=True
+ancillary_data=True
+l2w_parameters=None
+l2r_export_geotiff=False
+output_rhot=False

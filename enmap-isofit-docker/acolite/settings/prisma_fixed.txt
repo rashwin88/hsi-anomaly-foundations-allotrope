@@ -1,0 +1,8 @@
+## PRISMA L1, DSF with one scene-wide AOT from the dark spectrum (ACOLITE default).
+## run_prisma.sh appends l2cfile= pointing at the geometry from prisma_l1_geometry.py.
+dsf_aot_estimate=fixed
+dem_pressure=True
+ancillary_data=False
+l2w_parameters=None
+l2r_export_geotiff=False
+output_rhot=False
