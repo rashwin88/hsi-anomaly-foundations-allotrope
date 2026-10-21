@@ -94,7 +94,7 @@ Criteria: 1 failed (a real pAUC loss); 2 met on points (both object counts sligh
 
 **Observations (FT08)**
 - **Block masking moved objects the right way and pixels the wrong way, both within or near noise.** Objects caught
-  +0.2 / +0.4 points (not resolved); pAUC -0.006 and ROC-AUC -0.008 (resolved). Hiding 8 px blocks makes the model
+  +0.2 / +0.4 points (not resolved); pAUC -0.006 (resolved) and ROC-AUC -0.008 (not bootstrapped). Hiding 8 px blocks makes the model
   reconstruct from further away, so normal texture inside a block is rebuilt less exactly - more background residual
   - while targets gain little extra contrast.
 - FT07 and FT08 together: **training-time gating does not help detection on this bench.** Training-time changes,

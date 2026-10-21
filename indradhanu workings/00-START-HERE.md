@@ -91,7 +91,7 @@ Every part has the same skeleton:
 | 29 | [29-inference.md](29-inference.md) | Running it on a real scene |
 | 30 | [30-scoring-and-the-product.md](30-scoring-and-the-product.md) | Turning errors into an answer |
 
-**Sequel - the next Indradhanu: a smarter spectral bottleneck, then pretraining, scoring, fine-tuning and shipping (31-63)**
+**Sequel - the next Indradhanu: a smarter spectral bottleneck, then pretraining, scoring, fine-tuning and shipping (31-65)**
 
 Written 2026-10-14, after the decision to pretrain the next Indradhanu on SpectralEarth with a
 cross-attention spectral bottleneck. Parts 31 to 39 were written as a **design studied before
@@ -135,6 +135,8 @@ Assumes all of parts 01 to 30; leans on 08, 10, 12, 13 and 17 to 21.
 | 61 | [61-shipping-indradhanu-v2.md](61-shipping-indradhanu-v2.md) | Shipping FT04 as Indradhanu V2: a new codename (routing is last-wins), the embedded model config, the band-grid check, `read_bands`, cloud zeroed after scoring, and the parity run that guards it |
 | 62 | [62-the-uncertainty-head-proposal.md](62-the-uncertainty-head-proposal.md) | **The proposal (run 2026-10-20 as FT06, see 63):** score-side ideas failed, so a small head predicts each pixel's expected error (Laplace likelihood, hidden pixels only) and the score divides by it |
 | 63 | [63-the-uncertainty-head-run.md](63-the-uncertainty-head-run.md) | **FT06, failed:** the head learned its own error (Spearman ~0.6) but expects large errors on targets themselves (halo in visible neighbouring tokens), so dividing by it hides anomalies - predicting your error is not detection |
+| 64 | [64-how-small-a-difference-can-we-see.md](64-how-small-a-difference-can-we-see.md) | The paired object bootstrap: resample objects (not pixels), the same draw for both scorers, pAUC rebuilt from per-pixel `c(p)`; only cloud exclusion is a resolved gain, and from now on a gain counts only if its 95% interval clears zero |
+| 65 | [65-gating-the-training-loss-and-block-masking.md](65-gating-the-training-loss-and-block-masking.md) | **FT07 and FT08, failed:** gating the worst 1% of training pixels and masking in 2 x 2-token blocks each cost a small, real pAUC - the gated pixels are mostly hard normal ones - and since FT04 nothing but cloud exclusion beats bench noise |
 
 Parts 34 to 39's numbers were first produced by a study prototype and then re-checked against
 the real modules (5,345 compressor and 6,401 decoder parameters at `d = D = 32`; 13,162 gate
@@ -237,6 +239,20 @@ pointing here. **Values that will drift:** the per-epoch Spearman and NLL table 
 two untried rescue ideas - if either is tried, this part's verdict may change. Authoritative:
 `research/experiments/indradhanu-finetune/FT06-uncertainty/README.md` (and its `eval_report.md`,
 `b_at_targets.py`), `docs/proposals/uncertainty-head.md`, `docs/lld/finetune.md` (mode `scale`).
+
+**Parts 64 and 65 (written 2026-10-22, from results of 2026-10-21).** Part 64 teaches the paired
+object bootstrap (`app/evaluation/significance.py`, `scripts/compare_scorers.py`) and the rule it set:
+a gain counts only if its 95% interval clears zero. Part 65 teaches FT07 (gated training loss) and FT08
+(gated loss + 2 x 2-token block masking), **both failed and not adopted**; part 63 now ends pointing
+to 64. **Values that will drift:** every interval in part 64's table (a rebuilt bench, more scenes, or
+a different draw count moves them; the README used 1000 draws, the script defaults to 2000), the stated
+resolution (+-0.005 to +-0.01 pAUC, +-1 to +-1.5 points), FT07's and FT08's per-epoch SAM / IoU and
+detection tables and their intervals (-0.0047 [-0.0082, -0.0020], -0.0058 [-0.0106, -0.0010]), and part
+65's cumulative table - any new run adds a row and may change its conclusion. The 1/4 footprint and 25%
+gate figures in part 65 are worked illustrations, not measurements; no run logged its gated share.
+Authoritative: `research/experiments/bench-resolution/README.md`,
+`research/experiments/indradhanu-finetune/FT07-gated/README.md` (both runs), `docs/lld/finetune.md`,
+`docs/lld/evaluation.md`.
 
 ## Figures
 

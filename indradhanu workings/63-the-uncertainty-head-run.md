@@ -290,5 +290,6 @@ Selection risk, and it is still below the 0.180 pAUC bar.
 
 ---
 
-That is the course so far. The uncertainty head is closed; V2 (part 61) stands, and the README's
-two rescue ideas wait behind any cheaper one.
+The uncertainty head is closed; V2 (part 61) stands, and the README's two rescue ideas wait behind
+any cheaper one. Next, part 64: how small a difference the real bench can actually tell apart from
+noise - which also settles whether the sqrt variant's numbers above are a loss or a tie.

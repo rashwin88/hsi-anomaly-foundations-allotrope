@@ -77,8 +77,8 @@ class InferenceConfig(BaseModel):
     checkerboard_cell_size: int = Field(
         default=1,
         gt=0,
-        description="Size of each checkerboard cell in pixels. "
-        "1 = single-pixel checkerboard, 2 = 2x2 blocks, etc.",
+        description="Size of each checkerboard cell in stage-1 tokens (4 px each). "
+        "1 = single-token checkerboard, 2 = 2x2-token blocks, etc.",
     )
     device: str | None = Field(
         default=None, description="None = auto-detect via get_device()"
