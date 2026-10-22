@@ -84,6 +84,10 @@ train, mixed_batches (adapt / joint): _AllSourcesLoader - one DataLoader per sou
           dilation) leave the reconstruction loss (gate_pixels); mixed batches only
   mask_block (FT08): MAE masks in mask_block x mask_block-token blocks (_build_prediction_mask); inference uses the
           same block as its checkerboard cell (SpectralStemInferencer). Both failed detection (2026-10-21)
+  decoder_type progressive (FT09): ProgressiveDecoder (x2 stages, masked full-resolution skip from the stem);
+          from a SegFormer-decoder checkpoint its projections + fuse warm-start, refine.* is dropped
+  decoder (mode, FT09a): only decoder.* trains, everything else frozen in eval mode - the warm-up for a new
+          decoder; then joint (FT09b). FT09b: the first resolved pAUC gain since cloud exclusion (+0.006)
 validation: every test source in turn; per-sensor L1/SAM and per-class IoU -> finetune_metrics.csv
             probe ranks epochs by seg loss, scale by its NLL, adapt/joint by the full-SAM reconstruction score
 ```

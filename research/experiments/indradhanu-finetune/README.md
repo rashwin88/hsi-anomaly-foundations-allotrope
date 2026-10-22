@@ -152,4 +152,10 @@ thread that connects them.
   objects caught and bench-v2.1 tie. Reconstruction and masks held. Folder [FT07-gated](FT07-gated/README.md).
   With bench-resolution (research/experiments/bench-resolution/): every change since FT04 except cloud exclusion moves
   detection by less than the real bench resolves, or costs a little.
+- **2026-10-22 - FT09 (progressive decoder): the first resolved gain since cloud exclusion.** FT04 rendered pixels it
+  could see barely better than hidden ones (research/experiments/decoder-capacity/), so its SegFormer decoder was
+  replaced by x2 stages with a masked full-resolution skip. Two phases - FT09a decoder alone (3 epochs, FT04 frozen),
+  FT09b joint (5) - after a joint-from-scratch first attempt lagged. FT09b, cloud excluded: real pAUC 0.176 vs 0.170,
+  bootstrap [+0.0002, +0.0118]; caught top 1% +1.1 pts, top 0.1% -0.4 (set3). A candidate, not a release; FT09c
+  continues it. Folder [FT09-decoder](FT09-decoder/README.md).
 

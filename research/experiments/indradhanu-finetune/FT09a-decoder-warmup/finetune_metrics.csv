@@ -1,0 +1,4 @@
+epoch,trained_wavelengths,enmap_val_l1,enmap_val_sam_deg,prisma_val_l1,prisma_val_sam_deg,aviris_ng_val_l1,aviris_ng_val_sam_deg,iou_water,iou_cloud,iou_thin_cloud,iou_shadow,iou_snow,iou_mean
+1,733,0.018229,4.4601,0.017007,4.8319,0.017377,6.0033,0.8393,0.8095,0.11,0.2227,0.0,0.3963
+2,733,0.017157,4.1685,0.016294,4.536,0.016698,5.8285,0.8393,0.8095,0.11,0.2227,0.0,0.3963
+3,733,0.016316,3.9791,0.014473,4.139,0.015405,5.5033,0.8393,0.8095,0.11,0.2227,0.0,0.3963

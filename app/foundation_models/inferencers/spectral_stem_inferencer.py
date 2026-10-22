@@ -61,7 +61,7 @@ class SpectralStemInferencer(SegFormerMAEInferencer):
             embed_dims=cfg.embed_dims, num_heads=cfg.num_heads,
             reduction_ratios=cfg.reduction_ratios, num_blocks=cfg.num_blocks, decoder_dim=cfg.decoder_dim,
             expansion_ratio=cfg.expansion_ratio, drop_rate=0.0,
-            scale_decoder_dim=getattr(cfg, "scale_decoder_dim", 0))
+            scale_decoder_dim=getattr(cfg, "scale_decoder_dim", 0), decoder_type=getattr(cfg, "decoder_type", "segformer"))
         return _ProductCallAdapter(inner)
 
     def _checkerboard_keep_mask(self, H: int, W: int, mask: torch.Tensor, invert: bool) -> torch.Tensor:

@@ -29,8 +29,10 @@ Gotchas:
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
 from app.foundation_models.components.pixel_normalization import WavelengthStats
+from app.foundation_models.components.progressive_decoder import ProgressiveDecoder
 from app.foundation_models.components.seg_former_decoder import SegFormerDecoder
 from app.foundation_models.components.seg_former_encoder import SegFormerEncoder
 from app.foundation_models.components.spectral_attention import (
@@ -51,7 +53,7 @@ class SpectralStemSegFormerMAE(nn.Module):
                  band_weighting: str = "count", seg_classes: int = 0, seg_decoder_dim: int = 128,
                  embed_dims=(32, 64, 160, 256), num_heads=(1, 2, 5, 8), reduction_ratios=(8, 4, 2, 1),
                  num_blocks=(2, 2, 2, 2), decoder_dim: int = 256, expansion_ratio: int = 4,
-                 drop_rate: float = 0.0, scale_decoder_dim: int = 0):
+                 drop_rate: float = 0.0, scale_decoder_dim: int = 0, decoder_type: str = "segformer"):
         super().__init__()
         if stem not in STEMS:
             raise ValueError(f"stem must be one of {STEMS}, got {stem!r}")
@@ -74,7 +76,14 @@ class SpectralStemSegFormerMAE(nn.Module):
             in_channels=D, embed_dims=list(embed_dims), num_heads=list(num_heads),
             reduction_ratios=list(reduction_ratios), num_blocks=list(num_blocks),
             expansion_ratio=expansion_ratio, drop_rate=drop_rate)
-        self.decoder = SegFormerDecoder(embed_dims=list(embed_dims), decoder_dim=decoder_dim, out_channels=D)
+        # "progressive" (FT09, research/experiments/decoder-capacity/): x2 upsampling stages with a skip from the
+        # stem output, hidden tokens zeroed - FT04's SegFormer decoder could not render sub-token detail it could see.
+        if decoder_type not in ("segformer", "progressive"):
+            raise ValueError(f"decoder_type must be 'segformer' or 'progressive', got {decoder_type!r}")
+        self.decoder_type = decoder_type
+        self.decoder = (ProgressiveDecoder(list(embed_dims), decoder_dim=decoder_dim, out_channels=D, skip_channels=D)
+                        if decoder_type == "progressive"
+                        else SegFormerDecoder(embed_dims=list(embed_dims), decoder_dim=decoder_dim, out_channels=D))
         # Optional segmentation head on the same encoder features (fine-tuning stage 1+,
         # docs/proposals/fine-tuning-and-segmentation.md): one logit per class, independent (sigmoid),
         # predicted per pixel like the reconstruction. Absent (seg_classes = 0) in pretrained models.
@@ -155,8 +164,9 @@ class SpectralStemSegFormerMAE(nn.Module):
             raise ValueError(f"{self.stem} stem reads one band list only")
         z = torch.cat([self._stem(x, wl, bv) for x, wl, bv, _, _ in groups])
         keep = None if groups[0][3] is None else torch.cat([g[3] for g in groups])
-        features = self.encoder(self.norm(z), keep_mask=keep)
-        z_hat = self.decoder(features)
+        z = self.norm(z)
+        features = self.encoder(z, keep_mask=keep)
+        z_hat = self._decode(z, features, keep)
         out, start = [], 0
         for x, wl, _, _, out_wl in groups:
             wl_out = wl if out_wl is None else out_wl
@@ -166,6 +176,17 @@ class SpectralStemSegFormerMAE(nn.Module):
         if with_scale:
             return out, list(torch.split(self.scale_head(features), [len(g[0]) for g in groups]))
         return out
+
+    def _decode(self, z: torch.Tensor, features: list, keep_mask: torch.Tensor | None) -> torch.Tensor:
+        """Encoder features -> (B, D, H, W) latent. The progressive decoder also gets z (B, D, H, W), the normalised stem
+        output, with every pixel of a removed (hidden) token zeroed, so no hidden value reaches the reconstruction."""
+        if self.decoder_type != "progressive":
+            return self.decoder(features)
+        if keep_mask is not None:
+            B, _, H, W = z.shape
+            visible = keep_mask.reshape(B, 1, H // 4, W // 4).to(z.dtype)
+            z = z * F.interpolate(visible, scale_factor=4, mode="nearest")
+        return self.decoder(features, z)
 
     def segment(self, x: torch.Tensor, wavelengths_nm: torch.Tensor, band_valid: torch.Tensor | None = None) -> torch.Tensor:
         """(B, N, H, W) reflectance -> (B, seg_classes, H, W) logits, from the unmasked encoder."""
@@ -185,8 +206,11 @@ class SpectralStemSegFormerMAE(nn.Module):
         if out_wavelengths_nm is not None and self.stem not in WAVELENGTH_STEMS:
             raise ValueError(f"{self.stem} stem reconstructs its input bands only")
         out_wl = wavelengths_nm if out_wavelengths_nm is None else out_wavelengths_nm
-        features = self.encode(x, wavelengths_nm, band_valid, keep_mask)
-        z_hat = self.decoder(features)                                    # (B, D, H, W)
+        if self.stem not in WAVELENGTH_STEMS and x.shape[1] != self.bands:
+            raise ValueError(f"{self.stem} stem was built for {self.bands} bands, got {x.shape[1]}")
+        z = self.norm(self._stem(x, wavelengths_nm, band_valid))
+        features = self.encoder(z, keep_mask=keep_mask)
+        z_hat = self._decode(z, features, keep_mask)                      # (B, D, H, W)
         if self.stem in WAVELENGTH_STEMS:
             z_hat = self.spectral_out(z_hat, out_wl)                         # (B, M, H, W)
         else:

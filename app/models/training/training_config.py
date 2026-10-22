@@ -177,10 +177,12 @@ class SpectralStemFinetuneConfig(SpectralStemMAEConfig):
     model_type: Literal["spectral_stem_finetune"] = "spectral_stem_finetune"
     sources: list[FinetuneSource] = Field(min_length=1)
     init_from: str | None = Field(default=None, description="Pretrained checkpoint (local path or s3://) to start from.")
-    mode: Literal["probe", "adapt", "joint", "scale"] = Field(
+    mode: Literal["probe", "adapt", "joint", "scale", "decoder"] = Field(
         default="joint", description="probe: train the segmentation head only, backbone frozen. adapt: reconstruction "
         "only. joint: reconstruction + segmentation loss on labelled batches. scale: train the uncertainty head only "
-        "(Laplace NLL of the expected error on hidden pixels), backbone frozen (docs/proposals/uncertainty-head.md).")
+        "(Laplace NLL of the expected error on hidden pixels), backbone frozen (docs/proposals/uncertainty-head.md). "
+        "decoder: train the reconstruction decoder only (reconstruction loss), everything else frozen - the warm-up "
+        "for a new decoder (FT09a).")
     seg_classes: int = Field(default=5, ge=0)
     seg_decoder_dim: int = 128
     scale_decoder_dim: int = Field(default=0, ge=0, description="Uncertainty head width; 0 = no head. Mode 'scale' needs it.")
@@ -189,6 +191,9 @@ class SpectralStemFinetuneConfig(SpectralStemMAEConfig):
                             "reconstruction loss - the model never practises rebuilding rare odd pixels (FT07, GT-HAD "
                             "style gating; research/experiments/indradhanu-finetune/FT07-gated/). 0 = off.")
     gate_halo: int = Field(default=2, ge=0, description="Gate dilation, px.")
+    decoder_type: Literal["segformer", "progressive"] = Field(default="segformer", description="Reconstruction "
+        "decoder: SegFormer's (one-shot PixelShuffle at 1/4 resolution) or progressive (x2 stages with a masked "
+        "full-resolution skip from the stem; FT09, research/experiments/decoder-capacity/).")
     mask_block: int = Field(default=1, ge=1, description="MAE masking unit in stage-1 tokens: 1 = single 4 px tokens, "
                             "2 = 8 px blocks, so a target and its halo are hidden together (FT08). Inference uses the "
                             "same block as its checkerboard cell.")

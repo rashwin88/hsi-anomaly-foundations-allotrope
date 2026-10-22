@@ -247,8 +247,8 @@ class FinetuneTrainer(SpectralStemMAETrainer):
         self._iou = IoUTally()
         super().__init__(config)
         cfg = config.model_config_
-        if cfg.mode in ("probe", "scale"):               # only the head learns
-            head = "seg_head." if cfg.mode == "probe" else "scale_head."
+        if cfg.mode in ("probe", "scale", "decoder"):    # only one head learns
+            head = {"probe": "seg_head.", "scale": "scale_head.", "decoder": "decoder."}[cfg.mode]
             for name, p in self.model.named_parameters():
                 p.requires_grad = name.startswith(head)
             self.optimizer = torch.optim.Adam([p for p in self.model.parameters() if p.requires_grad], lr=config.learning_rate)
@@ -280,10 +280,15 @@ class FinetuneTrainer(SpectralStemMAETrainer):
             seg_classes=cfg.seg_classes, seg_decoder_dim=cfg.seg_decoder_dim, embed_dims=cfg.embed_dims,
             num_heads=cfg.num_heads, reduction_ratios=cfg.reduction_ratios, num_blocks=cfg.num_blocks,
             decoder_dim=cfg.decoder_dim, expansion_ratio=cfg.expansion_ratio, drop_rate=cfg.drop_rate,
-            scale_decoder_dim=cfg.scale_decoder_dim)
+            scale_decoder_dim=cfg.scale_decoder_dim, decoder_type=cfg.decoder_type)
+        new_heads = ("seg_head.", "scale_head.")
+        if state is not None and cfg.decoder_type == "progressive" and not any(k.startswith("decoder.up_") for k in state):
+            # from a SegFormer-decoder checkpoint (FT04): keep its projections and fuse, drop its PixelShuffle refine
+            state = {k: v for k, v in state.items() if not k.startswith("decoder.refine.")}
+            new_heads += ("decoder.up_", "decoder.head.")
         if state is not None:
             missing, unexpected = model.load_state_dict(state, strict=False)
-            if unexpected or any(not k.startswith(("seg_head.", "scale_head.")) for k in missing):
+            if unexpected or any(not k.startswith(new_heads) for k in missing):
                 raise ValueError(f"init_from does not match the model: missing {missing[:5]}, unexpected {unexpected[:5]}")
             heads = sorted({k.split(".")[0] for k in missing})
             logger.info(f"init_from {cfg.init_from}: loaded; {len(missing)} new tensors ({', '.join(heads) or 'none'})")
@@ -564,9 +569,9 @@ class FinetuneTrainer(SpectralStemMAETrainer):
 
     def _train_pass_mode(self) -> None:
         mode = self.config.model_config_.mode
-        if mode in ("probe", "scale"):                   # frozen backbone: keep its BatchNorm statistics
+        if mode in ("probe", "scale", "decoder"):        # frozen backbone: keep its BatchNorm statistics
             self.model.eval()
-            (self.model.seg_head if mode == "probe" else self.model.scale_head).train()
+            {"probe": self.model.seg_head, "scale": self.model.scale_head, "decoder": self.model.decoder}[mode].train()
 
     def _run_train_pass(self, loader, sample_cap: int):
         self._train_pass_mode()

@@ -129,6 +129,9 @@ SpectralStemInferencer.segment_full_scene(cube, valid) -> (class map (H, W), pro
   run; ROC-AUC within 0.0005.
 
 ## Invariants
+- **The progressive decoder's skip never carries a hidden pixel** (`_decode`: every pixel of a removed token is zeroed
+  before the skip; its H/2 average stays inside a 4 px token). A leak would let the model copy hidden targets and
+  detection would die; `test_hidden_pixels_never_reach_the_output` enforces it.
 
 1. **Only the stem differs between variants.** Normalisation, the BatchNorm, encoder, decoder,
    masking and loss are shared code. Pinned by `tests/test_foundation_models/
