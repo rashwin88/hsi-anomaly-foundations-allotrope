@@ -76,7 +76,7 @@ The decoder alone reaches FT04's reconstruction (within 0.1 deg on all three) in
 | target / background, FT04 -> FT09a | 3.82 -> **4.00** | 1.61 -> **1.62** | 1.39 -> **1.46** | 1.37 -> **1.47** |
 | visible background (no mask) FT04 -> FT09a | 0.056 -> 0.176 | 0.110 -> 0.120 | 0.159 -> 0.120 | 0.135 -> 0.115 |
 
-- **Hidden-pixel background error falls 6-21% and targets fall less: contrast up on all four scenes** - the intended
+- **Hidden-pixel background error falls 9-21% and targets fall less: contrast up on all four scenes** - the intended
   effect, and the first model change in this series to move it.
 - **Criterion 5 as written fails** (visible background error not clearly below FT04's; set1 much worse). Stated plainly
   but with a caveat recorded after the fact: the progressive decoder only ever trained with 65% of its skip zeroed, so
@@ -101,7 +101,7 @@ cloud excluded on FT04's masks:
 | FT09a (decoder only) | 0.169 | 46.1% / 15.6% | 0.061 | 0.856 | 35.8% |
 | **FT09b** | **0.176** | **47.1%** / 15.4% | 0.063 | **0.854** | 36.1% |
 
-Paired bootstrap, FT09b - FT04: pAUC **+0.0060 [+0.0002, +0.0118]**, P(B > A) 0.976; caught top 1% +1.1 pts [-0.3, +2.4];
+Paired bootstrap, FT09b - FT04 (1000 draws; output in ../FT09b-decoder-joint/bootstrap.txt): pAUC **+0.0060 [+0.0002, +0.0118]**, P(B > A) 0.976; caught top 1% +1.1 pts [-0.3, +2.4];
 caught top 0.1% -0.4 pts [-1.4, +0.6]. FT09a - FT04: pAUC -0.0006 [-0.0056, +0.0043] (a tie).
 
 Per scene (pAUC set1 / set2 / set3 / set4): FT04 0.246 / 0.128 / 0.084 / 0.220; FT09b **0.260 / 0.131** / 0.083 / **0.229**.

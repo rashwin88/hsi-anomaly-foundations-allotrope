@@ -340,5 +340,6 @@ The intervals cross zero: under part 64's rule that is a tie, not a gain.
 
 ---
 
-That is the course so far. Indradhanu V2 (part 61) stands; the gains tried since have all been
-smaller than this bench can see, apart from cloud exclusion.
+Indradhanu V2 (part 61) stands; the gains tried since have all been smaller than this bench can see,
+apart from cloud exclusion. Every change so far altered the loss, the masking or the score, never the
+shape of the network. Next: part 66 asks whether the decoder itself is the bottleneck.

@@ -91,7 +91,7 @@ Every part has the same skeleton:
 | 29 | [29-inference.md](29-inference.md) | Running it on a real scene |
 | 30 | [30-scoring-and-the-product.md](30-scoring-and-the-product.md) | Turning errors into an answer |
 
-**Sequel - the next Indradhanu: a smarter spectral bottleneck, then pretraining, scoring, fine-tuning and shipping (31-65)**
+**Sequel - the next Indradhanu: a smarter spectral bottleneck, then pretraining, scoring, fine-tuning and shipping (31-67)**
 
 Written 2026-10-14, after the decision to pretrain the next Indradhanu on SpectralEarth with a
 cross-attention spectral bottleneck. Parts 31 to 39 were written as a **design studied before
@@ -137,6 +137,8 @@ Assumes all of parts 01 to 30; leans on 08, 10, 12, 13 and 17 to 21.
 | 63 | [63-the-uncertainty-head-run.md](63-the-uncertainty-head-run.md) | **FT06, failed:** the head learned its own error (Spearman ~0.6) but expects large errors on targets themselves (halo in visible neighbouring tokens), so dividing by it hides anomalies - predicting your error is not detection |
 | 64 | [64-how-small-a-difference-can-we-see.md](64-how-small-a-difference-can-we-see.md) | The paired object bootstrap: resample objects (not pixels), the same draw for both scorers, pAUC rebuilt from per-pixel `c(p)`; only cloud exclusion is a resolved gain, and from now on a gain counts only if its 95% interval clears zero |
 | 65 | [65-gating-the-training-loss-and-block-masking.md](65-gating-the-training-loss-and-block-masking.md) | **FT07 and FT08, failed:** gating the worst 1% of training pixels and masking in 2 x 2-token blocks each cost a small, real pAUC - the gated pixels are mostly hard normal ones - and since FT04 nothing but cloud exclusion beats bench noise |
+| 66 | [66-is-the-decoder-the-bottleneck.md](66-is-the-decoder-the-bottleneck.md) | **A diagnosis, no training:** the spectral floor is 2-10% of FT04's error and FT04 copies pixels it can see barely better than ones it must predict, so the limit is what the decoder can render - the 4 x 4-token bottleneck (512 numbers into 32) with no full-resolution path back |
+| 67 | [67-the-progressive-decoder-ft09.md](67-the-progressive-decoder-ft09.md) | **FT09, a candidate:** x2 upsampling stages with a full-resolution skip (hidden pixels zeroed, proved by test), warm-started from FT04 and trained decoder-first then joint; contrast up on all four scenes and pAUC +0.0060 [+0.0002, +0.0118], the first resolved gain since cloud exclusion - with a 4-object loss at the top 0.1% and a mechanism criterion judged after the fact |
 
 Parts 34 to 39's numbers were first produced by a study prototype and then re-checked against
 the real modules (5,345 compressor and 6,401 decoder parameters at `d = D = 32`; 13,162 gate
@@ -253,6 +255,22 @@ gate figures in part 65 are worked illustrations, not measurements; no run logge
 Authoritative: `research/experiments/bench-resolution/README.md`,
 `research/experiments/indradhanu-finetune/FT07-gated/README.md` (both runs), `docs/lld/finetune.md`,
 `docs/lld/evaluation.md`.
+
+**Parts 66 and 67 (written 2026-10-22).** Part 66 teaches the decoder-capacity diagnosis
+(`research/experiments/decoder-capacity/`, laptop, no training); part 67 teaches FT09, the progressive
+decoder, in its four runs (first attempt, FT09a, FT09b, FT09c); part 65 now ends pointing to 66. The
+parameter split (3,331,072 / 2,164,736 / 371,536 / 14,721 / 4,257) and the progressive decoder's
+1,504,096 and its shapes were checked by building the model on 2026-10-22. **Values that will drift:**
+FT09b is a candidate, not adopted, and **FT09c (5 more joint epochs, lr 3e-5) was running when part 67
+was written** - its result may supersede FT09b's numbers, the cumulative table and the "candidate"
+verdict. Also: the floor-share and visible / hidden tables (part 66; a different checkpoint or tile
+draw moves them), FT09a's contrast table, every SAM / IoU epoch table, FT09b's detection, per-scene,
+per-tier and object-count figures, and the bootstrap intervals (+0.0060 [+0.0002, +0.0118]; recorded in
+the README only, not in `eval_report.md`). Part 67 notes one README slip: hidden background "falls
+6-21%" where its own table gives 9-21%. The arithmetic-cost comparison in part 67 is a hand count, not
+a timing. Authoritative: `research/experiments/decoder-capacity/README.md`,
+`research/experiments/indradhanu-finetune/FT09-decoder/README.md`,
+`app/foundation_models/components/progressive_decoder.py`.
 
 ## Figures
 
