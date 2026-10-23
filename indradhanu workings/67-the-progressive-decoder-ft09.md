@@ -1,6 +1,9 @@
 # 67 - The progressive decoder (FT09)
 
 > **The one thing this part teaches:** FT09 replaced FT04's decoder with one that upsamples in two x2
+
+> **Update 2026-10-23 - FT09c.** Five more joint epochs made reconstruction better (AVIRIS-NG SAM 5.34) and detection worse: pAUC 0.172, a tie with FT04 and a resolved -0.004 against FT09b. FT09b's gain was a favourable checkpoint, not a stable improvement; the progressive decoder is not adopted. The lesson for every later part: a gain must hold across neighbouring checkpoints, because the object bootstrap cannot see checkpoint noise (research/experiments/indradhanu-finetune/FT09-decoder/README.md, FT09c).
+
 > stages and is fed a full-resolution copy of the stem output with every hidden pixel zeroed; trained
 > in two phases (decoder alone, then joint), it raised hidden-pixel contrast on all four PRISMA scenes
 > and gave the first pAUC gain since cloud exclusion whose bootstrap interval clears zero - by a hair,

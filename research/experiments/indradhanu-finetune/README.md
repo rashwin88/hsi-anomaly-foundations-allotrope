@@ -158,4 +158,8 @@ thread that connects them.
   FT09b joint (5) - after a joint-from-scratch first attempt lagged. FT09b, cloud excluded: real pAUC 0.176 vs 0.170,
   bootstrap [+0.0002, +0.0118]; caught top 1% +1.1 pts, top 0.1% -0.4 (set3). A candidate, not a release; FT09c
   continues it. Folder [FT09-decoder](FT09-decoder/README.md).
+- **2026-10-23 - FT09c: FT09b's gain does not hold.** Five more joint epochs: better reconstruction (AVIRIS-NG SAM 5.34),
+  detection back to a tie with FT04 (pAUC 0.172; -0.004 vs FT09b, resolved). Checkpoint-to-checkpoint variation is as
+  large as the gain. Progressive decoder not adopted. Lesson: a gain must hold across neighbouring checkpoints, not
+  only clear the object bootstrap.
 

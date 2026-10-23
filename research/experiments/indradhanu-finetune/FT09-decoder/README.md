@@ -1,6 +1,6 @@
 # FT09 - a richer decoder: render what the encoder sees
 
-**Status:** FT09b done 2026-10-22 16:06 UTC, best.pt = epoch 5 - **the first resolved pAUC gain since cloud exclusion (criteria 1, 3, 4 met; 2 fails at the top 0.1% by 4 objects, unresolved; 5 failed as written, see FT09a). A candidate, not a release.** FT09c (5 more joint epochs) launched after it. First attempt stopped after epoch 3 (2026-10-22 13:05 UTC); rerun in two phases, FT09a (decoder warm-up) then FT09b (joint), since 13:10 UTC, bundle cbf5af8. First attempt ran on `i-0a3afdd4efbcafe92` (code bundle 66efe53 = f67b89f's working tree + the
+**Status:** FT09b done 2026-10-22 16:06 UTC, best.pt = epoch 5 - **the first resolved pAUC gain since cloud exclusion (criteria 1, 3, 4 met; 2 fails at the top 0.1% by 4 objects, unresolved; 5 failed as written, see FT09a). A candidate, not a release.** **FT09c (5 more joint epochs, 2026-10-22 19:15 UTC) reconstructs better and detects worse: its pAUC falls back to a tie with FT04 (0.172; -0.004 vs FT09b, resolved). FT09b's gain is not stable under further training - not adopted.** First attempt stopped after epoch 3 (2026-10-22 13:05 UTC); rerun in two phases, FT09a (decoder warm-up) then FT09b (joint), since 13:10 UTC, bundle cbf5af8. First attempt ran on `i-0a3afdd4efbcafe92` (code bundle 66efe53 = f67b89f's working tree + the
 progressive decoder). Prompted by the user ("more layers of decoding"; "the decoder maybe too un-expressive given the
 sophistication of the encoder") and the diagnosis in research/experiments/decoder-capacity/.
 
@@ -121,3 +121,36 @@ unresolved; the top 1% rises +1.1); **3 met** (-0.1); **4 met** (SAM within 0.1 
   FT09b, with the encoder adapting to the new decoder, gains. The best checkpoint is the last epoch, so FT09c continues it.
 - The two-phase start was necessary: the first attempt (joint from random decoder) was still 0.5-1 deg SAM behind
   FT04 after 3 epochs.
+
+### FT09c (FT09b + 5 joint epochs, lr 3e-5) - done 2026-10-22 19:15 UTC, evaluated 2026-10-23
+
+Evaluation was late: no watcher was set when FT09c launched, so it finished unevaluated and the GPU sat idle ~10 h.
+
+| epoch | SAM EnMAP / PRISMA / AVIRIS-NG (deg) | IoU water / cloud |
+|---|---|---|
+| FT04 | 3.88 / 4.11 / 5.46 | 0.839 / 0.810 |
+| FT09b (ep 5) | 3.97 / 4.17 / 5.41 | 0.841 / 0.811 |
+| FT09c ep 5 (best) | 3.96 / 4.14 / **5.34** | 0.840 / 0.814 |
+
+Detection (`configs/eval/ft09c.json`, same run directory as FT09b; [../FT09c-decoder-joint-more/eval_report.md](../FT09c-decoder-joint-more/eval_report.md),
+[bootstrap.txt](../FT09c-decoder-joint-more/bootstrap.txt)), cloud excluded:
+
+| | real pAUC | real caught top 1% / 0.1% | v2.1 caught top 1% |
+|---|---|---|---|
+| FT04 | 0.170 | 46.0% / 15.8% | 36.2% |
+| FT09b | **0.176** | **47.1%** / 15.4% | 36.1% |
+| FT09c | 0.172 | 46.4% / 15.0% | 36.3% |
+
+Bootstrap: FT09c - FT04 pAUC +0.0020 [-0.0026, +0.0064] (a tie), caught top 0.1% -0.9 pts [-2.0, +0.2];
+**FT09c - FT09b pAUC -0.0040 [-0.0076, -0.0010] (a resolved loss).** Per scene pAUC: FT09c 0.254 / 0.131 / 0.082 /
+0.219 (set1 and set4 fall back toward FT04); top-0.1% objects 56 / 30 / 9 / 41.
+
+**Observations (FT09c)**
+- **FT09b's gain does not survive five more epochs.** Reconstruction keeps improving (AVIRIS-NG SAM 5.41 -> 5.34,
+  better than FT04) while detection falls back to FT04's level. FT09b's +0.006 was a favourable checkpoint, not a
+  stable improvement - the object bootstrap cannot see checkpoint-to-checkpoint variation, which here is as large
+  as the gain itself.
+- The same divergence as FT06: **better reconstruction is not better detection**, and validation loss - which picks
+  best.pt - does not select for detection. Any future claim needs the gain to hold across neighbouring checkpoints.
+- The progressive decoder is not adopted. The mechanism (higher hidden-pixel contrast, FT09a) was real; its effect on
+  detection is within checkpoint noise.
