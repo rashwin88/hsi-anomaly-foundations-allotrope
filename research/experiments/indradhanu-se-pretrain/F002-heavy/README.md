@@ -1,6 +1,6 @@
 # F002-heavy - Indradhanu Heavy: 4x-wide pretraining on SpectralEarth
 
-**Status:** running since 2026-10-28 14:05 UTC (first start 12:48 crashed, see below) on `i-06645b351d4dc9712` (p5.4xlarge, 1x H100 80 GB HBM3, 16 vCPU,
+**Status:** done 2026-10-28 22:55 UTC, 80 epochs (first start 12:48 crashed, see below); best.pt = epoch 72. Ran on `i-06645b351d4dc9712` (p5.4xlarge, 1x H100 80 GB HBM3, 16 vCPU,
 249 GB RAM, 3.5 TB NVMe), H100 capacity block `cr-08d2ff733d27a977c` (2026-10-28 11:30 -> 10-29 11:30 UTC); block 2
 `cr-0dccba00b34dc29e1` (10-31 11:30 -> 11-02 11:30). Code bundle 7947bef. Launched on the user's "Go, but 4x wide";
 named by the user ("This is indradhanu-heavy"); 80 epochs on the user's "we will lose steam after epoch 50-75".
@@ -52,4 +52,27 @@ the 80 epochs, FT04 pseudo-labels for PRISMA / AVIRIS-NG, then **FTH1** (Heavy f
 final recipe, 10 epochs) and **FTB1** (the control: F001 at FT04 size, same recipe).
 
 ## Results
-_pending_
+
+**Reconstruction** ([metrics.csv](metrics.csv)): validation L1 / SAM - epoch 20 0.0202 / 5.03 deg, 40 0.0176 / 4.43,
+60 0.0171 / 4.34, **80 0.0164 / 3.89** (F001's best of 113 epochs: 0.0182 / 4.06 at epoch 100). Train - val gap steady
+(-0.003 L1, like F001's); no within-block memorising (train and val fall together across each 5-epoch block).
+
+**Detection, pretrained only** (`configs/eval/f002_heavy.json`, best.pt = epoch 72, [eval_report.md](eval_report.md)),
+real PRISMA bench, cloud excluded on FT04's masks:
+
+| | pAUC | caught top 1% / 0.1% | TPR @ 0.1% |
+|---|---|---|---|
+| F001 (pretrained, FT04 size) | 0.155 | 45.1% / **14.0%** | 0.059 |
+| **F002-heavy** | **0.166** | **47.4%** / 12.4% | 0.058 |
+| FT04 (F001 + fine-tuning) | 0.170 | 46.0% / 15.8% | 0.065 |
+
+Heavy - F001 (paired bootstrap, 1000 draws): pAUC +0.0111 [-0.0003, +0.0223], P 0.971 (at the edge, not resolved);
+caught top 0.1% **-1.5 pts [-3.0, -0.2] (a resolved loss)**. Caught top 1% by tier (easy / medium / subtle): F001
+55.9 / 38.7 / 40.7%, Heavy **58.2 / 40.7 / 43.3%**. pAUC per scene: Heavy **0.259 / 0.150** / 0.071 / 0.185 vs F001
+0.220 / 0.126 / 0.080 / 0.195. Top-0.1% objects per scene: Heavy 53 / 23 / 12 / **25** vs F001 52 / 27 / 11 / 37.
+
+**Observations**
+- Broader ranking better (top 1% +2.3 pts on every tier, above even fine-tuned FT04; pAUC nearly resolved), very top
+  worse - almost all of it set4 (hazy), where Heavy's highest scores land on something other than the labelled targets.
+- Pretrained Heavy closes ~75% of FT04's pAUC lead over F001 without fine-tuning.
+- The deciding comparison is fine-tuned: FTH1 (Heavy) vs FTB1 (F001, same recipe).
