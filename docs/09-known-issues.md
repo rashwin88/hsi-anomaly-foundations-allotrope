@@ -179,8 +179,6 @@ Added 2026-10-14 with `app/utils/spectralearth/`. Rationale in
 Added 2026-10-15 with `app/spectral_match/family_match.py` and `data/family_library`.
 Rationale and results in [`lld/spectral-family-match.md`](lld/spectral-family-match.md).
 
-- **Not wired into `spectral_library_match` yet.** The module, library and tests are ready;
-  the LLD gives the integration steps.
 - **Radiometric scale unverified.** The method scores pixel minus local background, so pixels
   must be 0-1 surface reflectance like the library; SAM never needed this. Confirm that the
   onboarding vendable's `normalized_hyperspectral_cube` is reflectance for each sensor before
