@@ -1,0 +1,150 @@
+{
+  "_description": "FTH1: Indradhanu Heavy (F002-heavy) fine-tuned in one joint run with FT04's final recipe (mixed batches, EnMAP labels + PRISMA/AVIRIS-NG pseudo-labels from FT04, rare-class weights [1,1,1,3,3], seg_weight 0.1), 10 epochs, lr 1e-4 cosine. H100 block 1, 2026-10-28.",
+  "foundation_model_name": "spectral_stem_finetune",
+  "version": "0.5.0",
+  "device": "cuda",
+  "model_config": {
+    "model_type": "spectral_stem_finetune",
+    "stem": "reduced_attention",
+    "bands": 202,
+    "compressed_channels": 64,
+    "token_dim": 32,
+    "attention_heads": 4,
+    "gate_hidden": 32,
+    "embed_dims": [
+      96,
+      192,
+      480,
+      768
+    ],
+    "num_heads": [
+      3,
+      6,
+      10,
+      12
+    ],
+    "reduction_ratios": [
+      8,
+      4,
+      2,
+      1
+    ],
+    "num_blocks": [
+      2,
+      2,
+      2,
+      2
+    ],
+    "decoder_dim": 512,
+    "expansion_ratio": 4,
+    "drop_rate": 0.4,
+    "mask_ratio": 0.65,
+    "trim_fraction": 0.0,
+    "sam_weight": 0.5,
+    "sam_ramp_epochs": 0,
+    "erosion_kernel_size": 1,
+    "metrics_csv": "/opt/dlami/nvme/runs/FTH1-heavy-joint/metrics.csv",
+    "amp_bf16": true,
+    "early_stop_patience": null,
+    "early_stop_min_delta": 0.01,
+    "early_stop_min_epochs": 20,
+    "checkpoint_s3_uri": "s3://allotrope-training-data-prod-india/experiments/indradhanu-finetune/FTH1-heavy-joint/checkpoints/",
+    "auto_resume": true,
+    "bin_nm": 40.0,
+    "band_weighting": "width",
+    "band_augment_prob": 0.8,
+    "band_jitter_nm": 3.0,
+    "mode": "joint",
+    "sources": [
+      {
+        "name": "enmap",
+        "train_dir": "/opt/dlami/nvme/ft/enmap/train",
+        "test_dir": "/opt/dlami/nvme/ft/enmap/test",
+        "share": 0.4,
+        "band_list_path": "/opt/dlami/nvme/ft/band_lists/enmap_224.json",
+        "labels": "enmap",
+        "skip_scenes_path": "/opt/dlami/nvme/ft/band_lists/enmap_drop_duplicate_scenes.json"
+      },
+      {
+        "name": "prisma",
+        "train_dir": "/opt/dlami/nvme/ft/prisma/train",
+        "test_dir": "/opt/dlami/nvme/ft/prisma/test",
+        "share": 0.35,
+        "labels": "pseudo",
+        "pseudo_dir": "/opt/dlami/nvme/ft/pseudo_ft04/prisma"
+      },
+      {
+        "name": "aviris_ng",
+        "train_dir": "/opt/dlami/nvme/ft/aviris_ng/train",
+        "test_dir": "/opt/dlami/nvme/ft/aviris_ng/test",
+        "share": 0.25,
+        "band_list_path": "/opt/dlami/nvme/ft/band_lists/aviris_ng_372.json",
+        "labels": "pseudo",
+        "pseudo_dir": "/opt/dlami/nvme/ft/pseudo_ft04/aviris_ng"
+      }
+    ],
+    "init_from": "s3://allotrope-training-data-prod-india/experiments/indradhanu-se-pretrain/F002-heavy/checkpoints/best.pt",
+    "seg_classes": 5,
+    "seg_decoder_dim": 256,
+    "seg_weight": 0.1,
+    "plateau_elevation_m": 3500.0,
+    "low_water_vapour": 750.0,
+    "cirrus_min_level": 2,
+    "finetune_metrics_csv": "/opt/dlami/nvme/runs/FTH1-heavy-joint/finetune_metrics.csv",
+    "mixed_batches": true,
+    "grad_loss_weight": 0.0,
+    "seg_head_from": null,
+    "seg_class_weights": [
+      1.0,
+      1.0,
+      1.0,
+      3.0,
+      3.0
+    ],
+    "loader_workers_per_source": 4,
+    "decoder_type": "progressive",
+    "decoder_stage_dims": [
+      256,
+      128
+    ]
+  },
+  "data": {
+    "num_epochs": 10,
+    "data_provider": "spectralearth",
+    "train_samples_per_epoch": {
+      "128": 30000
+    },
+    "test_samples_per_epoch": {
+      "128": 5000
+    },
+    "shard_key_template": "unused/{split}/",
+    "stage": "ft-v1",
+    "bucket_name": "allotrope-training-data-prod-india",
+    "region_name": "ap-south-1",
+    "batch_size": 16,
+    "gradient_accumulation_steps": 2,
+    "num_workers": 6,
+    "shardshuffle": 100,
+    "pixel_stats_path": null
+  },
+  "learning_rate": 0.0001,
+  "lr_schedule": {
+    "scheduler_type": "cosine",
+    "warmup_epochs": 1,
+    "min_lr": 1e-06,
+    "step_size": 10,
+    "step_gamma": 0.5
+  },
+  "checkpoint": {
+    "checkpoint_dir": "/opt/dlami/nvme/runs/FTH1-heavy-joint/ckpt",
+    "save_every_n_epochs": 1,
+    "keep_top_k": 10
+  },
+  "hot_storage": {
+    "enabled": true,
+    "local_cache_dir": "/opt/dlami/nvme/ft",
+    "train_shards_per_size": 1,
+    "test_shards_per_size": 1,
+    "skip_sync_if_exists": true
+  }
+}

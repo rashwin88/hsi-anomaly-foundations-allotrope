@@ -113,6 +113,11 @@ class SpectralStemMAEConfig(HyperspectralSegFormerMAEConfig):
     Inherits every SegFormer, masking and loss field; `in_channels` is unused (the band
     count comes from `bands` or, for cross_attention, from each batch's wavelengths)."""
 
+    decoder_type: Literal["segformer", "progressive"] = Field(default="segformer", description="Reconstruction "
+        "decoder: SegFormer's (one-shot PixelShuffle at 1/4 resolution) or progressive (x2 stages with a masked "
+        "full-resolution skip from the stem; FT09, research/experiments/decoder-capacity/).")
+    decoder_stage_dims: list[int] = Field(default_factory=lambda: [192, 96], min_length=2, max_length=2,
+        description="progressive decoder: channels of its 1/2- and full-resolution stages.")
     model_type: Literal["spectral_stem_mae"] = "spectral_stem_mae"
     stem: Literal["linear", "gate", "cross_attention", "reduced_attention"] = "cross_attention"
     bands: int = Field(default=202, description="Fixed input band count for the linear and gate stems.")
@@ -191,9 +196,6 @@ class SpectralStemFinetuneConfig(SpectralStemMAEConfig):
                             "reconstruction loss - the model never practises rebuilding rare odd pixels (FT07, GT-HAD "
                             "style gating; research/experiments/indradhanu-finetune/FT07-gated/). 0 = off.")
     gate_halo: int = Field(default=2, ge=0, description="Gate dilation, px.")
-    decoder_type: Literal["segformer", "progressive"] = Field(default="segformer", description="Reconstruction "
-        "decoder: SegFormer's (one-shot PixelShuffle at 1/4 resolution) or progressive (x2 stages with a masked "
-        "full-resolution skip from the stem; FT09, research/experiments/decoder-capacity/).")
     mask_block: int = Field(default=1, ge=1, description="MAE masking unit in stage-1 tokens: 1 = single 4 px tokens, "
                             "2 = 8 px blocks, so a target and its halo are hidden together (FT08). Inference uses the "
                             "same block as its checkerboard cell.")

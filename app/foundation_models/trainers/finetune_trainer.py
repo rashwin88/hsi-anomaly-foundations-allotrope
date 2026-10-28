@@ -280,7 +280,8 @@ class FinetuneTrainer(SpectralStemMAETrainer):
             seg_classes=cfg.seg_classes, seg_decoder_dim=cfg.seg_decoder_dim, embed_dims=cfg.embed_dims,
             num_heads=cfg.num_heads, reduction_ratios=cfg.reduction_ratios, num_blocks=cfg.num_blocks,
             decoder_dim=cfg.decoder_dim, expansion_ratio=cfg.expansion_ratio, drop_rate=cfg.drop_rate,
-            scale_decoder_dim=cfg.scale_decoder_dim, decoder_type=cfg.decoder_type)
+            scale_decoder_dim=cfg.scale_decoder_dim, decoder_type=cfg.decoder_type,
+            decoder_stage_dims=cfg.decoder_stage_dims)
         new_heads = ("seg_head.", "scale_head.")
         if state is not None and cfg.decoder_type == "progressive" and not any(k.startswith("decoder.up_") for k in state):
             # from a SegFormer-decoder checkpoint (FT04): keep its projections and fuse, drop its PixelShuffle refine

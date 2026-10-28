@@ -53,7 +53,8 @@ class SpectralStemSegFormerMAE(nn.Module):
                  band_weighting: str = "count", seg_classes: int = 0, seg_decoder_dim: int = 128,
                  embed_dims=(32, 64, 160, 256), num_heads=(1, 2, 5, 8), reduction_ratios=(8, 4, 2, 1),
                  num_blocks=(2, 2, 2, 2), decoder_dim: int = 256, expansion_ratio: int = 4,
-                 drop_rate: float = 0.0, scale_decoder_dim: int = 0, decoder_type: str = "segformer"):
+                 drop_rate: float = 0.0, scale_decoder_dim: int = 0, decoder_type: str = "segformer",
+                 decoder_stage_dims=(192, 96)):
         super().__init__()
         if stem not in STEMS:
             raise ValueError(f"stem must be one of {STEMS}, got {stem!r}")
@@ -81,7 +82,8 @@ class SpectralStemSegFormerMAE(nn.Module):
         if decoder_type not in ("segformer", "progressive"):
             raise ValueError(f"decoder_type must be 'segformer' or 'progressive', got {decoder_type!r}")
         self.decoder_type = decoder_type
-        self.decoder = (ProgressiveDecoder(list(embed_dims), decoder_dim=decoder_dim, out_channels=D, skip_channels=D)
+        self.decoder = (ProgressiveDecoder(list(embed_dims), decoder_dim=decoder_dim, out_channels=D, skip_channels=D,
+                                           stage_dims=tuple(decoder_stage_dims))
                         if decoder_type == "progressive"
                         else SegFormerDecoder(embed_dims=list(embed_dims), decoder_dim=decoder_dim, out_channels=D))
         # Optional segmentation head on the same encoder features (fine-tuning stage 1+,

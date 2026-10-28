@@ -249,7 +249,8 @@ class SpectralStemMAETrainer(HyperspectralSegFormerMAETrainer):
             band_weighting=cfg.band_weighting,
             embed_dims=cfg.embed_dims, num_heads=cfg.num_heads, reduction_ratios=cfg.reduction_ratios,
             num_blocks=cfg.num_blocks, decoder_dim=cfg.decoder_dim,
-            expansion_ratio=cfg.expansion_ratio, drop_rate=cfg.drop_rate)
+            expansion_ratio=cfg.expansion_ratio, drop_rate=cfg.drop_rate,
+            decoder_type=cfg.decoder_type, decoder_stage_dims=cfg.decoder_stage_dims)
 
     def _decode_batch(self, batch: dict) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         """-> (reflectance (B, N, H, W) float32, band_valid (B, N, H, W) bool,
