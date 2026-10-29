@@ -174,12 +174,17 @@ services:
       WORKER_HEARTBEAT_TIMEOUT_SEC: ${WORKER_HEARTBEAT_TIMEOUT_SEC:-60.0}
       WORKER_REAP_INTERVAL_SEC: ${WORKER_REAP_INTERVAL_SEC:-30.0}
       WORKER_LOG_LEVEL: ${WORKER_LOG_LEVEL:-INFO}
-      # Thread caps removed 2026-05-11: the SIGTERMs that originally
-      # motivated them turned out to be Docker Desktop UI's restart
-      # button (user_agent=DockerDesktopUI in apiproxy.log), not VM
-      # monitor throttling. Letting OMP/OpenBLAS/torch use all VM cores
-      # gives 3-5× wall-clock speedup on predict_full_scene. If kill
-      # cycles return, re-cap here BEFORE rebuilding (memory rule).
+      # Thread counts. The SIGTERMs that once motivated a cap of 2 were Docker
+      # Desktop UI's restart button, not throttling (2026-05-11) - but the cap
+      # stayed in backend/Dockerfile.worker (ENV) and allotrope_worker/__init__.py
+      # (setdefault), so the worker ran torch on 2 threads until 2026-10-29
+      # (Indradhanu Heavy: ~30 min per PRISMA scene). Set here, they override
+      # both. 16 leaves headroom on the 24-core host. If kill cycles return,
+      # lower these before rebuilding.
+      OMP_NUM_THREADS: ${WORKER_THREADS:-16}
+      MKL_NUM_THREADS: ${WORKER_THREADS:-16}
+      OPENBLAS_NUM_THREADS: ${WORKER_THREADS:-16}
+      NUMEXPR_NUM_THREADS: ${WORKER_THREADS:-16}
       # JWT_SECRET isn't strictly needed by the worker today, but config.py
       # validates it at import time. Leave the same value as the api so we
       # don't have to fork the settings model.

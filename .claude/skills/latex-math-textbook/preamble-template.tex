@@ -1,0 +1,62 @@
+% preamble-template.tex - starting preamble for a latex-math-textbook book (Tectonic / XeTeX).
+% Copy to <book>/preamble.tex. Add packages HERE, never in chapter files.
+
+\usepackage[a4paper,top=25mm,bottom=25mm,inner=28mm,outer=22mm,headheight=14pt]{geometry}
+\usepackage{fontspec}
+\IfFontExistsTF{Libertinus Serif}{\setmainfont{Libertinus Serif}}{\usepackage{lmodern}}
+\usepackage{amsmath,amssymb,amsthm,mathtools,bm}
+\usepackage{microtype}
+\usepackage[dvipsnames,svgnames,table]{xcolor}
+\usepackage{graphicx}
+\usepackage{booktabs,longtable,array,tabularx}
+\usepackage{enumitem}
+\usepackage{caption,subcaption}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta,positioning,calc,patterns,decorations.pathreplacing,shapes.geometric,fit,backgrounds,matrix}
+\usepackage{pgfplots}
+\pgfplotsset{compat=1.18}
+\usepgfplotslibrary{fillbetween,groupplots}
+\usepackage[most]{tcolorbox}
+\usepackage{imakeidx}
+\makeindex[intoc,columns=2,title=Index]
+\usepackage[numbers,sort&compress]{natbib}
+\usepackage[hidelinks,bookmarksnumbered]{hyperref}
+\usepackage[nameinlink,capitalise,noabbrev]{cleveref}
+
+\graphicspath{{figures/}}
+\setlist{itemsep=2pt,topsep=4pt}
+\setlength{\parskip}{3pt}
+\captionsetup{font=small,labelfont=bf}
+
+% colours (the courses' figure language: teal spectral, indigo spatial, plum attention, amber loss, grey masked)
+\definecolor{spec}{HTML}{0F766E}
+\definecolor{spat}{HTML}{3F4CA8}
+\definecolor{attn}{HTML}{8E3B8A}
+\definecolor{loss}{HTML}{B45309}
+\definecolor{maskgrey}{HTML}{9CA3AF}
+
+% the four teaching boxes
+\newtcolorbox{oneThing}{colback=spec!8,colframe=spec,boxrule=0.6pt,arc=2pt,fonttitle=\bfseries,
+  title={The one thing this chapter teaches}}
+\newtcolorbox{worked}[1][]{colback=spat!5,colframe=spat!70,boxrule=0.5pt,arc=2pt,breakable,fonttitle=\bfseries,
+  title={Worked example#1}}
+\newtcolorbox{confusion}{colback=loss!7,colframe=loss!80,boxrule=0.5pt,arc=2pt,breakable,fonttitle=\bfseries,
+  title={Common confusions}}
+\newtcolorbox{checkYourself}{colback=attn!5,colframe=attn!70,boxrule=0.5pt,arc=2pt,breakable,fonttitle=\bfseries,
+  title={Check yourself}}
+
+% theorems
+\theoremstyle{definition}
+\newtheorem{definition}{Definition}[chapter]
+\newtheorem{rulebox}[definition]{Rule}
+\theoremstyle{plain}
+\newtheorem{proposition}[definition]{Proposition}
+
+% data tags for project numbers
+\newcommand{\M}{\textsuperscript{[M]}}   % measured in a project experiment (cite the file)
+\newcommand{\C}{\textsuperscript{[C]}}   % computed for this book (compute_numbers.py)
+\newcommand{\A}{\textsuperscript{[A]}}   % assumed (state it)
+
+% paths and code: url-style, break at punctuation; NOT inside \section, \caption or \index (use \texttt with \_ there)
+\newcommand{\code}[1]{\texttt{\detokenize{#1}}}
+\newcommand{\file}[1]{\url{#1}}
