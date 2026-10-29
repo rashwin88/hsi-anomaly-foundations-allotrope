@@ -1,0 +1,105 @@
+{
+ "name": "FTH1 (Heavy fine-tuned) vs FTB1 (control), epochs 8-10, vs FT04: real PRISMA bench",
+ "models": [
+  {
+   "name": "FT04_ep10",
+   "checkpoint": "C:/es/models/FT04_best.pt"
+  },
+  {
+   "name": "FTH1_ep8",
+   "checkpoint": "C:/es/models/FTH1_ep8.pt"
+  },
+  {
+   "name": "FTH1_ep9",
+   "checkpoint": "C:/es/models/FTH1_ep9.pt"
+  },
+  {
+   "name": "FTH1_ep10",
+   "checkpoint": "C:/es/models/FTH1_ep10.pt"
+  },
+  {
+   "name": "FTB1_ep8",
+   "checkpoint": "C:/es/models/FTB1_ep8.pt"
+  },
+  {
+   "name": "FTB1_ep9",
+   "checkpoint": "C:/es/models/FTB1_ep9.pt"
+  },
+  {
+   "name": "FTB1_ep10",
+   "checkpoint": "C:/es/models/FTB1_ep10.pt"
+  }
+ ],
+ "datasets": [
+  {
+   "kind": "prisma_bench",
+   "path": "C:/Users/FITT/Documents/stage1_datasets"
+  }
+ ],
+ "scorers": [
+  {
+   "kind": "residual_mahalanobis",
+   "name": "RM"
+  },
+  {
+   "kind": "exclude",
+   "name": "RM, cloud excl. FT04 masks",
+   "classes": [
+    "cloud"
+   ],
+   "segmenter": "FT04_ep10",
+   "fit_on_kept": false,
+   "base": {
+    "kind": "residual_mahalanobis"
+   }
+  },
+  {
+   "kind": "exclude",
+   "name": "RM, cloud excl. FTH1 masks",
+   "classes": [
+    "cloud"
+   ],
+   "segmenter": "FTH1_ep10",
+   "fit_on_kept": false,
+   "base": {
+    "kind": "residual_mahalanobis"
+   }
+  },
+  {
+   "kind": "exclude",
+   "name": "RM, cloud excl. FTB1 masks",
+   "classes": [
+    "cloud"
+   ],
+   "segmenter": "FTB1_ep10",
+   "fit_on_kept": false,
+   "base": {
+    "kind": "residual_mahalanobis"
+   }
+  }
+ ],
+ "metrics": [
+  {
+   "kind": "roc_auc"
+  },
+  {
+   "kind": "pauc",
+   "max_fpr": 0.01
+  },
+  {
+   "kind": "tpr_at",
+   "fpr": 0.001
+  },
+  {
+   "kind": "objects_caught",
+   "top_pct": [
+    1.0,
+    0.1
+   ]
+  }
+ ],
+ "group_by": [
+  "tier"
+ ],
+ "output": "C:/es/eval/fth1_ftb1"
+}

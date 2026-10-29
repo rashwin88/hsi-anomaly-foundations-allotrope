@@ -33,6 +33,11 @@ Sampled every 30 s by `nvidia-smi` into `gpu_log.csv` (mirrored to the run's S3 
 Steady state so far: **63-85% utilisation, ~375 W of 700 W, 16 of 80 GB**. CPU: 12 loader workers at ~7% each, main
 process 60% of one core, 86% of the 16 vCPU idle - the GPU, not the loaders, sets the pace; the headroom is batch size.
 
+## Decision (2026-10-29)
+**Indradhanu Heavy is the base pretrained model** (user: "I think heavy is our base model now"). New fine-tunes and
+heads start from this checkpoint (`checkpoints/best.pt`, epoch 72), not F001. Its one-run fine-tune (FTH1) did not
+beat the same-recipe control yet; the product is unchanged (Indradhanu V2 = FT04 opt-in, v0.2.0 default).
+
 ## Incidents
 - **12:48 start crashed at the first validation, 3 times, then the driver gave up (13:10); GPU idle 13:10-14:05.**
   12 loader workers, 10 staged test shards: two workers got no shard and webdataset raised "No samples found ...

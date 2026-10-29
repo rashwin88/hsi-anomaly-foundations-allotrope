@@ -162,4 +162,9 @@ thread that connects them.
   detection back to a tie with FT04 (pAUC 0.172; -0.004 vs FT09b, resolved). Checkpoint-to-checkpoint variation is as
   large as the gain. Progressive decoder not adopted. Lesson: a gain must hold across neighbouring checkpoints, not
   only clear the object bootstrap.
+- **2026-10-29 - Indradhanu Heavy becomes the base; FTH1 / FTB1 one-run fine-tunes.** User decision after F002-heavy's
+  pretraining (val SAM 3.89 vs F001's 4.06; pretrained pAUC 0.166 vs 0.155). FTH1 (Heavy) and FTB1 (control, F001)
+  with FT04's final recipe in one 10-epoch joint run both fell short of FT04's curriculum (PRISMA SAM 4.74 / 4.48 vs
+  4.11; IoU water / cloud ~0.79 / 0.72 vs 0.84 / 0.81), Heavy not ahead of the control; FTH2 / FTB2 (+8 epochs) and the
+  detection evaluation running.
 
