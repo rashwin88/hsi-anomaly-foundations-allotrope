@@ -50,4 +50,6 @@ Mean pAUC 0.1892, equal to the evaluator's.
 
 **Worker CPU cost** ([cpu_timing.py](cpu_timing.py), inside `allotrope_worker`, 2 torch threads as the image pins,
 PRISMA set1 1186 x 1196 x 185 bands): Heavy 1819 s (predict 1629, segment 185, score 4) against FT04 1058 s (predict
-920, segment 133) - 1.7x.
+920, segment 133) - 1.7x. **With 16 threads** (compose `OMP/MKL/OPENBLAS/NUMEXPR_NUM_THREADS`, 2026-10-29): Heavy
+454 s (predict 402, segment 47, score 4) against FT04 274 s (predict 236, segment 32) - 4.0x and 3.9x faster, Heavy
+still 1.7x FT04.

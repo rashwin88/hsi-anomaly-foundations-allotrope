@@ -215,9 +215,11 @@ Added 2026-10-14 with the `spectral_stem_mae` trainer; rewritten 2026-10-19 when
   target is therefore scored, not masked. The rule costs FT04 nothing (bootstrap -0.0004 [-0.0015, +0.0015], FTH2).
 - **Heavy costs 1.7x FT04 on the worker's CPU.** One PRISMA scene (set1, 1186 x 1196, 185 bands) through the product
   path inside `allotrope_worker` (2026-10-29): Heavy 1819 s (predict 1629, segment 185), FT04 1058 s (predict 920,
-  segment 133) - ~30 against ~18 minutes. The worker image pins `OMP_NUM_THREADS` / `MKL_NUM_THREADS` to 2
-  (`backend/Dockerfile.worker`), so torch ran 2 threads on a 24-core host; the compose file's comment that the caps
-  were removed on 2026-05-11 does not match the image. The worker has no GPU locally.
+  segment 133) - ~30 against ~18 minutes - on 2 torch threads: the image pins `OMP_NUM_THREADS` / `MKL_NUM_THREADS`
+  to 2 (`backend/Dockerfile.worker`, `allotrope_worker/__init__.py`). Since 2026-10-29 the compose file sets them to 16
+  (`WORKER_THREADS`, default 16), which overrides both: **Heavy 454 s (predict 402, segment 47), FT04 274 s - about
+  7.6 against 4.6 minutes, 4x faster.** The Dockerfile and `__init__` still default to 2 for anything run outside
+  compose. The worker has no GPU locally.
 - **EnMAP keeps the product convention.** The default EnMAP band filter removes provider cloud / shadow / haze pixels
   before scoring, unlike the PRISMA evaluation behind V2's numbers (decision 2026-10-19).
 
