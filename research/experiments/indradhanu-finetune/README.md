@@ -165,8 +165,8 @@ thread that connects them.
 - **2026-10-29 - Indradhanu Heavy becomes the base; FTH1 / FTB1 one-run fine-tunes.** User decision after F002-heavy's
   pretraining (val SAM 3.89 vs F001's 4.06; pretrained pAUC 0.166 vs 0.155). FTH1 (Heavy) and FTB1 (control, F001)
   with FT04's final recipe in one 10-epoch joint run both fell short of FT04's curriculum (PRISMA SAM 4.74 / 4.48 vs
-  4.11; IoU water / cloud ~0.79 / 0.72 vs 0.84 / 0.81), Heavy not ahead of the control; FTH2 / FTB2 (+8 epochs) and the
-  detection evaluation running.
+  4.11; IoU water / cloud ~0.79 / 0.72 vs 0.84 / 0.81), Heavy not ahead of the control on reconstruction or masks -
+  **on detection it was** (see the entries below).
 - **2026-10-29 - FTH2 / FTB2: Heavy is the better detector.** After 18 joint epochs, with each model's own thick-cloud
   masks: FTH2 pAUC 0.185 / 0.184 / 0.186 (epochs 6-8) vs control FTB2 0.160-0.163 (+0.021-0.025, all resolved) and
   shipped FT04 0.170 (+0.014-0.017, all resolved); top 1% +2.1-2.5 pts over the control (resolved); top 0.1% a tie.

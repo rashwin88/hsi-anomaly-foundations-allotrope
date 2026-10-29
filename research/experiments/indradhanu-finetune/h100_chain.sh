@@ -21,9 +21,13 @@ if ! grep -q '^ok' $N/ft/STAGED 2>/dev/null; then
   echo "ok $(date -u +%FT%TZ)" > $N/ft/STAGED
 fi
 # 2. wait for F002-heavy
-until grep -q "F002-heavy driver finished" /var/log/heavy.log 2>/dev/null; do sleep 120; done
-E=$(( $(wc -l < $N/runs/F002-heavy/metrics.csv) - 1 ))
-[ $E -ge 80 ] || { log "F002-heavy stopped at $E epochs - chain stops"; exit 1; }
+# wait on the epoch count, not a log line: heavy.log is appended across restarts and keeps old "finished" lines
+epochs() { echo $(( $(wc -l < $N/runs/F002-heavy/metrics.csv 2>/dev/null || echo 1) - 1 )); }
+until [ $(epochs) -ge 80 ]; do
+  pgrep -f heavy_run.sh >/dev/null || { log "F002-heavy driver not running at $(epochs) epochs - chain stops"; exit 1; }
+  sleep 120
+done
+sleep 60; E=$(epochs)
 log "F002-heavy done ($E epochs)"
 # 3. pseudo-labels from FT04 (PRISMA, AVIRIS-NG train shards)
 mkdir -p $N/models && aws s3 cp s3://$B/experiments/indradhanu-finetune/FT04-final-joint/checkpoints/best.pt $N/models/FT04.pt --only-show-errors

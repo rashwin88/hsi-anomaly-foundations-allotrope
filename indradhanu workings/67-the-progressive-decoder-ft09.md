@@ -403,5 +403,5 @@ recorded and carried as a caveat; it does not undo criterion 1.
 
 ---
 
-That is the course so far. Indradhanu V2 (part 61) stands; FT09b is the first candidate since cloud
-exclusion to clear the bench's noise, and FT09c, still running, continues it.
+Next: FT09c's result (the update note at the top) left every change since FT04 inside checkpoint noise, so
+part 68 tests the question none of them touched - capacity - by pretraining a wider model.

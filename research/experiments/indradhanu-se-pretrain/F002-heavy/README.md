@@ -1,8 +1,8 @@
-# F002-heavy - Indradhanu Heavy: 4x-wide pretraining on SpectralEarth
+# F002-heavy - Indradhanu Heavy: 3x-wide pretraining on SpectralEarth
 
 **Status:** done 2026-10-28 22:55 UTC, 80 epochs (first start 12:48 crashed, see below); best.pt = epoch 72. Ran on `i-06645b351d4dc9712` (p5.4xlarge, 1x H100 80 GB HBM3, 16 vCPU,
 249 GB RAM, 3.5 TB NVMe), H100 capacity block `cr-08d2ff733d27a977c` (2026-10-28 11:30 -> 10-29 11:30 UTC); block 2
-`cr-0dccba00b34dc29e1` (10-31 11:30 -> 11-02 11:30). Code bundle 7947bef. Launched on the user's "Go, but 4x wide";
+`cr-0dccba00b34dc29e1` (10-31 11:30 -> 11-02 11:30). Code bundle 7947bef. Launched on the user's "Go, but 4x wide" - **implemented as 3x encoder widths** (and 2x spectral latent and decoder), which this README first called 4x (corrected 2026-10-29);
 named by the user ("This is indradhanu-heavy"); 80 epochs on the user's "we will lose steam after epoch 50-75".
 
 ## Question
@@ -35,8 +35,9 @@ process 60% of one core, 86% of the 16 vCPU idle - the GPU, not the loaders, set
 
 ## Decision (2026-10-29)
 **Indradhanu Heavy is the base pretrained model** (user: "I think heavy is our base model now"). New fine-tunes and
-heads start from this checkpoint (`checkpoints/best.pt`, epoch 72), not F001. Its one-run fine-tune (FTH1) did not
-beat the same-recipe control yet; the product is unchanged (Indradhanu V2 = FT04 opt-in, v0.2.0 default).
+heads start from this checkpoint (`checkpoints/best.pt`, epoch 72), not F001. Its one-run fine-tune's reconstruction and masks did not beat
+the same-recipe control - **but on detection Heavy did, at every checkpoint (FTH1-FTH3; release candidate FTH3 epoch 5,
+pAUC 0.189 vs FT04 0.170)**; the product is unchanged (Indradhanu V2 = FT04 opt-in, v0.2.0 default).
 
 ## Incidents
 - **12:48 start crashed at the first validation, 3 times, then the driver gave up (13:10); GPU idle 13:10-14:05.**

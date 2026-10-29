@@ -31,7 +31,7 @@ Paired bootstrap (1000 draws):
 
 ## Observations
 - **The capacity question is answered on this bench: the bigger pretrained model is the better detector** - ~+0.023
-  pAUC over the same-recipe control (about twice what cloud exclusion bought), holding at three neighbouring
+  pAUC over the same-recipe control (about three times what cloud exclusion bought, +0.0074), holding at three neighbouring
   checkpoints; +0.015 over shipped FT04, which had a four-stage curriculum.
 - The gap grew with fine-tuning (FTH1 vs FTB1 ~+0.013 -> FTH2 vs FTB2 ~+0.023), while reconstruction did not separate
   them - Heavy's PRISMA SAM is still worse than the control's. Better detection without better reconstruction.

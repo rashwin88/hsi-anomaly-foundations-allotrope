@@ -1,5 +1,5 @@
 {
-  "_description": "F002, Indradhanu Heavy: 4x-wide pretraining on SpectralEarth (user 2026-10-28: 'Go, but 4x wide'): encoder [96,192,480,768], heads [3,6,10,12], spectral latent 64 (token_dim stays 32: the reduced stem's wavelength encoding is 32 wide), progressive decoder (dim 512, stages 256/128); F001's recipe and normalisation stats otherwise; 80 epochs (cosine fully decayed; user: 'we will lose steam after epoch 50-75'), train shards rotated in blocks of 200 every 5 epochs (16 blocks, 3,200 of 3,419 shards). H100 capacity blocks cr-08d2ff733d27a977c / cr-0dccba00b34dc29e1.",
+  "_description": "F002, Indradhanu Heavy: 3x-wide (encoder) pretraining on SpectralEarth (user 2026-10-28: 'Go, but 4x wide'): encoder [96,192,480,768], heads [3,6,10,12], spectral latent 64 (token_dim stays 32: the reduced stem's wavelength encoding is 32 wide), progressive decoder (dim 512, stages 256/128); F001's recipe and normalisation stats otherwise; 80 epochs (cosine fully decayed; user: 'we will lose steam after epoch 50-75'), train shards rotated in blocks of 200 every 5 epochs (16 blocks, 3,200 of 3,419 shards). H100 capacity blocks cr-08d2ff733d27a977c / cr-0dccba00b34dc29e1.",
   "foundation_model_name": "spectral_stem_mae",
   "version": "0.4.0",
   "device": "cuda",
