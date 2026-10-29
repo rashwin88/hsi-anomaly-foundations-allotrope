@@ -37,6 +37,23 @@ detection measured so far.
 caught top 1% ~33%) - its head marks far too much as cloud on the bench scenes, though its EnMAP validation cloud IoU
 (0.717) is like FTB1's (0.721). FTB1's masks are good (they even lift FT04: 0.170 -> 0.176).
 
+## Mask diagnosis (2026-10-29)
+Share of each bench scene the heads call cloud (class map = cloud or thin cloud > 0.5), and targets inside it:
+
+| | set1 | set2 | set3 | set4 |
+|---|---|---|---|---|
+| FT04 | 0.0% / 0 | 0.0% / 0 | 0.8% / 0 | 11.8% / 2 |
+| FTB1 | 0.0% / 0 | 0.0% / 0 | 1.7% / 0 | 0.3% / 0 |
+| FTH1 | 0.4% / 17 | 0.0% / 0 | 2.1% / 0 | **75.4% / 209 of 230** |
+
+**All of it is the thin-cloud output** - FTH1 on set4: thick cloud 0.4% (0 targets), thin cloud 75.4% (209 targets) =
+the haze; FT04's 11.8% on set4 is thin cloud too. Excluding **thick cloud only** with FTH1's own head:
+epoch 10 pAUC **0.181** (set1-4 0.253 / 0.162 / 0.086 / 0.222), caught top 1% 48.0%, top 0.1% 15.5%; epoch 8 0.181 /
+48.5% / 15.4% - the same as with FTB1's masks. **Heavy stands alone at pAUC 0.181 vs shipped FT04's 0.170.**
+
+Follow-up (not done): the product's exclusion (`SpectralStemInferencer.segment_full_scene`, cloud = cloud or thin
+cloud) also removes haze for Indradhanu V2; measure thick-only on FT04 before changing shipped behaviour.
+
 ## Observations
 - **Bigger pretrained model -> better detector**, consistently across three neighbouring checkpoints (two resolved),
   the rule FT09c taught. Heavy's lead over F001 seen in pretraining (pAUC +0.011) survives and grows in fine-tuning.
