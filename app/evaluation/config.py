@@ -31,6 +31,9 @@ class ModelSpec(BaseModel):
     adapt_gate_pct: float = Field(default=1.0, ge=0, lt=100, description="Top % of the unadapted model's residual "
                                   "Mahalanobis score left out of the adaptation loss; 0 = no gating.")
     adapt_halo: int = Field(default=2, ge=0, description="Gate dilation, px.")
+    cloud_rule: Literal["cloud_or_thin", "thick"] = Field(default="cloud_or_thin", description="What the class map "
+        "calls cloud: cloud or thin cloud (segment_full_scene's rule) or thick cloud only - thin cloud fires on haze "
+        "(research/experiments/indradhanu-finetune/FTH1-heavy-joint/, mask diagnosis).")
 
 
 class DatasetSpec(BaseModel):

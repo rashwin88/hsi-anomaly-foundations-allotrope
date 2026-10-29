@@ -137,6 +137,8 @@ class Evaluation:
         s = getattr(model, "spec", None)
         if s is not None and s.adapt_steps:           # adapted variants differ by their settings, not their file
             key += f"|adapt {s.adapt_steps} {s.adapt_lr} {s.adapt_gate_pct} {s.adapt_halo}"
+        if s is not None and s.cloud_rule != "cloud_or_thin":   # class maps differ by rule; score maps do not
+            key += f"|cloud {s.cloud_rule}"
         return f"{model.name}-" + hashlib.sha1(key.encode()).hexdigest()[:10]
 
     def _score_path(self, scene, model, spec) -> Path:

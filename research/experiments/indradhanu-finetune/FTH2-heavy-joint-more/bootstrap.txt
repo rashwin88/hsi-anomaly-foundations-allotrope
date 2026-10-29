@@ -1,0 +1,22 @@
+== FTB2_ep6 -> FTH2_ep6 (each own thick masks)
+pAUC<=1%: A 0.1602  B 0.1847  B-A +0.0245  95% [+0.0140, +0.0352]  P(B>A) 1.000
+caught top 1%: A 46.1%  B 48.2%  B-A +2.1 pts  95% [+0.2, +4.1]
+== FT04 shipped -> FTH2_ep6 (own thick)
+pAUC<=1%: A 0.1695  B 0.1847  B-A +0.0151  95% [+0.0036, +0.0257]  P(B>A) 1.000
+caught top 0.1%: A 15.8%  B 15.3%  B-A -0.6 pts  95% [-1.8, +0.8]
+== FTB2_ep7 -> FTH2_ep7 (each own thick masks)
+pAUC<=1%: A 0.1629  B 0.1838  B-A +0.0209  95% [+0.0102, +0.0321]  P(B>A) 1.000
+caught top 1%: A 46.4%  B 49.0%  B-A +2.5 pts  95% [+0.6, +4.3]
+== FT04 shipped -> FTH2_ep7 (own thick)
+pAUC<=1%: A 0.1695  B 0.1838  B-A +0.0143  95% [+0.0032, +0.0247]  P(B>A) 0.996
+caught top 0.1%: A 15.8%  B 15.2%  B-A -0.7 pts  95% [-2.1, +0.8]
+== FTB2_ep8 -> FTH2_ep8 (each own thick masks)
+pAUC<=1%: A 0.1620  B 0.1864  B-A +0.0244  95% [+0.0135, +0.0362]  P(B>A) 1.000
+caught top 1%: A 46.8%  B 49.0%  B-A +2.2 pts  95% [+0.3, +4.0]
+== FT04 shipped -> FTH2_ep8 (own thick)
+pAUC<=1%: A 0.1695  B 0.1864  B-A +0.0168  95% [+0.0053, +0.0275]  P(B>A) 1.000
+caught top 0.1%: A 15.8%  B 15.7%  B-A -0.1 pts  95% [-1.3, +1.2]
+== FT04 shipped -> FT04 thick
+pAUC<=1%: A 0.1695  B 0.1691  B-A -0.0004  95% [-0.0015, +0.0015]  P(B>A) 0.294
+caught top 0.1%: A 15.8%  B 15.8%  B-A +0.0 pts  95% [+0.0, +0.0]
+
