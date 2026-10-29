@@ -1,5 +1,11 @@
 # Shipping FT04 in the product
 
+> **2026-10-29: Indradhanu V2 now points to Indradhanu Heavy** (FTH3 epoch 5, `v2.1.0`,
+> research/experiments/indradhanu-finetune/FTH3-heavy-joint-more2/), behind the same codename and architecture key,
+> with cloud exclusion narrowed to thick cloud (`thin_cloud_is_cloud=False`). FT04 (`v2.0.0`) stays in the models
+> volume as the manifest's first alternative. Everything below describes the FT04 ship and still holds for the
+> serving path.
+
 **Status:** proposed 2026-10-19, for agreement. **Model:** FT04 (research/experiments/indradhanu-finetune/
 FT04-final-joint/) - native-band reconstruction plus a segmentation head; with cloud exclusion on its own masks the
 best real-bench result (pAUC 0.170 vs shipped v0.2.0 0.159; like for like with exclusion, 0.170 vs 0.165).

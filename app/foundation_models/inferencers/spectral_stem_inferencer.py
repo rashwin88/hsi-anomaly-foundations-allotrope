@@ -109,10 +109,12 @@ class SpectralStemInferencer(SegFormerMAEInferencer):
     SEG_CLASSES = ("water", "cloud", "thin_cloud", "shadow", "snow")    # the head's output order
     CLASS_NAMES = ("land", "water", "cloud", "shadow", "snow")          # segment_full_scene's class ids
 
-    def segment_full_scene(self, cube: np.ndarray, valid: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    def segment_full_scene(self, cube: np.ndarray, valid: np.ndarray, thin_cloud: bool = True) -> tuple[np.ndarray, np.ndarray]:
         """(class map (H, W) int64: 0 land, 1 water, 2 cloud, 3 shadow, 4 snow; probabilities (5, H, W) float32).
         128 px windows at stride 64, sigmoid probabilities averaged where windows overlap; classes by priority
-        cloud (cloud or thin cloud) > snow > shadow > water > land; 0 outside valid. Call read_bands first."""
+        cloud > snow > shadow > water > land; 0 outside valid. Call read_bands first.
+        thin_cloud: cloud = cloud or thin cloud (True) or thick cloud only (False) - Heavy's thin-cloud output fires
+        on haze (research/experiments/indradhanu-finetune/FTH1-heavy-joint/, mask diagnosis)."""
         net = self.model.inner.eval()
         if net.seg_head is None:
             raise ValueError("checkpoint has no segmentation head")
@@ -135,6 +137,6 @@ class SpectralStemInferencer(SegFormerMAEInferencer):
         cls[prob[0] > 0.5] = 1
         cls[prob[3] > 0.5] = 3
         cls[prob[4] > 0.5] = 4
-        cls[np.maximum(prob[1], prob[2]) > 0.5] = 2
+        cls[(np.maximum(prob[1], prob[2]) if thin_cloud else prob[1]) > 0.5] = 2
         return cls * valid.astype(bool), prob
 

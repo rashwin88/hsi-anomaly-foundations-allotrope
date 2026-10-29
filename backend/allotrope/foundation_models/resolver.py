@@ -80,6 +80,9 @@ class ModelCapabilities:
     # Segmentation classes scored 0 AFTER scoring (the evaluated semantics, docs/proposals/ship-ft04.md); only for
     # models with a segmentation head. Classes: water, cloud, shadow, snow.
     exclude_classes: tuple[str, ...] = ()
+    # Whether the head's thin-cloud output counts as "cloud" for exclude_classes. False = thick cloud only: Indradhanu
+    # Heavy's thin-cloud output fires on haze (research/experiments/indradhanu-finetune/FTH1-heavy-joint/).
+    thin_cloud_is_cloud: bool = True
 
 
 _THERMAL_STATS = "constants/thermal_pixel_consts.json"
@@ -157,9 +160,9 @@ _CAPABILITIES: dict[str, ModelCapabilities] = {
         default_stride=32,
         pixel_stats_relpath=_HSI_STATS,
     ),
-    # Indradhanu V2 (FT04, research/experiments/indradhanu-finetune/FT04-final-joint/): the reduced-attention
-    # spectral stem at each sensor's native bands, with a segmentation head whose cloud mask is excluded after
-    # scoring. Normalisation travels in the checkpoint's buffers (no pixel_stats file).
+    # Indradhanu V2 (Indradhanu Heavy since 2026-10-29, research/experiments/indradhanu-finetune/FTH3-heavy-joint-more2/;
+    # FT04 before): the reduced-attention spectral stem at each sensor's native bands, with a segmentation head whose
+    # thick-cloud mask is excluded after scoring. Normalisation travels in the checkpoint's buffers (no pixel_stats).
     "spectral_stem_finetune": ModelCapabilities(
         architecture="spectral_stem_finetune",
         foundation_model_name="spectral_stem_finetune",
@@ -170,6 +173,7 @@ _CAPABILITIES: dict[str, ModelCapabilities] = {
         pixel_stats_relpath=None,
         band_grid="native",
         exclude_classes=("cloud",),
+        thin_cloud_is_cloud=False,
     ),
     # --- Classical statistical detectors -----------------------------
     # Closed-form, no learned weights. The worker dispatches via
@@ -245,6 +249,7 @@ class ResolvedModel:
     detector_key: str | None = None      # ADModel value when family == "classical"
     band_grid: str = "common165"         # "common165" | "native" (ModelCapabilities.band_grid)
     exclude_classes: tuple[str, ...] = () # segmentation classes zeroed after scoring
+    thin_cloud_is_cloud: bool = True     # ModelCapabilities.thin_cloud_is_cloud
 
 
 _SCENE_SENSOR_FAMILY: dict[str, str] = {
@@ -385,6 +390,7 @@ def _from_manifest(arch_dir: Path, manifest_path: Path) -> ResolvedModel:
         detector_key=caps.detector_key,
         band_grid=caps.band_grid,
         exclude_classes=caps.exclude_classes,
+        thin_cloud_is_cloud=caps.thin_cloud_is_cloud,
     )
 
 

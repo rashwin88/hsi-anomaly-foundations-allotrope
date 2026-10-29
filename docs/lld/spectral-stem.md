@@ -108,13 +108,16 @@ two-pass validation) it runs at ~55 patches/s, 9.2 min per 30,000 patches.
 
 ## Serving (Indradhanu V2, since 2026-10-19)
 
-The fine-tuned stem (`spectral_stem_finetune`, FT04) is served as **Indradhanu V2**, opt-in next to v0.2.0
-(design: `docs/proposals/ship-ft04.md`).
+The fine-tuned stem (`spectral_stem_finetune`) is served as **Indradhanu V2**, opt-in next to v0.2.0
+(design: `docs/proposals/ship-ft04.md`). Since 2026-10-29 V2 is Indradhanu Heavy (FTH3 epoch 5, `v2.1.0`: 3x wide,
+progressive decoder, 35.3 M params); FT04 (`v2.0.0`) is the manifest's first `alternatives` entry. Same architecture
+key, so nothing in the resolver or worker branches on which one it is - `build_model` reads `decoder_type`,
+`decoder_stage_dims` and the widths from the embedded `model_config`.
 
 ```python
 # app/foundation_models/inferencers/spectral_stem_inferencer.py - shared by the product and app/evaluation
 SpectralStemInferencer.read_bands(cube, wavelengths_nm) -> (cube[keep], wavelengths[keep], kept indices)
-SpectralStemInferencer.segment_full_scene(cube, valid) -> (class map (H, W), probabilities (5, H, W))
+SpectralStemInferencer.segment_full_scene(cube, valid, thin_cloud=True) -> (class map (H, W), probabilities (5, H, W))
 ```
 
 - `read_bands` keeps only bands inside the trained-wavelength record and sets the wavelengths for the next
@@ -124,9 +127,21 @@ SpectralStemInferencer.segment_full_scene(cube, valid) -> (class map (H, W), pro
   checkpoint's `stats.*` curve.
 - `anomaly_scoring` scores on the upstream keep mask, then zeros `exclude_classes` from the head's class map - not
   the other way round (zeroing first would change the whitening fit; the benchmark measured this order).
-- Parity (2026-10-19, resolver manifest -> get_inferencer -> read_bands -> compute_score -> segment -> zero cloud):
-  PRISMA bench pAUC set1 0.2460, set4 0.2106 plain / 0.2199 cloud-excluded - identical to the evaluator's FT04
-  run; ROC-AUC within 0.0005.
+- **Thick-cloud rule.** "cloud" in `exclude_classes` means thick cloud only for V2: the resolver's
+  `thin_cloud_is_cloud=False` reaches `segment_full_scene(..., thin_cloud=False)`, and a pixel that is only thin
+  cloud falls to the next class by priority (snow > shadow > water > land). Heavy's thin-cloud output fires on haze -
+  75.4% of PRISMA set4's valid pixels and 209 of its 230 targets (FTH1 mask diagnosis); FT04 under the thick rule
+  loses nothing (bootstrap -0.0004 [-0.0015, +0.0015], FTH2). The evaluator's `ModelSpec.cloud_rule: thick` calls
+  the same argument. `stats.json` records it as `cloud_rule` (`"thick"` | `"cloud_or_thin"`).
+- Parity (2026-10-19, FT04, resolver manifest -> get_inferencer -> read_bands -> compute_score -> segment -> zero
+  cloud): PRISMA bench pAUC set1 0.2460, set4 0.2106 plain / 0.2199 cloud-excluded - identical to the evaluator's
+  FT04 run; ROC-AUC within 0.0005.
+- Parity (2026-10-29, Heavy v2.1.0, same path with the thick rule;
+  `research/experiments/indradhanu-finetune/FTH3-heavy-joint-more2/product_parity.py`): pAUC set1 0.2617,
+  set2 0.1874, set3 0.0861, set4 0.2217 (mean 0.1892) - the evaluator's FTH3_ep5 "excl. FTH3_ep5 thick" numbers to
+  4 decimals; ROC-AUC within 0.0004.
+- CPU cost (2026-10-29, inside `allotrope_worker`, 2 torch threads): one PRISMA scene takes 1819 s with Heavy and
+  1058 s with FT04, mostly `predict_full_scene` at stride 32 (docs/09-known-issues.md).
 
 ## Invariants
 - **The progressive decoder's skip never carries a hidden pixel** (`_decode`: every pixel of a removed token is zeroed

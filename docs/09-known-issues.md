@@ -196,10 +196,11 @@ Rationale and results in [`lld/spectral-family-match.md`](lld/spectral-family-ma
 
 ## Spectral-stem models — open gaps
 
-Added 2026-10-14 with the `spectral_stem_mae` trainer; rewritten 2026-10-19 when FT04 shipped as Indradhanu V2. Rationale in
+Added 2026-10-14 with the `spectral_stem_mae` trainer; rewritten 2026-10-19 when FT04 shipped as Indradhanu V2, and
+2026-10-29 when V2 moved to Indradhanu Heavy (`v2.1.0`). Rationale in
 [`lld/spectral-stem.md`](lld/spectral-stem.md) and [`lld/enmap-shards.md`](lld/enmap-shards.md).
 
-- **Indradhanu V2 (FT04) is opt-in, not the default** (2026-10-19, docs/proposals/ship-ft04.md, Phase 1). The
+- **Indradhanu V2 is opt-in, not the default** (2026-10-19, docs/proposals/ship-ft04.md, Phase 1). The
   hyperspectral defaults still route to Indradhanu v0.2.0 and `band_filter_apply` still defaults to the 165-band grid;
   making V2 the default is Phase 2, after it has been used in the product.
 - **One `anomaly_scoring` action cannot mix V2 and v0.2.0.** V2 needs a native-band band filter, v0.2.0 the 165-band
@@ -208,8 +209,15 @@ Added 2026-10-14 with the `spectral_stem_mae` trainer; rewritten 2026-10-19 when
 - **V2's masks are written but not shown.** `models/<codename>/mask_cloud.tif` and `class_map.tif` (0 land, 1 water,
   2 cloud, 3 shadow, 4 snow) and the stats keys `bands_read`, `excluded_classes`, `excluded_percent` are on disk; the
   viewer has no panel for them, no erosion knob or flow diagram for the new architecture (frontend work).
-- **CPU cost on the stack is unmeasured.** Native bands (~200-370 against 165) at stride 32 plus a segmentation pass;
-  the worker has no GPU locally.
+- **Thin cloud is not excluded, by design.** V2 zeros thick cloud only (`thin_cloud_is_cloud=False` in the resolver,
+  `stats.json` `cloud_rule: "thick"`). Heavy's thin-cloud output fires on haze: on PRISMA set4 it covers 75.4% of
+  valid pixels and 209 of 230 targets, so excluding it would blank the scene (FTH1 mask diagnosis). Thin cirrus over a
+  target is therefore scored, not masked. The rule costs FT04 nothing (bootstrap -0.0004 [-0.0015, +0.0015], FTH2).
+- **Heavy costs 1.7x FT04 on the worker's CPU.** One PRISMA scene (set1, 1186 x 1196, 185 bands) through the product
+  path inside `allotrope_worker` (2026-10-29): Heavy 1819 s (predict 1629, segment 185), FT04 1058 s (predict 920,
+  segment 133) - ~30 against ~18 minutes. The worker image pins `OMP_NUM_THREADS` / `MKL_NUM_THREADS` to 2
+  (`backend/Dockerfile.worker`), so torch ran 2 threads on a 24-core host; the compose file's comment that the caps
+  were removed on 2026-05-11 does not match the image. The worker has no GPU locally.
 - **EnMAP keeps the product convention.** The default EnMAP band filter removes provider cloud / shadow / haze pixels
   before scoring, unlike the PRISMA evaluation behind V2's numbers (decision 2026-10-19).
 

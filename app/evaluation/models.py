@@ -141,12 +141,7 @@ class EvalModel:
         if not self.has_segmentation:
             raise ValueError(f"{self.name}: checkpoint has no segmentation head")
         cube, _, valid = self._read(scene, "native")
-        cls, prob = self.inferencer.segment_full_scene(cube, valid)
-        if self.spec.cloud_rule == "thick":            # thin-cloud-only pixels fall to the next class by priority
-            thin_only = (cls == 2) & (prob[1] <= 0.5)
-            nxt = np.select([prob[4] > 0.5, prob[3] > 0.5, prob[0] > 0.5], [4, 3, 1], default=0)
-            cls = np.where(thin_only, nxt, cls)
-        return cls
+        return self.inferencer.segment_full_scene(cube, valid, thin_cloud=self.spec.cloud_rule != "thick")[0]
 
     def release(self) -> None:
         import torch

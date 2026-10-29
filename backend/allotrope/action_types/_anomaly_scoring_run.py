@@ -468,14 +468,17 @@ def run(ctx: Any) -> None:
                 combined_weight=sam_l1_alpha,
             )
 
-            # Classes the model excludes (Indradhanu V2: cloud) are zeroed AFTER scoring, from its own
+            # Classes the model excludes (Indradhanu V2: thick cloud) are zeroed AFTER scoring, from its own
             # segmentation - the evaluated semantics (docs/proposals/ship-ft04.md; app/evaluation/scorers.py).
             if m.exclude_classes:
                 ctx.on_step(f"model={codename} Â· segment")
-                class_map, _ = inferencer.segment_full_scene(model_cube, spatial_valid.astype(bool))
+                class_map, _ = inferencer.segment_full_scene(
+                    model_cube, spatial_valid.astype(bool), thin_cloud=m.thin_cloud_is_cloud
+                )
                 excluded = np.isin(class_map, [inferencer.CLASS_NAMES.index(c) for c in m.exclude_classes])
                 score = np.where(excluded, 0.0, score).astype(np.float32)
-                exclusion = {"classes": list(m.exclude_classes), "class_map": class_map, "mask": excluded}
+                exclusion = {"classes": list(m.exclude_classes), "class_map": class_map, "mask": excluded,
+                             "cloud_rule": "cloud_or_thin" if m.thin_cloud_is_cloud else "thick"}
 
         # Write per-model rasters + rendered previews.
         model_dir = models_root / _safe_dirname(codename)
@@ -592,6 +595,7 @@ def run(ctx: Any) -> None:
             # Additive keys (the frontend reads stats by key): bands the model read, and what it excluded.
             "bands_read": None if is_classical else int(len(model_wl)),
             "excluded_classes": exclusion["classes"] if exclusion else [],
+            "cloud_rule": exclusion["cloud_rule"] if exclusion else None,
             "excluded_percent": (
                 round(100.0 * float(exclusion["mask"].sum()) / float(spatial_valid.sum() or 1), 3) if exclusion else 0.0
             ),

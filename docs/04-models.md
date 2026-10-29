@@ -28,11 +28,15 @@ class name.
 | `segformer_mae` | **Chakshu** चक्षु | transformer MAE (thermal) |
 | `hyperspectral_segformer_mae` | **Indradhanu** इंद्रधनु | transformer MAE + spectral bottleneck |
 | `spectral_stem_mae` | *(experimental, no codename)* | Indradhanu's SegFormer with a swappable spectral stem - pretraining only |
-| `spectral_stem_finetune` | **Indradhanu V2** इंद्रधनु V2 | the stem fine-tuned on EnMAP, PRISMA and AVIRIS-NG at native bands, plus a segmentation head |
+| `spectral_stem_finetune` | **Indradhanu V2** इंद्रधनु V2 | the stem fine-tuned on EnMAP, PRISMA and AVIRIS-NG at native bands, plus a segmentation head; since 2026-10-29 the 3x-wide **Indradhanu Heavy** with a progressive decoder |
 
 Shipped checkpoints: **Chakshu** 406 k params, val 0.2565 @ epoch 495. **Indradhanu**
-5.5 M params, val 0.0435 @ epoch 200. **Indradhanu V2** (FT04, `v2.0.0`) 5.9 M params, val 0.0558 @
-epoch 10 of fine-tuning - opt-in next to Indradhanu, which stays the default (docs/proposals/ship-ft04.md).
+5.5 M params, val 0.0435 @ epoch 200. **Indradhanu V2** (`v2.1.0`, since 2026-10-29) is Indradhanu Heavy
+(FTH3 epoch 5, research/experiments/indradhanu-finetune/FTH3-heavy-joint-more2/): embed dims [96, 192, 480, 768],
+spectral width 64, progressive decoder [256, 128], 35.3 M params, val 0.0568; real PRISMA bench pAUC 0.189 against
+FT04's 0.170 (+0.020, resolved). The previous V2, FT04 (`v2.0.0`, 5.9 M params, val 0.0558 @ epoch 10), stays in the
+models volume as the manifest's first `alternatives` entry. V2 is opt-in next to Indradhanu, which stays the default
+(docs/proposals/ship-ft04.md).
 
 ## Why masked reconstruction
 
@@ -148,7 +152,9 @@ refuses the wrong grid for either kind of model. Before predicting it calls `rea
 keeps only the bands the model has trained on and sets their wavelengths. Its segmentation head
 runs through `segment_full_scene` (128 px windows, stride 64; classes land, water, cloud, shadow,
 snow), and the scoring action zeros the model's `exclude_classes` (cloud) **after** scoring, the
-semantics the evaluator measured. The evaluator (`app/evaluation/models.py`) calls the same two
+semantics the evaluator measured. For V2 "cloud" means thick cloud only (`thin_cloud_is_cloud=False` in the
+resolver, `segment_full_scene(..., thin_cloud=False)`): Heavy's thin-cloud output fires on haze, see
+[9. Known issues](09-known-issues.md#spectral-stem-models--open-gaps). The evaluator (`app/evaluation/models.py`) calls the same two
 methods, so product and benchmark numbers come from one implementation. Its manifest embeds the
 checkpoint's full `model_config` (the api cannot `torch.load`); `scripts/make_model_manifest.py`
 writes it.
