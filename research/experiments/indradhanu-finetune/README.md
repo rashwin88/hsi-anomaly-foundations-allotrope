@@ -171,4 +171,7 @@ thread that connects them.
   masks: FTH2 pAUC 0.185 / 0.184 / 0.186 (epochs 6-8) vs control FTB2 0.160-0.163 (+0.021-0.025, all resolved) and
   shipped FT04 0.170 (+0.014-0.017, all resolved); top 1% +2.1-2.5 pts over the control (resolved); top 0.1% a tie.
   Folder [FTH2-heavy-joint-more](FTH2-heavy-joint-more/README.md).
+- **2026-10-29 - FTH3: plateau; release candidate FTH3 epoch 5.** Heavy +6 joint epochs: pAUC 0.184 / 0.189 / 0.187
+  (epochs 4-6), ties with FTH2; vs shipped FT04 +0.015 / +0.020 / +0.018, all resolved; top 0.1% now a tie (16.0% vs
+  15.8% at epoch 5). H100 block 1 ended with every checkpoint in S3. Folder [FTH3-heavy-joint-more2](FTH3-heavy-joint-more2/README.md).
 

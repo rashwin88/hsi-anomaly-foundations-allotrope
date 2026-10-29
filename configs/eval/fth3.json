@@ -1,0 +1,125 @@
+{
+ "name": "FTH3 (Heavy, 24 epochs) epochs 4-6 vs FTH2 epoch 8 and FT04 shipped: real PRISMA bench, own thick-cloud masks",
+ "models": [
+  {
+   "name": "FT04_shipped",
+   "checkpoint": "C:/es/models/FT04_best.pt"
+  },
+  {
+   "name": "FTH2_ep8",
+   "checkpoint": "C:/es/models/FTH2_ep8.pt",
+   "cloud_rule": "thick"
+  },
+  {
+   "name": "FTH3_ep4",
+   "checkpoint": "C:/es/models/FTH3_ep4.pt",
+   "cloud_rule": "thick"
+  },
+  {
+   "name": "FTH3_ep5",
+   "checkpoint": "C:/es/models/FTH3_ep5.pt",
+   "cloud_rule": "thick"
+  },
+  {
+   "name": "FTH3_ep6",
+   "checkpoint": "C:/es/models/FTH3_ep6.pt",
+   "cloud_rule": "thick"
+  }
+ ],
+ "datasets": [
+  {
+   "kind": "prisma_bench",
+   "path": "C:/Users/FITT/Documents/stage1_datasets"
+  }
+ ],
+ "scorers": [
+  {
+   "kind": "residual_mahalanobis",
+   "name": "RM"
+  },
+  {
+   "kind": "exclude",
+   "name": "excl. FT04 masks (cloud or thin)",
+   "classes": [
+    "cloud"
+   ],
+   "segmenter": "FT04_shipped",
+   "fit_on_kept": false,
+   "base": {
+    "kind": "residual_mahalanobis"
+   }
+  },
+  {
+   "kind": "exclude",
+   "name": "excl. FTH2 thick",
+   "classes": [
+    "cloud"
+   ],
+   "segmenter": "FTH2_ep8",
+   "fit_on_kept": false,
+   "base": {
+    "kind": "residual_mahalanobis"
+   }
+  },
+  {
+   "kind": "exclude",
+   "name": "excl. FTH3_ep4 thick",
+   "classes": [
+    "cloud"
+   ],
+   "segmenter": "FTH3_ep4",
+   "fit_on_kept": false,
+   "base": {
+    "kind": "residual_mahalanobis"
+   }
+  },
+  {
+   "kind": "exclude",
+   "name": "excl. FTH3_ep5 thick",
+   "classes": [
+    "cloud"
+   ],
+   "segmenter": "FTH3_ep5",
+   "fit_on_kept": false,
+   "base": {
+    "kind": "residual_mahalanobis"
+   }
+  },
+  {
+   "kind": "exclude",
+   "name": "excl. FTH3_ep6 thick",
+   "classes": [
+    "cloud"
+   ],
+   "segmenter": "FTH3_ep6",
+   "fit_on_kept": false,
+   "base": {
+    "kind": "residual_mahalanobis"
+   }
+  }
+ ],
+ "metrics": [
+  {
+   "kind": "roc_auc"
+  },
+  {
+   "kind": "pauc",
+   "max_fpr": 0.01
+  },
+  {
+   "kind": "tpr_at",
+   "fpr": 0.001
+  },
+  {
+   "kind": "objects_caught",
+   "top_pct": [
+    1.0,
+    0.1
+   ]
+  }
+ ],
+ "group_by": [
+  "tier"
+ ],
+ "output": "C:/es/eval/fth2_ftb2"
+}
