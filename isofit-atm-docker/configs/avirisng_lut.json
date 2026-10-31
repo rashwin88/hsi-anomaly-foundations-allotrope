@@ -1,0 +1,18 @@
+{
+  "_comment": [
+    "AVIRIS-NG preset, consumed by `apply_oe --lut_config_file` (same flat LUTConfig override as enmap_summer.json).",
+    "Matches JPL's v2 corr (ATREM), which assumes a fixed 50 km visibility, i.e. AOT550 of about 0.12",
+    "(Thompson et al. 2015). Pinning AOT here took the low-sun Jamnagar flight from 0.0123 to 0.0087 land MAE",
+    "against JPL and left the other flights within +-0.0002 (EXPERIMENT_LOG AC26-P).",
+    "Referenced by SENSOR_RULES['avirisng'] in src/atm_post.py."
+  ],
+  "h2o_range": [0.2, 4.5],
+  "h2o_spacing": 0.5,
+  "h2o_spacing_min": 0.03,
+  "h2o_min": 0.2,
+  "aerosol_2_range": [0.10, 0.14],
+  "aerosol_2_spacing": 0.04,
+  "aerosol_2_spacing_min": 0.0,
+  "elevation_spacing": 0.25,
+  "elevation_spacing_min": 0.2
+}

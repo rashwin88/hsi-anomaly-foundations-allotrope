@@ -1,0 +1,13 @@
+# Allowlist: the build context is exactly what the Dockerfile COPYs.
+*
+!requirements.txt
+!requirements-dev.txt
+!build/
+!configs/
+!src/
+!harmonise/
+!tests/
+!entrypoint.sh
+
+**/__pycache__
+**/*.pyc

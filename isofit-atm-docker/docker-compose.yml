@@ -1,0 +1,33 @@
+# isofit-atm-docker: its own stack (shares nothing with the product's docker/).
+# One scene per run. On the air-gapped VM scripts/run_scene.sh does the same
+# with plain docker run (no compose needed).
+#
+#   IN_DIR=/data/scenes INPUT=PRS_L1_STD_OFFL_...he5 OUT_DIR=/data/l2 \
+#   DEM_DIR=/data/dem docker compose run --rm atm [entrypoint options]
+#
+# DEM_DIR may point at an empty folder: the run then uses a flat 0 m and flags it.
+
+name: isofit-atm
+
+services:
+  atm:
+    build:
+      context: .
+      target: runtime
+    image: isofit-atm-docker:1.3.0
+    user: "${UID:-1000}:${GID:-1000}"
+    shm_size: "${SHM_SIZE:-16g}"          # Ray's object store; Docker's default is 64 MB
+    volumes:
+      - ${IN_DIR:?set IN_DIR to the folder holding the input}:/data/in:ro
+      - ${OUT_DIR:?set OUT_DIR to your output dir}:/data/out
+      - ${DEM_DIR:?set DEM_DIR to a Cop-DEM folder (or an empty one)}:/aux/dem:ro
+    environment:
+      N_CORES: "${N_CORES:-}"
+    command: ["/data/in/${INPUT:?set INPUT to the file or folder name inside IN_DIR}", "/data/out"]
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]

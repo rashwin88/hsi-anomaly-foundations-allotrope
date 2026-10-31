@@ -1,0 +1,17 @@
+{
+  "_comment": [
+    "EnMAP winter preset, consumed by `apply_oe --lut_config_file`.",
+    "See enmap_summer.json for the schema notes; same flat LUTConfig override.",
+    "H2OSTR narrowed for dry winter atmospheres; AOD lowered - snow and low",
+    "sun-angle scenes are typically clearer."
+  ],
+  "h2o_range": [0.2, 2.5],
+  "h2o_spacing": 0.4,
+  "h2o_spacing_min": 0.03,
+  "h2o_min": 0.2,
+  "aerosol_2_range": [0.02, 0.30],
+  "aerosol_2_spacing": 0.07,
+  "aerosol_2_spacing_min": 0.0,
+  "elevation_spacing": 0.25,
+  "elevation_spacing_min": 0.2
+}

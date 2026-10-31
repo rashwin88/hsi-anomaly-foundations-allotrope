@@ -1,0 +1,4 @@
+# Test-only dependencies (the Dockerfile's test stage; never in the runtime image).
+-r requirements.txt
+pytest==8.4.2
+pytest-cov==7.0.0

@@ -1,0 +1,35 @@
+# isofit-atm-docker: Python dependencies (pip only, Python 3.12, no conda).
+# Pinned to the versions verified end to end on 2026-10-31 (Colab L4, item 11 trials).
+# torch is the CUDA 13.0 build: install with
+#   pip install --extra-index-url https://download.pytorch.org/whl/cu130 -r requirements.txt
+# rasterio's wheels carry their own GDAL; nothing at run time needs the GDAL command-line tools.
+
+# ISOFIT and its runtime
+isofit==4.1.5
+ray==2.59.0
+torch==2.14.1+cu130
+
+# Arrays, geospatial, I/O
+numpy==2.5.4
+scipy==1.18.1
+rasterio==1.5.0
+pyproj==3.8.0
+h5py==3.14.0
+netCDF4==1.7.3
+spectral==0.25
+xarray==2026.9.0
+zarr==3.4.2
+dask==2026.8.0
+pandas==3.1.0
+lxml==6.1.3
+pystac==1.10.1
+
+# Models, post-processing, report
+scikit-learn==1.9.1
+scikit-image==0.26.0
+matplotlib==3.11.2
+
+# Utility
+PyYAML==6.0.3
+tqdm==4.70.1
+click==8.5.0
