@@ -65,16 +65,15 @@ class SpectralStemInferencer(SegFormerMAEInferencer):
             decoder_stage_dims=getattr(cfg, "decoder_stage_dims", (192, 96)))
         return _ProductCallAdapter(inner)
 
-    def _checkerboard_keep_mask(self, H: int, W: int, mask: torch.Tensor, invert: bool) -> torch.Tensor:
-        """The parent's two complementary checkerboard passes, with cells of the model's training mask_block (FT08:
-        2 x 2 tokens) unless the inference config asks for larger ones."""
-        block = getattr(self.config.model_config_, "mask_block", 1)
-        if block <= self.config.checkerboard_cell_size:
-            return super()._checkerboard_keep_mask(H, W, mask, invert)
-        from app.foundation_models.components.token_masking import TokenMasking
-        checker = TokenMasking.checkerboard_token_mask(H // 4, W // 4, cell_size=block, device=self.device, invert=invert)
-        valid = TokenMasking.pixel_mask_to_token_mask(mask, kernel_size=4, stride=4, padding=0)
-        return 1.0 - valid * (1.0 - checker)
+    def __init__(self, config):
+        # A model trained with block masks (mask_block, FT08: 2 x 2 tokens) is inferred with checkerboard cells of the
+        # same size - for BOTH the token masks and the choice of which pass each pixel's prediction comes from (the
+        # parent reads config.checkerboard_cell_size for both). Until 2026-10-31 only the masks used the block, so half
+        # of each block's pixels were taken from the pass where they were visible (found by the textbook writers).
+        block = getattr(config.model_config_, "mask_block", 1)
+        if block > config.checkerboard_cell_size:
+            config = config.model_copy(update={"checkerboard_cell_size": block})
+        super().__init__(config)
 
     def _load_weights(self, path: str) -> None:
         ckpt = torch.load(path, map_location=self.device, weights_only=False)

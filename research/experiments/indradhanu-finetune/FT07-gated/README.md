@@ -102,3 +102,14 @@ Criteria: 1 failed (a real pAUC loss); 2 met on points (both object counts sligh
   a small, consistent pAUC cost.
 - The epoch-to-epoch swing in validation SAM (AVIRIS-NG 5.33 -> 5.60 between epochs 4 and 5; 5.78 at epoch 3) is as
   large as the guard itself; per-epoch numbers on these test splits are noisy.
+
+### FT08 re-evaluated after the pass-selection fix (2026-10-31)
+
+The textbook writers found that FT08's evaluation took half of each 8 px block's pixels from the pass in which they
+were *visible*: `SpectralStemInferencer` hid tokens in 2 x 2 blocks, but the parent chose each pixel's pass with
+checkerboard cell size 1. Fixed: the inferencer now sets the inference config's `checkerboard_cell_size` to the model's
+`mask_block`, so masks and pass selection agree (test
+`test_block_inference_never_predicts_a_pixel_from_a_pass_that_saw_it` fails without the fix). Re-run
+(`configs/eval/ft08_fixed.json`, C:/es/eval/ft08_fixed), cloud excluded on FT04's masks: FT08 pAUC **0.1638** (the
+leaky run: 0.164), caught top 1% / 0.1% 46.1% / 15.4%; FT08 - FT04 -0.0057 [-0.0101, -0.0013]; FT08 - FT07 (blocks
+alone) -0.0010 [-0.0047, +0.0028], a tie. **The verdict stands: block masking does not help.**

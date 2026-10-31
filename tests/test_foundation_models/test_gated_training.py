@@ -75,3 +75,31 @@ def test_block_inference_checkerboard_passes_are_complementary(tmp_path):
     g = p1.reshape(16, 16)
     assert torch.equal(g[0:2, 0:2], g[0, 0].expand(2, 2))                  # in 2 x 2 token cells
     assert g[0, 0] != g[0, 2]
+
+
+def test_block_inference_never_predicts_a_pixel_from_a_pass_that_saw_it(tmp_path):
+    """FT08 leak (fixed 2026-10-31): with mask_block 2, every pixel's prediction must come from the pass where its
+    8 x 8 block was hidden - so changing the pixels inside one block cannot change that block's own predictions."""
+    from app.foundation_models.components.spectral_stem_seg_former_mae import SpectralStemSegFormerMAE
+    from app.foundation_models.inferencers.spectral_stem_inferencer import SpectralStemInferencer
+    from app.models.training.inference_config import InferenceConfig
+    from app.models.training.training_config import SpectralStemFinetuneConfig
+    torch.manual_seed(0)
+    wl = torch.linspace(420, 2440, 202)
+    m = SpectralStemSegFormerMAE("reduced_attention", wl.tolist(), [0.2] * 202, [0.1] * 202, seg_classes=5,
+                                 seg_decoder_dim=16, embed_dims=(8, 16, 32, 64), num_heads=(1, 1, 2, 2), decoder_dim=32)
+    cfg = SpectralStemFinetuneConfig(sources=[{"name": "e", "train_dir": "t", "test_dir": "v", "share": 1.0}],
+                                     stem="reduced_attention", seg_classes=5, seg_decoder_dim=16, mask_block=2,
+                                     embed_dims=[8, 16, 32, 64], num_heads=[1, 1, 2, 2], decoder_dim=32).model_dump()
+    torch.save({"model_state_dict": m.state_dict(), "config": {"model_config": cfg}}, tmp_path / "m.pt")
+    inf = SpectralStemInferencer(InferenceConfig(foundation_model_name="spectral_stem_finetune", model_config=cfg,
+                                                 checkpoint_path=str(tmp_path / "m.pt"), patch_size=64, stride=32))
+    assert inf.config.checkerboard_cell_size == 2
+    inf.set_wavelengths(wl)
+    x = (torch.rand(1, 202, 64, 64) * 0.3).to(inf.device)
+    valid = torch.ones(1, 1, 64, 64, device=inf.device)
+    y = x.clone()
+    y[:, :, 8:16, 16:24] += 0.4                                            # one 2 x 2-token (8 px) block
+    with torch.no_grad():
+        a, b = inf.predict(x, valid), inf.predict(y, valid)
+    assert torch.allclose(a[..., 8:16, 16:24], b[..., 8:16, 16:24], atol=1e-5)
