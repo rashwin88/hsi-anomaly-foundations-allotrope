@@ -34,7 +34,7 @@ Outputs: [separability_prisma.json](separability_prisma.json), [_enmap](separabi
 0.72 / 0.72 / 0.73 given level 1 right); EnMAP 0.23 / 0.44 / 0.58 / 0.64; AVIRIS-NG 0.36 / 0.53 / 0.59 / 0.62.
 
 Per family at fill 0.25, PRISMA (EnMAP / AVIRIS-NG similar): oil 80%, plastic 70%, textile 69%, wood/paper 62%,
-paint 45%, metal 41%, building 39% (16% -> pavement), roofing 31% (scattered: npv, plastic), pavement ~12% (-> soil
+paint 45%, metal 41%, building 39% (16% -> pavement), roofing 31% (scattered: npv, plastic), pavement 10.4% (75 of 720; -> soil
 15%, rock 13%, building 12%), glass untestable (1 spectrum: held out, nothing of its family remains).
 
 ## Conclusions for the class list
