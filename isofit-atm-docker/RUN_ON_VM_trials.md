@@ -56,7 +56,7 @@ REF=$T/tanager/reference/20250919_170238_88_4001_basic_sr_hdf5.h5 \
 
 # AVIRIS-NG L1 full flight line (5592 x 722 px, India, 2015-12-19) vs JPL L2 corr (no DEM needed: it carries loc_ort)
 # Runs at superpixels of 400 + empirical line by default (AVIRIS-NG rule, AC26-FAST). Estimates for this 4 Mpix
-# line: Colab ~50 min, VM ~25-35 min; a 14-16 GB line ~50-75 min on the VM. Please time it.
+# line: Colab 41 min (measured, AC26-T7B), VM ~20-30 min; a 14-16 GB line ~45-65 min on the VM. Please time it.
 # First, calibrate on the 600-line window (Drive: atm_trial_scenes/aviris_ng_600line_calibration, ~7.5 min on
 # Colab): it gives the VM's real speed factor.
 REF=$T/aviris_ng/reference/ang20151219t081738_corr_v2m2_img.hdr \
@@ -79,7 +79,7 @@ number. The final table is filled in from the corrected reports (AC26-T11).
 | PRISMA | 33 min | 0.0125 | 0.0124 (research scorer, 165-band grid with shift search: 0.0097 raw / 0.0057 harmonised) |
 | EnMAP | 33 min | 0.0162 | 0.0157 |
 | Tanager | 44 min | 0.0126 | 0.0089 |
-| AVIRIS-NG | 6.2 h at seg 50; default seg 400 + empirical ~50 min (est.) | 0.0136 (seg 50) | 0.0060 at seg 50 (pixel-index paired 0.0051); seg 400 + empirical 0.0057 on the window (AC26-FAST) |
+| AVIRIS-NG | 6.2 h at seg 50; default seg 400 + empirical 41 min (measured) | 0.0136 (seg 50) | 0.0060 at seg 50 (pixel-index paired 0.0051); seg 400 + empirical 0.0057 on the window (AC26-FAST) |
 
 The report pairs by nearest location on native bands, over all land, with no sub-pixel shift search or cloud and
 shadow exclusion. It is a sanity check on the VM: a run within about ±30% of these numbers is behaving as on Colab.

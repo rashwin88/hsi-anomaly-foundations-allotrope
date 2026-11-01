@@ -2075,3 +2075,15 @@ own+z-unless-ridge-is-≥10%-better rule.
 - **Decision (user 2026-11-01): AVIRIS-NG default seg 400 + empirical line** (2 h budget incl. anomaly detection);
   --line analytical when time allows. Calibration window on Drive (atm_trial_scenes/aviris_ng_600line_calibration)
   to measure the VM's speed factor first.
+
+## AC26-T7B: T7 full line on the default seg 400 + empirical line, module 1e6885d (2026-11-01, Colab L4, alone)
+- No flags: the sensor rule set superpixels of 400 (8,818) and the empirical line. **41 min total** (estimate ~50;
+  seg 50 analytical 373 min): presolve 8.5, LUT 3, full inversion 22.3, empirical line 4.2, I/O ~3.
+- Outputs: GeoTIFF + BSQ 380 bands, transform == source (rotated), outlier / snow sidecars, report 8 images / none
+  missing; AOT 0.10, H2O 2.46, elevation 0.24 km.
+- vs JPL by pixel index, 883,366 px (every 4th 128-row block), core bands: MAE 0.0057 (+0.0031) vs seg 50 analytical
+  0.0056 (+0.0032); 460-550 nm 0.0047 vs 0.0037; angle median 2.27 vs 2.23 deg.
+- Angle tail by surface (JPL classes): other land 97.9 % median 2.22 -> 2.26, p99 3.83 -> 4.37; water 0.06 % better
+  (MAE 0.0054 -> 0.0031); dark land < 0.06 2.0 % carries the extreme tail for both (median 15.5 -> 21.5 deg, MAE
+  0.0037 both): all of the top 1 % sits in rows 9-34, the nearly black start of the flight line.
+- VM estimates from this anchor: T7 ~20-30 min, a 14-16 GB line ~45-65 min (to be calibrated on the VM).
