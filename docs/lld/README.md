@@ -18,6 +18,8 @@ adding another.
 | `frequency-destriper.md` | the FFT notch filter and its significance test |
 | `test-harness.md` | how anything gets verified in this repo |
 | `segmentation-sharding.md` | the `enmap_seg` lane that attaches provider labels to shards |
+| `atm-correction.md` | atmospheric-correction post-processing and harmonisation: per-sensor adjacency, terrain, QC masks |
+| `isofit-atm-docker.md` | the L1 → L2 atmospheric-correction stack: readers, level tests, speed levers, writers, report, image, tests |
 
 ## How these are written
 

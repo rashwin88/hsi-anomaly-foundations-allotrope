@@ -6,8 +6,11 @@
 #
 # Environment:
 #   IMG       image (default isofit-atm-docker:1.3.0)
-#   DEM_DIR   folder holding cop30_mosaic.vrt + tiles (optional: without it the
-#             run uses a flat 0 m and flags it)
+#   DEM_DIR   folder holding the DEM mosaic VRT + its tiles (optional: without
+#             it the run uses a flat 0 m and flags it). The VRT must name its
+#             tiles relative to itself (relativeToVRT="1", as stage_dem.sh and
+#             gdalbuildvrt with tiles in the same folder write it).
+#   DEM_VRT_NAME  the VRT's file name inside DEM_DIR (default cop30_mosaic.vrt)
 #   REF       reference product for the report's comparison (optional; mounted
 #             read-only and passed as --ref)
 #   GPUS      docker --gpus value (default all; "none" for a CPU-only host)
@@ -30,7 +33,8 @@ ARGS=(--rm --user "$(id -u):$(id -g)" --shm-size "${SHM_SIZE:-16g}"
       -e N_CORES="${N_CORES:-$(nproc)}"
       -v "$(dirname "$IN"):/data/in:ro" -v "${OUT}:/data/out")
 [[ "${GPUS:-all}" != "none" ]] && ARGS+=(--gpus "${GPUS:-all}")
-[[ -n "${DEM_DIR:-}" ]] && ARGS+=(-v "$(readlink -f "$DEM_DIR"):/aux/dem:ro")
+[[ -n "${DEM_DIR:-}" ]] && ARGS+=(-v "$(readlink -f "$DEM_DIR"):/aux/dem:ro"
+                                  -e DEM_VRT="/aux/dem/${DEM_VRT_NAME:-cop30_mosaic.vrt}")
 EXTRA=()
 if [[ -n "${REF:-}" ]]; then
     REF=$(readlink -f "$REF")

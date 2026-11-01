@@ -85,6 +85,36 @@ rationale in `docs/lld/segmentation-sharding.md`.
 - **A float16 shard must be cast to float32 by its trainer.** The models are fp32.
   Segmentation shards store float16; the reconstruction lane still stores float32.
 
+## Deliberate limitations in the atmospheric-correction stack
+
+Added 2026-11-01 with `isofit-atm-docker/`. All known and accepted, not defects. Design rationale and evidence in
+`docs/lld/isofit-atm-docker.md` (Known limitations); results in the experiment log, AC26-T11.
+
+- **Level-test thresholds and harmonisation scores are in-sample.** GHOSt has never been seen. The EnMAP
+  blue-only model is holdout-informed and declared as such.
+- **Swath products are not map-projected.** PRISMA L1 and Tanager basic keep their swath grid, with lat/lon GCPs
+  and a `_latlon.tif`. Compare against swath L2C, not orthorectified L2D. Over relief, location pairing against
+  L2D mismatches pixels. On the report's all-band metric, the Himalaya trial scored MAE 0.056 against L2D; the
+  flat Maharashtra scene scored 0.0145 against L2C.
+- **Free-AOT error depends on the surface (Tanager, EnMAP-style free retrieval).**
+  - On two AERONET overpasses (Thessaloniki, ROCX2025) it read high: +0.07 and +0.09. Planet read +0.16 and +0.21.
+  - On a bright Permian desert scene it sank to the LUT floor (0.05). The May climatology is 0.19 and Planet read
+    0.99, so the blue there runs +0.047 at 451 nm against Planet.
+  - Water vapour reads +8–17% against AERONET.
+  - PRISMA's climatology AOT prior (`aot_prior.py`, ±0.15 around the monthly value, floor 0.05) is **not** a fix.
+    All three Tanager retrievals already sat inside their windows: Permian 0.05–0.34, ROCX 0.09–0.39 and
+    Thessaloniki 0.13–0.43. ROCX's AERONET 0.033 lies below its window.
+  - On core bands (460–2450 nm outside the water bands) the effect is limited to the blue below 600 nm. Core land
+    MAE against Planet: Permian 0.0092, ROCX 0.0089, Thessaloniki 0.0114.
+- **`fast_al` solves diagonal Seps only.** An actor that meets an off-diagonal chunk switches to ISOFIT's own
+  solve, which is correct but slower: 2 of 12 actors on the EnMAP coast trial.
+- **AVIRIS-NG runs at superpixels of 200, not 50**, for the 2 h submission budget.
+  - Against JPL the core error is unchanged (0.0056), and the spectral angle moves 2.15° → 2.17°.
+  - The 460–550 nm bias grows by +0.001.
+  - Not checked over water. Evidence: AC26-SEG.
+- **ISOFIT logs "Center wavelengths ... do not match" on every run.** It is cosmetic: `apply_oe` compares microns
+  with the prior's nanometres. The centres match exactly.
+
 ## Config knobs that do nothing
 
 Declared, set in real configs, never read by any code:

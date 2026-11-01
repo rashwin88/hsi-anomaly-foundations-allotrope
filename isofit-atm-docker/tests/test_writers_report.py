@@ -84,6 +84,44 @@ def test_report_sections_and_reference(tmp_path, rho):
     assert "29.0 min" in page and "30.5 min" in page   # isofit stage, total
 
 
+def test_reference_with_junk_water_bands(tmp_path, rho):
+    """A 0-1 reference whose water bands hold junk (as JPL corr does) must not be read as x10000 (AC26-T11)."""
+    import report
+    import writers
+    from conftest import WL
+    src = write_tif(tmp_path / "in.tif", radiance(rho))
+    junk = rho.copy()
+    junk[:, (WL > 1350) & (WL < 1400), :] = 5e4     # 1360 nm stays in the product: its junk must count as missing
+    junk[:, (WL > 1850) & (WL < 1910), :] = 190.0
+    ref = write_tif(tmp_path / "ref.tif", junk)
+    w = tmp_path / "w"
+    w.mkdir()
+    rfl = str(write_envi(w / "scn_rfl", rho))
+    writers.write(rfl, str(_scene_json(w, src)), str(tmp_path / "out"), None)
+    page = report.build(tmp_path / "out", w, str(ref)).read_text()
+    assert re.search(r"Reference scale</td><td>x1<", page)
+    assert float(re.search(r"MAE \(all bands\)</td><td>([0-9.]+)", page).group(1)) < 1e-4
+
+
+def test_reference_pairing_under_decimation(tmp_path, rho, monkeypatch):
+    """With the report's 1-in-N grid active, a product compared with itself must pair exactly. A decimated read that
+    samples block middles while locations are computed at block starts paired neighbours (AC26-T11, T7 AVIRIS-NG:
+    report MAE 0.038 vs 0.0051 by index)."""
+    import report
+    import writers
+    monkeypatch.setattr(report, "MAX_SIDE", 16)                     # 60 x 50 scene -> step 4
+    noisy = rho * (1 + 0.3 * np.random.default_rng(0).random((rho.shape[0], 1, rho.shape[2]))).astype(np.float32)
+    src = write_tif(tmp_path / "in.tif", radiance(noisy))
+    ref = write_tif(tmp_path / "ref.tif", noisy)
+    w = tmp_path / "w"
+    w.mkdir()
+    rfl = str(write_envi(w / "scn_rfl", noisy))
+    writers.write(rfl, str(_scene_json(w, src)), str(tmp_path / "out"), None)
+    assert report.Product(tmp_path / "out").step == 4
+    page = report.build(tmp_path / "out", w, str(ref)).read_text()
+    assert float(re.search(r"MAE \(all bands\)</td><td>([0-9.]+)", page).group(1)) < 1e-4
+
+
 def test_report_without_extras(tmp_path, rho):
     import report
     import writers

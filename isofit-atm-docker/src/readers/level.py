@@ -40,6 +40,18 @@ DEPTH_TESTS = (("o2_760", 761, (740, 780), 0.12, 0.06),
                ("co2_2010", 2010, (1960, 2080), 0.50, -1.0))   # TOA-only (see the module docstring)
 
 
+# Where vendor products put junk: JPL corr fills 1358-1373 nm and 1854-1909 nm with values up to 5e4 (AC26-T11).
+# The reflectance-scale decision must not see them, or a 0-1 product reads as x1e4.
+NOISY_NM = ((0, 420), (1340, 1460), (1780, 1990), (2450, 9999))
+
+
+def quiet_bands(wl) -> np.ndarray:
+    """Bands outside the water-absorption windows and the sensor edges (falls back to all bands if none are left)."""
+    wl = np.asarray(wl, float)
+    q = ~np.any([(wl >= lo) & (wl <= hi) for lo, hi in NOISY_NM], axis=0)
+    return q if q.any() else np.ones(wl.shape, bool)
+
+
 def _band(wl, nm, tol=12.0):
     i = int(np.argmin(np.abs(wl - nm)))
     return i if abs(wl[i] - nm) <= tol else None
@@ -76,7 +88,7 @@ def classify(sample: np.ndarray, wl: np.ndarray, integer: bool = False) -> dict:
                       "radiance" if ratio < 0.3 else "reflectance" if ratio > 0.5 else None}
     kind = t.get("shape", {}).get("vote")
     med = np.nanmedian(px, 0)
-    p99 = float(np.nanpercentile(px, 99))
+    p99 = float(np.nanpercentile(px[:, quiet_bands(wl)], 99))
     out["p99"] = p99
     if kind == "radiance":
         if integer:   # integers left unscaled by the reader: no gain/offset was delivered with them

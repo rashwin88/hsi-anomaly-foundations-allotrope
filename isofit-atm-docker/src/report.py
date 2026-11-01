@@ -16,7 +16,8 @@ Images and statistics use a regular 1-in-N pixel grid (at most ~800 pixels a sid
 A section that cannot be drawn says why; the report never fails the run (entrypoint.sh treats it as optional).
 
 Reference products: an EnMAP L2A folder (SPECTRAL_IMAGE + METADATA.XML), a PRISMA L2 .he5, a Tanager surface
-reflectance .h5, or any GeoTIFF / ENVI cube with wavelengths. Values above 5 (99th percentile) are read as x10000.
+reflectance .h5, or any GeoTIFF / ENVI cube with wavelengths. Values above 5 (99th percentile, on bands outside the
+water windows and sensor edges, where vendors put junk) are read as x10000.
 Pixels are paired by location (nearest reference pixel within one reference pixel spacing), so a map-projected
 reference (PRISMA L2D, a reprojected FLAASH output) compares with a swath product; with no location on either side
 and identical dimensions they are paired by index.
@@ -94,7 +95,6 @@ class Product:
 
     def __init__(self, out_dir: Path):
         import rasterio
-        from rasterio.enums import Resampling
         prov = sorted(out_dir.glob("*_L2_SR_provenance.json"))
         if not prov:
             raise FileNotFoundError(f"no *_L2_SR_provenance.json in {out_dir}")
@@ -105,8 +105,11 @@ class Product:
         with rasterio.open(tif) as d:
             self.lines, self.samples = d.height, d.width
             self.step = max(1, math.ceil(max(d.height, d.width) / MAX_SIDE))
-            h, w = math.ceil(d.height / self.step), math.ceil(d.width / self.step)
-            x = d.read(out_shape=(d.count, h, w), resampling=Resampling.nearest).astype(np.float32)
+            # Exactly rows / cols 0, step, 2*step ...: lonlat() locates these. A decimated read (out_shape) samples
+            # near each block's middle instead, half a step from those locations (~3 px on 4 m AVIRIS-NG): the
+            # reference comparison then paired neighbours (AC26-T11). One band at a time keeps memory small.
+            x = np.stack([d.read(i + 1)[::self.step, ::self.step] for i in range(d.count)]).astype(np.float32)
+            h, w = x.shape[1:]
             self.wl = np.array([float(d.tags(i + 1)["wavelength"]) for i in range(d.count)])
             self.transform, self.crs = (d.transform, d.crs) if d.crs is not None and not d.transform.is_identity else (None, None)
         x[x == NODATA] = np.nan
@@ -117,7 +120,7 @@ class Product:
             p = out_dir / f"{self.name}_{tag}.tif"
             if p.exists():
                 with rasterio.open(p) as d:
-                    self.masks[tag] = d.read(1, out_shape=(h, w), resampling=Resampling.nearest)
+                    self.masks[tag] = d.read(1)[::self.step, ::self.step]
 
     def lonlat(self) -> tuple[np.ndarray, np.ndarray] | None:
         """(lon, lat) of the sampled pixels: from the map transform, or the swath's _latlon.tif sidecar."""
@@ -161,9 +164,10 @@ def read_l1(work: Path, fid: str, step: int, nms: tuple) -> tuple[np.ndarray, st
 
 def read_atm(work: Path, step: int) -> dict[str, np.ndarray]:
     import rasterio
-    found = [p for p in (work / "isofit" / "output").glob("*_atm_interp") if "_subs_" not in p.name]
+    od = work / "isofit" / "output"
+    found = [p for p in od.glob("*_atm_interp") if "_subs_" not in p.name]
     if not found:
-        return {}
+        return _atm_from_superpixels(od, step)   # --empirical_line writes no *_atm_interp
     out = {}
     with rasterio.open(found[0]) as d:
         names = [(n or "").upper() for n in d.descriptions]
@@ -172,6 +176,27 @@ def read_atm(work: Path, step: int) -> dict[str, np.ndarray]:
                 b = d.read(names.index(key) + 1)[::step, ::step].astype(np.float32)
                 b[b <= -9990] = np.nan
                 out[key] = b
+    return out
+
+
+def _atm_from_superpixels(od: Path, step: int) -> dict[str, np.ndarray]:
+    """Atmosphere maps from *_subs_state (one row per superpixel) painted through the *_lbl segmentation."""
+    import rasterio
+    from spectral.io import envi
+    st, lb = sorted(od.glob("*_subs_state")), [p for p in od.glob("*_lbl") if not p.name.endswith(".hdr")]
+    if not st or not lb:
+        return {}
+    lbl = np.asarray(envi.open(str(lb[0]) + ".hdr", str(lb[0])).open_memmap(interleave="bip")[::step, ::step, 0])
+    lbl = lbl.astype(np.int64)
+    out = {}
+    with rasterio.open(st[0]) as d:
+        names = [(n or "").upper() for n in d.descriptions]
+        for key in ("AOT550", "H2OSTR", "SURFACE_ELEVATION_KM"):
+            if key in names:
+                v = d.read(names.index(key) + 1).ravel().astype(np.float32)   # (superpixels, 1) -> one per label
+                v[v <= -9990] = np.nan
+                ok = (lbl >= 0) & (lbl < v.size)
+                out[key] = np.where(ok, v[np.clip(lbl, 0, v.size - 1)], np.nan).astype(np.float32)
     return out
 
 
@@ -278,11 +303,14 @@ def match_reference(prod: Product, ref) -> dict:
     used = np.mean(np.isfinite(spec), 0) > 0.5 if want.size else np.zeros(wl_r.size, bool)
     spec, wl_r = spec[:, used], wl_r[used]
     ok = np.all(np.isfinite(spec), 1) & np.any(spec != 0, 1)
-    scale = 1e-4 if ok.any() and np.percentile(spec[ok], 99) > 5 else 1.0
+    from readers.level import quiet_bands   # judged on clean bands: JPL corr's water bands hold values up to 5e4
+    scale = 1e-4 if ok.any() and np.percentile(spec[ok][:, quiet_bands(wl_r)], 99) > 5 else 1.0
     # reference onto the product bands: linear in wavelength, only inside its range and near one of its bands
     near = np.array([wl_r.size > 1 and np.min(np.abs(wl_r - x)) <= 15 and wl_r[0] <= x <= wl_r[-1] for x in prod.wl])
     ref_on = np.full((ok.sum(), prod.wl.size), np.nan, np.float32)
     good = spec[ok] * scale
+    # vendor junk (JPL corr: up to 5e4 at 1358 nm) is not reflectance: missing, not averaged in (rfl_qc's range)
+    good[(good < -0.2) | (good > 2.5)] = np.nan
     for b in np.flatnonzero(near):
         i = np.searchsorted(wl_r, prod.wl[b]).clip(1, wl_r.size - 1)
         t = (prod.wl[b] - wl_r[i - 1]) / (wl_r[i] - wl_r[i - 1])

@@ -108,4 +108,18 @@ Two unrelated things, easily confused:
 
 There is **no Prometheus, no Grafana, and no CI** — there is no `.github/` directory.
 
+## The atmospheric-correction stack (separate)
+
+`isofit-atm-docker/` is a second, independent stack. It shares no image, volume or compose file with the one
+above. It turns L1 radiance from EnMAP, PRISMA, AVIRIS-NG, Tanager or GHOSt into L2 surface reflectance with
+ISOFIT 4.1.5 + sRTMnet, one scene per container run, on an air-gapped GPU VM.
+
+- Build and ship on a connected PC: `isofit-atm-docker/scripts/build_image.sh`. It runs the unit tests (≥ 30%
+  coverage gate), builds the runtime image, smoke-tests it as non-root, runs trivy, and exports a tarball plus
+  checksum.
+- Load on the VM with `scripts/deploy_airgap.sh`. Run one scene with `DEM_DIR=… scripts/run_scene.sh <input>
+  <out>`, which handles the GPU, a 16 GB shm and the mounts.
+- Step-by-step for an agent on the build PC: `isofit-atm-docker/BUILD_AGENT.md`. Design:
+  `docs/lld/isofit-atm-docker.md`.
+
 See also [9. Known issues](09-known-issues.md) for the port mismatch in the deploy scripts.

@@ -39,7 +39,7 @@ Tests without Docker, given a Python 3.12 env:
 
 ```bash
 pip install --extra-index-url https://download.pytorch.org/whl/cu130 -r requirements-dev.txt
-python -m pytest           # 76 tests, ~30 s; fails under 30 % coverage (53 % on 2026-10-31)
+python -m pytest           # 81 tests, ~30 s; fails under 30 % coverage (54 % on 2026-11-01)
 ```
 
 ## Run (air-gapped VM)

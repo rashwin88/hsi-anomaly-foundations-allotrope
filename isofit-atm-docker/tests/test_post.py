@@ -83,12 +83,57 @@ def test_atm_post_ghost_rule(tmp_path, rho):
     assert rep["bands_outside_inversion_windows"] > 0 and rep["snow_fraction"] == 0
 
 
+def _as_empirical_line(tmp_path, fid="scn", n_sp=6):
+    """Turn a _fake_isofit run into what --empirical_line leaves: no *_atm_interp, a *_subs_state with one row per
+    superpixel (named AOT550 / H2OSTR / surface_elevation_km bands last) and the *_lbl segmentation."""
+    import rasterio
+    out = tmp_path / "isofit" / "output"
+    (out / f"{fid}_atm_interp").unlink()
+    for f in out.glob(f"{fid}_atm_interp*"):
+        f.unlink()
+    with rasterio.open(out / f"{fid}_subs_state", "w", driver="ENVI", width=1, height=n_sp, count=4, dtype="float32") as d:
+        for i, (n, v) in enumerate((("RFL_0500_0.000", 0.1), ("AOT550", 0.3), ("H2OSTR", 1.8), ("surface_elevation_km", 0.5))):
+            d.write(np.full((n_sp, 1), v, np.float32) + np.arange(n_sp, dtype=np.float32)[:, None] * 0.01, i + 1)
+            d.set_band_description(i + 1, n)
+    rfl = rasterio.open(out / f"{fid}_rfl")
+    L, S = rfl.height, rfl.width
+    rfl.close()
+    lbl = (np.arange(L)[:, None] * n_sp // L).repeat(S, 1).astype(np.float32)
+    write_envi(out / f"{fid}_lbl", lbl[:, None, :], wl=np.arange(1.0), fwhm=np.ones(1))
+    return out
+
+
+def test_atm_post_on_empirical_line_output(tmp_path, rho):
+    import atm_post
+    _, obs = _fake_isofit(tmp_path, rho)
+    _as_empirical_line(tmp_path)
+    rfl, atm, _ = atm_post.find_outputs(tmp_path / "isofit")
+    assert atm.name.endswith("_subs_state")
+    rep = atm_post.run("avirisng", tmp_path / "isofit", obs)
+    assert rep["scene_aot550"] == pytest.approx(0.325) and rep["scene_h2o"] == pytest.approx(1.825)
+    assert rep["scene_elev_km"] == pytest.approx(0.525)
+
+
+def test_report_atmosphere_from_superpixels(tmp_path, rho):
+    import report
+    _fake_isofit(tmp_path, rho)
+    _as_empirical_line(tmp_path)
+    m = report.read_atm(tmp_path, 2)
+    assert set(m) == {"AOT550", "H2OSTR", "SURFACE_ELEVATION_KM"}
+    assert m["AOT550"].shape == (30, 25)
+    assert m["AOT550"][0, 0] == pytest.approx(0.3) and m["AOT550"][-1, 0] == pytest.approx(0.35)
+
+
 def test_rules_table():
     import atm_post
     assert atm_post.rule_name("aviris_ng") == "avirisng" and atm_post.rule_name("unknown") == "generic"
     assert atm_post.SENSOR_RULES["prisma"].aot_prior and not atm_post.SENSOR_RULES["enmap"].aot_prior
     for r in atm_post.SENSOR_RULES.values():
         assert r.harmonise_model is None or r.harmonise_model.endswith(".npz")
+    # superpixel size (AC26-SEG): AVIRIS-NG 200 for the 2 h budget, every other sensor at its validated 50
+    seg = {k: r.segmentation_size for k, r in atm_post.SENSOR_RULES.items()}
+    assert seg.pop("avirisng") == 200 and set(seg.values()) == {50}
+    assert atm_post.asdict(atm_post.SENSOR_RULES["avirisng"])["segmentation_size"] == 200   # what scene.json carries
 
 
 def test_steep_fraction(tmp_path, rho):

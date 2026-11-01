@@ -41,6 +41,16 @@ def test_integer_sr_x10000_gets_scale(rho):
     assert r["level"] == "surface_reflectance"
 
 
+def test_junk_in_water_bands_does_not_change_the_scale(rho):
+    """JPL corr fills 1358-1373 and 1854-1909 nm with values up to 5e4 (AC26-T11): still a 0-1 SR product."""
+    x = _pixels(rho).copy()
+    x[:, (WL > 1350) & (WL < 1380)] = 5e4
+    x[:, (WL > 1850) & (WL < 1910)] = 190.0
+    r = level.classify(x, WL)
+    assert r["reflectance_scale"] == 1.0
+    assert level.quiet_bands(WL)[np.argmin(abs(WL - 860))] and not level.quiet_bands(WL)[np.argmin(abs(WL - 1360))]
+
+
 def test_counts_that_fit_no_scale_are_unknown(rho):
     r = level.classify(_pixels(rho * 1e6), WL)
     assert r["level"] == "unknown"

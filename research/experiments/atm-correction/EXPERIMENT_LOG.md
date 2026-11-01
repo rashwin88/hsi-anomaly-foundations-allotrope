@@ -1983,3 +1983,73 @@ own+z-unless-ridge-is-≥10%-better rule.
   --target test before tagging --target runtime.
 - Fixes found while writing tests: none in the module; three fixture mistakes (radiance floor 1e-4 by design,
   shape test needs a 2200 nm band, mixed water pixels too bright in NIR).
+
+## AC26-T11: item 11 trials, the all-sensor entrypoint end to end (2026-10-31/11-01, Colab L4 GPU, 12 vCPU)
+- Runtime = the Dockerfile builder replayed outside Docker (t11_setup.sh: environment.yml with gdal 3.12, torch cu130,
+  6S builds + sixs_check, patches, sRTMnet / data). Each trial: entrypoint.sh with --keep-work and --ref (report).
+  Scripts: research/.../scripts/item9-11/. Report numbers below are from the reports regenerated after the two
+  report fixes (next bullet); "core" = land, 460-2450 nm outside the water bands (harmonise.bands), report pairing.
+
+  | trial | scene | ref | time | report all-band | core land | notes |
+  |---|---|---|---|---|---|---|
+  | T1 | PRISMA 20260514055637 (Maharashtra coast) | ASI L2C | 33 min | 0.0125 | 0.0124 | research scorer 0.0097 raw / 0.0057 harm = AC26-E7 exactly |
+  | T2 | Tanager Thessaloniki 2025-07-12 | Planet SR | 36 min | 0.0165 | 0.0114 | AERONET L1.5: AOT 0.220 vs 0.149, H2O 2.49 vs 2.12 |
+  | T3 | Tanager ROCX2025 2025-09-19 | Planet SR | 44 min | 0.0126 | 0.0089 | AERONET L1.5: AOT 0.127 vs 0.033, H2O 1.46 vs 1.35 |
+  | T4 | PRISMA Himachal 2026-03-05 (snow) | ASI L2D | 26 min | 0.0506 | 0.0461 | 18.5 % snow, 0 outliers; L2D ortho vs our swath: misregistration on relief |
+  | T5 | EnMAP 056279 Sundarbans (coast, haze) | DLR L2A | 33 min | 0.0162 | 0.0157 | 1.5 % dark water < -0.2 -> nodata (DLR nodata there too); 2/12 fast_al actors fell back (Seps not diagonal) |
+  | T6 | Tanager Permian 2025-05-28 (flares) | Planet SR | 36 min | 0.0231 | 0.0092 | 12 flare px kept + flagged (SWIR 2-3); AOT 0.053 (floor) vs clim 0.19 vs Planet 0.99: blue 451 nm +0.047 |
+  | T7 | AVIRIS-NG ang20151219t081738 full line (5592 x 722, 4.0 Mpix) | JPL corr | 373 min | 0.0136 | 0.0060 | index-paired core 0.0051 (= campaign holdout); presolve 79 + full inversion ~200 + per-pixel 90 min |
+
+  Outputs checked end to end on T7: GeoTIFF / BSQ 380 bands int16, values == round(rfl x 1e4) exactly, transform =
+  source (rotated), 45 bands dropped and listed, outlier (70 flagged) / snow sidecars, HTML 8 images, nothing missing.
+- **Report bugs found by T7 and fixed (report.py only; products and every research scorer unaffected):**
+  1. JPL corr fills 1358-1373 / 1854-1909 nm with junk (to 5.1e4): the all-band p99 made the 0-1 reference read
+     as x1e4 (T7 MAE 0.20). Scale now judged on level.quiet_bands; reference values outside [-0.2, 2.5] are missing.
+     The same p99 rule sat in level.classify (an SR input with junk bands would pass through x1e-4): same fix.
+  2. Product read with out_shape (GDAL samples block middles) while lonlat() located block starts: pairs N/2 px
+     apart (T7 N = 7: report core 0.038 vs 0.005 by index; PRISMA / EnMAP N = 2: <= 1 px; Tanager N = 1: none).
+     Now strided reads of exactly the located rows / cols. Regression tests for both (79 tests, 53.3 %).
+- AOT vs climatology prior: all three Tanager retrievals already sat inside their +-0.15 windows (0.05-0.34, 0.09-0.39,
+  0.13-0.43), so PRISMA's prior is not a fix for Tanager; core land MAE vs Planet 0.0089-0.0114 regardless.
+- Bands kept as they are (user decision): the water-band shoulders (1350-1360, 1410-1450 nm) and > 2450 nm stay in
+  the product although they carry most of the all-band error against the vendors.
+
+## AC26-SEG: AVIRIS-NG superpixel size, 600-line window rows 2496-3096 (2026-11-01, Colab L4, runs alone)
+- Window cut from ang20151219t081738 with rasterio's window transform (rotation kept); 433,200 px, 381,210 compared
+  against the JPL corr window at full resolution by pixel index.
+
+  | | seg 50 | seg 100 | seg 200 |
+  |---|---|---|---|
+  | superpixels | 7,624 | 3,812 | 1,906 |
+  | presolve / LUT / full inversion / interp + per-pixel, min | 8.1 / 3 / 21.3 / 7.6 | 3.9 / 3 / 10.0 / 8.1 | 2.0 / 3 / 4.8 / 7.5 |
+  | total | 41 min | 26 min | 18 min |
+  | core land MAE vs JPL (bias) | 0.0056 (+0.0032) | 0.0059* | 0.0056 (+0.0031) |
+  | 460-550 nm MAE (bias) | 0.0034 (+0.0031) | | 0.0044 (+0.0044) |
+  | spectral angle vs JPL median / p95 | 2.15 / 3.01 deg | | 2.17 / 3.01 deg |
+  | vs seg 50 per pixel, core mean abs median / p99 / > 0.005 | | 0.0002 mean | 0.0004 / 0.0016 / 0.00 % |
+  | vs seg 50 spectral angle median / p99 | | | 0.14 / 0.56 deg |
+  | AOT map sd / corr with seg 50 | 0.0037 | | 0.0021 / 0.85 |
+
+  (*seg 100 scored with the report pairing; the others at full resolution by index.) By surface (NDVI from JPL):
+  dense veg 0.0046 -> 0.0047, sparse 0.0057 -> 0.0057, bare / built 0.0065 -> 0.0065; brightness quartiles +0.5..+1.0 %
+  relative. No water in the window (dryland): untested there.
+- **Decision (user, 2026-11-01): AVIRIS-NG default segmentation_size 200** (SensorRules.segmentation_size; other
+  sensors stay at 50; --segmentation-size overrides). Reason: the 2 h submission budget includes anomaly detection.
+  At 200 the per-pixel solve (~7.5 min per 600 lines on the L4, ~90 min for T7's full line) is the bottleneck.
+- The campaign's "ANG 31-39 min" (AC26-ACC) were three other flight lines; this window's 41 min at seg 50 is scene size.
+
+## AC26-PIP: T1 in the pip-only venv the image ships (2026-11-01, Colab L4, runs alone)
+- Clean python 3.12 venv from requirements-dev.txt, ISOFIT patched as the Dockerfile does (isofit_patches.py, empirical
+  line fix); fast_al wired, torch 2.14.1+cu130 on CUDA. Same PRISMA scene / entrypoint as T1: 33 min (conda 33 min).
+- Research scorer vs ASI L2C: **raw 0.0097, harmonised 0.0057: identical to the conda run** (and to AC26-E7).
+- Product vs the conda product (int16 x1e4): 83.6 % of values bit-identical, mean |diff| 0.000017; 205 of 1,000,000
+  pixels differ by > 0.001 (2 by > 0.05), in the noisiest bands (2436 / 2414 / 1350 nm): a handful of per-pixel solves
+  converging differently under OpenBLAS (pip) vs conda's BLAS. Nodata masks agree 100 %.
+
+## AC26-EL: AVIRIS-NG empirical line at seg 200, 600-line window (2026-11-01, Colab L4, alone)
+- `--line empirical`: ISOFIT writes no *_atm_interp in this mode; atm_post.find_outputs now falls back to
+  *_subs_state (same named AOT550 / H2OSTR / surface_elevation_km bands, scene medians) and report.read_atm paints the
+  superpixel state through *_lbl. First run failed on exactly that; fixed and tested (81 tests, 53.6 %).
+- ISOFIT 17.8 -> 11.3 min (per-pixel stage ~7.5 min -> 64 s). Core land MAE vs JPL 0.0056 both (bias +0.0031 /
+  +0.0029), spectral angle median 2.17 deg both; empirical vs analytical per pixel median 0.0014, > 0.005 on 0.94 %.
+- Full-line estimate (T7, 4 Mpix) at seg 200 + empirical: ~80 min on the L4 (analytical ~2.5 h).

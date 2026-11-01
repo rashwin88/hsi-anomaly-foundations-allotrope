@@ -43,6 +43,9 @@ Options:
   --paco-layout           EnMAP only: also write the PACO-style L2A folder
   --n-cores N             parallel workers (default: all CPUs)
   --line {analytical|empirical}   per-pixel solve (default: analytical)
+  --segmentation-size N   pixels per ISOFIT superpixel (default: the sensor rule,
+                          AVIRIS-NG 200, others 50; larger is faster,
+                          coarser atmosphere)
   --ref PATH              reference product for the report's comparison section
                           (vendor L2 / FLAASH: EnMAP L2A folder, PRISMA L2 .he5,
                           Tanager SR .h5, GeoTIFF or ENVI)
@@ -63,6 +66,7 @@ INPUT="$1"; shift
 OUTPUT_DIR="$1"; shift
 SEASON=""
 LINE_MODE="analytical"
+SEG_SIZE=""   # empty: the sensor rule's segmentation_size (atm_post.SENSOR_RULES; AVIRIS-NG 200, others 50)
 N_CORES="${N_CORES:-$(nproc)}"
 KEEP_WORK=0
 STOP_AFTER_LUT=0
@@ -77,6 +81,7 @@ while [[ $# -gt 0 ]]; do
         --sensor|--input-level|--radiance-scale|--wavelength-file) PREP_ARGS+=("$1" "$2"); shift 2 ;;
         --season)         SEASON="$2"; shift 2 ;;
         --line)           LINE_MODE="$2"; shift 2 ;;
+        --segmentation-size) SEG_SIZE="$2"; shift 2 ;;
         --n-cores)        N_CORES="$2"; shift 2 ;;
         --no-harmonise)   HARMONISE=0; shift ;;
         --formats)        OUT_FORMATS="$2"; shift 2 ;;
@@ -135,6 +140,7 @@ v = {"FID": r["fid"], "FMT": r["format"], "ISOFIT_SENSOR": r["isofit_sensor"], "
      "LEVEL": r["level"], "PASS": "1" if r["pass_through"] else "0", "GRADE": r["grade"],
      "NOISE": u["instrument_noise"] or "", "LUT_CFG": u["lut_config"] or "", "AOT_PRIOR": "1" if u["aot_prior"] else "0",
      "HARM_MODEL": u["harmonise_model"] or "", "SEASON": sys.argv[2] or r["season"],
+     "SEG_RULE": u.get("segmentation_size") or 50,
      "LAT": "" if r["centre_lat"] is None else r["centre_lat"], "LON": "" if r["centre_lon"] is None else r["centre_lon"],
      "DATE": r["date"]}
 print("\n".join(f"{k}={shlex.quote(str(x))}" for k, x in v.items()))
@@ -173,7 +179,8 @@ else
     fi
     NOISE_ARG=()
     [[ -n "$NOISE" ]] && NOISE_ARG=(--instrument_noise_path="/root/.isofit/data/${NOISE}")
-    log "Rule $RULE: LUT $(basename "$LUT"), noise ${NOISE:-ISOFIT default}, AOT prior $AOT_PRIOR"
+    SEG_SIZE="${SEG_SIZE:-$SEG_RULE}"
+    log "Rule $RULE: LUT $(basename "$LUT"), noise ${NOISE:-ISOFIT default}, AOT prior $AOT_PRIOR, superpixels of $SEG_SIZE"
 
     # ---- Stage 2: ISOFIT apply_oe --------------------------------------------
     # In its generic NA- mode ISOFIT takes the file id from the radiance file's stem, then names everything
@@ -191,7 +198,7 @@ else
     isofit apply_oe \
         "$RDN_IN" "${WORK}/${FID}_loc" "${WORK}/${FID}_obs" "${WORK}/isofit" "$ISOFIT_SENSOR" \
         --presolve ${LINE_ARG} --emulator_base="${EMU}" --lut_config_file="${LUT}" \
-        --surface_path="${SCENE_SURFACE}" "${NOISE_ARG[@]}" --n_cores="${N_CORES}" --segmentation_size=50 \
+        --surface_path="${SCENE_SURFACE}" "${NOISE_ARG[@]}" --n_cores="${N_CORES}" --segmentation_size="${SEG_SIZE}" \
         --pressure_elevation --logging_level=INFO \
         2>&1 | tee "${WORK}/isofit.log"
     }
