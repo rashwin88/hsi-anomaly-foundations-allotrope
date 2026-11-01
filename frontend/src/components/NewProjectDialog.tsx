@@ -38,6 +38,8 @@ const SENSOR_FILTERS: { value: "" | SensorType; label: string }[] = [
   { value: "enmap", label: "EnMAP" },
   { value: "aviris_ng", label: "AVIRIS-NG" },
   { value: "hotsat1", label: "HotSAT-1" },
+  { value: "tanager", label: "Tanager" },
+  { value: "generic_hsi", label: "Other hyperspectral" },
 ];
 
 export function NewProjectDialog({
@@ -302,6 +304,8 @@ function sensorLabel(sensor: string): string {
   if (sensor === "enmap") return "EnMAP";
   if (sensor === "aviris_ng") return "AVIRIS-NG";
   if (sensor === "hotsat1") return "HotSAT-1";
+  if (sensor === "tanager") return "Tanager";
+  if (sensor === "generic_hsi") return "Other hyperspectral";
   return sensor;
 }
 

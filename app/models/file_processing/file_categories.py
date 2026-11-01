@@ -10,3 +10,5 @@ class FileCategory(Enum):
     HDFS = "he5"
     TIF = "tif"
     ENMAP_FOLDER = "enmap_folder"
+    ENVI_FOLDER = "envi_folder"      # a scene folder holding ENVI .hdr / .bin pairs (AVIRIS-NG)
+    ENVI_HEADER = "envi_header"      # one ENVI .hdr whose data file sits beside it (Tanager ENVI)

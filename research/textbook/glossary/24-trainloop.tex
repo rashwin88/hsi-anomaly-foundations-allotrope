@@ -1,0 +1,30 @@
+\glossentry{Gradient}{The vector of partial derivatives of the loss with respect to every parameter; it points in the direction of steepest increase of the loss.}
+\glossentry{Gradient descent}{The update that moves every parameter a small step against its gradient: w becomes w minus the learning rate times the gradient.}
+\glossentry{Learning rate}{The step-size multiplier eta in a gradient update; too small crawls, too large diverges.}
+\glossentry{Batch (mini-batch)}{The group of patches processed together in one forward pass; its gradient is a noisy estimate of the whole training set's gradient.}
+\glossentry{Step (iteration)}{One update of the parameters by the optimiser.}
+\glossentry{Epoch (in this project)}{A fixed budget of surviving training samples (40,000 for v0.2.0) followed by validation; the interval at which the learning rate, SAM weight and checkpoints advance. Not a full pass over the data.}
+\glossentry{Stochastic gradient descent}{Gradient descent using batch gradients, which are cheap, noisy estimates of the full gradient.}
+\glossentry{Momentum}{An optimiser that steps along a running sum of past gradients, so consistent directions accumulate and alternating ones cancel.}
+\glossentry{Exponential moving average}{A running average in which each older value's weight shrinks by a factor beta per step.}
+\glossentry{Adam}{The optimiser that divides an EMA of each parameter's gradient by the square root of an EMA of its squared gradient, giving every parameter a step of about the learning rate when its gradient is consistent.}
+\glossentry{Bias correction}{Dividing Adam's moment estimates by 1 minus beta to the power t, which removes the bias towards zero caused by starting the averages at zero.}
+\glossentry{Weight decay}{Shrinking every weight towards zero by a fixed fraction each step, a form of regularisation.}
+\glossentry{L2 regularisation}{Adding half lambda times the squared length of the weights to the loss; equal to weight decay under plain gradient descent but not under Adam.}
+\glossentry{AdamW}{Adam with decoupled weight decay: the decay is subtracted separately rather than passed through Adam's per-parameter normaliser.}
+\glossentry{Learning-rate schedule}{A rule that changes the learning rate over the course of training.}
+\glossentry{Warmup}{A schedule phase that raises the learning rate gradually from a small value at the start of training; described by warmup-epochs in this repository's config but never implemented.}
+\glossentry{Cosine annealing}{The schedule eta(t) = eta-min + (eta-max - eta-min)(1 + cos(pi t / T))/2: flat at the start, steepest in the middle, flat near the floor.}
+\glossentry{Gradient clipping}{Scaling the whole gradient down to a maximum length when it exceeds it, keeping its direction; not used in this repository.}
+\glossentry{Mixed precision}{Running the expensive parts of a network in a 16-bit floating-point format and the precision-critical parts, such as the loss, in float32.}
+\glossentry{bfloat16}{A 16-bit floating-point format with float32's 8 exponent bits and 7 mantissa bits: float32's range at about 2 to 3 significant digits.}
+\glossentry{Autocast}{PyTorch's context that runs eligible operations in a lower-precision format automatically.}
+\glossentry{Gradient accumulation}{Summing the gradients of several small batches, each loss divided by their number, before one optimiser step, to imitate a larger batch.}
+\glossentry{Stride}{The distance between the top-left corners of neighbouring patches; half the patch size in training here, giving 50 percent overlap.}
+\glossentry{Edge snapping}{The patch planner's rule that moves the last patch back to end exactly at the scene edge instead of running past it.}
+\glossentry{Shard}{A tar archive packing many patches as named members, streamed sequentially; the webdataset convention.}
+\glossentry{Hot storage}{The trainer's local-disk cache of shards, synced once and reused for every epoch.}
+\glossentry{Sample-weighted average}{An average over batches in which each batch's mean is weighted by the number of samples that survived filtering.}
+\glossentry{Checkpoint}{A saved file holding the model's parameters, the optimiser and scheduler state, the epoch and the configuration, from which training can resume.}
+\glossentry{Resume mode}{Whether a checkpoint restores the full training state (resume) or only the weights with a fresh optimiser and schedule (finetune).}
+\glossentry{Band-list augmentation}{Training on a random subset of a patch's bands, with jittered wavelengths, while still grading every band, so a wavelength-aware stem copes with unseen sensors.}

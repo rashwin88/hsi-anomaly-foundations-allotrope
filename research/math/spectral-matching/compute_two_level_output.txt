@@ -1,0 +1,107 @@
+
+=== ACE on three bands, ring = grass, whitening sd (0.02, 0.04, 0.01) ===
+whitened roof direction [12.5 -2.  10. ]  |.|^2 260.25
+whitened soil direction [ 7.5  -3.75  5.  ]  |.|^2 95.3125
+fill 0.2: d~ = [ 2.5 -0.4  2. ], |d~|^2 = 10.4100
+   no noise : ACE roof 1.0000, soil 0.9223, d.soil 30.2500
+   + noise  : d~ = [3.5 0.6 1. ], |d~|^2 = 13.6100, d.roof 52.5500, d.soil 29.0000
+              ACE roof 0.7796, soil 0.6483
+fill 0.5: d~ = [ 6.25 -1.    5.  ], |d~|^2 = 65.0625
+   no noise : ACE roof 1.0000, soil 0.9223, d.soil 75.6250
+   + noise  : d~ = [ 7.25000000e+00 -2.22044605e-16  4.00000000e+00], |d~|^2 = 68.5625, d.roof 130.6250, d.soil 74.3750
+              ACE roof 0.9563, soil 0.8465
+
+=== two-level probabilities ===
+  P(painted metal) = 0.9 x 0.6 = 0.5400
+  P(bare metal) = 0.9 x 0.25 = 0.2250
+  P(tarp) = 0.9 x 0.15 = 0.1350
+  P(natural) = 0.1  sum = 1.0
+  P(mm)=0.3, top P(class|mm)=0.6: product 0.180
+  P(mm)=0.9, top P(class|mm)=0.4: product 0.360
+  P(mm)=0.9, top P(class|mm)=0.6: product 0.540
+
+=== separability (read-only) ===
+  prisma fill  0.1: n 19728, L1 mm->mm 0.6096, nat->nat 0.7822, L2 0.3846, L2|L1 0.6309, product 0.3846
+  prisma fill 0.25: n 19728, L1 mm->mm 0.7724, nat->nat 0.8342, L2 0.5523, L2|L1 0.7151, product 0.5523
+  prisma fill  0.5: n 19728, L1 mm->mm 0.8456, nat->nat 0.8551, L2 0.6121, L2|L1 0.7238, product 0.6121
+  prisma fill  1.0: n 19728, L1 mm->mm 0.8703, nat->nat 0.8596, L2 0.6374, L2|L1 0.7325, product 0.6374
+    fill 1.0 glass: 0 of 48 right, 15 called natural, top [('roofing', 22), ('pavement', 8), ('rock', 8)]
+    fill 1.0 building: 272 of 528 right, 56 called natural, top [('building', 272), ('pavement', 127), ('soil', 51)]
+    fill 1.0 pavement: 204 of 720 right, 149 called natural, top [('pavement', 204), ('building', 165), ('roofing', 150)]
+    fill 1.0 oil: 1721 of 1920 right, 129 called natural, top [('oil', 1721), ('vegetation', 78), ('pavement', 30)]
+    fill 0.25 building: 205/528 = 0.388 right; top others [('pavement', 82), ('soil', 64), ('metal', 42)]
+    fill 0.25 glass: 0/48 = 0.000 right; top others [('rock', 13), ('roofing', 8), ('soil', 6)]
+    fill 0.25 metal: 255/624 = 0.409 right; top others [('soil', 76), ('mineral', 63), ('plastic', 44)]
+    fill 0.25 oil: 1537/1920 = 0.801 right; top others [('vegetation', 83), ('mineral', 55), ('water', 52)]
+    fill 0.25 paint: 174/384 = 0.453 right; top others [('plastic', 44), ('roofing', 34), ('water', 24)]
+    fill 0.25 pavement: 75/720 = 0.104 right; top others [('soil', 111), ('rock', 94), ('building', 87)]
+    fill 0.25 plastic: 1319/1872 = 0.705 right; top others [('roofing', 134), ('mineral', 67), ('paint', 58)]
+    fill 0.25 roofing: 398/1296 = 0.307 right; top others [('npv', 146), ('plastic', 136), ('rock', 106)]
+    fill 0.25 textile: 464/672 = 0.690 right; top others [('roofing', 60), ('npv', 48), ('plastic', 38)]
+    fill 0.25 wood_paper: 239/384 = 0.622 right; top others [('textile', 61), ('npv', 59), ('roofing', 13)]
+  enmap fill  0.1: n 14796, L1 mm->mm 0.4842, nat->nat 0.7173, L2 0.2263, L2|L1 0.4674, product 0.2263
+  enmap fill 0.25: n 14796, L1 mm->mm 0.6635, nat->nat 0.7851, L2 0.4396, L2|L1 0.6625, product 0.4396
+  enmap fill  0.5: n 14796, L1 mm->mm 0.8022, nat->nat 0.8434, L2 0.5770, L2|L1 0.7193, product 0.5770
+  enmap fill  1.0: n 14796, L1 mm->mm 0.8711, nat->nat 0.8664, L2 0.6368, L2|L1 0.7311, product 0.6368
+    fill 1.0 glass: 0 of 36 right, 15 called natural, top [('rock', 12), ('roofing', 7), ('pavement', 5)]
+    fill 1.0 building: 215 of 396 right, 30 called natural, top [('building', 215), ('pavement', 100), ('roofing', 21)]
+    fill 1.0 pavement: 105 of 540 right, 143 called natural, top [('roofing', 113), ('pavement', 105), ('building', 99)]
+    fill 1.0 oil: 1326 of 1440 right, 64 called natural, top [('oil', 1326), ('vegetation', 33), ('roofing', 29)]
+    fill 0.25 building: 104/396 = 0.263 right; top others [('mineral', 53), ('soil', 52), ('rock', 36)]
+    fill 0.25 glass: 0/36 = 0.000 right; top others [('mineral', 6), ('rock', 6), ('oil', 4)]
+    fill 0.25 metal: 144/468 = 0.308 right; top others [('mineral', 61), ('soil', 55), ('rock', 51)]
+    fill 0.25 oil: 835/1440 = 0.580 right; top others [('mineral', 121), ('vegetation', 99), ('npv', 73)]
+    fill 0.25 paint: 115/288 = 0.399 right; top others [('mineral', 28), ('plastic', 24), ('rock', 21)]
+    fill 0.25 pavement: 23/540 = 0.043 right; top others [('rock', 104), ('mineral', 75), ('soil', 51)]
+    fill 0.25 plastic: 888/1404 = 0.632 right; top others [('roofing', 123), ('textile', 72), ('mineral', 69)]
+    fill 0.25 roofing: 201/972 = 0.207 right; top others [('plastic', 132), ('npv', 109), ('mineral', 105)]
+    fill 0.25 textile: 330/504 = 0.655 right; top others [('plastic', 43), ('vegetation', 43), ('npv', 21)]
+    fill 0.25 wood_paper: 145/288 = 0.503 right; top others [('npv', 50), ('textile', 36), ('roofing', 26)]
+  aviris_ng fill  0.1: n 14796, L1 mm->mm 0.5870, nat->nat 0.7683, L2 0.3565, L2|L1 0.6074, product 0.3565
+  aviris_ng fill 0.25: n 14796, L1 mm->mm 0.7603, nat->nat 0.8134, L2 0.5278, L2|L1 0.6942, product 0.5278
+  aviris_ng fill  0.5: n 14796, L1 mm->mm 0.8384, nat->nat 0.8459, L2 0.5908, L2|L1 0.7046, product 0.5908
+  aviris_ng fill  1.0: n 14796, L1 mm->mm 0.8696, nat->nat 0.8541, L2 0.6174, L2|L1 0.7100, product 0.6174
+    fill 1.0 glass: 0 of 36 right, 1 called natural, top [('roofing', 27), ('plastic', 4), ('metal', 3)]
+    fill 1.0 building: 138 of 396 right, 50 called natural, top [('building', 138), ('pavement', 107), ('metal', 61)]
+    fill 1.0 pavement: 173 of 540 right, 118 called natural, top [('pavement', 173), ('roofing', 102), ('building', 101)]
+    fill 1.0 oil: 1277 of 1440 right, 96 called natural, top [('oil', 1277), ('vegetation', 65), ('roofing', 38)]
+    fill 0.25 building: 124/396 = 0.313 right; top others [('pavement', 62), ('soil', 61), ('metal', 41)]
+    fill 0.25 glass: 0/36 = 0.000 right; top others [('rock', 7), ('mineral', 5), ('roofing', 5)]
+    fill 0.25 metal: 188/468 = 0.402 right; top others [('mineral', 59), ('soil', 50), ('roofing', 34)]
+    fill 0.25 oil: 1098/1440 = 0.762 right; top others [('vegetation', 67), ('mineral', 50), ('water', 36)]
+    fill 0.25 paint: 120/288 = 0.417 right; top others [('plastic', 36), ('roofing', 26), ('water', 21)]
+    fill 0.25 pavement: 49/540 = 0.091 right; top others [('rock', 79), ('roofing', 67), ('soil', 59)]
+    fill 0.25 plastic: 940/1404 = 0.670 right; top others [('roofing', 128), ('textile', 65), ('soil', 41)]
+    fill 0.25 roofing: 295/972 = 0.303 right; top others [('plastic', 112), ('npv', 95), ('vegetation', 78)]
+    fill 0.25 textile: 359/504 = 0.712 right; top others [('plastic', 52), ('wood_paper', 27), ('vegetation', 26)]
+    fill 0.25 wood_paper: 171/288 = 0.594 right; top others [('npv', 60), ('textile', 41), ('roofing', 5)]
+
+=== what fits in a pixel ===
+  car 8.10 m^2 in a 30 m pixel (900 m^2): fill 0.0090
+  car 8.10 m^2 in a 5 m pixel (25 m^2): fill 0.3240
+  0.51 deg: cos 0.999960, 1-cos 0.000040, sin 0.00890
+  5.92 deg: cos 0.994667, 1-cos 0.005333, sin 0.10314
+
+=== matching in a 2-D embedding ===
+  cos(f, painted metal) = 0.8000
+  cos(f, tarp) = 0.6000
+  cos(f, glass (new)) = 0.9600
+  classifier logits [0.8 0.6]
+
+=== InfoNCE on three candidates ===
+  tau 1.0: logits [0.8  0.6  0.96], exp [2.2255 1.8221 2.6117], sum 6.6594, p [0.3342 0.2736 0.3922], loss 0.9360
+  tau 0.5: logits [1.6  1.2  1.92], exp [4.953  3.3201 6.821 ], sum 15.0941, p [0.3281 0.22   0.4519], loss 0.7943
+  tau 0.1: logits [8.  6.  9.6], exp [ 2980.958    403.4288 14764.7816], sum 18149.1683, p [0.1642 0.0222 0.8135], loss 0.2064
+  gradient p - y at tau 0.5: [ 0.3281  0.22   -0.5481]
+  batch row 0: exp [6.0496 1.4918], sum 7.5415, p_true 0.8022, loss 0.2204
+  batch row 1: exp [1.8221 4.0552], sum 5.8773, p_true 0.6900, loss 0.3711
+  batch mean loss 0.2958
+
+=== open-set level 1 ===
+  sorted natural scores [0.2 0.4 0.5 0.7 0.9 1.1 1.3 1.6 2.3 3.1]
+  90th percentile (numpy linear) 2.3800; flagged natural 1 of 10
+  pos 8.1, between 2.3 and 3.1
+  natural centroid [0.5 0.5]
+  camouflage to natural centroid 0.1414, to man-made library 0.7071
+  natural points to their own centroid [0.5657 0.2828 0.     0.2828 0.5657]
+  explanation residual |x + y - 1|: camouflage 0.2000, natural points [0. 0. 0. 0. 0.], library man-made 0.8000

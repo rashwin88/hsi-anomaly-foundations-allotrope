@@ -1,0 +1,22 @@
+\glossentry{PRISMA}{Italian Space Agency hyperspectral satellite; 239 bands (66 VNIR, 173 SWIR) delivered as one HDF5 (.he5) file in BIL layout.}
+\glossentry{EnMAP}{German hyperspectral satellite; 224 bands delivered as a folder, with ready-made cloud, cirrus, haze, shadow and snow masks.}
+\glossentry{AVIRIS-NG}{Airborne hyperspectral sensor with about 425 bands, delivered as ENVI files in a folder.}
+\glossentry{Landsat 9}{Thermal source in this product: one band (B10) delivered as a GeoTIFF, converted to degrees Celsius.}
+\glossentry{HotSat-1}{Thermal sensor delivering one band of uncalibrated digital numbers around 5000.}
+\glossentry{VNIR and SWIR detectors}{The two detector arrays of a hyperspectral instrument, for the visible/near-infrared and the shortwave-infrared ranges.}
+\glossentry{Layout}{The order in which a multi-index array is flattened into memory.}
+\glossentry{BSQ}{Band-sequential layout (C, H, W): each band image is contiguous; the layout every model expects.}
+\glossentry{BIL}{Band-interleaved-by-line layout (H, C, W): PRISMA's native layout.}
+\glossentry{BIP}{Band-interleaved-by-pixel layout (H, W, C): each pixel's spectrum is contiguous.}
+\glossentry{Row-major order}{Memory order in which the last index changes fastest; offset of (a, b, d) in shape (A, B, D) is a B D + b D + d.}
+\glossentry{Transpose (axes)}{Reordering an array's axes without changing any value, such as BIL to BSQ.}
+\glossentry{Bit flag}{A single binary digit of an integer used as a yes/no answer; bit k of q is (q >> k) and 1.}
+\glossentry{QA PIXEL}{Landsat's bit-packed quality layer; the builder rejects pixels with the fill, dilated cloud, cloud, cloud shadow or high-cirrus bits set.}
+\glossentry{FileHelper}{A class wrapping one physical file format (HE5Helper, TIFHelper, EnmapHelper, ENVIHelper, HotSatHelper) that returns raw arrays and metadata.}
+\glossentry{Template (file)}{A dictionary, injected into a FileHelper, mapping each logical component to where it lives in the file.}
+\glossentry{Resampling}{Estimating a spectrum's values at a fixed list of wavelengths from its values at the sensor's own wavelengths.}
+\glossentry{Common wavelength grid}{The 165 wavelengths, 10 nm apart from 460 to 2450 nm with four atmospheric windows removed, onto which every hyperspectral sensor is resampled (DEFAULT\_COMMON\_WAVELENGTH\_GRID).}
+\glossentry{Fencepost formula}{The number of evenly spaced points from first to last inclusive is (last - first)/step + 1.}
+\glossentry{Atmospheric window (absorption)}{A wavelength range where water vapour or carbon dioxide absorbs so strongly that a band measures noise; removed from the grid.}
+\glossentry{Spectral family}{In the code, the detector a band came from (the SpectralFamily enum: VNIR, SWIR, PANCHROMATIC); not the five grid segments.}
+\glossentry{Wire format}{A data layout that stored files and saved models depend on by position, so that changing it silently invalidates them.}

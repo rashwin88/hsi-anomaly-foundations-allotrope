@@ -1,0 +1,970 @@
+\chapter{Gated losses, block masking, the decoder bottleneck and FT09}\label{ch:decoderwork}
+
+\begin{onething}
+Changing what the training loss sees (gating the worst pixels, hiding tokens in blocks) cost a little
+detection, because most of what a model gets wrong is ordinary hard background; a diagnosis without training
+then showed that FT04's error is mostly detail its decoder cannot render, because each $4\times4$ token is
+squeezed into 32 numbers with no full-resolution path back, and the progressive decoder built to fix that
+(FT09) raised contrast and gave a gain that cleared the bootstrap by a hair and then did not survive five more
+epochs.
+\end{onething}
+
+This chapter covers three days of experiments, 2026-10-21 to 2026-10-23, after the uncertainty head of
+\cref{ch:uncertainty} failed. It is three stories with one thread. The first two runs (FT07, FT08) changed the
+\emph{training signal}. The diagnosis that followed (``is the decoder the bottleneck?'') asked where the error
+actually comes from. The third run (FT09) changed the \emph{shape of the network}. Each story carries a piece
+of mathematics: quantiles and what a gate removes from a gradient; expected numbers of visible neighbours under
+random masking; projection onto a span and the Pythagorean split of an error; a counting argument about
+information through a bottleneck; and a by-hand parameter count of a new decoder.
+
+Provenance tags abbreviate paths as in \cref{ch:uncertainty}: \texttt{FT07-gated/}, \texttt{FT09-decoder/} and
+the like are folders under \file{research/experiments/indradhanu-finetune/}; \texttt{decoder-capacity/} and
+\texttt{bench-resolution/} are under \file{research/experiments/}.
+
+\begin{analogy}
+A police sketch artist draws faces from a witness's description, and the sketches come out poor. Is the
+witness's memory the problem, or the artist's pencil? You could coach the witness to leave out the details
+they remember worst (that is FT07), or to describe the face in bigger pieces (FT08), and the sketches barely
+change. The decisive test is to put the real face in front of the artist and ask for a copy. If the copy is
+barely better than the sketch from memory, the memory was never the limit: the pencil is. That test is
+\cref{sec:decoderwork:diagnosis}, and FT09 is a finer pencil.
+\end{analogy}
+
+%======================================================================
+\section{The question behind FT07 and FT08}\label{sec:decoderwork:question}
+
+A masked autoencoder fine-tuned on shards that contain real targets can learn to reconstruct them, and a
+target it reconstructs well leaves no residual to score (\cref{ch:recon}). GT-HAD \citep{lian2025gated}
+\emph{gates} its training: it keeps likely anomalies out of what the network learns from. The anomaly
+course tried a gate per scene at inference time and found that a short run never learns the targets anyway,
+so the gate changed nothing (\cref{ch:scoringgains}). Five epochs over the whole training mix is different: it
+sees every target-like pixel many times. So two runs, both from FT04's \code{best.pt}, 5 epochs, learning rate
+$5\times10^{-5}$ on a cosine schedule, FT04's configuration otherwise
+\tagM{FT07-gated/README.md}:
+
+\begin{center}
+\begin{tabular}{lll}
+\toprule
+run & change & configuration fields\\
+\midrule
+FT07 & gated loss & \texttt{gate\_pct: 1.0}, \texttt{gate\_halo: 2}\\
+FT08 & gated loss + $2\times2$-token block masking & as FT07, plus \texttt{mask\_block: 2}\\
+\bottomrule
+\end{tabular}
+\end{center}
+
+The expectation, written before launch: FT07 a small gain at the top 0.1\% and slightly worse reconstruction;
+FT08 the larger detection change, in either direction.
+
+%======================================================================
+\section{Gating the worst 1\%}\label{sec:decoderwork:gate}
+
+\subsection{Quantiles}
+
+\begin{definition}[Quantile]
+The $q$-\emph{quantile}\index{quantile} of a list of numbers, for $0\le q\le 1$, is the value below which a
+fraction $q$ of the list lies. With $n$ sorted values $x_{(0)}\le x_{(1)}\le\dots\le x_{(n-1)}$ (counting from
+0), \code{torch.quantile} uses the position $q(n-1)$ and interpolates linearly between the two neighbouring
+sorted values: at position $k+f$ ($k$ an integer, $0\le f<1$) the quantile is $x_{(k)}+f\,(x_{(k+1)}-x_{(k)})$.
+\end{definition}
+
+The function \code{gate_pixels} in \file{app/foundation_models/trainers/finetune_trainer.py} does four
+things, for each source group (each sensor's tiles) in a mixed batch (\cref{ch:finetune}):
+\begin{lstlisting}
+err  = per-pixel L1, mean over valid bands                        # (B, 1, H, W)
+cut  = torch.quantile(err[loss pixels][:1_000_000], 1 - pct/100)  # the group's top pct % threshold
+gate = (err >= cut) & loss_pixel
+gate = max_pool2d(gate, 2*halo + 1, stride=1, padding=halo) > 0   # dilate to a (2 halo + 1)-wide square
+\end{lstlisting}
+and the reconstruction loss mask becomes \code{loss_mask * ~gate}. Three details matter.
+\begin{itemize}
+\item \code{x_hat} is \emph{detached} before the gate is computed: the gate is a selection made without
+  gradient, so the model cannot learn to change which pixels get gated.
+\item The quantile is taken over \emph{loss pixels only} (hidden, valid pixels), since only they carry loss.
+\item At most the first 1,000,000 loss pixels enter the quantile, because \code{torch.quantile} rejects very
+  large inputs. Eight 128\,px tiles are $8\times128\times128=131{,}072$ pixels, so at FT07's batch size of 8
+  the cap is never reached.
+\end{itemize}
+
+\begin{worked}[label={we:decoderwork:quantile}]{The top 1\% of 100 loss pixels, with its halo}
+Do this on paper. A group has 100 loss pixels laid out as a $10\times10$ patch, all hidden, with distinct
+errors.
+\begin{align*}
+\text{quantile level} &= 1-1/100 = 0.99\\
+\text{position} &= 0.99\times(100-1) = 98.01 \quad(k=98,\ f=0.01)\\
+\text{cut} &= x_{(98)} + 0.01\,(x_{(99)}-x_{(98)})\\
+&\phantom{=}\ \text{(1\% of the way from the 99th to the 100th smallest)}\\
+\text{err}\ge\text{cut} &: \text{only } x_{(99)}, \text{the single largest error}\\
+\text{gated before the halo} &= 1 \text{ pixel} = 1\% \text{ of } 100
+\end{align*}
+Now the halo, \code{gate_halo = 2}: \code{max_pool2d} with kernel $2\times2+1=5$ turns one pixel into a
+$5\times5$ square.
+\begin{align*}
+\text{gated pixel in the middle} &: 5\times5 = 25 \text{ pixels};\quad 100-25 = 75 \text{ loss pixels left}\\
+\text{gated pixel in a corner} &: 3\times3 = 9 \text{ pixels};\quad 100-9 = 91 \text{ loss pixels left}
+\end{align*}
+A 1\% gate removed a quarter of this group's loss pixels.
+\end{worked}
+
+\subsection{What fraction of the gradient a gate removes}\label{sec:decoderwork:gradfrac}
+
+``Removing 1\% of the pixels'' sounds small. Two different things could be meant by how much is removed: the
+share of the \emph{loss value}, or the share of the \emph{gradient}. For L1 they differ sharply.
+
+The L1 loss over $N$ loss pixels and $C$ bands is $L=\frac{1}{NC}\sum_{p,c}\abs{\hat x_{pc}-x_{pc}}$.
+Differentiate with respect to one reconstructed value $\hat x_{pc}$. Only one term contains it, and the
+derivative of $\abs{u}$ is $\sign(u)$ (for $u\ne0$):
+\begin{equation}\label{eq:decoderwork:l1grad}
+\frac{\partial L}{\partial\hat x_{pc}} = \frac{1}{NC}\,\sign(\hat x_{pc}-x_{pc}).
+\end{equation}
+Every included pixel-band pushes on the network with the \emph{same strength}, $1/(NC)$, however large its
+error. So the share of gradient terms the gate removes is the share of loss pixels it removes, while the share
+of loss \emph{value} it removes is larger, because the gated pixels are the large ones. (Under an L2 loss the
+gradient would be proportional to the error, and the worst pixels would dominate the gradient as well.)
+
+\begin{worked}[label={we:decoderwork:share}]{Loss share against gradient share}
+A group of 100 loss pixels: 99 have error $0.05$ and one has error $0.50$ (illustrative numbers \tagA). Gate
+the worst one, without a halo.
+\begin{align*}
+\text{total loss value} &= 99\times0.05 + 0.50 = 4.95 + 0.50 = 5.45\\
+\text{share of loss value removed} &= 0.50/5.45 = 0.092 \quad(9.2\%)\\
+\text{share of L1 gradient terms removed} &= 1/100 = 0.01 \quad(1\%)\\
+\text{under L2: } \textstyle\sum 2\abs{r} &= 99\times0.10 + 1.00 = 9.90+1.00 = 10.90\\
+\text{share of L2 gradient size removed} &= 1.00/10.90 = 0.092 \quad(9.2\%)
+\end{align*}
+With the halo of 25 pixels, the gradient share is 25\%, and almost all of those 24 extra pixels are ordinary.
+\end{worked}
+
+How large the gated share was in FT07 is not recorded: the run logged no gated share. You can bound it.
+
+\begin{worked}[label={we:decoderwork:tile}]{An upper bound on a real batch}
+Use FT07's batch of 8 tiles of $128\times128$ and assume (\tagA) about 65\% of pixels are hidden and valid, and
+the gated pixels are isolated, far from edges and from each other.
+\begin{align*}
+\text{pixels} &= 8\times128\times128 = 131{,}072\\
+\text{loss pixels} &\approx 0.65\times131{,}072 = 85{,}197\\
+\text{gated before halo} &\approx 0.01\times85{,}197 = 852\\
+\text{loss pixels per square} &\approx 0.65\times25 = 16.25\quad\text{(the square also covers visible pixels)}\\
+\text{removed} &\approx 852\times16.25 = 13{,}845\\
+\text{share} &\approx 13{,}845/85{,}197 = 0.16
+\end{align*}
+At most about 16\%. Real high-error pixels come in clumps whose squares overlap, so the true share is lower.
+\end{worked}
+
+\section{Block masking}\label{sec:decoderwork:blocks}
+
+\subsection{Why blocks}
+
+\Cref{ch:uncertainty} found that the head could see a target ``through the neighbours'': a target's halo
+reaches into neighbouring tokens, and a model filling a hidden token can copy the odd spectrum from next door.
+Hide bigger units and less of the target is left in view. FT08 hides tokens in $2\times2$ blocks, 8\,px on a
+side.
+
+\begin{worked}[label={we:decoderwork:footprint}]{A 5\,px footprint on a 4\,px and an 8\,px grid}
+A one-pixel target whose light reaches 2\,px either side has a footprint $2+1+2=5$\,px wide. Assume (\tagA) its
+starting offset on the grid is uniform.
+\begin{align*}
+\text{4\,px token} &: 5>4,\ \text{never fits}: 0 \text{ of } 4 \text{ offsets}\\
+\text{8\,px block} &: \text{fits if it starts at offset } 0,1,2,3:\ 4 \text{ of } 8 = 1/2 \text{ per axis}\\
+\text{both axes} &: 1/2\times1/2 = 1/4
+\end{align*}
+So a block contains the whole footprint about a quarter of the time; otherwise it straddles a border and
+leaks unless the neighbouring block is hidden too.
+\end{worked}
+
+\subsection{How the block mask is drawn}
+
+\code{_build_prediction_mask} in the fine-tune trainer, with \code{mask_block = b > 1}:
+\begin{lstlisting}
+tokens = valid-token mask                                  # (B, N), N = Ht * Wt
+grid   = tokens.reshape(B, 1, Ht, Wt)
+blocks = max_pool2d(grid, b, ceil_mode=True) > 0          # (B, 1, Ht/b, Wt/b): valid if any token is
+_, block_pred = generate_prediction_mask(blocks, mask_ratio)   # hide mask_ratio of the valid blocks
+pred   = interpolate(block_pred, scale_factor=b, mode="nearest")[..., :Ht, :Wt] * tokens
+\end{lstlisting}
+
+\begin{worked}[label={we:decoderwork:hidden}]{How much a 128\,px tile hides}
+At \code{mask_ratio} $0.65$:
+\begin{align*}
+\text{tokens per side} &= 128/4 = 32;\quad \text{tokens} = 32\times32 = 1{,}024\\
+\text{blocks per side} &= 32/2 = 16;\quad \text{blocks} = 16\times16 = 256\\
+\text{blocks hidden} &= 256\times0.65 = 166.4 \to 166 \ (\text{truncated})\\
+\text{tokens hidden} &= 166\times4 = 664;\quad 664/1{,}024 = 0.648\\
+\text{single tokens} &: 1{,}024\times0.65 = 665.6 \to 665
+\end{align*}
+FT08 hides almost exactly as much as FT04; it hides it in bigger pieces.
+\end{worked}
+
+\subsection{Expected visible neighbours}\label{sec:decoderwork:neighbours}
+
+How much context does a hidden token keep? Count its \emph{visible neighbours}: of the 8 tokens around it
+(sides and corners), how many are visible. Ignore tile borders (\tagA).
+
+\paragraph{Random single tokens.} Given that our token is hidden, the remaining $1{,}023$ tokens contain
+$665-1=664$ hidden and $1{,}024-665=359$ visible ones. Each neighbour is visible with probability
+$359/1{,}023$. By \emph{linearity of expectation}\index{linearity of expectation} (the expected count is the sum
+of the probabilities, whether or not the events are independent):
+\begin{equation}\label{eq:decoderwork:single}
+\E[\text{visible neighbours}] = 8\times\frac{359}{1{,}023} = 8\times0.3509 = 2.807.
+\end{equation}
+
+\paragraph{$2\times2$ blocks.} Every token in a $2\times2$ block sits at a corner of its block. Take the
+top-left token. Of its 8 neighbours, 3 are in its own block (hidden for certain), 2 in the block above, 2 in
+the block to the left, 1 in the diagonal block.
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}[scale=0.7]
+\fill[maskgrey!70] (2,2) rectangle (4,4);
+\fill[loss!70] (2,3) rectangle (3,4);
+\foreach \i/\j in {1/2,1/3,1/4,2/4,3/4} {\fill[spat!40] (\i,\j) rectangle ++(1,1);}
+\foreach \x in {0,...,5} \foreach \y in {0,...,5} \draw[gray!50] (\x,\y) rectangle ++(1,1);
+\foreach \x in {0,2,4} \foreach \y in {0,2,4} \draw[very thick] (\x,\y) rectangle ++(2,2);
+\node[font=\small,align=left,anchor=west] at (6.3,4) {amber: the hidden token\\grey: its own block, hidden\\indigo: the 5 neighbours in\\\quad 3 other blocks};
+\end{tikzpicture}
+\caption{The top-left token of a hidden $2\times2$ block (thick outlines are blocks). Three of its 8 neighbours
+are in its own block and are certainly hidden; the other 5 lie in three neighbouring blocks.}
+\label{fig:decoderwork:neighbours}
+\end{figure}
+
+Given our block is hidden, the other 255 blocks contain $166-1=165$ hidden and $256-166=90$ visible ones. Each of
+the 5 outside neighbours is visible with probability $90/255$:
+\begin{align*}
+\E[\text{visible neighbours}] &= 3\times0 + 5\times\frac{90}{255}\\
+&= 5\times0.3529 = 1.765.
+\end{align*}
+Blocks cut the expected visible context from 2.807 to 1.765 neighbours, by a factor $1.765/2.807=0.63$. That is
+the intended effect: less of a target's halo in view. The cost is also visible in the arithmetic: ordinary
+texture is now rebuilt from neighbours further away.
+
+\subsection{Inference must match}
+
+The product reconstructs in two complementary checkerboard passes (\cref{ch:inference}). A model trained to
+fill 8\,px holes but asked to fill 4\,px ones sees more context than it trained with. So FT08 had to be inferred
+with checkerboard cells of \code{mask_block} tokens. On a $32\times32$-token tile with cell 2: $16\times16$ cells,
+and each pass hides 128 cells $=512$ tokens $=50\%$.
+
+The parent inferencer (\file{app/foundation_models/inferencers/segformer_mae_inferencer.py}) makes \emph{two}
+checkerboard choices, both from \code{config.checkerboard_cell_size}: which tokens each pass hides (the keep masks,
+built by \code{_checkerboard_keep_mask}) and which pass each pixel's prediction is taken from (\code{pass1_pixels},
+\code{pass2_pixels}). When FT08 was run, \code{SpectralStemInferencer} overrode only the first. The second still
+used cells of one token. \Cref{we:decoderwork:leak} counts what that did, and \cref{sec:decoderwork:leak} tells how
+it was found and fixed.
+
+\begin{worked}[label={we:decoderwork:leak}]{Half of each block taken from a pass that saw it}
+A $4\times4$-token tile, block 2. Write $h(i,j)=1$ if pass 1 hides token $(i,j)$ (cells of 2 tokens, pass 1 hiding
+the cells whose block row plus block column is odd) and $s(i,j)=1$ if the pixel's prediction is taken from pass 1
+(cells of 1 token, $i+j$ odd). A token is predicted correctly when $s=h$: taken from pass 1 exactly when pass 1 hid
+it.
+\begin{center}\small\ttfamily
+\begin{tabular}{cccc@{\qquad}cccc@{\qquad}cccc}
+\multicolumn{4}{c}{$h$} & \multicolumn{4}{c}{$s$} & \multicolumn{4}{c}{leak ($s\ne h$)}\\
+0&0&1&1 & 0&1&0&1 & .&x&x&.\\
+0&0&1&1 & 1&0&1&0 & x&.&.&x\\
+1&1&0&0 & 0&1&0&1 & x&.&.&x\\
+1&1&0&0 & 1&0&1&0 & .&x&x&.\\
+\end{tabular}
+\end{center}
+Count the leaks: two per row, $2+2+2+2=8$ of 16 tokens, $8/16=0.5$. The reason is local: inside any $2\times2$
+block $h$ is constant, while $s$ takes each value on exactly 2 of the 4 tokens. So in every block, whichever way
+the two patterns line up, 2 of 4 tokens agree and 2 disagree. \textbf{Half of each block's pixels were predicted by
+the pass in which their block was visible.}
+\end{worked}
+
+\begin{sourcenote}[: checkerboard cell size is in tokens]
+\code{InferenceConfig.checkerboard_cell_size} (\file{app/models/training/inference_config.py}) was described as
+the ``Size of each checkerboard cell in pixels''. The code passes it to \code{checkerboard_token_mask} as
+\code{cell_size}, documented there as ``checkerboard cell size in tokens'', and the inferencer compares it
+with \code{mask_block}, also in tokens. It is a token count. The description was corrected to ``stage-1 tokens
+(4 px each)'' on 2026-10-21 after the course found it.
+\end{sourcenote}
+
+\paragraph{What validation measures.} Both runs' per-epoch validation is ungated and uses single-token masks:
+\code{compute_validation_loss} in \file{spectral_stem_mae_trainer.py} builds two complementary random token masks
+itself, without \code{_build_prediction_mask} and without \code{gate_pixels}. So validation numbers compare
+with FT04's, and for FT08 they are measured under a masking different from its training and its inference.
+
+\section{FT07 and FT08: results}\label{sec:decoderwork:ft0708}
+
+The pass criteria, fixed before launch, against FT04 + RM with cloud excluded on the real PRISMA bench:
+(1) pAUC $\le$1\% at least $+0.005$ \emph{and} its paired-bootstrap 95\% interval above zero
+(\cref{ch:bootstrap}); (2) objects caught at the top 1\% and 0.1\% not lower; (3) bench-v2.1 caught top 1\% not
+lower by more than 0.5 points; (4) validation SAM within 0.1° of FT04 (3.88 / 4.11 / 5.46 for EnMAP / PRISMA /
+AVIRIS-NG) and EnMAP IoU water / cloud within 0.01 (0.839 / 0.810).
+
+\begin{table}[htbp]
+\centering\small
+\begin{tabular}{lccccc}
+\toprule
+ & pAUC & top 1\% / 0.1\% & TPR @ 0.1\% & ROC-AUC & v2.1 top 1\%\\
+\midrule
+FT04 & \textbf{0.170} & 46.0\% / 15.8\% & 0.065 & 0.852 & 36.2\%\\
+FT07 & 0.165 & 46.1\% / 15.4\% & 0.062 & -- & 36.4\%\\
+FT07 epoch 1 & 0.169 & 46.3\% / 15.5\% & 0.063 & -- & --\\
+FT08 & 0.164 & 46.4\% / 16.1\% & 0.062 & 0.844 & 36.7\%\\
+\midrule
+\multicolumn{6}{l}{Paired bootstrap against FT04 (1000 draws), pAUC:}\\
+\multicolumn{6}{l}{\quad FT07 $-0.0047\ [-0.0082,-0.0020]$;\quad FT08 $-0.0058\ [-0.0106,-0.0010]$}\\
+\bottomrule
+\end{tabular}
+\caption{FT07 and FT08 detection, real PRISMA bench, cloud excluded on FT04's masks; ``top'' is objects caught.
+Both best checkpoints are epoch 4. Source: \tagM{FT07-gated/README.md}.}
+\label{tab:decoderwork:ft0708}
+\end{table}
+
+\begin{drift}
+Run 2026-10-21. FT07 validation at epoch 4: SAM 3.90 / 4.16 / 5.47°, IoU 0.840 / 0.813. FT08 at epoch 4: SAM
+3.92 / 4.17 / 5.33°, IoU 0.841 / 0.807; FT08's AVIRIS-NG SAM swung 5.78 (epoch 3), 5.33 (4), 5.60 (5), as large as
+the 0.1° guard \tagM{FT07-gated/README.md}.
+\end{drift}
+
+Both failed criterion 1: the intervals lie wholly below zero, a real loss, small. Objects caught were a tie.
+Reconstruction and masks held (criterion 4), so the cost is specific to detection. FT07's cost grew with
+training: epoch 1 was $-0.001$, epoch 4 $-0.005$.
+
+\paragraph{Why gating hit the wrong pixels.} Real targets are under 0.1\% of pixels, and many are not the
+worst-reconstructed in a batch. The top 1\% of training error is mostly hard \emph{normal} pixels: field edges,
+texture, glint, shoreline. Gating them leaves the model slightly worse exactly where RM's false alarms come
+from, and does little to the targets.
+
+\paragraph{Why blocks moved objects one way and pixels the other.} Objects caught went up a little for FT08
+(unresolved) while pAUC fell. Hiding 8\,px blocks makes the model reconstruct each hidden pixel from further away
+(\cref{sec:decoderwork:neighbours}), so ordinary texture is rebuilt less exactly: more background residual
+everywhere, while targets gain little extra contrast.
+
+\begin{keypoint}
+Making the training ignore what it gets wrong does not make it ignore targets, because most of what it gets
+wrong is ordinary hard background.
+\end{keypoint}
+
+\subsection{The leak in FT08's evaluation, and the re-run}\label{sec:decoderwork:leak}
+
+The numbers above for FT08 were measured with the pass selection of \cref{we:decoderwork:leak}. On 2026-10-31,
+while this book was being written, its authors found the mismatch, and it was fixed the same day (commit d025059).
+\code{SpectralStemInferencer.__init__} now copies the model's block into the inference configuration before the
+parent is built, so both checkerboard choices read the same number:
+\begin{lstlisting}
+def __init__(self, config):
+    block = getattr(config.model_config_, "mask_block", 1)
+    if block > config.checkerboard_cell_size:
+        config = config.model_copy(update={"checkerboard_cell_size": block})
+    super().__init__(config)
+\end{lstlisting}
+The old \code{_checkerboard_keep_mask} override is gone. A test pins it:
+\code{test_block_inference_never_predicts_a_pixel_from_a_pass_that_saw_it}
+(\file{tests/test_foundation_models/test_gated_training.py}) builds a small model with \code{mask_block=2}, adds
+0.4 to every band of one $8\times8$-pixel block and checks that the predictions inside that block do not change.
+If any of them came from a pass that saw the block, they would. The FT07 README records that the test fails
+without the fix. FT04 and Heavy have \code{mask_block} 1 (the configuration default), so the \code{if} is false and
+nothing changes for them.
+
+FT08 was re-evaluated (\file{configs/eval/ft08_fixed.json}):
+\begin{center}\small
+\begin{tabular}{lccc}
+\toprule
+ & pAUC & caught top 1\% / 0.1\% & paired difference [95\% interval]\\
+\midrule
+FT08, leaky (2026-10-21) & 0.164 & 46.4\% / 16.1\% & $-0.0058\ [-0.0106,-0.0010]$ vs FT04\\
+FT08, fixed (2026-10-31) & 0.1638 & 46.1\% / 15.4\% & $-0.0057\ [-0.0101,-0.0013]$ vs FT04\\
+ & & & $-0.0010\ [-0.0047,+0.0028]$ vs FT07\\
+\bottomrule
+\end{tabular}
+
+\smallskip
+{\footnotesize Source: \tagM{research/experiments/indradhanu-finetune/FT07-gated/README.md} (last section).}
+\end{center}
+Against FT04 the clean FT08 is still a resolved loss; against FT07, the same gated loss without blocks, it is a
+tie. Blocks added nothing on top of gating. \textbf{The verdict ``block masking does not help'' stands, now on a
+measurement without the leak.}
+
+Why did predicting half the pixels from a pass that could see them move pAUC by only $0.0002$? A likely reason,
+not tested for FT08: \cref{sec:decoderwork:diagnosis} measures that FT04 reproduces pixels it can see barely
+better than ones it must predict (set2 background 0.110 visible against 0.137 hidden). A model that cannot copy
+what it sees gains little from seeing it.
+
+\begin{lesson}[: one setting, read in two places]
+A configuration value was read in two places and overridden in one. Nothing crashed, the numbers were
+plausible, and the conclusion happened to survive; but nobody could know that without re-running the
+evaluation. Two habits follow. When a model needs a non-default inference setting, change it where \emph{every}
+reader of the setting sees it (here, the configuration), not in one of the methods that reads it. And write the
+test that states the invariant directly (``no pixel is predicted by a pass that saw it''), so a future override
+cannot quietly break it again. The leak was found by people reading the code to explain it, which is one argument
+for writing explanations at all.
+\end{lesson}
+
+%======================================================================
+\section{Is the decoder the bottleneck? A diagnosis without training}\label{sec:decoderwork:diagnosis}
+
+Every change since FT04 had altered the loss, the masking or the score, never the shape of the network. The
+user's prompt was: ``Maybe a bigger model is the answer'', ``Or maybe more layers of decoding'', ``I feel the
+decoder maybe too un-expressive given the sophistication of the encoder.'' Before building anything, two
+measurements on the laptop, with no training, asked \emph{where} FT04's error comes from
+\tagM{decoder-capacity/README.md}.
+
+\subsection{Where the parameters are}
+
+\begin{center}
+\begin{tabular}{lrl}
+\toprule
+component & parameters & role\\
+\midrule
+encoder & 3,331,072 & four SegFormer stages (\cref{ch:encoder})\\
+decoder (reconstruction) & 2,164,736 & fuse at 1/4, then PixelShuffle(4) (\cref{ch:decoder})\\
+segmentation head & 371,536 & water / cloud masks (\cref{ch:seghead})\\
+\texttt{spectral\_in} & 14,721 & bands to 32 numbers per pixel (\cref{ch:specdecoder})\\
+\texttt{spectral\_out} & 4,257 & 32 numbers per pixel to any band list\\
+\bottomrule
+\end{tabular}
+\end{center}
+Building the FT04-sized model on CPU confirms the encoder, decoder and stem figures \tagC; the script
+and its output are in \file{research/textbook/tools/}. The decoder is 39\% of encoder plus decoder:
+$2{,}164{,}736/5{,}495{,}808=0.39$. It is not small, so ``make the decoder bigger'' is not the obvious fix. The
+question is not how many parameters it has but \emph{what it is able to draw}.
+
+\begin{worked}[label={we:decoderwork:ft04dec}]{FT04's decoder, 2,164,736 parameters}
+A \code{SegFormerDecoder} with widths $[32,64,160,256]$, \code{decoder_dim} 256 and 32 output channels (the
+spectral latent), so the last convolution makes $32\times16=512$ sub-pixel channels.
+\begin{align*}
+\text{projections} &: (32+64+160+256)\times256 + 4\times256 = 512\times256+1{,}024\\
+&\phantom{:}\ = 131{,}072+1{,}024 = 132{,}096\\
+\text{fuse} &: 1{,}024\times256+256 = 262{,}144+256 = 262{,}400\\
+\text{refine }3\times3 &: 256\times256\times9+256 = 589{,}824+256 = 590{,}080\\
+\text{sub-pixel }3\times3 &: 256\times512\times9+512 = 1{,}179{,}648+512 = 1{,}180{,}160\\
+\text{total} &: 132{,}096+262{,}400 = 394{,}496;\quad 394{,}496+590{,}080 = 984{,}576\\
+&\phantom{:}\ 984{,}576+1{,}180{,}160 = 2{,}164{,}736
+\end{align*}
+Over half the decoder (1,180,160) is the one layer that emits a whole $4\times4$ block at once.
+\end{worked}
+
+\subsection{Test 1: the spectral floor}\label{sec:decoderwork:floor}
+
+\code{WavelengthLinearDecoder} (\cref{ch:specdecoder}) makes band $n$ of a pixel as
+\begin{equation}\label{eq:decoderwork:wld}
+\hat x_n = \vect{U}(\lambda_n)\cdot\vect{z} + c(\lambda_n),
+\end{equation}
+with $\vect{z}$ the 32 numbers the decoder predicts for the pixel and $\vect{U}(\lambda_n)$ a 32-vector. Stack
+the rows $\vect{U}(\lambda_n)$ into a matrix $\mat{U}$ of shape $N\times32$: every output spectrum is the offset
+curve $\vect{c}$ plus $\mat{U}\vect{z}$, a mixture of the 32 fixed columns of $\mat{U}$.
+
+\begin{definition}[Span and spectral floor]
+The \emph{span}\index{span} of a set of vectors is the set of all their weighted sums. The \emph{spectral
+floor}\index{spectral floor} of a pixel is the part of its (offset-removed) spectrum that lies outside the span of
+the columns of $\mat{U}$: error that no choice of $\vect{z}$, and so no change upstream of \code{spectral_out},
+can remove.
+\end{definition}
+
+The closest point of the span to a spectrum $\vect{x}$ is its \emph{orthogonal projection}\index{projection}
+(\cref{ch:linalg}). For one curve $\vect{u}$ the projection is $a^\star\vect{u}$ with
+$a^\star=(\vect{x}\cdot\vect{u})/(\vect{u}\cdot\vect{u})$.
+
+\begin{worked}[label={we:decoderwork:floor}]{The floor with 3 bands and 1 curve}
+Do this on paper. The model has 3 bands, one curve $\vect{u}=(1,1,1)$ and no offset: every reconstruction is a
+flat spectrum $a(1,1,1)$. The real pixel is $\vect{x}=(2,1,3)$.
+\begin{align*}
+\vect{x}\cdot\vect{u} &= 2\times1+1\times1+3\times1 = 2+1+3 = 6\\
+\vect{u}\cdot\vect{u} &= 1+1+1 = 3\\
+a^\star &= 6/3 = 2;\quad\text{projection } = (2,2,2)\\
+\text{floor} &= \vect{x}-\text{projection} = (2-2,\ 1-2,\ 3-2) = (0,-1,1)\\
+\text{floor energy} &= 0^2+(-1)^2+1^2 = 0+1+1 = 2
+\end{align*}
+Now the model predicts $a=1.5$:
+\begin{align*}
+\text{residual} &= (1.5-2,\ 1.5-1,\ 1.5-3) = (-0.5,\ 0.5,\ -1.5)\\
+\text{energy} &= 0.25+0.25+2.25 = 2.75\\
+\text{floor share} &= 2/2.75 = 0.73
+\end{align*}
+73\% of this residual's energy is floor; the other 27\% is the model choosing 1.5 instead of 2.
+\end{worked}
+
+\paragraph{Why the share can never exceed 1.} Split the residual $\vect{e}=\xhat-\vect{x}$ into its part in the
+span and its part at right angles to the span. Every reconstruction lies in the span, so the out-of-span part of
+$\vect{e}$ is exactly minus the out-of-span part of $\vect{x}$, the floor $\vect{f}$. Write
+$\vect{e}=\vect{s}-\vect{f}$ with $\vect{s}$ in the span and $\vect{f}$ orthogonal to it. Then
+\begin{align*}
+\norm{\vect{e}}^2 &= (\vect{s}-\vect{f})\cdot(\vect{s}-\vect{f})
+  \intertext{expand the product:}
+  &= \vect{s}\cdot\vect{s} - 2\,\vect{s}\cdot\vect{f} + \vect{f}\cdot\vect{f}
+  \intertext{$\vect{s}\cdot\vect{f}=0$ because they are at right angles:}
+  &= \norm{\vect{s}}^2+\norm{\vect{f}}^2 \;\ge\; \norm{\vect{f}}^2 .
+\end{align*}
+This is Pythagoras' theorem. Check it on \cref{we:decoderwork:floor}:
+\[
+\vect{s}=(1.5,1.5,1.5)-(2,2,2)=(-0.5,-0.5,-0.5),\qquad \norm{\vect s}^2=0.75,\qquad 0.75+2=2.75. \checkmark
+\]
+
+The script \file{spectral_floor.py} does this with 32 curves, using a QR decomposition: \code{Q, _ =
+np.linalg.qr(U)} gives an orthonormal basis $\mat{Q}$ of the same span, so the projection is
+$\mat{Q}(\mat{Q}\T\vect{x})$. It runs over every target pixel and 200,000 random background pixels per scene.
+
+\begin{table}[htbp]
+\centering\small
+\begin{tabular}{lcccc}
+\toprule
+scene & background: actual / floor & floor share & targets: actual / floor & floor share\\
+\midrule
+set1 & 0.048 / 0.013 & 0.07 & 0.189 / 0.022 & 0.02\\
+set2 & 0.122 / 0.017 & 0.02 & 0.204 / 0.025 & 0.02\\
+set3 & 0.121 / 0.033 & 0.09 & 0.149 / 0.043 & 0.10\\
+set4 & 0.115 / 0.015 & 0.03 & 0.177 / 0.025 & 0.03\\
+\bottomrule
+\end{tabular}
+\caption{The spectral floor of FT04 on the PRISMA bench, normalised units. ``Actual / floor'' are mean absolute
+errors; the share is of squared error (energy). Source: \tagM{decoder-capacity/README.md}.}
+\label{tab:decoderwork:floor}
+\end{table}
+
+The floor is 2--10\% of the residual energy. Over 90\% of FT04's error is in which $\vect{z}$ the decoder
+predicts. Test 1 clears \code{spectral_out}. (Mind the units: set1 background's floor is $0.013/0.048=0.27$ of
+the error in mean-absolute terms but $0.07$ in energy terms; squaring shrinks small parts relative to large
+ones.)
+
+\subsection{Test 2: visible against hidden pixels}\label{sec:decoderwork:visible}
+
+FT04's background error could come from two causes.
+\begin{itemize}
+\item \textbf{Unpredictability.} A hidden pixel's value is not fully fixed by its neighbours. No decoder can fix
+  this, and it is also what makes targets detectable.
+\item \textbf{Capacity.} The network cannot \emph{render} the detail even when it has it. A better architecture
+  can fix this.
+\end{itemize}
+Run the model with \emph{no mask}, every token visible: unpredictability is gone, so what error is left is
+capacity. Compare it with the error on hidden pixels from the product's two complementary passes. The script
+\file{visible_vs_hidden.py} cuts 24 random 128\,px tiles per PRISMA scene, keeping only tiles at least 95\% valid.
+
+\begin{table}[htbp]
+\centering\small
+\begin{tabular}{lcccc}
+\toprule
+scene & background visible & background hidden & targets visible & targets hidden\\
+\midrule
+set1 & 0.056 & 0.057 & 0.194 & 0.218\\
+set2 & 0.110 & 0.137 & 0.161 & 0.220\\
+set3 & 0.159 & 0.129 & 0.176 & 0.179\\
+set4 & 0.135 & 0.139 & 0.169 & 0.191\\
+\bottomrule
+\end{tabular}
+\caption{FT04's mean absolute error per band (normalised), with no mask (visible) and in the two-pass
+inference (hidden). Source: \tagM{decoder-capacity/README.md}.}
+\label{tab:decoderwork:visible}
+\end{table}
+
+On set1 FT04 copies the background it can see (0.056) no better than the background it must predict (0.057). On
+set2 and set4 visible is only modestly better; on set3 it is \emph{worse}, which neither the README nor this book
+can explain. A model limited by unpredictability would autoencode visible pixels almost exactly. \textbf{This one
+is limited by what its architecture can render.}
+
+\subsection{Why: the \texorpdfstring{$4\times4$}{4x4}-token bottleneck, counted}\label{sec:decoderwork:bottleneck}
+
+Follow one stage-1 token. The stage-1 patch embedding is a convolution with kernel 4 and stride 4
+(\cref{ch:patchembed}), so a token reads a $4\times4$ block of pixels with 32 channels each:
+\begin{align*}
+\text{numbers into the token} &= 4\times4\times32 = 512\\
+\text{numbers out (stage-1 width)} &= 32\\
+\text{compression} &= 512/32 = 16\text{ to }1;\quad\text{per pixel } 32/16 = 2 \text{ numbers}.
+\end{align*}
+
+\paragraph{A counting argument for a whole tile.} The decoder must produce $32\times128\times128=524{,}288$
+numbers for a 128\,px tile (32 latent numbers per pixel). Everything it knows about the tile arrives through the
+four encoder stages:
+\begin{align*}
+\text{stage 1} &: 32\times32\text{ tokens}\times32 = 32{,}768\\
+\text{stage 2} &: 16\times16\times64 = 16{,}384\\
+\text{stage 3} &: 8\times8\times160 = 10{,}240\\
+\text{stage 4} &: 4\times4\times256 = 4{,}096\\
+\text{total} &: 32{,}768+16{,}384+10{,}240+4{,}096 = 63{,}488\\
+\text{per pixel} &: 63{,}488/16{,}384 = 3.875 \text{ numbers, against 32 to produce}.
+\end{align*}
+Only stage 1 is at the resolution of a $4\times4$ block, and it carries 2 numbers per pixel; the other stages are
+coarser still. This is a count, not a proof: the network is nonlinear, and natural images are compressible, so
+3.875 numbers per pixel can carry a lot. But the detail that does not fit through has no other route.
+
+\paragraph{The linear case: rank.} If the path were linear, the argument would be exact. A linear map from 512
+numbers to 32 and back to 512 is a product $\mat{D}\mat{E}$ with $\mat{E}$ of shape $32\times512$ and $\mat{D}$
+of shape $512\times32$; its \emph{rank}\index{rank (of a matrix)} (the dimension of the set of outputs it can
+produce) is at most 32. At least $512-32=480$ directions of variation inside a block are lost entirely.
+
+\begin{worked}[label={we:decoderwork:rank}]{Two pixels through one number}
+Squeeze two one-channel pixels $(a,b)$ through one number and back: encode $z=(a+b)/2$, decode $(z,z)$.
+\begin{align*}
+(a,b)=(3,1)&:\ z=(3+1)/2=2,\ \text{output }(2,2),\ \text{error }(2-3,\ 2-1)=(-1,\ 1)\\
+(a,b)=(1,3)&:\ z=(1+3)/2=2,\ \text{output }(2,2),\ \text{error }(1,\ -1)\\
+(a,b)=(2,2)&:\ z=2,\ \text{output }(2,2),\ \text{error }(0,0)
+\end{align*}
+Three different inputs, one output. The difference $a-b$ never reaches the decoder, so no decoder, however large,
+can restore it, even though the input was \emph{visible}. That is test 2's finding in miniature: visible
+pixels are copied no better than hidden ones.
+\end{worked}
+
+FT04's decoder then fuses the four stages at 1/4 resolution and emits each $4\times4$ block \emph{at once} from
+one 256-wide vector: a $3\times3$ convolution to 512 channels and PixelShuffle(4) (\cref{ch:decoder}). Every
+pixel gets its own output channel and its own weights, but all 16 are computed from the same token-level input.
+\textbf{Nothing at full resolution ever comes back in.}
+
+\begin{keypoint}
+The decoder's limit is not its parameter count but its paths: sub-token detail that did not fit through 32
+numbers per token is gone, for visible pixels as much as hidden ones.
+\end{keypoint}
+
+%======================================================================
+\section{FT09: the progressive decoder}\label{sec:decoderwork:ft09}
+
+The diagnosis asked for two things: upsampling in \emph{stages}, so detail is rendered gradually, and a
+\emph{full-resolution skip}\index{skip connection!full-resolution}: a second input that bypasses the encoder
+and arrives at the decoder at full size, in the style of U-Net \citep{ronneberger2015unet}. This is not the
+residual connection inside a transformer block (\cref{ch:block}); it runs from the start of the network to the
+end.
+
+\subsection{Shapes, stage by stage}
+
+The skip is $\vect{z}$, the stem output after BatchNorm: 32 numbers per pixel. \code{ProgressiveDecoder} in
+\file{app/foundation_models/components/progressive_decoder.py}, with FT09's widths (\code{decoder_dim} 256,
+\code{skip_channels} 32, \code{stage_dims} (192, 96)), for a 128\,px tile and batch $B$:
+
+\begin{table}[htbp]
+\centering\small
+\begin{tabular}{lll}
+\toprule
+scale & operation & shape\\
+\midrule
+in & encoder stages F1, F2 & \shape{(B,32,32,32)}, \shape{(B,64,16,16)}\\
+in & encoder stages F3, F4 & \shape{(B,160,8,8)}, \shape{(B,256,4,4)}\\
+in & skip $\vect{z}$, hidden pixels zeroed & \shape{(B,32,128,128)}\\
+1/4 & $1\times1$ projections to 256, bilinear up, concat & \shape{(B,1024,32,32)}\\
+1/4 & $1\times1$ fuse + GELU (warm-started) & \shape{(B,256,32,32)}\\
+1/2 & bilinear $\times2$ & \shape{(B,256,64,64)}\\
+1/2 & concat \texttt{avg\_pool2d(skip, 2)} & \shape{(B,288,64,64)}\\
+1/2 & \texttt{up\_half}: $3\times3$ conv, GELU, $3\times3$ conv, GELU & \shape{(B,192,64,64)}\\
+1 & bilinear $\times2$ & \shape{(B,192,128,128)}\\
+1 & concat skip & \shape{(B,224,128,128)}\\
+1 & \texttt{up\_full}: $3\times3$ conv, GELU, $3\times3$ conv, GELU & \shape{(B,96,128,128)}\\
+1 & \texttt{head}: $1\times1$ conv & \shape{(B,32,128,128)}\\
+out & \texttt{spectral\_out}, unchanged & \shape{(B,N,128,128)}\\
+\bottomrule
+\end{tabular}
+\caption{\texttt{ProgressiveDecoder.forward} for a 128\,px tile with FT09's widths.}
+\label{tab:decoderwork:shapes}
+\end{table}
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}[font=\small,box/.style={draw,rounded corners,minimum height=7mm,align=center},>=Stealth]
+\node[box,fill=spat!15] (enc) at (0,0) {encoder\\F1..F4};
+\node[box,fill=attn!12] (fuse) at (2.8,0) {project+fuse\\$256@32^2$};
+\node[box,fill=attn!12] (half) at (5.8,0) {\texttt{up\_half}\\$192@64^2$};
+\node[box,fill=attn!12] (full) at (8.8,0) {\texttt{up\_full}\\$96@128^2$};
+\node[box,fill=spec!15] (head) at (11.4,0) {head\\$32@128^2$};
+\node[box,fill=spec!15] (stem) at (0,-2.2) {stem $\vect z$\\$32@128^2$};
+\node[box,fill=maskgrey!30] (zero) at (2.8,-2.2) {zero hidden\\pixels};
+\node[box,fill=maskgrey!15] (pool) at (5.8,-2.2) {avg pool $2$\\$32@64^2$};
+\draw[->] (enc)--(fuse); \draw[->] (fuse)--node[above]{$\times2$}(half); \draw[->] (half)--node[above]{$\times2$}(full); \draw[->] (full)--(head);
+\draw[->] (stem)--(zero); \draw[->] (zero)--(pool); \draw[->] (pool)--(half);
+\draw[->] (zero.east) -- ++(0.4,0) |- ($(zero.south)+(0,-0.4)$) -| (full.south);
+\draw[->] (stem.north)--(enc.south);
+\end{tikzpicture}
+\caption{The progressive decoder. The stem output reaches the decoder twice: through the encoder (top) and
+through the masked skip (bottom), at half and full resolution. Channel counts are written as ``channels @ size''.}
+\label{fig:decoderwork:progressive}
+\end{figure}
+
+\subsection{The parameter count by hand}
+
+\begin{worked}[label={we:decoderwork:prog}]{The progressive decoder's 1,504,096 parameters}
+Every convolution has $c_\text{in}\times c_\text{out}\times k\times k+c_\text{out}$ parameters. Do it on paper.
+\begin{align*}
+\text{projections} &: (32+64+160+256)\times256 + 4\times256 = 131{,}072+1{,}024 = 132{,}096\\
+\text{fuse} &: 1{,}024\times256+256 = 262{,}144+256 = 262{,}400\\
+\texttt{up\_half}\ 1 &: 288\times192\times9+192 = 497{,}664+192 = 497{,}856\\
+\texttt{up\_half}\ 2 &: 192\times192\times9+192 = 331{,}776+192 = 331{,}968\\
+\texttt{up\_full}\ 1 &: 224\times96\times9+96 = 193{,}536+96 = 193{,}632\\
+\texttt{up\_full}\ 2 &: 96\times96\times9+96 = 82{,}944+96 = 83{,}040\\
+\texttt{head} &: 96\times32+32 = 3{,}072+32 = 3{,}104\\[3pt]
+\text{running total} &: 132{,}096+262{,}400 = 394{,}496\\
+&\phantom{:}\ 394{,}496+497{,}856 = 892{,}352\\
+&\phantom{:}\ 892{,}352+331{,}968 = 1{,}224{,}320\\
+&\phantom{:}\ 1{,}224{,}320+193{,}632 = 1{,}417{,}952\\
+&\phantom{:}\ 1{,}417{,}952+83{,}040 = 1{,}500{,}992\\
+&\phantom{:}\ 1{,}500{,}992+3{,}104 = 1{,}504{,}096
+\end{align*}
+\end{worked}
+
+\begin{sourcenote}[: 1,504,096 verified]
+Building \code{ProgressiveDecoder([32, 64, 160, 256])} on CPU gives 1,504,096 \tagC
+(\file{research/textbook/tools/compute_39-41.py}); the source comment reads ``1.50 M with FT04 widths (FT04's
+decoder: 2.16 M)''. \textbf{The new decoder has fewer parameters than the old one}: it is wired differently, not
+bigger.
+\end{sourcenote}
+
+It does far more arithmetic, though. \texttt{up\_full}'s first convolution runs its 193,536 multiply-adds at each
+of $128\times128=16{,}384$ pixels: $193{,}536\times16{,}384\approx3.17\times10^9$ per tile. FT04's two refine
+convolutions together at $32\times32$: $(589{,}824+1{,}179{,}648)\times1{,}024=1{,}769{,}472\times1{,}024\approx
+1.81\times10^9$. These are hand counts, not timings \tagC.
+
+\subsection{The skip must not carry hidden pixels}
+
+This is the trap in the design. The masked autoencoder works because a hidden pixel's value never reaches its
+own reconstruction (\cref{ch:recon}). A skip that bypasses the encoder would undo that: hand the decoder the real
+pixel and it will copy it, the residual vanishes, and every target with it. So \code{_decode} in
+\file{spectral_stem_seg_former_mae.py} zeroes them:
+\begin{lstlisting}
+visible = keep_mask.reshape(B, 1, H // 4, W // 4).to(z.dtype)    # (B, 1, 32, 32): 1 = visible token
+z = z * F.interpolate(visible, scale_factor=4, mode="nearest")   # (B, 32, 128, 128): token's 16 pixels
+return self.decoder(features, z)
+\end{lstlisting}
+Nearest-neighbour interpolation by 4 copies each token's 0 or 1 to its 16 pixels. The half-resolution skip is
+\code{avg_pool2d(skip, 2)}: since 2 divides 4 and the $2\times2$ windows line up with token borders, each average
+stays inside one token, so a hidden token is 0 at both resolutions. Neighbouring \emph{visible} pixels still reach
+a hidden pixel through the $3\times3$ convolutions; the docstring calls that context, as in the encoder.
+
+The test \code{test_hidden_pixels_never_reach_the_output} builds a small model and a 64\,px tile ($16\times16=256$
+tokens), hides tokens 0, 17, 100 and 255, makes a second input in which \emph{only those tokens' pixels} are
+replaced with fresh random values, and asserts the two reconstructions agree everywhere to $10^{-6}$. Token $t$
+is at row $\lfloor t/16\rfloor$, column $t \bmod 16$: token 17 is $(1,1)$, pixels rows 4--7, columns 4--7; token
+100 is $(6,4)$, rows 24--27, columns 16--19. Its partner test shows the skip is live: adding 0.5 to one visible
+pixel moves that pixel's own reconstruction by more than $10^{-4}$.
+
+\subsection{Warm start and two-phase training}
+
+FT09 starts from FT04's \code{best.pt}. The new decoder kept the old layer names \code{linear_projections} and
+\code{fuse_conv}, so those load; the old \code{refine.*} is dropped. How much of the decoder is warm?
+$132{,}096+262{,}400=394{,}496$ of 1,504,096, that is $394{,}496/1{,}504{,}096=0.26$. \textbf{Three quarters of the
+new decoder starts random.}
+
+The first attempt trained everything jointly from the start (lr $10^{-4}$, planned 8 epochs) and was stopped
+after epoch 3, still 0.5--1° SAM behind FT04: a mostly random decoder had $3\times30{,}000=90{,}000$ samples to
+learn from, against the millions behind FT04's, on a learning rate already decaying, and its early gradients
+pushed a good encoder around to suit a bad decoder. The fix split training in two \tagM{FT09-decoder/README.md}:
+
+\begin{center}\small
+\begin{tabular}{llllll}
+\toprule
+run & mode & what trains & lr & epochs & starts from\\
+\midrule
+FT09a & \texttt{"decoder"} & \texttt{decoder.*} only & $10^{-3}$ & 3 & FT04\\
+FT09b & \texttt{"joint"} & everything & $5\times10^{-5}$ & 5 & FT09a\\
+FT09c & \texttt{"joint"} & everything & $3\times10^{-5}$ & 5 & FT09b\\
+\bottomrule
+\end{tabular}
+\end{center}
+With \code{spectral_out} frozen in FT09a, the decoder is in effect learning to emit FT04's own code $\vect{z}$.
+FT09a reached FT04's reconstruction, within 0.1° on all three sensors (3.98 / 4.14 / 5.50° against 3.88 / 4.11 /
+5.46°), in 3 epochs.
+
+\subsection{Did it do what it was built for? Contrast}
+
+\begin{table}[htbp]
+\centering\footnotesize\setlength{\tabcolsep}{3pt}
+\begin{tabular}{lcccc}
+\toprule
+ & set1 & set2 & set3 & set4\\
+\midrule
+hidden background FT04 $\to$ FT09a & 0.057 $\to$ \textbf{0.051} & 0.137 $\to$ \textbf{0.125} & 0.129 $\to$ \textbf{0.117} & 0.139 $\to$ \textbf{0.110}\\
+hidden targets FT04 $\to$ FT09a & 0.218 $\to$ 0.204 & 0.220 $\to$ 0.203 & 0.179 $\to$ 0.171 & 0.191 $\to$ 0.162\\
+target / background & 3.82 $\to$ \textbf{4.00} & 1.61 $\to$ \textbf{1.62} & 1.39 $\to$ \textbf{1.46} & 1.37 $\to$ \textbf{1.47}\\
+visible background & 0.056 $\to$ 0.176 & 0.110 $\to$ 0.120 & 0.159 $\to$ 0.120 & 0.135 $\to$ 0.115\\
+\bottomrule
+\end{tabular}
+\caption{The mechanism check on FT09a, mean absolute error per band, normalised. Source:
+\tagM{FT09-decoder/README.md}.}
+\label{tab:decoderwork:contrast}
+\end{table}
+
+\begin{worked}[label={we:decoderwork:contrast}]{Set1's contrast change}
+\begin{align*}
+\text{background fall} &: 0.057-0.051 = 0.006;\quad 0.006/0.057 = 0.105\ (10.5\%)\\
+\text{target fall} &: 0.218-0.204 = 0.014;\quad 0.014/0.218 = 0.064\ (6.4\%)\\
+\text{new ratio} &: 0.204/0.051 = 4.00
+\end{align*}
+Background fell by a larger fraction than targets, so the ratio rose.
+\end{worked}
+
+Hidden background error fell more than target error on all four scenes, so contrast rose on all four: the
+intended effect, and the first model change in the series to move it.
+
+\begin{sourcenote}[: ``6--21\%'' or ``9--21\%'']
+Course part 67 records that the FT09 README said hidden background error ``falls 6-21\%'', while its own table
+gives set1 10.5\%, set2 $0.012/0.137=8.8\%$, set3 $0.012/0.129=9.3\%$, set4 $0.029/0.139=20.9\%$: 9--21\%. The
+README now reads ``falls 9-21\%'' (\file{research/experiments/indradhanu-finetune/FT09-decoder/README.md}); the
+course note predates the correction.
+\end{sourcenote}
+
+\paragraph{Criterion 5, stated honestly.} Before launch the README fixed a mechanism criterion: visible-pixel
+background error well below FT04's on all four scenes. The last row of \cref{tab:decoderwork:contrast} is that
+test, and it \textbf{failed}: set1 got much worse (0.056 to 0.176). Afterwards the README recorded a caveat: the
+progressive decoder only ever trained with about 65\% of its skip zeroed, so a fully unmasked input is outside
+anything it has seen. That argument is reasonable, but the yardstick was judged wrong \emph{after} the result came
+in, which is exactly what fixing criteria in advance is meant to prevent. Treat the mechanism as supported, not
+proven.
+
+\subsection{FT09b: detection, and the bootstrap}
+
+\begin{table}[htbp]
+\centering\small
+\begin{tabular}{lccccc}
+\toprule
+ & pAUC & top 1\% / 0.1\% & TPR @ 0.1\% & ROC-AUC & v2.1 top 1\%\\
+\midrule
+FT04 & 0.170 & 46.0\% / \textbf{15.8\%} & \textbf{0.065} & 0.852 & \textbf{36.2\%}\\
+FT09a & 0.169 & 46.1\% / 15.6\% & 0.061 & 0.856 & 35.8\%\\
+FT09b & \textbf{0.176} & \textbf{47.1\%} / 15.4\% & 0.063 & \textbf{0.854} & 36.1\%\\
+FT09c & 0.172 & 46.4\% / 15.0\% & -- & -- & 36.3\%\\
+\bottomrule
+\end{tabular}
+\caption{FT09 detection, real PRISMA bench, cloud excluded on FT04's masks. Source: \tagM{FT09-decoder/README.md}.}
+\label{tab:decoderwork:ft09}
+\end{table}
+
+The bench pAUC is the mean over the four scenes. Check it from the unrounded per-scene values in
+\file{eval_per_scene.csv}:
+\begin{align*}
+\text{FT04} &: 0.24603+0.12817+0.08428+0.21986 = 0.67834;\quad 0.67834/4 = 0.16959\\
+\text{FT09b} &: 0.26010+0.13061+0.08301+0.22873 = 0.70245;\quad 0.70245/4 = 0.17561\\
+\text{change} &: 0.17561-0.16959 = 0.00602
+\end{align*}
+which is the bootstrap's point value $+0.0060$.
+
+The paired object bootstrap of \cref{ch:bootstrap} resamples the bench's 909 objects with replacement 1000 times
+and recomputes the difference each time; the 95\% interval runs from the 2.5th to the 97.5th percentile of those
+differences. For FT09b $-$ FT04 \tagM{FT09b-decoder-joint/bootstrap.txt}:
+\[
+\text{pAUC: } +0.0060\ [+0.0002,\ +0.0118],\quad P(B>A)=0.976 .
+\]
+The interval clears zero, by $0.0002$. Caught at the top 1\%: $+1.1$ points $[-0.3,+2.4]$, a tie. Caught at the
+top 0.1\%: $-0.4$ points $[-1.4,+0.6]$, a tie in the wrong direction: FT04 caught $57+33+13+41=144$ objects and
+FT09b $56+34+9+41=140$, and $4/909=0.44\%$; the whole loss is set3, 13 to 9.
+
+\begin{worked}[label={we:decoderwork:interval}]{Reading an interval as a margin}
+The interval is centred near the point value: $0.0060-0.0002=0.0058$ below and $0.0118-0.0060=0.0058$ above.
+Its half-width $0.0058$ is the bench's resolution for this pair. A gain of $+0.0060$ is only
+$0.0060/0.0058=1.03$ half-widths from zero: the smallest margin the rule (``interval above zero'') allows.
+Compare cloud exclusion, $+0.0074\ [+0.0047,+0.0101]$: half-width $0.0027$, margin $0.0074/0.0027=2.7$.
+\end{worked}
+
+So FT09b met criterion 1 by $+0.0002$, failed criterion 2 at the top 0.1\% (unresolved), met 3 ($-0.1$ points) and
+4, and failed 5 as written. A candidate, not a release. FT09a alone, with higher contrast already, \emph{tied}
+FT04 ($-0.0006\ [-0.0056,+0.0043]$): the joint phase, with the encoder adapting to the new decoder, did the work.
+
+\subsection{FT09c: the gain does not hold}
+
+FT09b's best checkpoint was its last epoch, so FT09c continued it for five epochs at $3\times10^{-5}$. Its
+reconstruction got better (AVIRIS-NG SAM 5.41 to 5.34°, better than FT04) and its detection worse: pAUC 0.172, a
+tie with FT04 ($+0.0020\ [-0.0026,+0.0064]$), and a \emph{resolved} loss against FT09b,
+$-0.0040\ [-0.0076,-0.0010]$ \tagM{FT09-decoder/README.md}.
+
+\begin{keypoint}
+A gain must hold across neighbouring checkpoints: the object bootstrap resamples objects, not training runs, so
+it cannot see checkpoint-to-checkpoint variation, which here was as large as the gain itself.
+\end{keypoint}
+
+The progressive decoder was not adopted. Its mechanism (higher hidden-pixel contrast) was real; its effect on
+detection was within checkpoint noise. And again, as with FT06: better reconstruction is not better detection.
+
+\begin{drift}
+FT09 runs 2026-10-22, FT09c evaluated 2026-10-23 (it finished unevaluated and the GPU sat idle about 10 hours
+because no watcher was set). Per-scene pAUC FT09c: 0.254 / 0.131 / 0.082 / 0.219
+\tagM{FT09-decoder/README.md}.
+\end{drift}
+
+\section{The cumulative lesson since FT04}\label{sec:decoderwork:cumulative}
+
+\begin{table}[htbp]
+\centering\small
+\begin{tabular}{llcl}
+\toprule
+change tried on FT04 & chapter & pAUC change [95\% interval] & verdict\\
+\midrule
+cloud exclusion & \ref{ch:bootstrap} & $+0.0074\ [+0.0047,+0.0101]$ & real gain, adopted\\
+FT06 residual$/\sqrt b$ & \ref{ch:uncertainty} & $-0.0067\ [-0.0174,+0.0037]$ & tie\\
+gated scene adaptation, $N=50$ & \ref{ch:scoringgains} & $-0.0091\ [-0.0176,-0.0028]$ & real loss\\
+FT07 gated loss & this & $-0.0047\ [-0.0082,-0.0020]$ & real loss, small\\
+FT08 gated loss + blocks & this & $-0.0057\ [-0.0101,-0.0013]$ & real loss, small\\
+FT09a decoder only & this & $-0.0006\ [-0.0056,+0.0043]$ & tie\\
+FT09b decoder, joint & this & $+0.0060\ [+0.0002,+0.0118]$ & gain by a hair\\
+FT09c five more epochs & this & $+0.0020\ [-0.0026,+0.0064]$ & tie: FT09b did not hold\\
+\bottomrule
+\end{tabular}
+\caption{Every change tried on FT04 with a paired bootstrap interval. Sources: \tagM{bench-resolution/README.md},
+\tagM{FT07-gated/README.md}, \tagM{FT09-decoder/README.md}. FT06 residual$/b$ (0.170 to 0.125) was not
+bootstrapped. FT08's row is the 2026-10-31 re-run without the evaluation leak (\cref{sec:decoderwork:leak}); the
+leaky run read $-0.0058\ [-0.0106,-0.0010]$.}
+\label{tab:decoderwork:cumulative}
+\end{table}
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}
+\begin{axis}[width=0.9\linewidth,height=7.5cm,xmin=-0.02,xmax=0.014,ymin=0.4,ymax=8.6,
+  ytick={1,...,8},yticklabels={FT09c,FT09b,FT09a,FT08,FT07,gated SA,FT06 sqrt,cloud excl.},
+  xlabel={pAUC change against FT04},xtick={-0.02,-0.015,-0.01,-0.005,0,0.005,0.01},
+  scaled x ticks=false,xticklabel style={/pgf/number format/fixed,/pgf/number format/precision=3,font=\scriptsize},
+  grid=major,grid style={gray!15}]
+\draw[thick,maskgrey] (axis cs:0,0.4) -- (axis cs:0,8.6);
+\addplot[only marks,mark=*,loss,error bars/.cd,x dir=both,x explicit]
+ coordinates {
+ (0.0074,8) += (0.0027,0) -= (0.0027,0)
+ (-0.0067,7) += (0.0104,0) -= (0.0107,0)
+ (-0.0091,6) += (0.0063,0) -= (0.0085,0)
+ (-0.0047,5) += (0.0027,0) -= (0.0035,0)
+ (-0.0057,4) += (0.0044,0) -= (0.0044,0)
+ (-0.0006,3) += (0.0049,0) -= (0.0050,0)
+ (0.0060,2) += (0.0058,0) -= (0.0058,0)
+ (0.0020,1) += (0.0044,0) -= (0.0046,0)
+ };
+\end{axis}
+\end{tikzpicture}
+\caption{\Cref{tab:decoderwork:cumulative} drawn to scale: point values with their 95\% paired-bootstrap
+intervals. Only cloud exclusion lies wholly right of zero; FT09b touches it, and FT09c falls back.}
+\label{fig:decoderwork:intervals}
+\end{figure}
+
+Read down the last column. Since FT04, every change except cloud exclusion has been inside the bench's noise or a
+small, consistent cost, and the one exception from the network's shape (FT09b) did not survive further training.
+None of these changes altered how much the \emph{encoder} can hold: its widths stayed 32, 64, 160, 256. That is
+the question \cref{ch:heavy} takes up.
+
+\begin{confusions}
+\confusion{Top 1\% gated means 1\% of the loss is gone.}{The halo multiplies it: one isolated pixel with
+\texttt{gate\_halo = 2} becomes a $5\times5$ square of 25. And the share of loss \emph{value} removed exceeds the
+share of pixels, because the gated pixels are the large ones (\cref{we:decoderwork:share}).}
+\confusion{FT08 hides more of the tile than FT04.}{Almost the same share, 664 against 665 tokens on a 128\,px
+tile, in bigger pieces. What changes is the visible context: 1.765 against 2.807 expected visible neighbours.}
+\confusion{The FT08 leak inflated its score, so FT08 was really much worse.}{The clean re-run reads 0.1638
+against the leaky 0.164, well inside what the bench resolves. The leak was real; its effect on this model was
+tiny, and the verdict is the same.}
+\confusion{FT08's validation score beat FT04's, so FT08 reconstructs better.}{Validation uses single-token masks,
+not FT08's blocks, and SAM swings by about the guard from epoch to epoch.}
+\confusion{The decoder has 2.16 M parameters, so it cannot be under-powered.}{Parameters are not the issue; paths
+are. Its parameters all work at 1/4 resolution on token-level vectors (\cref{we:decoderwork:rank}).}
+\confusion{A floor share of 0.07 means the floor is 7\% of the mean absolute error.}{The share is of squared
+error (energy). In mean-absolute terms set1 background's floor is 0.27 of the error.}
+\confusion{The progressive decoder is bigger, so the gain came from parameters.}{It is smaller, 1.50 M against
+2.16 M; it does more arithmetic because it works at full resolution.}
+\confusion{The skip leaks hidden pixels.}{Hidden tokens are zeroed at full and half resolution, and a test
+checks it to $10^{-6}$. Visible neighbours do reach a hidden pixel through $3\times3$ convolutions; that is context.}
+\confusion{FT09b cleared the bootstrap, so it is a real improvement.}{It cleared the \emph{object} bootstrap at
+one checkpoint, by 0.0002. Five more epochs gave a resolved loss against it. The bootstrap cannot see checkpoint
+noise.}
+\end{confusions}
+
+\begin{checkyourself}
+\item\label{ex:decoderwork:1} A group has 200 loss pixels and \texttt{gate\_pct = 1}. How many are gated before
+the halo? With \texttt{gate\_halo = 1}, how many loss pixels at most are removed, if the gated pixels are far apart
+and away from edges? What share of L1 gradient terms is that?
+\item\label{ex:decoderwork:2} A 256\,px tile with \texttt{mask\_block = 2} and ratio 0.65: how many blocks, how many
+hidden, how many tokens hidden? Then compute the expected number of visible neighbours of a hidden token, for
+blocks and for single tokens (where $4{,}096\times0.65$ is truncated).
+\item\label{ex:decoderwork:3} With one curve $\vect{u}=(1,1,1)$ and pixel $\vect{x}=(4,1,1)$: find the projection,
+the floor and its energy. If the model predicts $(3,3,3)$, what is the floor share? Verify Pythagoras.
+\item\label{ex:decoderwork:4} Count the parameters of \texttt{up\_half}'s first convolution with
+\texttt{stage\_dims = (160, 96)}, and the whole progressive decoder with that change (the second \texttt{up\_half}
+convolution and \texttt{up\_full}'s first also change).
+\item\label{ex:decoderwork:5} A colleague proposes stage-1 width 64 for FT04. What is the per-token compression,
+and how many numbers per pixel would the four encoder stages then deliver for a 128\,px tile (other stages
+unchanged)?
+\item\label{ex:decoderwork:6} Set4's hidden background fell 0.139 to 0.110 and targets 0.191 to 0.162. Compute
+each fall as a percentage and the new ratio. Then explain in two sentences why FT09b is not shipped.
+\item\label{ex:decoderwork:7} Redo \cref{we:decoderwork:leak} on a $6\times6$-token tile. How many blocks, how
+many tokens leak per block, and how many in all? Then explain why the answer does not depend on which pass hides
+which blocks.
+\end{checkyourself}
+
+\nextchapter{ch:heavy}

@@ -1,0 +1,26 @@
+\glossentry{Scene (product)}{One uploaded raw satellite acquisition, onboarded into a vendable.}
+\glossentry{Project}{A piece of work bound to exactly one Scene; it holds that work's Actions.}
+\glossentry{Action}{One processing step inside a Project; reads earlier Actions' outputs and writes its own to its own folder.}
+\glossentry{ActionOutput}{The folder of files one Action writes, referred to by later Actions.}
+\glossentry{Export}{The deliverable zip (GeoTIFF, Shapefile, CSV) of candidate anomalies with map coordinates.}
+\glossentry{UUID}{A 128-bit random identifier; on the wire always written with a type prefix such as scene\_ or action\_.}
+\glossentry{Directed acyclic graph (DAG)}{A set of nodes joined by one-way arrows with no path that returns to its start; the shape of a Project's Actions.}
+\glossentry{In-degree}{The number of arrows entering a node of a directed graph.}
+\glossentry{Topological order}{An ordering of a DAG's nodes in which every node comes after all of its parents; found with Kahn's algorithm.}
+\glossentry{api}{The web-server process: handles requests and the database, hands out work, never computes.}
+\glossentry{Worker}{The process that claims jobs from the jobs table and runs the analysis.}
+\glossentry{SKIP LOCKED}{A Postgres row-locking clause that lets several workers claim different queued jobs without blocking or double-claiming.}
+\glossentry{Heartbeat}{A timestamp a worker writes to its running job at a fixed interval to show it is alive.}
+\glossentry{Reaper}{The routine that marks running jobs failed when their heartbeat is older than a timeout.}
+\glossentry{needs\_threshold}{The status in which anomaly\_detection\_prep waits for a person to choose and commit a threshold.}
+\glossentry{Lazy-import rule}{Action modules may import app, torch or rasterio only inside functions, keeping the api's start-up light.}
+\glossentry{Codename}{The Indic name (Indradhanu, Chakshu, ...) by which the backend selects a foundation model.}
+\glossentry{Resolver}{The static table of what each model architecture can do, combined with its manifest to build the model picker.}
+\glossentry{Manifest (current.json)}{The file beside a model's weights naming which checkpoint is current and recording facts about it.}
+\glossentry{Vendable}{The standard in-memory form of a scene: cube in physical units, validity cube and per-band metadata; consumed by everything downstream.}
+\glossentry{DatasetBuilder}{The class that turns one sensor's raw file into a vendable.}
+\glossentry{Onboarding vendable}{The vendable built at upload, with the sensor's native bands.}
+\glossentry{Filtered vendable}{The vendable built by band\_filter\_apply on the common grid and pickled to filtered\_vendable.pkl.}
+\glossentry{Geotransform (affine)}{The map from a pixel's column and row to map coordinates: x = a j + b i + c, y = d j + e i + f.}
+\glossentry{Identity transform}{The geotransform with a = e = 1 and all else 0; written on every Action's GeoTIFF as a placeholder.}
+\glossentry{Pickle}{Python's object serialisation; stores the class's import path, which makes class names a wire format.}

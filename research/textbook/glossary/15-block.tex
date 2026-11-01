@@ -1,0 +1,22 @@
+\glossentry{LayerNorm}{Normalisation of one token across its own C features: subtract their mean, divide by their standard deviation, then apply a learned per-feature scale and shift; 2C parameters.}
+\glossentry{BatchNorm}{Normalisation of one channel using statistics gathered across the batch, with running statistics at evaluation; its output depends on the other samples in the batch.}
+\glossentry{Epsilon (normalisation)}{A small constant, 1e-5 by default in PyTorch, added to the variance before the square root so that a constant input does not cause division by zero.}
+\glossentry{Affine map (LayerNorm)}{The learned per-feature scale gamma and shift beta applied after standardisation.}
+\glossentry{Chain rule}{The derivative of a composition is the product of the derivatives along the way: d g(f(x))/dx = g'(f(x)) f'(x).}
+\glossentry{Residual connection}{Adding a sublayer's output to its input, x + f(x), so that the derivative is 1 + f' and an untouched path always exists; also called a skip connection.}
+\glossentry{Vanishing gradient}{The shrinking of the error signal to almost nothing after it is multiplied by many factors smaller than one on its way back through a deep network.}
+\glossentry{Jacobian}{The matrix of partial derivatives of a vector function with respect to its vector input; the vector form of a derivative.}
+\glossentry{Pre-norm}{Placing LayerNorm inside the residual branch, x + f(LN(x)), so that the residual path is never normalised.}
+\glossentry{Post-norm}{Placing LayerNorm after the residual addition, LN(x + f(x)), as in the original 2017 transformer.}
+\glossentry{Dropout}{During training, zeroing each value with probability p and scaling the survivors by 1/(1-p); off at evaluation.}
+\glossentry{Drop path}{Stochastic depth: dropping a whole sublayer's contribution for a whole sample; not used in this codebase.}
+\glossentry{Feed-forward network}{The per-token two-layer network of a transformer block, Linear, nonlinearity, Linear, with a wider middle.}
+\glossentry{Expansion ratio}{The factor by which the feed-forward network widens the token in its middle; 4 here.}
+\glossentry{Mix-FFN}{SegFormer's feed-forward network with a 3-by-3 depthwise convolution on the token grid between the expansion and the GELU.}
+\glossentry{Depthwise convolution}{A convolution in which each channel has its own private filter and no channels are mixed (groups equal to channels); 9 weights plus a bias per channel for a 3-by-3 kernel.}
+\glossentry{Zero padding}{Treating positions outside the grid as zeros so that a convolution keeps the grid size; it also makes border positions distinguishable.}
+\glossentry{GELU}{Gaussian Error Linear Unit, x times Phi(x), a smooth relative of ReLU; GELU(-1) = -0.1587, GELU(0) = 0, GELU(1) = 0.8413.}
+\glossentry{ReLU}{Rectified Linear Unit, max(0, x).}
+\glossentry{Gaussian cumulative distribution function}{Phi(x), the probability that a standard Gaussian random number is below x.}
+\glossentry{SegFormer block}{The repeating unit of the encoder: pre-norm efficient self-attention with a residual, then pre-norm Mix-FFN with a residual; shape (B, N, C) in and out.}
+\glossentry{Sublayer}{One of the two halves of a block, attention or Mix-FFN, each with its own LayerNorm, dropout and residual.}

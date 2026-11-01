@@ -1,0 +1,83 @@
+== manifest spectral_stem_finetune_v2.1.0_epoch5.pt version v2.1.0 params (manifest) 35315443
+  config {'stem': 'reduced_attention', 'compressed_channels': 64, 'token_dim': 32, 'attention_heads': 4, 'bin_nm': 40.0, 'band_weighting': 'width', 'embed_dims': [96, 192, 480, 768], 'num_heads': [3, 6, 10, 12], 'reduction_ratios': [8, 4, 2, 1], 'num_blocks': [2, 2, 2, 2], 'decoder_dim': 512, 'decoder_type': 'progressive', 'decoder_stage_dims': [256, 128], 'expansion_ratio': 4, 'seg_classes': 5, 'seg_decoder_dim': 256, 'mask_ratio': 0.65, 'mask_block': 1, 'drop_rate': 0.4}
+  resolver: patch 128 stride 32 batch 8 method residual_mahalanobis band grid native exclude ('cloud',) thin cloud is cloud False
+  strict load: <All keys matched successfully>
+== parameters
+  total trainable 35,315,314; without seg head 33,884,194
+  stats: 0
+  spectral_in: 17,825
+  spectral_out: 6,337
+  norm: 128
+  encoder: 29,580,288
+  decoder: 4,279,616
+  seg_head: 1,431,120
+  spectral_in parts: {'band_weight': 4192, 'skip_weight': 6272, 'bin_bias': 1056, 'q': 1056, 'k': 1056, 'v': 1056, 'o': 1056, 'to_channel': 33} queries 2048
+  spectral_out parts: {'out_weight': 6337}
+  seg head parts: {'linear_projections': 394240, 'fuse_conv': 262400, 'fuse_act': 0, 'refine': 774480} projections [24832, 49408, 123136, 196864] refine [590080, 0, 184400]
+  decoder parts: {'linear_projections': 788480, 'fuse_conv': 1049088, 'fuse_act': 0, 'up_half': 1917440, 'up_full': 516352, 'head': 8256}
+  buffers: {'trained_wl': 733, 'stats.wl': 202, 'stats.mean': 202, 'stats.std': 202, 'norm.running_mean': 64, 'norm.running_var': 64, 'norm.num_batches_tracked': 1}
+  state_dict numel minus stats.* and trained_wl: 35315443
+  stats curve length 202 range 418.4 2445.3 | trained_wl length 733
+== PRISMA set1, native bands, then trained_band_mask (tol 15 nm)
+Using device: cuda
+Using device: cuda
+  cube (185, 1186, 1196) wavelength range 453.4 2477.1
+  bands 185 kept 185 dropped 0 : []
+  against the 202-wavelength pretraining curve alone (a pretrained model's record): kept 165 dropped 20 [2477.1, 2469.6, 2463.0, 1958.6, 1794.0, 1784.7, 1775.1, 1765.5, 1755.8, 1746.2, 1736.5, 1502.0, 1491.4, 1480.8, 1469.9, 1459.3, 1339.1, 1328.3, 1317.3, 1306.2]
+  gaps over 30 nm in trained_wl: [] | trained_wl max 2500.4
+  bins 53 occupied by set1's kept bands 45 max bands in one bin 6
+== shape trace, one masked training-style pass: B=2, 128 x 128, N = 185 , mask ratio 0.65
+  tokens 1024 hidden 665 kept 359
+  reconstruction (2, 185, 128, 128)
+    ('stem.band_weight', (185, 32), (185, 32))
+    ('stem.bin_bias', (53, 32), (53, 32))
+    ('stem.k', (32768, 53, 32), (32768, 53, 32))
+    ('stem.v', (32768, 53, 32), (32768, 53, 32))
+    ('stem.q', (64, 32), (64, 32))
+    ('stem.o', (32768, 64, 32), (32768, 64, 32))
+    ('stem.to_channel', (32768, 64, 32), (32768, 64, 1))
+    ('stem.skip_weight', (185, 32), (185, 64))
+    ('stem', (2, 185, 128, 128), (2, 64, 128, 128))
+    ('norm(BN)', (2, 64, 128, 128), (2, 64, 128, 128))
+    ('enc1.patch_embed', (2, 64, 128, 128), (2, 1024, 96))
+    ('enc1.attn', (2, 359, 96), (2, 359, 96))
+    ('enc1.fc1', (2, 359, 96), (2, 359, 384))
+    ('enc1.norm', (2, 359, 96), (2, 359, 96))
+    ('enc2.patch_embed', (2, 96, 32, 32), (2, 256, 192))
+    ('enc2.attn', (2, 256, 192), (2, 256, 192))
+    ('enc2.fc1', (2, 256, 192), (2, 256, 768))
+    ('enc2.norm', (2, 256, 192), (2, 256, 192))
+    ('enc3.patch_embed', (2, 192, 16, 16), (2, 64, 480))
+    ('enc3.attn', (2, 64, 480), (2, 64, 480))
+    ('enc3.fc1', (2, 64, 480), (2, 64, 1920))
+    ('enc3.norm', (2, 64, 480), (2, 64, 480))
+    ('enc4.patch_embed', (2, 480, 8, 8), (2, 16, 768))
+    ('enc4.attn', (2, 16, 768), (2, 16, 768))
+    ('enc4.fc1', (2, 16, 768), (2, 16, 3072))
+    ('enc4.norm', (2, 16, 768), (2, 16, 768))
+    ('dec.proj1', (2, 96, 32, 32), (2, 512, 32, 32))
+    ('dec.proj2', (2, 192, 16, 16), (2, 512, 16, 16))
+    ('dec.proj3', (2, 480, 8, 8), (2, 512, 8, 8))
+    ('dec.proj4', (2, 768, 4, 4), (2, 512, 4, 4))
+    ('dec.fuse', (2, 2048, 32, 32), (2, 512, 32, 32))
+    ('dec.up_half', (2, 576, 64, 64), (2, 256, 64, 64))
+    ('dec.up_full', (2, 320, 128, 128), (2, 128, 128, 128))
+    ('dec.head', (2, 128, 128, 128), (2, 64, 128, 128))
+    ('out.out_weight', (185, 32), (185, 65))
+    ('spectral_out', (2, 64, 128, 128), (2, 185, 128, 128))
+  segment logits (2, 5, 128, 128)
+    ('seg.proj1', (2, 96, 32, 32), (2, 256, 32, 32))
+    ('seg.proj2', (2, 192, 16, 16), (2, 256, 16, 16))
+    ('seg.proj3', (2, 480, 8, 8), (2, 256, 8, 8))
+    ('seg.proj4', (2, 768, 4, 4), (2, 256, 4, 4))
+    ('seg.fuse', (2, 1024, 32, 32), (2, 256, 32, 32))
+    ('seg.refine0', (2, 256, 32, 32), (2, 256, 32, 32))
+    ('seg.refine2', (2, 256, 32, 32), (2, 80, 32, 32))
+== sizes worth quoting
+  stem rows P = 2*128*128 = 32,768; attention weights if stored: P*4*64*53 = 444,596,224 (1696 MiB float32)
+  stage 1: grid 32x32 = 1024 tokens, C 96, heads 3, head dim 32, keys 16
+  stage 2: grid 16x16 = 256 tokens, C 192, heads 6, head dim 32, keys 16
+  stage 3: grid 8x8 = 64 tokens, C 480, heads 10, head dim 48, keys 16
+  stage 4: grid 4x4 = 16 tokens, C 768, heads 12, head dim 64, keys 16
+  masked stage 1: full attention among 359 kept tokens, 128,881 scores per head, x3 heads
+  F1 values per item: 98304 | input values per item: 3031040 | latent z per item: 1048576

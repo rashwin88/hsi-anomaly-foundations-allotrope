@@ -31,6 +31,8 @@ const SENSOR_OPTIONS: SensorOption[] = [
   { value: "enmap", label: "EnMAP" },
   { value: "aviris_ng", label: "AVIRIS-NG" },
   { value: "hotsat1", label: "HotSAT-1" },
+  { value: "tanager", label: "Tanager" },
+  { value: "generic_hsi", label: "Other hyperspectral" },
 ];
 
 const SENSOR_LABELS: Record<string, string> = {
@@ -39,6 +41,8 @@ const SENSOR_LABELS: Record<string, string> = {
   enmap: "EnMAP",
   aviris_ng: "AVIRIS-NG",
   hotsat1: "HotSAT-1",
+  tanager: "Tanager",
+  generic_hsi: "Other hyperspectral",
 };
 
 function formatDate(iso: string | null): string {
@@ -213,7 +217,7 @@ export function ScenesPage() {
           </p>
           <p className="scenes__empty-step">
             Click <strong>Ingest scene</strong> above to add a PRISMA, Landsat&nbsp;9,
-            EnMAP, AVIRIS-NG, or HotSAT-1 scene.
+            EnMAP, AVIRIS-NG, HotSAT-1 or Tanager scene, or any other hyperspectral file.
           </p>
         </div>
       ) : (
@@ -225,8 +229,8 @@ export function ScenesPage() {
                 <th>Name</th>
                 <th>Sensor</th>
                 <th>Acquired</th>
-                <th>Cloud cover</th>
-                <th>Bands</th>
+                <th className="num">Cloud cover</th>
+                <th className="num">Bands</th>
                 <th>Annotations</th>
                 <th>Onboarded</th>
                 <th aria-label="Actions" />
@@ -264,9 +268,9 @@ export function ScenesPage() {
                       {SENSOR_LABELS[s.sensor_type] ?? s.sensor_type}
                     </span>
                   </td>
-                  <td>{formatDate(s.acquisition_at)}</td>
-                  <td>{formatPercent(s.cloud_cover_pct)}</td>
-                  <td>{s.band_count}</td>
+                  <td className="nowrap">{formatDate(s.acquisition_at)}</td>
+                  <td className="num">{formatPercent(s.cloud_cover_pct)}</td>
+                  <td className="num">{s.band_count}</td>
                   <td>
                     <span
                       className={
@@ -277,7 +281,7 @@ export function ScenesPage() {
                       }
                     />
                   </td>
-                  <td>{formatDate(s.created_at)}</td>
+                  <td className="nowrap">{formatDate(s.created_at)}</td>
                   <td
                     className="data-table__row-actions"
                     onClick={(e) => e.stopPropagation()}

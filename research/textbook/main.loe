@@ -1,0 +1,376 @@
+\contentsline {tcolorbox}{The ``always normal'' rule}{3}{tcb@cnt@worked.1.1}%
+\contentsline {tcolorbox}{A one-band scene with one hot pixel}{5}{tcb@cnt@worked.1.2}%
+\contentsline {tcolorbox}{A reconstruction residual on three numbers}{7}{tcb@cnt@worked.1.3}%
+\contentsline {tcolorbox}{Why a fixed cut-off fails}{8}{tcb@cnt@worked.1.4}%
+\contentsline {tcolorbox}{A top-20\% cut on ten scores}{8}{tcb@cnt@worked.1.5}%
+\contentsline {tcolorbox}{An unmasked zero becomes the top anomaly}{9}{tcb@cnt@worked.1.6}%
+\contentsline {tcolorbox}{Radiance to reflectance}{14}{tcb@cnt@worked.2.1}%
+\contentsline {tcolorbox}{A band as a weighted average of three samples}{15}{tcb@cnt@worked.2.2}%
+\contentsline {tcolorbox}{The weights of a 10 nm band}{16}{tcb@cnt@worked.2.3}%
+\contentsline {tcolorbox}{Two pixels of the same material}{18}{tcb@cnt@worked.2.4}%
+\contentsline {tcolorbox}{Slicing a 3-band, 2-by-2 cube}{20}{tcb@cnt@worked.2.5}%
+\contentsline {tcolorbox}{The size of a real cube}{20}{tcb@cnt@worked.2.6}%
+\contentsline {tcolorbox}{A Landsat digital number to Celsius}{21}{tcb@cnt@worked.2.7}%
+\contentsline {tcolorbox}{Two ways to collapse validity}{22}{tcb@cnt@worked.2.8}%
+\contentsline {tcolorbox}{One element, three addresses}{25}{tcb@cnt@worked.3.1}%
+\contentsline {tcolorbox}{Reading BIL as if it were BSQ}{26}{tcb@cnt@worked.3.2}%
+\contentsline {tcolorbox}{Two reflectance conversions}{27}{tcb@cnt@worked.3.3}%
+\contentsline {tcolorbox}{Unpacking two QA values}{27}{tcb@cnt@worked.3.4}%
+\contentsline {tcolorbox}{Counting the five windows}{30}{tcb@cnt@worked.3.5}%
+\contentsline {tcolorbox}{Which wavelength is band 43, and which band is 1,000 nm?}{32}{tcb@cnt@worked.3.6}%
+\contentsline {tcolorbox}{A topological order for one Project}{39}{tcb@cnt@worked.4.1}%
+\contentsline {tcolorbox}{When is a job reaped?}{40}{tcb@cnt@worked.4.2}%
+\contentsline {tcolorbox}{Both summaries on a 3-band, 2-by-2 validity cube}{44}{tcb@cnt@worked.4.3}%
+\contentsline {tcolorbox}{Pixel to map, with a real transform and with the identity}{45}{tcb@cnt@worked.4.4}%
+\contentsline {tcolorbox}{Filtering a ten-band toy sensor}{50}{tcb@cnt@worked.5.1}%
+\contentsline {tcolorbox}{Kept or wiped?}{51}{tcb@cnt@worked.5.2}%
+\contentsline {tcolorbox}{Three bands by hand}{52}{tcb@cnt@worked.5.3}%
+\contentsline {tcolorbox}{Resampling one spectrum onto four grid wavelengths}{53}{tcb@cnt@worked.5.4}%
+\contentsline {tcolorbox}{The same three samples, listed backwards}{54}{tcb@cnt@worked.5.5}%
+\contentsline {tcolorbox}{A spline overshoots a step}{55}{tcb@cnt@worked.5.6}%
+\contentsline {tcolorbox}{PCHIP on the same step}{56}{tcb@cnt@worked.5.7}%
+\contentsline {tcolorbox}{Normalising the 3-band, 2-by-2 cube}{57}{tcb@cnt@worked.5.8}%
+\contentsline {tcolorbox}{Real statistics, band 0}{59}{tcb@cnt@worked.5.9}%
+\contentsline {tcolorbox}{Why the moments are computed in float64}{60}{tcb@cnt@worked.5.10}%
+\contentsline {tcolorbox}{Filling a row and a 3-by-3 patch}{62}{tcb@cnt@worked.5.11}%
+\contentsline {tcolorbox}{The dot product of two 3-band spectra}{68}{tcb@cnt@worked.6.1}%
+\contentsline {tcolorbox}{The length of a spectrum}{68}{tcb@cnt@worked.6.2}%
+\contentsline {tcolorbox}{The angle between two spectra}{69}{tcb@cnt@worked.6.3}%
+\contentsline {tcolorbox}{Projection in two dimensions}{71}{tcb@cnt@worked.6.4}%
+\contentsline {tcolorbox}{Projecting a pixel onto a reference spectrum}{71}{tcb@cnt@worked.6.5}%
+\contentsline {tcolorbox}{A matrix times a vector}{72}{tcb@cnt@worked.6.6}%
+\contentsline {tcolorbox}{The transpose of a product, on $2\times 2$ matrices}{73}{tcb@cnt@worked.6.7}%
+\contentsline {tcolorbox}{Inverting a $2\times 2$ matrix by hand}{74}{tcb@cnt@worked.6.8}%
+\contentsline {tcolorbox}{A covariance matrix from four pixels and two bands}{75}{tcb@cnt@worked.6.9}%
+\contentsline {tcolorbox}{Eigenvalues and eigenvectors of the covariance matrix}{77}{tcb@cnt@worked.6.10}%
+\contentsline {tcolorbox}{Rebuilding the covariance from its eigenvectors}{78}{tcb@cnt@worked.6.11}%
+\contentsline {tcolorbox}{Checking that the first principal direction wins}{80}{tcb@cnt@worked.6.12}%
+\contentsline {tcolorbox}{Turning the four pixels onto their principal directions}{80}{tcb@cnt@worked.6.13}%
+\contentsline {tcolorbox}{Whitening the four pixels}{81}{tcb@cnt@worked.6.14}%
+\contentsline {tcolorbox}{Per-band z-scores miss the pattern}{88}{tcb@cnt@worked.7.1}%
+\contentsline {tcolorbox}{Two ways to the same Mahalanobis distance}{90}{tcb@cnt@worked.7.2}%
+\contentsline {tcolorbox}{RX by hand on three bands}{94}{tcb@cnt@worked.7.3}%
+\contentsline {tcolorbox}{The same score through the eigenvectors}{96}{tcb@cnt@worked.7.4}%
+\contentsline {tcolorbox}{A mixture hides an anomaly from the global mean}{96}{tcb@cnt@worked.7.5}%
+\contentsline {tcolorbox}{Two highly correlated bands}{97}{tcb@cnt@worked.7.6}%
+\contentsline {tcolorbox}{Loading the correlated pair}{99}{tcb@cnt@worked.7.7}%
+\contentsline {tcolorbox}{The default ring, and the ring at an edge}{103}{tcb@cnt@worked.8.1}%
+\contentsline {tcolorbox}{A $3\times 3$ target with and without a guard}{104}{tcb@cnt@worked.8.2}%
+\contentsline {tcolorbox}{The masked mean must divide by the real count}{106}{tcb@cnt@worked.8.3}%
+\contentsline {tcolorbox}{How much arithmetic one PRISMA scene costs}{107}{tcb@cnt@worked.8.4}%
+\contentsline {tcolorbox}{MNF against PCA on two bands}{109}{tcb@cnt@worked.8.5}%
+\contentsline {tcolorbox}{A noise covariance from a strip of five pixels}{110}{tcb@cnt@worked.8.6}%
+\contentsline {tcolorbox}{Eigenvalues of PCA and MNF on a synthetic cube}{111}{tcb@cnt@worked.8.7}%
+\contentsline {tcolorbox}{PCA-RX on a tiny whitened patch}{113}{tcb@cnt@worked.8.8}%
+\contentsline {tcolorbox}{A three-band residual and its score}{119}{tcb@cnt@worked.9.1}%
+\contentsline {tcolorbox}{Leave-one-out prediction of six pixels}{122}{tcb@cnt@worked.9.2}%
+\contentsline {tcolorbox}{The self-including average hides a third of the anomaly}{122}{tcb@cnt@worked.9.3}%
+\contentsline {tcolorbox}{Mean versus median when one value is an anomaly}{125}{tcb@cnt@worked.9.4}%
+\contentsline {tcolorbox}{Tracing a checkerboard through two passes}{128}{tcb@cnt@worked.9.5}%
+\contentsline {tcolorbox}{Finding a value in memory}{135}{tcb@cnt@worked.10.1}%
+\contentsline {tcolorbox}{A $2\times 2\times 2$ cube through flatten, transpose and a wrong reshape}{136}{tcb@cnt@worked.10.2}%
+\contentsline {tcolorbox}{A linear layer from three inputs to two outputs}{137}{tcb@cnt@worked.10.3}%
+\contentsline {tcolorbox}{A $3\times 3$ input and a $2\times 2$ kernel, by hand}{138}{tcb@cnt@worked.10.4}%
+\contentsline {tcolorbox}{Every stage of Indradhanu's encoder}{141}{tcb@cnt@worked.10.5}%
+\contentsline {tcolorbox}{Why stage 1 must set its padding explicitly}{141}{tcb@cnt@worked.10.6}%
+\contentsline {tcolorbox}{The convolutional autoencoder and a $100\times 100$ patch}{142}{tcb@cnt@worked.10.7}%
+\contentsline {tcolorbox}{Receptive field of the four patch embeddings}{142}{tcb@cnt@worked.10.8}%
+\contentsline {tcolorbox}{The SpatialEncoder's 165,024 parameters}{144}{tcb@cnt@worked.10.9}%
+\contentsline {tcolorbox}{A transposed convolution in one dimension}{148}{tcb@cnt@worked.11.1}%
+\contentsline {tcolorbox}{Four bands into two}{156}{tcb@cnt@worked.12.1}%
+\contentsline {tcolorbox}{BatchNorm on four values}{157}{tcb@cnt@worked.12.2}%
+\contentsline {tcolorbox}{One training step of running statistics, then evaluation}{158}{tcb@cnt@worked.12.3}%
+\contentsline {tcolorbox}{A 3-to-2-to-3 bottleneck and what it loses}{160}{tcb@cnt@worked.12.4}%
+\contentsline {tcolorbox}{The spectral bottleneck's 10,821 parameters}{161}{tcb@cnt@worked.12.5}%
+\contentsline {tcolorbox}{Four tokens from a $4\times 4$ image}{167}{tcb@cnt@worked.13.1}%
+\contentsline {tcolorbox}{LayerNorm on a four-number token}{168}{tcb@cnt@worked.13.2}%
+\contentsline {tcolorbox}{How many windows see each pixel}{171}{tcb@cnt@worked.13.3}%
+\contentsline {tcolorbox}{All four patch embeddings}{172}{tcb@cnt@worked.13.4}%
+\contentsline {tcolorbox}{Three dot products}{176}{tcb@cnt@worked.14.1}%
+\contentsline {tcolorbox}{Softmax of three scores}{177}{tcb@cnt@worked.14.2}%
+\contentsline {tcolorbox}{The stable softmax}{178}{tcb@cnt@worked.14.3}%
+\contentsline {tcolorbox}{Gradients of a healthy and a saturated softmax}{179}{tcb@cnt@worked.14.4}%
+\contentsline {tcolorbox}{One query, three tokens of dimension 2}{180}{tcb@cnt@worked.14.5}%
+\contentsline {tcolorbox}{Full attention on three tokens, identity projections}{182}{tcb@cnt@worked.14.6}%
+\contentsline {tcolorbox}{Full attention with real projections}{183}{tcb@cnt@worked.14.7}%
+\contentsline {tcolorbox}{The variance of a 2-dimensional dot product, exactly}{186}{tcb@cnt@worked.14.8}%
+\contentsline {tcolorbox}{Swapping two tokens}{187}{tcb@cnt@worked.14.9}%
+\contentsline {tcolorbox}{Splitting a 4-number token into two heads}{188}{tcb@cnt@worked.14.10}%
+\contentsline {tcolorbox}{The projection parameters at every stage}{190}{tcb@cnt@worked.14.11}%
+\contentsline {tcolorbox}{The cost of plain attention at stage 1}{194}{tcb@cnt@worked.15.1}%
+\contentsline {tcolorbox}{The memory of one stage-1 score tensor}{194}{tcb@cnt@worked.15.2}%
+\contentsline {tcolorbox}{Summarising a $4\times 4$ grid with $R = 2$}{196}{tcb@cnt@worked.15.3}%
+\contentsline {tcolorbox}{One query against the four summary tokens}{197}{tcb@cnt@worked.15.4}%
+\contentsline {tcolorbox}{The cost of reduced attention at stage 1}{200}{tcb@cnt@worked.15.5}%
+\contentsline {tcolorbox}{The stage-1 score tensor, reduced}{200}{tcb@cnt@worked.15.6}%
+\contentsline {tcolorbox}{The stage-1 attention module, parameter by parameter}{201}{tcb@cnt@worked.15.7}%
+\contentsline {tcolorbox}{Is the fallback affordable?}{202}{tcb@cnt@worked.15.8}%
+\contentsline {tcolorbox}{LayerNorm of a 4-number token}{205}{tcb@cnt@worked.16.1}%
+\contentsline {tcolorbox}{Twenty layers with and without residuals}{208}{tcb@cnt@worked.16.2}%
+\contentsline {tcolorbox}{Dropout with $p = 0.4$}{209}{tcb@cnt@worked.16.3}%
+\contentsline {tcolorbox}{Ordinary against depthwise at stage 1}{211}{tcb@cnt@worked.16.4}%
+\contentsline {tcolorbox}{A depthwise filter sees the border}{211}{tcb@cnt@worked.16.5}%
+\contentsline {tcolorbox}{GELU at $-1$, 0 and 1}{212}{tcb@cnt@worked.16.6}%
+\contentsline {tcolorbox}{Mix-FFN at stage 1}{213}{tcb@cnt@worked.16.7}%
+\contentsline {tcolorbox}{A stage-1 block: 79{,}616 parameters}{215}{tcb@cnt@worked.16.8}%
+\contentsline {tcolorbox}{A stage-4 block: 800{,}000 parameters}{215}{tcb@cnt@worked.16.9}%
+\contentsline {tcolorbox}{The four grid sizes from the formula}{219}{tcb@cnt@worked.17.1}%
+\contentsline {tcolorbox}{Receptive fields of the four stages}{223}{tcb@cnt@worked.17.2}%
+\contentsline {tcolorbox}{Token validity on a 4 $\times $ 4 pixel grid with 2 $\times $ 2 tokens}{231}{tcb@cnt@worked.18.1}%
+\contentsline {tcolorbox}{Six tokens at $\rho = 0.65$: what the rounding does}{233}{tcb@cnt@worked.18.2}%
+\contentsline {tcolorbox}{Hiding three of six tokens by hand}{234}{tcb@cnt@worked.18.3}%
+\contentsline {tcolorbox}{Building ids\_restore for six tokens}{235}{tcb@cnt@worked.18.4}%
+\contentsline {tcolorbox}{The course example: two invalid tokens and the $+2$}{235}{tcb@cnt@worked.18.5}%
+\contentsline {tcolorbox}{The selection matrix for three kept tokens of six}{237}{tcb@cnt@worked.18.6}%
+\contentsline {tcolorbox}{Remove and restore on six tokens}{237}{tcb@cnt@worked.18.7}%
+\contentsline {tcolorbox}{Leakage in a batch of two}{238}{tcb@cnt@worked.18.8}%
+\contentsline {tcolorbox}{The loss mask on the 4 $\times $ 4 example}{240}{tcb@cnt@worked.18.9}%
+\contentsline {tcolorbox}{Erosion in one dimension, kernel 5}{241}{tcb@cnt@worked.18.10}%
+\contentsline {tcolorbox}{Erosion in two dimensions, kernel 3}{241}{tcb@cnt@worked.18.11}%
+\contentsline {tcolorbox}{Counting the graded pixels in \cref {fig:masking:grids}}{244}{tcb@cnt@worked.18.12}%
+\contentsline {tcolorbox}{A 1 $\times $ 1 projection at one position}{247}{tcb@cnt@worked.19.1}%
+\contentsline {tcolorbox}{Upsampling a row of two values to four}{248}{tcb@cnt@worked.19.2}%
+\contentsline {tcolorbox}{Bilinear upsampling of a 2 $\times $ 2 grid to 4 $\times $ 4}{249}{tcb@cnt@worked.19.3}%
+\contentsline {tcolorbox}{Pixel shuffle by hand, and PyTorch's order}{251}{tcb@cnt@worked.19.4}%
+\contentsline {tcolorbox}{A one-pixel anomaly, two ways}{252}{tcb@cnt@worked.19.5}%
+\contentsline {tcolorbox}{Denormalising one value}{253}{tcb@cnt@worked.19.6}%
+\contentsline {tcolorbox}{The rules on a tiny convolution}{258}{tcb@cnt@worked.20.1}%
+\contentsline {tcolorbox}{The four stages from \textup {\hbox {\mathsurround \z@ \normalfont (\ignorespaces \ref {eq:params:block}\unskip \@@italiccorr )}}}{259}{tcb@cnt@worked.20.2}%
+\contentsline {tcolorbox}{Where the manifest's 5,507,354 comes from}{262}{tcb@cnt@worked.20.3}%
+\contentsline {tcolorbox}{Multiply-adds of three layers}{263}{tcb@cnt@worked.20.4}%
+\contentsline {tcolorbox}{Two Landsat pixels into degrees}{270}{tcb@cnt@worked.21.1}%
+\contentsline {tcolorbox}{Normalising the two pixels, and an invalid one}{270}{tcb@cnt@worked.21.2}%
+\contentsline {tcolorbox}{How many tokens a training pass hides}{272}{tcb@cnt@worked.21.3}%
+\contentsline {tcolorbox}{Every stage attends to 64 keys}{273}{tcb@cnt@worked.21.4}%
+\contentsline {tcolorbox}{Chakshu's four blocks}{274}{tcb@cnt@worked.21.5}%
+\contentsline {tcolorbox}{Trimming 20 errors at 5\%}{276}{tcb@cnt@worked.21.6}%
+\contentsline {tcolorbox}{Tiles over two scene sizes}{277}{tcb@cnt@worked.21.7}%
+\contentsline {tcolorbox}{A HotSat number under the baked statistics}{279}{tcb@cnt@worked.21.8}%
+\contentsline {tcolorbox}{Rank and null space of the toy compressor}{286}{tcb@cnt@worked.22.1}%
+\contentsline {tcolorbox}{A dead band filled with zero}{287}{tcb@cnt@worked.22.2}%
+\contentsline {tcolorbox}{One query reading three tokens}{291}{tcb@cnt@worked.22.3}%
+\contentsline {tcolorbox}{Stretching one band value}{294}{tcb@cnt@worked.22.4}%
+\contentsline {tcolorbox}{The tag of two wavelengths at one period}{296}{tcb@cnt@worked.22.5}%
+\contentsline {tcolorbox}{Cosine similarity of 660 and 670\,nm, all sixteen periods}{297}{tcb@cnt@worked.22.6}%
+\contentsline {tcolorbox}{Building one band token}{298}{tcb@cnt@worked.22.7}%
+\contentsline {tcolorbox}{The cross-attention compressor's parameters by hand}{305}{tcb@cnt@worked.23.1}%
+\contentsline {tcolorbox}{One channel of a one-head compressor}{307}{tcb@cnt@worked.23.2}%
+\contentsline {tcolorbox}{Masking a dead band among four}{308}{tcb@cnt@worked.23.3}%
+\contentsline {tcolorbox}{Counting the compressor's multiply-adds}{311}{tcb@cnt@worked.23.4}%
+\contentsline {tcolorbox}{Bytes of attention for one patch}{313}{tcb@cnt@worked.23.5}%
+\contentsline {tcolorbox}{The cross-attention decoder's parameters by hand}{320}{tcb@cnt@worked.24.1}%
+\contentsline {tcolorbox}{A per-pixel L1 over valid bands only}{322}{tcb@cnt@worked.24.2}%
+\contentsline {tcolorbox}{Reading the mean curve at 864\,nm}{324}{tcb@cnt@worked.24.3}%
+\contentsline {tcolorbox}{Four values of the sigmoid}{326}{tcb@cnt@worked.24.4}%
+\contentsline {tcolorbox}{Gating the toy pixel}{327}{tcb@cnt@worked.24.5}%
+\contentsline {tcolorbox}{The gate's parameters at 202 bands}{328}{tcb@cnt@worked.24.6}%
+\contentsline {tcolorbox}{Counting the bins and placing three bands}{330}{tcb@cnt@worked.24.7}%
+\contentsline {tcolorbox}{A dip and its mirror image collide}{332}{tcb@cnt@worked.24.8}%
+\contentsline {tcolorbox}{Fix 1 separates the dip from its mirror}{332}{tcb@cnt@worked.24.9}%
+\contentsline {tcolorbox}{The skip path on the toy pixel}{333}{tcb@cnt@worked.24.10}%
+\contentsline {tcolorbox}{The skip path with a dead band holding 99}{334}{tcb@cnt@worked.24.11}%
+\contentsline {tcolorbox}{Decoding one band}{335}{tcb@cnt@worked.24.12}%
+\contentsline {tcolorbox}{The reduced compressor, 14,721 parameters}{337}{tcb@cnt@worked.24.13}%
+\contentsline {tcolorbox}{The wavelength-linear decoder, 4,257 parameters}{337}{tcb@cnt@worked.24.14}%
+\contentsline {tcolorbox}{Reading the throughput table}{339}{tcb@cnt@worked.24.15}%
+\contentsline {tcolorbox}{Masked L1 on three bands and two graded pixels}{347}{tcb@cnt@worked.25.1}%
+\contentsline {tcolorbox}{The gradient of L1 for the two-pixel example}{348}{tcb@cnt@worked.25.2}%
+\contentsline {tcolorbox}{A glitch pulls the mean, not the median}{349}{tcb@cnt@worked.25.3}%
+\contentsline {tcolorbox}{The spectral angle of pixel A, by hand}{352}{tcb@cnt@worked.25.4}%
+\contentsline {tcolorbox}{A reconstruction twice as bright}{353}{tcb@cnt@worked.25.5}%
+\contentsline {tcolorbox}{The chain rule on a tiny function}{354}{tcb@cnt@worked.25.6}%
+\contentsline {tcolorbox}{The gradient of the angle for pixel A}{357}{tcb@cnt@worked.25.7}%
+\contentsline {tcolorbox}{The naive formula producing NaN}{358}{tcb@cnt@worked.25.8}%
+\contentsline {tcolorbox}{The atan2 form on pixel A, and on a perfect reconstruction}{359}{tcb@cnt@worked.25.9}%
+\contentsline {tcolorbox}{The v0.2.0 ramp, epoch by epoch}{362}{tcb@cnt@worked.25.10}%
+\contentsline {tcolorbox}{The combined loss at the configuration's epoch-100 baseline}{363}{tcb@cnt@worked.25.11}%
+\contentsline {tcolorbox}{Three steps of gradient descent}{367}{tcb@cnt@worked.26.1}%
+\contentsline {tcolorbox}{Three steps with momentum}{368}{tcb@cnt@worked.26.2}%
+\contentsline {tcolorbox}{The bias-correction factors for t = 1, 2, 3}{370}{tcb@cnt@worked.26.3}%
+\contentsline {tcolorbox}{Three steps of Adam on the toy loss}{370}{tcb@cnt@worked.26.4}%
+\contentsline {tcolorbox}{The same decay, two different shrinks}{372}{tcb@cnt@worked.26.5}%
+\contentsline {tcolorbox}{The v0.2.0 schedule at five epochs}{373}{tcb@cnt@worked.26.6}%
+\contentsline {tcolorbox}{Clipping a 3-vector}{375}{tcb@cnt@worked.26.7}%
+\contentsline {tcolorbox}{Why the loss stays in float32}{376}{tcb@cnt@worked.26.8}%
+\contentsline {tcolorbox}{The row coordinates of a 300-pixel scene}{378}{tcb@cnt@worked.26.9}%
+\contentsline {tcolorbox}{Why the averaging is weighted}{382}{tcb@cnt@worked.26.10}%
+\contentsline {tcolorbox}{The size of one patch}{386}{tcb@cnt@worked.27.1}%
+\contentsline {tcolorbox}{The same model scored two ways}{388}{tcb@cnt@worked.27.2}%
+\contentsline {tcolorbox}{One spectrum, two sensors, two answers}{391}{tcb@cnt@worked.27.3}%
+\contentsline {tcolorbox}{The toy again, with widths}{394}{tcb@cnt@worked.27.4}%
+\contentsline {tcolorbox}{Coverage per epoch and per run}{395}{tcb@cnt@worked.27.5}%
+\contentsline {tcolorbox}{One pass of the driver after a crash}{397}{tcb@cnt@worked.27.6}%
+\contentsline {tcolorbox}{From a PRISMA digital number to a stored value}{401}{tcb@cnt@worked.27.7}%
+\contentsline {tcolorbox}{Delta-encoding one pixel}{402}{tcb@cnt@worked.27.8}%
+\contentsline {tcolorbox}{Aligning a sample onto a band list}{403}{tcb@cnt@worked.27.9}%
+\contentsline {tcolorbox}{The head's parameter count}{408}{tcb@cnt@worked.28.1}%
+\contentsline {tcolorbox}{Why the softmax cannot say ``water and thin cloud''}{410}{tcb@cnt@worked.28.2}%
+\contentsline {tcolorbox}{BCE on three pixels}{411}{tcb@cnt@worked.28.3}%
+\contentsline {tcolorbox}{Soft Dice on a $2 \times 2$ mask}{413}{tcb@cnt@worked.28.4}%
+\contentsline {tcolorbox}{A rare class and a common one under BCE and Dice}{414}{tcb@cnt@worked.28.5}%
+\contentsline {tcolorbox}{IoU of two pixel sets, and why the tally pools}{415}{tcb@cnt@worked.28.6}%
+\contentsline {tcolorbox}{The known-mask loss on a $2 \times 2$ tile}{417}{tcb@cnt@worked.28.7}%
+\contentsline {tcolorbox}{Four spectra through the cloud test}{419}{tcb@cnt@worked.28.8}%
+\contentsline {tcolorbox}{Why the curve is frozen}{426}{tcb@cnt@worked.29.1}%
+\contentsline {tcolorbox}{A ``frozen'' encoder that drifts}{428}{tcb@cnt@worked.29.2}%
+\contentsline {tcolorbox}{Growing the record}{429}{tcb@cnt@worked.29.3}%
+\contentsline {tcolorbox}{The end of an epoch moves the stored mean}{431}{tcb@cnt@worked.29.4}%
+\contentsline {tcolorbox}{Alternating sensors never settle; mixed batches do}{435}{tcb@cnt@worked.29.5}%
+\contentsline {tcolorbox}{Where the running mean settles with an EnMAP-only second pass}{436}{tcb@cnt@worked.29.6}%
+\contentsline {tcolorbox}{Pooled against per-class scoring on a coastal scene}{439}{tcb@cnt@worked.29.7}%
+\contentsline {tcolorbox}{Selecting from two passes on four tokens}{446}{tcb@cnt@worked.30.1}%
+\contentsline {tcolorbox}{The checkerboard on a $4\times 4$ token grid}{447}{tcb@cnt@worked.30.2}%
+\contentsline {tcolorbox}{Keep mask for a row of four tokens with one invalid}{448}{tcb@cnt@worked.30.3}%
+\contentsline {tcolorbox}{Tiles along one axis of a $1000$-pixel scene}{450}{tcb@cnt@worked.30.4}%
+\contentsline {tcolorbox}{A real PRISMA frame, $1210\times 1219$}{450}{tcb@cnt@worked.30.5}%
+\contentsline {tcolorbox}{Averaging three tiles, one of them eroded}{453}{tcb@cnt@worked.30.6}%
+\contentsline {tcolorbox}{The combined score and its fragile denominator}{455}{tcb@cnt@worked.30.7}%
+\contentsline {tcolorbox}{The funnel from 1.47 million pixels to a shortlist}{457}{tcb@cnt@worked.30.8}%
+\contentsline {tcolorbox}{Residual Mahalanobis on three bands}{463}{tcb@cnt@worked.31.1}%
+\contentsline {tcolorbox}{The same scores by rotate and divide}{466}{tcb@cnt@worked.31.2}%
+\contentsline {tcolorbox}{Building an integral image on a $4\times 4$ grid}{471}{tcb@cnt@worked.31.3}%
+\contentsline {tcolorbox}{A box sum and a ring mean from the table}{473}{tcb@cnt@worked.31.4}%
+\contentsline {tcolorbox}{A local covariance from five box sums}{474}{tcb@cnt@worked.31.5}%
+\contentsline {tcolorbox}{A two-model composite at one pixel}{481}{tcb@cnt@worked.32.1}%
+\contentsline {tcolorbox}{Flagging the top 30\% of ten pixels, and the top 0.5\% of a scene}{482}{tcb@cnt@worked.32.2}%
+\contentsline {tcolorbox}{SAM names the grass around a roof}{484}{tcb@cnt@worked.32.3}%
+\contentsline {tcolorbox}{The product of the two levels}{487}{tcb@cnt@worked.32.4}%
+\contentsline {tcolorbox}{Near the natural average, off the natural line}{487}{tcb@cnt@worked.32.5}%
+\contentsline {tcolorbox}{ACE on three bands, at two fills}{488}{tcb@cnt@worked.32.6}%
+\contentsline {tcolorbox}{An axis-aligned transform from a bounding box (the fallback)}{491}{tcb@cnt@worked.32.7}%
+\contentsline {tcolorbox}{The excluded percentage}{494}{tcb@cnt@worked.32.8}%
+\contentsline {tcolorbox}{The ROC of six pixels}{499}{tcb@cnt@worked.33.1}%
+\contentsline {tcolorbox}{The AUC of the six pixels, strip by strip}{500}{tcb@cnt@worked.33.2}%
+\contentsline {tcolorbox}{The six pixels, counted as pairs}{502}{tcb@cnt@worked.33.3}%
+\contentsline {tcolorbox}{A tie, both ways}{502}{tcb@cnt@worked.33.4}%
+\contentsline {tcolorbox}{Two detectors whose AUC and top-of-list disagree}{503}{tcb@cnt@worked.33.5}%
+\contentsline {tcolorbox}{Partial AUC of the six pixels, with a limit that cuts a segment}{505}{tcb@cnt@worked.33.6}%
+\contentsline {tcolorbox}{Chance for four object shapes at the top 1\%}{508}{tcb@cnt@worked.33.7}%
+\contentsline {tcolorbox}{Top-of-atmosphere reflectance}{512}{tcb@cnt@worked.34.1}%
+\contentsline {tcolorbox}{The test's $z$, by hand}{515}{tcb@cnt@worked.34.2}%
+\contentsline {tcolorbox}{A pixel on the mixing line}{516}{tcb@cnt@worked.34.3}%
+\contentsline {tcolorbox}{One band: the simple formula misses, the realised solve hits}{518}{tcb@cnt@worked.34.4}%
+\contentsline {tcolorbox}{Foreignness of $(3, 4, 0)$}{520}{tcb@cnt@worked.34.5}%
+\contentsline {tcolorbox}{Matching $(4, 0, 2)$ to foreignness 0.1}{520}{tcb@cnt@worked.34.6}%
+\contentsline {tcolorbox}{The PSF weights and the abundance map on a $3 \times 3$ footprint}{521}{tcb@cnt@worked.34.7}%
+\contentsline {tcolorbox}{An unforeign signal on a foreign spot}{523}{tcb@cnt@worked.34.8}%
+\contentsline {tcolorbox}{Counting the work of stage 3}{529}{tcb@cnt@worked.35.1}%
+\contentsline {tcolorbox}{A bench's chance row}{531}{tcb@cnt@worked.35.2}%
+\contentsline {tcolorbox}{Exclusion in miniature}{532}{tcb@cnt@worked.35.3}%
+\contentsline {tcolorbox}{Two water rules on one turbid pixel}{533}{tcb@cnt@worked.35.4}%
+\contentsline {tcolorbox}{Bootstrapping the mean of five numbers}{539}{tcb@cnt@worked.36.1}%
+\contentsline {tcolorbox}{Percentiles of the six bootstrap means}{539}{tcb@cnt@worked.36.2}%
+\contentsline {tcolorbox}{An effective sample size}{541}{tcb@cnt@worked.36.3}%
+\contentsline {tcolorbox}{A tiny scene, both ways}{542}{tcb@cnt@worked.36.4}%
+\contentsline {tcolorbox}{Five objects, paired and unpaired}{543}{tcb@cnt@worked.36.5}%
+\contentsline {tcolorbox}{Two paired draws on the tiny scene}{543}{tcb@cnt@worked.36.6}%
+\contentsline {tcolorbox}{Interpolating the repo's own test spectrum}{551}{tcb@cnt@worked.37.1}%
+\contentsline {tcolorbox}{The same three samples, listed the other way round}{552}{tcb@cnt@worked.37.2}%
+\contentsline {tcolorbox}{One row of the resample matrix, right and wrong}{553}{tcb@cnt@worked.37.3}%
+\contentsline {tcolorbox}{The sorted resample, by hand}{554}{tcb@cnt@worked.37.4}%
+\contentsline {tcolorbox}{A signature flattened}{556}{tcb@cnt@worked.37.5}%
+\contentsline {tcolorbox}{Objects the bug hid}{557}{tcb@cnt@worked.37.6}%
+\contentsline {tcolorbox}{How much of v0.2.0's jump is the fix?}{558}{tcb@cnt@worked.37.7}%
+\contentsline {tcolorbox}{Is 35.5\% against 34.9\% a difference?}{559}{tcb@cnt@worked.37.8}%
+\contentsline {tcolorbox}{The selection effect behind the easy tier}{560}{tcb@cnt@worked.37.9}%
+\contentsline {tcolorbox}{The segmentation head's parameters}{563}{tcb@cnt@worked.38.1}%
+\contentsline {tcolorbox}{Reading FT02's gate}{565}{tcb@cnt@worked.38.2}%
+\contentsline {tcolorbox}{Two edge measures on a 3 $\times $ 3 patch}{567}{tcb@cnt@worked.38.3}%
+\contentsline {tcolorbox}{Rank minus the median rank of its bin}{568}{tcb@cnt@worked.38.4}%
+\contentsline {tcolorbox}{The same blur, two losses}{570}{tcb@cnt@worked.38.5}%
+\contentsline {tcolorbox}{The repo's \texttt {match\_foreignness} test case}{575}{tcb@cnt@worked.38.6}%
+\contentsline {tcolorbox}{Which prediction does each target reward?}{575}{tcb@cnt@worked.38.7}%
+\contentsline {tcolorbox}{Times five moves 0.15\% to 0.76\%}{576}{tcb@cnt@worked.38.8}%
+\contentsline {tcolorbox}{Right singular vectors are eigenvectors of $\mathbf {X}^{\top }\mathbf {X}$}{577}{tcb@cnt@worked.38.9}%
+\contentsline {tcolorbox}{Criterion 1 at epoch 5}{578}{tcb@cnt@worked.38.10}%
+\contentsline {tcolorbox}{Four pixels through \texttt {pseudo\_targets}}{581}{tcb@cnt@worked.38.11}%
+\contentsline {tcolorbox}{Weighted BCE on a batch with no snow}{582}{tcb@cnt@worked.38.12}%
+\contentsline {tcolorbox}{FT04's criteria}{583}{tcb@cnt@worked.38.13}%
+\contentsline {tcolorbox}{Main effects of model and mask}{583}{tcb@cnt@worked.38.14}%
+\contentsline {tcolorbox}{Which manifest wins ``Indradhanu''?}{588}{tcb@cnt@worked.39.1}%
+\contentsline {tcolorbox}{Where 5,886,451 comes from}{590}{tcb@cnt@worked.39.2}%
+\contentsline {tcolorbox}{How close is ``on the grid''?}{591}{tcb@cnt@worked.39.3}%
+\contentsline {tcolorbox}{Three bands against a record ending 2395, 2405, 2440}{592}{tcb@cnt@worked.39.4}%
+\contentsline {tcolorbox}{One pixel, two cloud rules}{593}{tcb@cnt@worked.39.5}%
+\contentsline {tcolorbox}{The same pixel, twice the score}{593}{tcb@cnt@worked.39.6}%
+\contentsline {tcolorbox}{excluded\_percent on a small tile}{594}{tcb@cnt@worked.39.7}%
+\contentsline {tcolorbox}{A two-band matched filter}{601}{tcb@cnt@worked.40.1}%
+\contentsline {tcolorbox}{The promise and its price, on a 3-tap kernel}{601}{tcb@cnt@worked.40.2}%
+\contentsline {tcolorbox}{A strip of 12 pixels, plain and blurred}{602}{tcb@cnt@worked.40.3}%
+\contentsline {tcolorbox}{Rank mean and rank max on five pixels}{603}{tcb@cnt@worked.40.4}%
+\contentsline {tcolorbox}{Responsibilities and a weighted score in one band}{605}{tcb@cnt@worked.40.5}%
+\contentsline {tcolorbox}{k-means on six numbers}{605}{tcb@cnt@worked.40.6}%
+\contentsline {tcolorbox}{Targets that become their type's normal}{606}{tcb@cnt@worked.40.7}%
+\contentsline {tcolorbox}{Growth of a gate under two passes}{608}{tcb@cnt@worked.40.8}%
+\contentsline {tcolorbox}{Leave-one-scene-out on the real numbers}{610}{tcb@cnt@worked.40.9}%
+\contentsline {tcolorbox}{The loss at three scales}{617}{tcb@cnt@worked.41.1}%
+\contentsline {tcolorbox}{The derivative at three points}{619}{tcb@cnt@worked.41.2}%
+\contentsline {tcolorbox}{Four pixels, one scale}{619}{tcb@cnt@worked.41.3}%
+\contentsline {tcolorbox}{Gradients with respect to $b$ and to $\qopname \relax o{log}b$}{620}{tcb@cnt@worked.41.4}%
+\contentsline {tcolorbox}{The uncertainty head's 95,632 parameters}{621}{tcb@cnt@worked.41.5}%
+\contentsline {tcolorbox}{The floor at work}{622}{tcb@cnt@worked.41.6}%
+\contentsline {tcolorbox}{Spearman on five pairs}{623}{tcb@cnt@worked.41.7}%
+\contentsline {tcolorbox}{How often a halo leaks out of its token}{625}{tcb@cnt@worked.41.8}%
+\contentsline {tcolorbox}{Dividing by $b$, by hand}{626}{tcb@cnt@worked.41.9}%
+\contentsline {tcolorbox}{The top 1\% of 100 loss pixels, with its halo}{630}{tcb@cnt@worked.42.1}%
+\contentsline {tcolorbox}{Loss share against gradient share}{631}{tcb@cnt@worked.42.2}%
+\contentsline {tcolorbox}{An upper bound on a real batch}{632}{tcb@cnt@worked.42.3}%
+\contentsline {tcolorbox}{A 5\,px footprint on a 4\,px and an 8\,px grid}{632}{tcb@cnt@worked.42.4}%
+\contentsline {tcolorbox}{How much a 128\,px tile hides}{633}{tcb@cnt@worked.42.5}%
+\contentsline {tcolorbox}{Half of each block taken from a pass that saw it}{634}{tcb@cnt@worked.42.6}%
+\contentsline {tcolorbox}{FT04's decoder, 2,164,736 parameters}{637}{tcb@cnt@worked.42.7}%
+\contentsline {tcolorbox}{The floor with 3 bands and 1 curve}{637}{tcb@cnt@worked.42.8}%
+\contentsline {tcolorbox}{Two pixels through one number}{640}{tcb@cnt@worked.42.9}%
+\contentsline {tcolorbox}{The progressive decoder's 1,504,096 parameters}{641}{tcb@cnt@worked.42.10}%
+\contentsline {tcolorbox}{Set1's contrast change}{643}{tcb@cnt@worked.42.11}%
+\contentsline {tcolorbox}{Reading an interval as a margin}{644}{tcb@cnt@worked.42.12}%
+\contentsline {tcolorbox}{Stage-1 block, FT04 and Heavy}{650}{tcb@cnt@worked.43.1}%
+\contentsline {tcolorbox}{Heavy's progressive decoder, 4,279,616 parameters}{652}{tcb@cnt@worked.43.2}%
+\contentsline {tcolorbox}{What the masked stage\nobreakspace {}1 costs and holds}{653}{tcb@cnt@worked.43.3}%
+\contentsline {tcolorbox}{Dealing shards to workers}{657}{tcb@cnt@worked.43.4}%
+\contentsline {tcolorbox}{The learning rate at epochs 40 and 60}{658}{tcb@cnt@worked.43.5}%
+\contentsline {tcolorbox}{Where the top-0.1\% loss sits}{660}{tcb@cnt@worked.43.6}%
+\contentsline {tcolorbox}{Switching off a scene's targets}{662}{tcb@cnt@worked.43.7}%
+\contentsline {tcolorbox}{Mean gain over FT04 at three checkpoints}{664}{tcb@cnt@worked.43.8}%
+\contentsline {tcolorbox}{Parity, to the digit}{665}{tcb@cnt@worked.43.9}%
+\contentsline {tcolorbox}{Four times faster from eight times the threads}{666}{tcb@cnt@worked.43.10}%
+\contentsline {tcolorbox}{The cost of a new library}{674}{tcb@cnt@worked.44.1}%
+\contentsline {tcolorbox}{Counting the namer's parameters}{674}{tcb@cnt@worked.44.2}%
+\contentsline {tcolorbox}{Normalising one band}{675}{tcb@cnt@worked.44.3}%
+\contentsline {tcolorbox}{Three entries of $\operatorname {enc}(1000\text { nm})$}{676}{tcb@cnt@worked.44.4}%
+\contentsline {tcolorbox}{Widths of four bands, and of a band beside a water gap}{676}{tcb@cnt@worked.44.5}%
+\contentsline {tcolorbox}{Tokens by the matrix product, on paper}{677}{tcb@cnt@worked.44.6}%
+\contentsline {tcolorbox}{One query, three bins, one empty}{678}{tcb@cnt@worked.44.7}%
+\contentsline {tcolorbox}{One channel through the frozen BatchNorm}{679}{tcb@cnt@worked.44.8}%
+\contentsline {tcolorbox}{A ring that ignores the halo}{680}{tcb@cnt@worked.44.9}%
+\contentsline {tcolorbox}{How much training goes to small fills}{682}{tcb@cnt@worked.44.10}%
+\contentsline {tcolorbox}{Noise from four pixels}{682}{tcb@cnt@worked.44.11}%
+\contentsline {tcolorbox}{Planting one pixel}{683}{tcb@cnt@worked.44.12}%
+\contentsline {tcolorbox}{Recognising the sample, or naming the material}{684}{tcb@cnt@worked.44.13}%
+\contentsline {tcolorbox}{Who gets the pull}{685}{tcb@cnt@worked.44.14}%
+\contentsline {tcolorbox}{Level 1 by matching, three library entries}{687}{tcb@cnt@worked.44.15}%
+\contentsline {tcolorbox}{Four points no line can split}{688}{tcb@cnt@worked.44.16}%
+\contentsline {tcolorbox}{From one row of $\mathbf {S}$ to both levels}{689}{tcb@cnt@worked.44.17}%
+\contentsline {tcolorbox}{The schedule at a few steps}{693}{tcb@cnt@worked.44.18}%
+\contentsline {tcolorbox}{Two metals, two sides}{694}{tcb@cnt@worked.44.19}%
+\contentsline {tcolorbox}{Recall at a fixed false-alarm rate}{695}{tcb@cnt@worked.44.20}%
+\contentsline {tcolorbox}{Set-1's grid by hand}{701}{tcb@cnt@worked.45.1}%
+\contentsline {tcolorbox}{Two objects or three}{702}{tcb@cnt@worked.45.2}%
+\contentsline {tcolorbox}{Writing five values}{703}{tcb@cnt@worked.45.3}%
+\contentsline {tcolorbox}{The wavelength code at 450\,nm}{709}{tcb@cnt@worked.46.1}%
+\contentsline {tcolorbox}{HyperSL's 9,027,841 trainable parameters}{709}{tcb@cnt@worked.46.2}%
+\contentsline {tcolorbox}{How much does pretraining buy?}{713}{tcb@cnt@worked.46.3}%
+\contentsline {tcolorbox}{Scaling scene $S_1$}{717}{tcb@cnt@worked.47.1}%
+\contentsline {tcolorbox}{The same spectrum in scene $S_2$}{717}{tcb@cnt@worked.47.2}%
+\contentsline {tcolorbox}{Scene $S_1$ after a bright pixel arrives}{718}{tcb@cnt@worked.47.3}%
+\contentsline {tcolorbox}{The angle between $\mathbf {p}_2$ and $\mathbf {p}_3$, before and after}{719}{tcb@cnt@worked.47.4}%
+\contentsline {tcolorbox}{A 5-band window on PRISMA's 149-band list}{720}{tcb@cnt@worked.47.5}%
+\contentsline {tcolorbox}{Self-completion of band 2}{726}{tcb@cnt@worked.48.1}%
+\contentsline {tcolorbox}{Spatial completion of the same pixels}{726}{tcb@cnt@worked.48.2}%
+\contentsline {tcolorbox}{How many bands should never be hidden in 4 draws?}{728}{tcb@cnt@worked.48.3}%
+\contentsline {tcolorbox}{Reading the bootstrap rows}{730}{tcb@cnt@worked.48.4}%
+\contentsline {tcolorbox}{What 0.069 against 0.199 radians means}{736}{tcb@cnt@worked.49.1}%
+\contentsline {tcolorbox}{One target pixel at fill $a$, averaged over $3\times 3$}{737}{tcb@cnt@worked.49.2}%
+\contentsline {tcolorbox}{Why a TV penalty sets small targets to zero}{738}{tcb@cnt@worked.49.3}%
+\contentsline {tcolorbox}{Cirrus recall and precision, from the tables}{743}{tcb@cnt@worked.50.1}%
+\contentsline {tcolorbox}{One cirrus layer, two scenes}{744}{tcb@cnt@worked.50.2}%

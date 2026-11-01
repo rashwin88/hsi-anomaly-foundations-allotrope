@@ -48,7 +48,7 @@ export function useHostMetrics(): MetricSeries {
         setSeries((prev) => {
           const gpuPct =
             snap.gpu.available && snap.gpu.devices.length > 0
-              ? snap.gpu.devices[0].utilization_percent
+              ? snap.gpu.devices[0].utilization_percent ?? 0
               : 0;
           return {
             cpu: [...prev.cpu.slice(1), snap.cpu.percent],

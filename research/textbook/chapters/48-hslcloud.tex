@@ -1,0 +1,246 @@
+\chapter{Cloud masking}\label{ch:hslcloud}
+\def\tbrk{\hfil\penalty50\hfilneg}% local: a line may break before a provenance tag
+
+\begin{onething}
+A cloud classifier given HyperSL's 256-number embedding plus seven raw bands found 28.9\% of the cirrus that EnMAP's own
+masks label, against 67.9\% for the same classifier given the 148 raw bands alone; HyperSL was pretrained on scenes chosen
+to be nearly cloud-free, and its per-scene scaling turns the same thin cirrus into a different input in every scene.
+\end{onething}
+
+The product excludes cloud from its detections (\cref{ch:seghead}, \file{docs/lld/evaluation.md}, ``Decisions''). In
+September 2026 the cloud mask came from fixed thresholds and from EnMAP's own quality layers, which are wrong over the
+high plateau, and PRISMA L2D carries no cloud mask at all. A learned cloud mask on PRISMA was needed, and a foundation
+model's embedding is the textbook way to build one with few labels. The experiment
+\file{research/experiments/cloud-mask-hypersl/} (commits \code{fa8c1ab} and \code{b452e8d}, 2026-10-01) tried it.
+
+\begin{analogy}
+A wine taster trained only on still wines, poured at the temperature of whichever cellar they came from, and asked to
+detect a faint sparkle. The sparkle is small, it was never in the training glasses, and how cold the glass is (which
+changes how a sparkle feels) is set by the cellar, not the wine. Give a second taster a thermometer and the bare glass
+and they do better, with no training at all on what wine is.
+\end{analogy}
+
+%======================================================================
+\section{The experiment}\label{sec:hslcloud:setup}
+
+\paragraph{Training pixels (step 1).} 97 EnMAP L2A scenes (the commit message of \code{fa8c1ab}), every spectrum
+resampled onto PRISMA's band axis with a Gaussian of PRISMA's band width, because ``HyperSL's embedding shifts with band
+sampling almost as much as with material'' (\cref{ch:hslnorm}). Classes 0 clear, 1 cloud, 2 cirrus, 3 snow, from EnMAP's
+\code{QL_QUALITY_*} masks with three corrections agreed on 2026-10-01: scenes above 2,500\,m mean elevation contribute no
+cloud or cirrus labels (EnMAP flags 51--57\% of clear plateau ground as cirrus); snow labels below 1,000\,m are dropped
+(salt flats); pixels within 2 of a mask boundary are dropped. Cirrus is \code{QL_QUALITY_CIRRUS} $\ge2$; haze and shadow
+are left out\tbrk\tagMr{\texttt{fa8c1ab}: step1\_training\_set.py docstring}.
+
+\begin{sourcenote}[: the cirrus band is not there]
+The classic cirrus test uses the 1.38\,$\mu$m water-vapour band, where low surfaces are dark and high ice cloud is bright.
+``EnMAP L2A blanks 1343--1390\,nm \dots{} to nodata, so the 1.38\,$\mu$m cirrus band is never in the training spectra''
+(the same docstring). PRISMA's 149-band axis also drops 1325--1495\,nm. Both variants below work without it, so the
+comparison between them is fair, and both are harder than they would be with it.
+\end{sourcenote}
+
+\paragraph{Embeddings (step 2).} HyperSL at mask 0 on 148 bands (the 149-band axis minus 1785\,nm, which EnMAP does not
+cover), each pixel scaled per band by its own scene's minimum and maximum, ``the frame HyperSL was trained in''.
+
+\paragraph{Classifier (step 3).} A gradient-boosted tree classifier (\code{HistGradientBoostingClassifier}, 300 rounds,
+classes weighted to balance, early stopping) with two feature sets:
+\begin{itemize}
+\item \textbf{C}, ``the chosen design'': HyperSL's 256-number embedding plus raw reflectance at 7 wavelengths (490, 560,
+665, 865, 1240, 1610 and 2200\,nm);
+\item \textbf{B}, ``a yardstick only'': raw reflectance on the 148 bands, no HyperSL.
+\end{itemize}
+
+\begin{definition}[Grouped cross-validation]
+\emph{$k$-fold cross-validation}\index{cross-validation} splits the data into $k$ parts, trains on $k-1$ and tests on the
+remaining one, $k$ times, so every sample is tested exactly once by a model that did not train on it. \emph{Grouped}
+means whole groups are kept together: here an EnMAP \emph{datatake} (one overpass, cut into several tiles that share
+atmosphere and sun angle) is never split between training and test.
+\end{definition}
+784,120 pixels from 47 datatakes, 5 folds\tbrk\tagMr{\texttt{b452e8d}: cloud-mask-hypersl/step3\_report.txt}.
+
+%======================================================================
+\section{The results, in full}\label{sec:hslcloud:results}
+
+\begin{table}[htbp]
+\centering\small
+\begin{tabular}{@{}lrrrrr@{}}
+\toprule
+& \multicolumn{4}{c}{the classifier says} & \\
+\cmidrule(lr){2-5}
+EnMAP label & clear & cloud & cirrus & snow & row total \\
+\midrule
+clear & \textbf{341,395} & 36,215 & 4,955 & 909 & 383,474 \\
+cloud & 22,708 & \textbf{244,246} & 11,452 & 2,042 & 280,448 \\
+cirrus & 21,979 & 28,341 & \textbf{20,472} & 1 & 70,793 \\
+snow & 1,619 & 5,025 & 36 & \textbf{42,725} & 49,405 \\
+\bottomrule
+\end{tabular}
+\caption{Variant C, HyperSL embedding + 7 raw bands. Rows are EnMAP's labels, columns the classifier's out-of-fold
+predictions\tagMr{\texttt{b452e8d}: step3\_report.txt}; row totals \tagC.}
+\label{tab:hslcloud:c}
+\end{table}
+
+\begin{table}[htbp]
+\centering\small
+\begin{tabular}{@{}lrrrrr@{}}
+\toprule
+& \multicolumn{4}{c}{the classifier says} & \\
+\cmidrule(lr){2-5}
+EnMAP label & clear & cloud & cirrus & snow & row total \\
+\midrule
+clear & \textbf{342,688} & 25,158 & 12,901 & 2,727 & 383,474 \\
+cloud & 27,357 & \textbf{225,595} & 25,510 & 1,986 & 280,448 \\
+cirrus & 6,861 & 15,888 & \textbf{48,037} & 7 & 70,793 \\
+snow & 406 & 1,135 & 16 & \textbf{47,848} & 49,405 \\
+\bottomrule
+\end{tabular}
+\caption{Variant B, the 148 raw bands, no HyperSL; same pixels, folds and classifier\tagMr{\texttt{b452e8d}:
+step3\_report.txt}.}
+\label{tab:hslcloud:b}
+\end{table}
+
+\begin{definition}[Recall and precision of a class]
+For a class, \emph{recall}\index{recall} is the share of pixels \emph{labelled} with it that the classifier also calls
+it: the diagonal entry over its row total. \emph{Precision}\index{precision} is the share of pixels the classifier
+\emph{calls} it that are labelled with it: the diagonal entry over its column total. The report prints them as ``found
+$x$\% of EnMAP's'' and ``right $y$\% of the time''.
+\end{definition}
+
+\begin{worked}[label={we:hslcloud:cirrus}]{Cirrus recall and precision, from the tables}
+\emph{Variant C.} The cirrus row is $21{,}979+28{,}341+20{,}472+1$:
+\begin{align*}
+\text{row total} &= 21{,}979+28{,}341 = 50{,}320,\\
+&\quad 50{,}320+20{,}472 = 70{,}792,\quad 70{,}792+1 = 70{,}793,\\
+\text{recall} &= 20{,}472/70{,}793 = 0.2892 = 28.9\%,\\
+\text{column total} &= 4{,}955+11{,}452+20{,}472+36 = 36{,}915,\\
+\text{precision} &= 20{,}472/36{,}915 = 0.5546 = 55.5\% .
+\end{align*}
+\emph{Variant B.} Same row total, 70,793.
+\begin{align*}
+\text{recall} &= 48{,}037/70{,}793 = 0.6786 = 67.9\%,\\
+\text{column total} &= 12{,}901+25{,}510+48{,}037+16 = 86{,}464,\\
+\text{precision} &= 48{,}037/86{,}464 = 0.5556 = 55.6\% .
+\end{align*}
+At the same precision, the raw bands find $48{,}037/20{,}472=2.35$ times as much cirrus\tagC. Of C's 50,321 missed cirrus
+pixels, 21,979 were called clear and 28,341 cloud.
+\end{worked}
+
+\begin{center}\small
+\begin{tabular}{@{}lrrrr@{}}
+\toprule
+& \multicolumn{2}{c}{recall (found)} & \multicolumn{2}{c}{precision (right)} \\
+\cmidrule(lr){2-3}\cmidrule(lr){4-5}
+class & C: HyperSL + 7 & B: 148 raw & C: HyperSL + 7 & B: 148 raw \\
+\midrule
+clear & 89.0\% & 89.4\% & 88.1\% & 90.8\% \\
+cloud & \textbf{87.1\%} & 80.4\% & 77.8\% & \textbf{84.2\%} \\
+cirrus & 28.9\% & \textbf{67.9\%} & 55.5\% & 55.6\% \\
+snow & 86.5\% & \textbf{96.8\%} & 93.5\% & 91.0\% \\
+\midrule
+overall accuracy & \multicolumn{2}{c}{C 82.75\% \quad B 84.70\%\tagC} & & \\
+high-plateau clear called cloud or cirrus & \multicolumn{2}{c}{C \textbf{4.34\%} \quad B 6.62\%} & & \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}
+\begin{axis}[ybar, bar width=8pt, width=0.85\linewidth, height=55mm, ymin=0, ymax=110, ylabel={recall (\%)},
+  xtick={0,1,2,3}, xticklabels={clear,cloud,cirrus,snow}, enlarge x limits=0.18,
+  legend style={at={(0.5,-0.18)},anchor=north,font=\small,legend columns=2}]
+\addplot[fill=loss!60] table[x=idx, y=recallC] {figdata/hsl_cloud_recall.dat};
+\addplot[fill=spec!70] table[x=idx, y=recallB] {figdata/hsl_cloud_recall.dat};
+\legend{C: HyperSL + 7 raw bands, B: 148 raw bands}
+\end{axis}
+\end{tikzpicture}
+\caption{Share of each EnMAP-labelled class the classifier finds, out of fold over 47 datatakes. HyperSL's features lose
+most on cirrus, the thin class, and on snow.}
+\label{fig:hslcloud:recall}
+\end{figure}
+
+\paragraph{Being fair.} C is not worse everywhere. It finds more of the thick cloud (87.1\% against 80.4\%), and on the
+59,474 clear pixels of high-plateau scenes, where EnMAP's own masks fail, it calls fewer of them cloud or cirrus (4.34\%
+against 6.62\%). Its overall accuracy is two points lower, $82.75\%$ against $84.70\%$\tagC. And the scores measure
+\emph{agreement with EnMAP's masks}, not truth: the step-3 docstring warns that ``a model can only look as good as EnMAP is
+right''.
+
+\begin{sourcenote}[: one comparison the run did not make]
+C has 7 raw bands and B has 148. The run did not test the 7 raw bands \emph{alone}, nor HyperSL with all 148 raw bands, so
+it cannot say how much of B's advantage is ``more raw bands'' rather than ``no HyperSL''. What it does show is that adding
+HyperSL's 256 numbers to 7 bands is worth far less, on cirrus, than having the other 141 bands.
+\end{sourcenote}
+
+%======================================================================
+\section{Why thin cloud is hard for this model}\label{sec:hslcloud:why}
+
+\subsection{It was never shown clouds}
+
+The paper's pretraining data were chosen with ``cloud cover near zero'', overall below 10\% (\cref{sec:hslwhat:data}). A
+reconstruction model learns what its data contain. Cloud and cirrus were deliberately kept out, so nothing in pretraining
+made the embedding sensitive to them. Our own Indradhanu fine-tunes, by contrast, include cloud as a labelled class of their
+segmentation head (\cref{ch:seghead}).
+
+\subsection{The same cirrus, a different input in every scene}
+
+Thin cirrus mostly adds a little brightness to whatever is beneath it\tagA. Call that addition $\delta$ in one band. Under
+\cref{eq:hslnorm:minmax} a pixel's input changes by
+\begin{align*}
+x'_{\text{cirrus}}-x'_{\text{clear}} &= \frac{(x+\delta)-m}{M-m}-\frac{x-m}{M-m} && \text{the scaled value with and without }\delta\\
+&= \frac{x+\delta-m-x+m}{M-m} && \text{one fraction, same denominator}\\
+&= \frac{\delta}{M-m}. && x\text{ and }m\text{ cancel}
+\end{align*}
+The step depends on the scene's span $M-m$ in that band.
+
+\begin{worked}[label={we:hslcloud:span}]{One cirrus layer, two scenes}
+Cirrus adds $\delta=0.03$ reflectance at 865\,nm\tagA. Scene A is dark (water and forest), with $m=0.02$ and $M=0.22$, a span
+of 0.20; scene B is a bright desert with $m=0.20$ and $M=0.80$, a span of 0.60\tagA.
+\begin{align*}
+\text{scene A: } & 0.03/0.20 = 0.15,\\
+\text{scene B: } & 0.03/0.60 = 0.05 .
+\end{align*}
+The same cirrus is a step of 0.15 in one scene's input and 0.05 in the other's, a factor of three. With raw reflectance the
+step is 0.03 in both. A classifier trained across 47 datatakes sees one physical signal at many sizes.
+\end{worked}
+
+Every band has its own span, so the cirrus signature's \emph{shape} across bands is distorted too, differently per scene
+(the angle argument of \cref{we:hslnorm:angle}). And the brightest pixels of a cloudy scene are often the cloud itself: the
+cloud then sets $M$, the frame, for every other pixel (\cref{we:hslnorm:anom}).
+
+\begin{keypoint}
+A cloud mask must recognise a class by an absolute property (thin ice cloud is bright, flat and high). A model that
+removes absolute brightness per scene and never saw clouds has to recover both from seven raw bands bolted on afterwards.
+\end{keypoint}
+
+\paragraph{What the product does.} Cloud is a class of Indradhanu's own segmentation head, trained on labelled masks from
+reflectance input; since FTH3 the release candidate excludes \emph{thick} cloud only, because its thin-cloud output called
+haze cloud on set4 (\cref{ch:heavy}). The HyperSL classifier was not adopted.
+
+\begin{drift}
+The 784,120 pixels, 47 datatakes and both confusion tables belong to the 2026-10-01 run (commit \code{b452e8d}); its
+training tables lived on the GPU box (\file{/wt/cloudmask/}), not in the repository. A step 4 (maps on PRISMA) was planned
+in the scripts; no result of it is in the history.
+\end{drift}
+
+%======================================================================
+\begin{confusions}
+\confusion{HyperSL is worse at every cloud class.}{It finds more thick cloud (87.1\% against 80.4\%) and makes fewer false
+calls on the high plateau. It loses on cirrus and snow, and on overall accuracy by two points.}
+\confusion{The cirrus result is low because the 1.38\,$\mu$m band was missing.}{It was missing for both variants. The
+difference between them is not that band.}
+\confusion{Recall and precision are the same thing seen twice.}{Recall divides by the row (what EnMAP labelled), precision by
+the column (what the classifier called). C and B have the same cirrus precision and very different recall.}
+\confusion{These numbers say how often the mask is right.}{They say how often it agrees with EnMAP's own masks, which are
+themselves wrong over the plateau.}
+\end{confusions}
+
+\begin{checkyourself}
+\item\label{ex:hslcloud:1} From \cref{tab:hslcloud:c}, compute variant C's recall and precision for snow.
+\item\label{ex:hslcloud:2} From \cref{tab:hslcloud:b}, compute variant B's recall and precision for cloud.
+\item\label{ex:hslcloud:3} Compute both variants' overall accuracy from the tables (the diagonal over 784,120).
+\item\label{ex:hslcloud:4} A third scene has span 0.40 at 865\,nm. What input step does the same cirrus ($\delta=0.03$) make?
+  What span would make it 0.10?
+\item\label{ex:hslcloud:5} In variant C, what share of the missed cirrus was called cloud? Why is that error less harmful to the
+  product than calling it clear?
+\end{checkyourself}
+
+\nextchapter{ch:hslverdict}

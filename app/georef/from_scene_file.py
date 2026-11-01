@@ -3,17 +3,26 @@
 The vendable model doesn't store spatial reference; we recover it at export
 time. Each sensor's raw file ships georef in its own way:
 
-  * **PRISMA L2D**: per-pixel ``Latitude`` + ``Longitude`` arrays under
-    ``HDFEOS/SWATHS/PRS_L2D_HCO/Geolocation Fields``. Swath data — we fit
-    an EPSG:4326 affine to the corner lat/lon and report that. Sub-pixel
-    accuracy isn't critical for submission overlay; this is the
-    industry-standard simplification for L2D HCO data.
+  * **PRISMA L2D**: the product's own UTM grid from its root attributes
+    (``Epsg_Code`` + ``Product_*corner_easting/northing``, ``prisma_utm_grid``) -
+    the grid the evaluators' ground truth uses. Fallback when they are missing or
+    the shape differs: an EPSG:4326 affine fitted to the per-pixel ``Latitude`` /
+    ``Longitude`` bounding box (approximate, can be pixels off).
   * **EnMAP L2A**: spectral image is a UTM GeoTIFF
     (``*-SPECTRAL_IMAGE.TIF``). rasterio reads CRS + transform directly.
   * **AVIRIS-NG**: ENVI BIL with a ``.hdr`` sidecar carrying ``map info``
     and ``coordinate system string``. rasterio understands ENVI.
   * **Landsat 9 / HotSat**: source ``.tif`` is a UTM GeoTIFF — rasterio
     direct read.
+  * **Tanager**: HDF-EOS5 GRID. The UTM grid comes from ``StructMetadata.0``
+    (outer corners, so no half-pixel shift) and the grid group's
+    ``epsg_code``, read with h5py by ``app.utils.files.tanager_helper``.
+    An ENVI Tanager upload (``.hdr`` + data) is read by rasterio from the data
+    file's ``map info`` / ``coordinate system string``; no map info refuses.
+  * **generic_hsi**: the file's own CRS (any GDAL format, EPSG:4326 included),
+    else an OSK ``.igm``'s per-pixel lat/lon fitted like PRISMA's fallback,
+    else refuse with "this file has no map coordinates"
+    (``app.utils.files.generic_hsi_georef``).
 
 If the spatial extent (H, W) of the resolved georef doesn't match the
 caller's expected shape, we error out instead of silently emitting a
@@ -47,7 +56,7 @@ def resolve_scene_georef(
         ``<data_dir>/scenes/<scene_id>/raw`` — the per-scene raw folder.
     sensor_type : str
         Scene's ``sensor_type`` column (``prisma``, ``enmap``, ``aviris_ng``,
-        ``landsat9``, ``hotsat1``).
+        ``landsat9``, ``hotsat1``, ``tanager``).
     target_shape : (H, W)
         Expected raster shape — the cube's spatial dims. Used to scale the
         derived affine if the source is at a different resolution (PRISMA),
@@ -70,6 +79,12 @@ def resolve_scene_georef(
         return _resolve_aviris_ng(scene_dir, target_shape)
     if sensor_type in ("landsat9", "hotsat1"):
         return _resolve_thermal_geotiff(scene_dir, sensor_type, target_shape)
+    if sensor_type == "tanager":
+        return _resolve_tanager(scene_dir, target_shape)
+    if sensor_type == "generic_hsi":
+        from app.utils.files.generic_hsi_georef import resolve_generic_hsi_georef
+
+        return resolve_generic_hsi_georef(scene_dir, target_shape)
     raise GeorefUnavailable(f"unknown sensor_type {sensor_type!r}")
 
 
@@ -115,6 +130,7 @@ def _resolve_prisma(scene_dir: Path, target_shape):
                 )
             lats = geo["Latitude"][:]
             lons = geo["Longitude"][:]
+            attrs = dict(f.attrs)
     except (OSError, KeyError) as exc:
         raise GeorefUnavailable(
             f"failed to read PRISMA HE5 at {he5_path}: {exc}"
@@ -125,6 +141,11 @@ def _resolve_prisma(scene_dir: Path, target_shape):
             f"PRISMA lat/lon arrays have mismatched shapes "
             f"{lats.shape} vs {lons.shape}"
         )
+
+    grid = prisma_utm_grid(attrs, lats.shape)
+    if grid is not None and tuple(target_shape) == tuple(lats.shape):
+        logger.info("PRISMA georef resolved from %s: the product's own UTM grid, EPSG:%d", he5_path.name, grid[1])
+        return grid[0], CRS.from_epsg(grid[1])
 
     # The source lat/lon arrays match the cube's source spatial shape, but
     # the vendable may have transposed / cropped. We fit the affine to the
@@ -143,6 +164,29 @@ def _resolve_prisma(scene_dir: Path, target_shape):
         he5_path.name, min_lon, max_lon, min_lat, max_lat, H, W,
     )
     return transform, crs
+
+
+def prisma_utm_grid(attrs: dict, shape):
+    """(Affine, EPSG) of a PRISMA L2D product's own map grid from its root attributes, or None if they are missing.
+
+    L2D is gridded in UTM (`Epsg_Code`); the `Product_{UL,UR,LL}corner_{easting,northing}` attributes are the
+    corner pixels' *centres*, so the pitch is the corner span over (n - 1) and the origin is the UL centre minus half
+    a pixel. This is the grid the AIGC ground-truth rasters use (Set-1: EPSG:32642, [30, 0, 545007.75, 0, -30,
+    2501437.5]); the lat/lon bounding-box fit below is only the fallback.
+    """
+    from rasterio.transform import Affine
+
+    try:
+        epsg = int(attrs["Epsg_Code"])
+        ule, uln = float(attrs["Product_ULcorner_easting"]), float(attrs["Product_ULcorner_northing"])
+        ure, lln = float(attrs["Product_URcorner_easting"]), float(attrs["Product_LLcorner_northing"])
+    except (KeyError, TypeError, ValueError):
+        return None
+    h, w = shape
+    if epsg <= 0 or h < 2 or w < 2 or ure <= ule or uln <= lln:
+        return None
+    dx, dy = round((ure - ule) / (w - 1), 2), round((uln - lln) / (h - 1), 2)   # float32 attrs: 29.9998 -> 30.0
+    return Affine(dx, 0.0, ule - dx / 2, 0.0, -dy, uln + dy / 2), epsg
 
 
 # ---------------------------------------------------------------------------
@@ -266,6 +310,64 @@ def _resolve_thermal_geotiff(scene_dir: Path, sensor_type: str, target_shape):
         # Reject UDM (uncertainty / mask) products even if they slipped in.
         preferred = [p for p in preferred if "udm" not in p.name.lower()]
     return _read_georef_from_geotiff((preferred or tifs)[0], target_shape)
+
+
+# ---------------------------------------------------------------------------
+# Tanager — HDF-EOS5 grid geometry
+# ---------------------------------------------------------------------------
+
+def _resolve_tanager(scene_dir: Path, target_shape):
+    from rasterio.crs import CRS
+    from rasterio.transform import Affine
+
+    from app.utils.files.tanager_helper import grid_epsg, pick_tanager_file, read_tanager_metadata
+
+    path = pick_tanager_file([p for p in scene_dir.rglob("*") if p.is_file()])
+    if path is None:
+        raise GeorefUnavailable(f"no Tanager .h5, or ENVI .hdr with its data file, under {scene_dir}")
+    if path.suffix.lower() == ".hdr":
+        return _resolve_tanager_envi(path, target_shape)
+    try:
+        grid = read_tanager_metadata(path).grid
+        epsg = grid_epsg(grid)
+    except (OSError, KeyError, ValueError) as exc:
+        raise GeorefUnavailable(f"failed to read the Tanager grid from {path}: {exc}") from exc
+    # No rescaling, unlike _read_georef_from_geotiff: band_filter_apply never
+    # crops a Tanager cube, so a shape mismatch means the wrong file.
+    if tuple(target_shape) != (grid.y_dim, grid.x_dim):
+        raise GeorefUnavailable(
+            f"Tanager grid {grid.y_dim}x{grid.x_dim} in {path.name} != target shape {tuple(target_shape)}"
+        )
+    dx, dy = grid.pixel_size_m
+    ulx, uly = grid.upper_left_m
+    logger.info("Tanager georef resolved from %s: EPSG:%d, %.2f m grid", path.name, epsg, dx)
+    return Affine(dx, 0.0, ulx, 0.0, -dy, uly), CRS.from_epsg(epsg)
+
+
+def _resolve_tanager_envi(hdr: Path, target_shape):
+    """CRS + affine GDAL reads from the header's map info. Exact shape, as for the HDF5 grid."""
+    import warnings
+
+    import rasterio
+
+    from app.utils.files.tanager_envi import envi_data_file
+
+    data = envi_data_file(hdr)
+    try:
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", rasterio.errors.NotGeoreferencedWarning)
+            with rasterio.open(data) as src:
+                crs, transform, shape = src.crs, src.transform, (src.height, src.width)
+    except Exception as exc:
+        raise GeorefUnavailable(f"rasterio could not open {data}: {exc}") from exc
+    if crs is None:
+        raise GeorefUnavailable(
+            f"ENVI header {hdr.name} has no map info / coordinate system string: the scene cannot be georeferenced"
+        )
+    if shape != tuple(target_shape):
+        raise GeorefUnavailable(f"Tanager ENVI raster {shape} in {data.name} != target shape {tuple(target_shape)}")
+    logger.info("Tanager georef resolved from ENVI %s: %s", hdr.name, crs.to_string())
+    return transform, crs
 
 
 # ---------------------------------------------------------------------------

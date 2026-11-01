@@ -1,0 +1,21 @@
+\glossentry{Local RX}{RX with the mean and covariance estimated separately for each pixel from a ring of its neighbours, so a pixel is judged against its surroundings rather than the whole scene.}
+\glossentry{Dual window}{The square ring used by local RX: an outer window around the pixel with a smaller inner (guard) window removed; also called an annulus.}
+\glossentry{Annulus}{Another name for the dual-window background ring.}
+\glossentry{Guard window}{The inner square excluded from the local background, so that a target larger than one pixel does not contaminate its own statistics.}
+\glossentry{Half-size}{The window parameter used by LocalRXDetector: a half-size of 25 means a 51 x 51 square. The residual score and PCA-RX use full widths instead.}
+\glossentry{min bg pixels}{The least number of valid ring pixels needed to score a pixel locally, by default the number of bands plus one, because a covariance from n points has rank at most n - 1.}
+\glossentry{Masked mean}{A mean over padded rows that sums only the real entries and divides by their count, not by the padded length.}
+\glossentry{computed mask}{The pixels that actually received a local score, as opposed to the spatial mask of pixels eligible for one; statistics must be reduced over it.}
+\glossentry{Stride}{In local RX, scoring only every n-th row and column and interpolating the rest.}
+\glossentry{Rank}{The number of independent directions a matrix's outputs fill; for a covariance, the number of non-zero eigenvalues.}
+\glossentry{Signal-to-noise ratio}{Along a direction, the signal variance divided by the noise variance.}
+\glossentry{Noise fraction}{Along a direction, the share of the total variance that is noise.}
+\glossentry{Maximum noise fraction}{The MNF transform (Green et al. 1988): the directions ordered by noise fraction, equivalently by signal-to-noise ratio; often called minimum noise fraction.}
+\glossentry{Generalised eigenproblem}{Sigma a = lambda (noise Sigma) a: find directions where one covariance is a multiple of another; solved by whitening with the second matrix and then taking ordinary eigenvectors.}
+\glossentry{Noise whitening}{Transforming data so the noise covariance becomes the identity, the first step of MNF.}
+\glossentry{Shift difference}{Estimating the noise covariance as half the covariance of differences between neighbouring pixels, assuming neighbours share the same signal.}
+\glossentry{MNF component}{A pixel's coordinate along an MNF direction; MNF components are uncorrelated, with variance 1 + SNR.}
+\glossentry{MNF-RX}{RX run on the top MNF components (10 by default); the product's classical hyperspectral detector.}
+\glossentry{MNF eigenvalue diagnostic}{Reading the MNF eigenvalues: values well above 1 are signal components, values near 1 are noise; a flat list means no dominant signal.}
+\glossentry{PCA-RX}{The evaluation's classical baseline: whiten the top 30 principal components of the cube with a global covariance and score the squared distance from a ring mean (full widths 21 and 61).}
+\glossentry{Statistical ensembler}{A notebook-only detector that fuses global and local RX score maps by their ranks.}

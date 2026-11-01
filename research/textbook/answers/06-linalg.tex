@@ -1,0 +1,107 @@
+\answersfor{ch:linalg}
+
+\begin{solution}{ex:linalg:1}
+Let $\vect{a} = (1, 2, 2)$ and $\vect{b} = (2, 1, 2)$.
+\begin{align*}
+\vect{a}\T\vect{b} &= 1\times2 + 2\times1 + 2\times2 = 2 + 2 + 4 = 8\\
+\norm{\vect{a}} &= \sqrt{1 + 4 + 4} = \sqrt9 = 3\\
+\norm{\vect{b}} &= \sqrt{4 + 1 + 4} = \sqrt9 = 3\\
+\cos\theta &= \frac{8}{3\times3} = \frac89 = 0.8889\\
+\theta &= \arccos(0.8889) = 0.4759\ \text{rad} = 0.4759\times180/3.14159 = 27.3^\circ .
+\end{align*}
+Projection of $\vect{a}$ onto $\vect{b}$:
+\begin{align*}
+t^\star &= \frac{\vect{b}\T\vect{a}}{\vect{b}\T\vect{b}} = \frac{8}{9}\\
+\vect{p} &= \tfrac89\,(2, 1, 2) = (\tfrac{16}{9}, \tfrac89, \tfrac{16}{9}) = (1.778, 0.889, 1.778)\\
+\vect{r} &= \vect{a} - \vect{p} = (1 - \tfrac{16}{9},\ 2 - \tfrac89,\ 2 - \tfrac{16}{9})
+  = (-\tfrac79, \tfrac{10}{9}, \tfrac29).
+\end{align*}
+Orthogonality: $\vect{b}\T\vect{r} = 2\times(-\tfrac79) + 1\times\tfrac{10}{9} + 2\times\tfrac29
+= \tfrac{-14 + 10 + 4}{9} = 0$.
+\end{solution}
+
+\begin{solution}{ex:linalg:2}
+Mean: band 1 $(1 + 3 + 2)/3 = 6/3 = 2$; band 2 $(2 + 2 + 5)/3 = 9/3 = 3$.
+Deviations: $(1-2, 2-3) = (-1, -1)$, $(3-2, 2-3) = (1, -1)$, $(2-2, 5-3) = (0, 2)$.
+Outer products:
+\[
+\begin{pmatrix} 1 & 1\\ 1 & 1\end{pmatrix},\qquad
+\begin{pmatrix} 1 & -1\\ -1 & 1\end{pmatrix},\qquad
+\begin{pmatrix} 0 & 0\\ 0 & 4\end{pmatrix}.
+\]
+Sum: $(1,1)$ entry $1 + 1 + 0 = 2$; $(1,2)$ entry $1 - 1 + 0 = 0$; $(2,2)$ entry $1 + 1 + 4 = 6$.
+Divide by $N - 1 = 2$:
+\[
+\Cov = \frac12\begin{pmatrix} 2 & 0\\ 0 & 6\end{pmatrix} = \begin{pmatrix} 1 & 0\\ 0 & 3\end{pmatrix}.
+\]
+The covariance is 0, so the correlation $0/(\sqrt1\times\sqrt3)$ is 0: in this sample the two
+bands are uncorrelated, and the principal directions are the band axes themselves.
+\end{solution}
+
+\begin{solution}{ex:linalg:3}
+Trace $5 + 2 = 7$, determinant $5\times2 - 2\times2 = 10 - 4 = 6$. Characteristic polynomial
+$\lambda^2 - 7\lambda + 6 = 0$, which factorises as $(\lambda - 6)(\lambda - 1)$, so
+$\lambda_1 = 6$, $\lambda_2 = 1$.
+
+For $\lambda_1 = 6$: $(5 - 6)u_1 + 2u_2 = 0$, so $u_1 = 2u_2$; take $(2, 1)$, length $\sqrt5$,
+$\vect{u}_1 = (2, 1)/\sqrt5 = (0.8944, 0.4472)$. Check: $(5\times2 + 2\times1, 2\times2 + 2\times1)
+= (12, 6) = 6\times(2, 1)$.
+
+For $\lambda_2 = 1$: $(5 - 1)u_1 + 2u_2 = 0$, so $u_2 = -2u_1$; take $(1, -2)$,
+$\vect{u}_2 = (1, -2)/\sqrt5$. Check: $(5 - 4, 2 - 4) = (1, -2)$.
+
+Explained variance ratio of the first component: $6/(6 + 1) = 6/7 = 0.857$.
+
+Rebuild:
+\[
+6\times\frac15\begin{pmatrix} 4 & 2\\ 2 & 1\end{pmatrix} + 1\times\frac15\begin{pmatrix} 1 & -2\\ -2
+& 4\end{pmatrix} = \frac15\begin{pmatrix} 24 + 1 & 12 - 2\\ 12 - 2 & 6 + 4\end{pmatrix}
+= \frac15\begin{pmatrix} 25 & 10\\ 10 & 10\end{pmatrix} = \begin{pmatrix} 5 & 2\\ 2 & 2\end{pmatrix}.
+\]
+\end{solution}
+
+\begin{solution}{ex:linalg:4}
+\[
+\mat{W} = \begin{pmatrix} 1/\sqrt6 & 0\\ 0 & 1\end{pmatrix}\frac{1}{\sqrt5}
+\begin{pmatrix} 2 & 1\\ 1 & -2\end{pmatrix}
+= \begin{pmatrix} 2/\sqrt{30} & 1/\sqrt{30}\\ 1/\sqrt5 & -2/\sqrt5\end{pmatrix}.
+\]
+First $\Cov\mat{W}\T$, column by column. Column 1 of $\mat{W}\T$ is $(2, 1)/\sqrt{30}$:
+$\Cov(2, 1) = (10 + 2, 4 + 2) = (12, 6)$, so the column is $(12, 6)/\sqrt{30}$. Column 2 is
+$(1, -2)/\sqrt5$: $\Cov(1, -2) = (5 - 4, 2 - 4) = (1, -2)$, so the column is $(1, -2)/\sqrt5$.
+Now multiply by $\mat{W}$:
+\begin{align*}
+(1,1):&\quad \frac{2\times12 + 1\times6}{\sqrt{30}\sqrt{30}} = \frac{30}{30} = 1\\
+(1,2):&\quad \frac{2\times1 + 1\times(-2)}{\sqrt{30}\sqrt5} = \frac{0}{\sqrt{150}} = 0\\
+(2,1):&\quad \frac{1\times12 + (-2)\times6}{\sqrt5\sqrt{30}} = \frac{0}{\sqrt{150}} = 0\\
+(2,2):&\quad \frac{1\times1 + (-2)\times(-2)}{\sqrt5\sqrt5} = \frac{5}{5} = 1 .
+\end{align*}
+So $\mat{W}\Cov\mat{W}\T = \mat{I}$.
+\end{solution}
+
+\begin{solution}{ex:linalg:5}
+By \cref{eq:linalg:covtransform}, $\Cov_z = \mat{\Lambda}_d^{-1/2}\mat{U}_d\T\Cov\mat{U}_d
+\mat{\Lambda}_d^{-1/2}$. Replace $\Cov$ by $\mat{U}\mat{\Lambda}\mat{U}\T$. The product
+$\mat{U}\T\mat{U}_d$ is a $C\times d$ matrix whose entry $(j,k)$ is $\vect{u}_j\T\vect{u}_k$ for
+$k \le d$; because the eigenvectors are orthogonal unit vectors this is 1 when $j = k$ and 0
+otherwise, so $\mat{U}\T\mat{U}_d = \begin{psmallmatrix}\mat{I}_d\\ \mat{0}\end{psmallmatrix}$.
+Likewise $\mat{U}_d\T\mat{U} = (\mat{I}_d\ \ \mat{0})$. Then
+\[
+\mat{U}_d\T\Cov\mat{U}_d = (\mat{I}_d\ \ \mat{0})\,\mat{\Lambda}
+\begin{pmatrix}\mat{I}_d\\ \mat{0}\end{pmatrix} = \mat{\Lambda}_d,
+\]
+the top-left $d\times d$ block of $\mat{\Lambda}$. Finally
+$\mat{\Lambda}_d^{-1/2}\mat{\Lambda}_d\mat{\Lambda}_d^{-1/2} = \mat{I}_d$. The proof uses the
+orthonormality of the eigenvectors, $\vect{u}_j\T\vect{u}_k = 1$ if $j = k$ and 0 otherwise.
+\end{solution}
+
+\begin{solution}{ex:linalg:6}
+Group the product as $(\mat{A}\mat{B})\mat{C}$ and apply \cref{eq:linalg:abt} with $\mat{A}\mat{B}$
+in place of $\mat{A}$: $((\mat{A}\mat{B})\mat{C})\T = \mat{C}\T(\mat{A}\mat{B})\T$. Apply the rule
+again to $(\mat{A}\mat{B})\T = \mat{B}\T\mat{A}\T$, giving $\mat{C}\T\mat{B}\T\mat{A}\T$.
+
+With $\mat{B} = \Cov$ and $\mat{C} = \mat{A}\T$:
+$(\mat{A}\Cov\mat{A}\T)\T = (\mat{A}\T)\T\Cov\T\mat{A}\T = \mat{A}\Cov\mat{A}\T$, because
+transposing twice gives back the original and $\Cov\T = \Cov$. So the transformed covariance is
+symmetric whenever the original is.
+\end{solution}

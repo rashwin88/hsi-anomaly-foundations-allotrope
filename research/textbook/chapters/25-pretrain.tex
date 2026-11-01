@@ -1,0 +1,915 @@
+\chapter{Pretraining on SpectralEarth}\label{ch:pretrain}
+\begingroup\setlength{\emergencystretch}{5em}% long provenance paths: allow loose lines rather than overfull ones
+\def\tbrk{\hfil\penalty50\hfilneg}% local: a line may break before a provenance tag, leaving the line ragged
+
+\begin{onething}
+A long pretraining run is only as good as three quiet decisions: the number that ranks its epochs must be
+measured on the same scale every epoch; a stem that \emph{can} read any band list must be \emph{trained} on many
+band lists, or it reads only the one it saw; and data that does not fit on the disk is walked through in blocks
+on one unbroken learning-rate schedule. This chapter derives each decision from numbers, then follows the
+pretrained model onto the three sensors it will be fine-tuned on.
+\end{onething}
+
+\section{What this chapter is about}\label{sec:pretrain:intro}
+
+\Cref{ch:trainloop} built a training loop: batches of patches go through the model, a loss is computed, the
+gradient of the loss nudges every parameter, and after each \emph{epoch} (one pass over the epoch's training
+patches) the loop measures a \emph{validation loss} on patches it never trains on. \Cref{ch:losses} built the loss
+itself, $L1 + \lambda(t)\,\SAM$, with the weight $\lambda$ of the spectral angle \citep{kruse1993spectral} ramping up from 0 over the first
+epochs. \Cref{ch:specdecoder} built the reduced-attention spectral stem, which reads a pixel's bands as tokens
+that carry their own wavelengths, so that in principle it can read any sensor's band list.
+
+This chapter takes that model and trains it for real, on \emph{SpectralEarth}\index{SpectralEarth}: about half a
+million hyperspectral patches that the German space agency DLR cut from EnMAP scenes and published for exactly
+this purpose \citep{braham2024spectralearth}. Three things went wrong, or nearly wrong, on the way, and each
+teaches a piece of mathematics:
+\begin{enumerate}
+  \item \textbf{The ruler moved.} The validation loss was computed with the training loss's ramped weight. A score
+    whose formula changes from epoch to epoch cannot rank epochs (\cref{sec:pretrain:ruler}).
+  \item \textbf{One band list is not any band list.} A stem trained on SpectralEarth's single list of 202 bands read
+    PRISMA's own 185 bands badly, worst over water. The cause is an average that gives every band one vote, and a
+    set of small wavelength networks that were only ever evaluated at one list (\cref{sec:pretrain:density}).
+  \item \textbf{The data did not fit.} The final run, F001, needed ten times more patches than the disk could hold.
+    It walked through them in blocks of 30,000 patches, with arithmetic that decides how much it sees, how much it
+    stores and when it rotates (\cref{sec:pretrain:f001}).
+\end{enumerate}
+The chapter ends with the three real sensors that fine-tuning (\cref{ch:finetune}) will read at their own bands:
+EnMAP, PRISMA and AVIRIS-NG, each with quirks that one rule handles (\cref{sec:pretrain:native}).
+
+\section{SpectralEarth in numbers}\label{sec:pretrain:se}
+
+Before training anything, count what you have. The data layer lives in \code{app/utils/spectralearth/} and is
+documented in \file{docs/lld/spectralearth.md}.
+
+\paragraph{Patches.} SpectralEarth holds 539,755\tbrk\tagM{docs/lld/spectralearth.md} patches. Each
+\index{patch}patch is a small square cut from a scene: 128 $\times$ 128 pixels, each pixel a spectrum of 202 bands.
+The values are stored as 16-bit integers (\emph{int16}, 2 bytes each): reflectance multiplied by 10,000, with
+$-32768$ meaning ``no data''. So reflectance $0.1934$ is stored as $1934$.
+
+\paragraph{Why 202 bands.} EnMAP records 224 bands. SpectralEarth drops two runs of them, the bands where water
+vapour in the air absorbs almost all sunlight so that the ground is invisible: bands 127 to 141 and 161 to 167
+(1-based).\tbrk\tagM{docs/lld/spectralearth.md} Count each run. A run from $a$ to $b$ inclusive has $b - a + 1$
+members:
+\begin{align*}
+  \text{run 1:}\quad 141 - 127 + 1 &= 15 \text{ bands}\\
+  \text{run 2:}\quad 167 - 161 + 1 &= 7 \text{ bands}\\
+  \text{kept:}\quad 224 - 15 - 7 &= 202 \text{ bands.}
+\end{align*}
+The data layer derives this list from a table and refuses anything else; the LLD's first invariant is
+``never hard-code a SpectralEarth wavelength; read the table''.
+
+\begin{worked}[label={we:pretrain:patchbytes}]{The size of one patch}
+Do this on paper. A patch is 202 bands of 128 $\times$ 128 pixels at 2 bytes per number.
+\begin{align*}
+  \text{pixels per band:}\quad 128 \times 128 &= 16{,}384\\
+  \text{numbers per patch:}\quad 202 \times 16{,}384 &= 3{,}309{,}568\\
+  \text{bytes per patch:}\quad 3{,}309{,}568 \times 2 &= 6{,}619{,}136 \text{ bytes}\\
+  \text{in megabytes (}10^6\text{):}\quad 6{,}619{,}136 / 1{,}000{,}000 &\approx 6.62 \text{ MB.}
+\end{align*}
+A \emph{shard}\index{shard} is a file that bundles 150 patches (a tar archive, read in order). One shard is therefore
+\begin{align*}
+  150 \times 6{,}619{,}136 &= 992{,}870{,}400 \text{ bytes} \approx 0.99 \text{ GB,}
+\end{align*}
+which matches the LLD's ``150-patch shards (\textasciitilde 0.99 GB)''.\tbrk\tagM{docs/lld/spectralearth.md}
+\end{worked}
+
+\paragraph{The split.} Patches from one place on two dates look alike. If one date were in training and the other in
+validation, the validation score would flatter the model. So the split is \emph{by site}: a site goes to the test
+side when a hash of its name, read as a number between 0 and 1, falls below the test fraction $f$. Every date of a
+site lands on the same side, and the same seed gives the same split on any machine. The \code{se-v1} split at
+$f = 0.05$ gave 512,849 training and 26,906 test patches.\tbrk\tagM{docs/lld/spectralearth.md} Check that it adds up
+and that the test share is close to 5\%:
+\begin{align*}
+  512{,}849 + 26{,}906 &= 539{,}755 \quad\text{(every patch, once)}\\
+  26{,}906 / 539{,}755 &= 0.0498 \approx 5\%.
+\end{align*}
+The share is not exactly 5\% because sites hold different numbers of patches; the hash chooses sites, not patches.
+
+\paragraph{The normalisation curve.} The sharder also writes \code{stats.json}: for every one of the 202
+wavelengths, the mean and standard deviation of valid reflectance over the training split. This is the
+\emph{normalisation curve}\index{normalisation curve} of \cref{ch:bandpipeline}: inside the model each band value $v$ at wavelength $\lambda$
+becomes $(v - \mu(\lambda)) / \sigma(\lambda)$, ``standard deviations from that band's mean''. Keep this curve in
+mind; \cref{ch:finetune} shows why it must never be recomputed after pretraining.
+
+\section{A ruler that does not move}\label{sec:pretrain:ruler}
+
+\subsection{Two jobs for one number}
+
+During pretraining the validation loss has a second job besides reporting progress. It decides two things:
+\begin{itemize}
+  \item \textbf{\texttt{best.pt}}\index{best checkpoint}: which epoch's weights are kept as ``the best''. A
+    \emph{checkpoint} is a file holding the model's weights (and the optimiser's state) at the end of an epoch;
+    \code{best.pt} is the one with the lowest validation score so far.
+  \item \textbf{Early stopping}: whether to stop the run before its last epoch.
+\end{itemize}
+
+\begin{definition}[Early stopping]\index{early stopping}\index{patience}
+Keep the best validation score seen so far, $S^\ast$, and a counter of \emph{bad epochs}. After each epoch with
+score $S_e$: if $S_e < S^\ast(1 - \delta)$, the epoch is an improvement, so set $S^\ast \gets S_e$ and reset the
+counter to 0; otherwise add 1 to the counter. Stop when the counter reaches the \emph{patience} $P$, but never before
+a minimum epoch $E_{\min}$. The number $\delta$ is the \emph{minimum relative improvement}.
+\end{definition}
+
+The rule in \code{app/foundation_models/trainers/spectral_stem_mae_trainer.py} is exactly this:
+\begin{lstlisting}
+if self._best_val == math.inf or avg_val < self._best_val * (1 - cfg.early_stop_min_delta):
+    self._best_val, self._bad_epochs = avg_val, 0   # improvement: new best, count reset
+else:
+    self._bad_epochs += 1                           # not better by delta: one more bad epoch
+self._stop = bool(cfg.early_stop_patience) and epoch >= cfg.early_stop_min_epochs \
+    and self._bad_epochs >= cfg.early_stop_patience
+\end{lstlisting}
+The experiment configs (\file{research/experiments/indradhanu-se-pretrain/E00*/config.json}) set $\delta = 0.01$,
+$P = 10$, $E_{\min} = 20$, a final SAM weight of 0.5 and a ramp of 10 epochs.\tbrk\tagM{research/experiments/indradhanu-se-pretrain/F001-final-pretrain/config.json}
+With $\delta = 0.01$ a score counts as an improvement only if it is below $0.99\,S^\ast$: one percent better than the
+best.
+
+\subsection{The trap, as algebra}
+
+The training loss of \cref{ch:losses} is
+\begin{equation}\label{eq:pretrain:trainloss}
+  \mathcal{L}_e = L1_e + \lambda_e\,\SAM_e, \qquad \lambda_e = \lambda_{\max}\min\!\left(1, \frac{e-1}{R}\right),
+\end{equation}
+where $e = 1, 2, \dots$ is the epoch as a person counts it, $\lambda_{\max} = 0.5$ and $R = 10$. The trainer counts
+epochs from 0 internally (\code{_get_sam_weight(epoch)} returns $\lambda_{\max}\min(1, \texttt{epoch}/R)$ with
+$\texttt{epoch} = e - 1$), which is why $e - 1$ appears. Work four values:
+\begin{align*}
+  e = 1:&\quad 0.5 \times \min(1, 0/10) = 0.5 \times 0.0 = 0.00\\
+  e = 3:&\quad 0.5 \times \min(1, 2/10) = 0.5 \times 0.2 = 0.10\\
+  e = 6:&\quad 0.5 \times \min(1, 5/10) = 0.5 \times 0.5 = 0.25\\
+  e = 11:&\quad 0.5 \times \min(1, 10/10) = 0.5 \times 1.0 = 0.50.
+\end{align*}
+
+The first validation code scored epochs with the same formula, ramp included. Ask when that score can rise from one
+epoch to the next even though both measurements fall. Write the change in score:
+\begin{align*}
+  S_{e+1} - S_e
+  &= \bigl(L1_{e+1} + \lambda_{e+1}\SAM_{e+1}\bigr) - \bigl(L1_e + \lambda_e\SAM_e\bigr).
+\intertext{Add and subtract $\lambda_e \SAM_{e+1}$, which changes nothing, so that each difference appears on its
+own:}
+  &= (L1_{e+1} - L1_e) + \lambda_e(\SAM_{e+1} - \SAM_e) + (\lambda_{e+1} - \lambda_e)\SAM_{e+1}.
+\intertext{Name the three differences $\Delta L1$, $\Delta\SAM$ and $\Delta\lambda$:}
+  S_{e+1} - S_e &= \underbrace{\Delta L1}_{\le 0\text{ if L1 improves}}
+     + \underbrace{\lambda_e\,\Delta\SAM}_{\le 0\text{ if SAM improves}}
+     + \underbrace{\Delta\lambda\;\SAM_{e+1}}_{> 0\text{ while the ramp rises}}.
+\end{align*}
+\begin{keypoint}
+While $\lambda$ is still rising, the third term is positive and grows with the size of SAM; if it outweighs the
+first two, a model that improved on \emph{both} measurements scores \emph{worse}.
+\end{keypoint}
+SAM is measured in radians and is several times larger than L1 in reflectance (a SAM of 0.2 rad against an L1 of
+0.05), so the third term easily wins.
+
+\begin{worked}[label={we:pretrain:ramp}]{The same model scored two ways}
+These values are illustrative \tagA, chosen to match what the live run E003 showed: a first-epoch score of about
+0.055 and every later epoch about 0.1. L1 and SAM both improve every epoch.
+\begin{center}
+\begin{tabular}{rccc}
+\toprule
+epoch $e$ & L1 & SAM (rad) & $\lambda_e$\\
+\midrule
+1 & 0.055 & 0.20 & 0.00\\
+3 & 0.045 & 0.17 & 0.10\\
+6 & 0.040 & 0.15 & 0.25\\
+11 & 0.034 & 0.13 & 0.50\\
+\bottomrule
+\end{tabular}
+\end{center}
+\textbf{Scored with the ramp}, $S_e = L1_e + \lambda_e\SAM_e$:
+\begin{align*}
+  e = 1:&\quad 0.055 + 0.00 \times 0.20 = 0.055 + 0.000 = 0.055\\
+  e = 3:&\quad 0.045 + 0.10 \times 0.17 = 0.045 + 0.017 = 0.062\\
+  e = 6:&\quad 0.040 + 0.25 \times 0.15 = 0.040 + 0.0375 = 0.0775\\
+  e = 11:&\quad 0.034 + 0.50 \times 0.13 = 0.034 + 0.065 = 0.099.
+\end{align*}
+\textbf{Scored at the full weight}, $S_e = L1_e + 0.5\,\SAM_e$ every epoch:
+\begin{align*}
+  e = 1:&\quad 0.055 + 0.5 \times 0.20 = 0.055 + 0.100 = 0.155\\
+  e = 3:&\quad 0.045 + 0.5 \times 0.17 = 0.045 + 0.085 = 0.130\\
+  e = 6:&\quad 0.040 + 0.5 \times 0.15 = 0.040 + 0.075 = 0.115\\
+  e = 11:&\quad 0.034 + 0.5 \times 0.13 = 0.034 + 0.065 = 0.099.
+\end{align*}
+Now check the decomposition on the step from epoch 1 to epoch 3 with the ramp. The three terms are
+\begin{align*}
+  \Delta L1 &= 0.045 - 0.055 = -0.010\\
+  \lambda_1\,\Delta\SAM &= 0.00 \times (0.17 - 0.20) = 0.00 \times (-0.03) = 0.000\\
+  \Delta\lambda\,\SAM_3 &= (0.10 - 0.00) \times 0.17 = 0.017\\
+  \text{sum} &= -0.010 + 0.000 + 0.017 = +0.007,
+\end{align*}
+and indeed $0.062 - 0.055 = 0.007$. The ramp term ($+0.017$) is larger than the whole improvement in L1
+($-0.010$), so the score rises. The model is identical in both columns; only the ruler differs.
+\end{worked}
+
+\coursefig[0.85\linewidth]{iw-41-val-score}{The four epochs of \cref{we:pretrain:ramp} scored two ways. With the
+training ramp (amber, dashed) the validation score climbs from 0.055 to 0.099 although L1 and SAM both fall; epoch 1
+stays ``best'' for ever. At the full SAM weight (teal) the score falls from 0.155 to 0.099. The two meet at epoch 11,
+where the ramp ends.}{fig:pretrain:valscore}
+
+\subsection{What early stopping would have done}
+
+Run the rule on the ramped scores. Epoch 1 sets $S^\ast = 0.055$, so a later epoch must score below
+\[
+  0.055 \times (1 - 0.01) = 0.055 \times 0.99 = 0.05445.
+\]
+Every later epoch scores near 0.1, so none qualifies:
+\begin{center}
+\begin{tabular}{rll}
+\toprule
+epoch & below 0.05445? & bad epochs, and the stop test\\
+\midrule
+2 & no & 1\\
+3 & no & 2\\
+$\vdots$ & & \\
+11 & no & 10: patience reached, but $11 < 20$, so no stop\\
+$\vdots$ & & \\
+20 & no & 19: $20 \ge 20$ and $19 \ge 10$, \textbf{stop}\\
+\bottomrule
+\end{tabular}
+\end{center}
+The run would have stopped at epoch 20, the first epoch the rule allows, and kept epoch 1's weights as \code{best.pt},
+whatever the model had learned. The minimum of 20 epochs delayed the damage but did not prevent it: the comparison
+itself was broken.
+
+\begin{analogy}
+A golf club records each member's best round of the season. The first round is scored on putts only; from the second
+round on, every stroke counts. The first round becomes everyone's ``best round'' for the rest of the year, however
+much their game improves. Early stopping is the club secretary who, seeing no new best for ten rounds, cancels the
+member's season.
+\end{analogy}
+
+\subsection{The fix, and making it safe to resume into}
+
+One line in \code{compute_validation_loss}: training keeps the ramp, validation uses the final weight from the
+first epoch.
+\begin{lstlisting}
+return l1 + cfg.sam_weight * sam, n          # validation: lambda = 0.5 at every epoch
+\end{lstlisting}
+The source records why in its own comment: with the ramp, ``epoch 1 (lambda 0) scored \textasciitilde 0.055 and every
+later epoch \textasciitilde 0.1 - early stop would have fired at the first allowed epoch whatever the model did''
+(found in E003 on 2026-10-14). Two smaller pieces make the fix safe:
+\begin{itemize}
+  \item \textbf{A checkpoint remembers how it was scored.} The early-stop state saved inside each checkpoint carries
+    \code{"score": "l1+full_sam"} (the constant \code{VAL_SCORE}). On resume, a stored state without that tag is
+    ignored rather than compared with numbers on another scale.
+  \item \textbf{The parts are logged separately.} \code{metrics.csv} records \code{val_l1}, \code{val_sam_deg} and
+    \code{sam_weight} each epoch, so you can recompute any score by hand. Convert the angle first:
+    radians $=$ degrees $\times \pi / 180$, so $4.90^\circ = 4.90 \times 3.1416 / 180 = 0.0855$ rad.
+\end{itemize}
+
+\begin{sourcenote}[: the validation score and the resume check]
+Verified in \file{app/foundation_models/trainers/spectral_stem_mae_trainer.py}: \code{VAL_SCORE = "l1+full_sam"}
+(line 44); \code{compute_validation_loss} returns \code{l1 + cfg.sam_weight * sam} (line 341) while
+\code{compute_loss} returns \code{l1 + self._get_sam_weight(self._current_epoch) * sam} (line 315); a loaded
+early-stop state whose \code{score} differs from \code{VAL_SCORE} is discarded with a log line (lines 148--151). The
+ramp itself is \code{sam_max * min(1.0, epoch / ramp_epochs)} with a 0-based epoch
+(\file{hyperspectral_segformer_mae_trainer.py}, \code{_get_sam_weight}).
+\end{sourcenote}
+
+\section{One band list is not any band list}\label{sec:pretrain:density}
+
+\subsection{The symptom}
+
+E004, the reduced-attention stem of \cref{ch:specdecoder}, was scored on the four labelled PRISMA scenes. A
+\emph{ROC-AUC} (\cref{ch:measures}) of 0.5 means ``no better than a coin''. Scene set1 scored 0.217: worse than a coin,
+so the model ranked real anomalies \emph{below} ordinary background.\tbrk\tagM{indradhanu workings/42-one-band-list.md}
+Set1 is 75\% sea. Splitting its mean reconstruction error by surface showed where the problem sat:
+\begin{center}
+\begin{tabular}{lcc}
+\toprule
+& mean L1 on water & on land\\
+\midrule
+E004, PRISMA's native bands & 0.0462 & 0.0282\\
+v0.2.0 (production) & 0.0046 & 0.0113\\
+\bottomrule
+\end{tabular}
+\end{center}
+E004's error on water was $0.0462 / 0.0046 \approx 10$ times production's, and 93\% of its highest-scoring pixels were
+sea.
+
+\paragraph{The cheap explanation, measured first.} ``SpectralEarth is land, so the model never learned water.'' A census
+counted water: 6.8\% of EnMAP training tiles had more than 30\% water, against 6--12\% of a 3,000-patch SpectralEarth
+sample.\tbrk\tagM{research/experiments/indradhanu-se-pretrain/E004-reduced-attention/} SpectralEarth has as much water as
+EnMAP. Measuring the cheap explanation before building its fix saved a training run that would have changed nothing.
+
+\paragraph{The clue.} The PRISMA bench scores each scene two ways: on PRISMA's \emph{native} bands (its own list, 185
+bands after the product's default band filter) and \emph{resampled} onto SpectralEarth's 202 wavelengths. At epoch 18,
+set1 scored 0.205 native and 0.725 resampled. Same scene, same model; only the band list changed.
+
+\subsection{One vote per band}
+
+\Cref{ch:specdecoder} gave the reduced stem two routes from a spectrum to its 32 channels, added together. Route 1
+averages the bands inside each 40\,nm \emph{bin} and attends across the bins. Route 2, the \emph{skip path}, sends every
+band straight to the channels:
+\begin{equation}\label{eq:pretrain:skip}
+  \vect{s} = \frac{1}{N}\sum_{b=1}^{N} v_b\,\vect{W}(\lambda_b),
+\end{equation}
+where $v_b$ is the normalised value of band $b$, $\lambda_b$ its wavelength, and $\vect{W}(\lambda)$ a weight vector
+produced by a small network from the wavelength. Because $\vect{W}$ is computed from $\lambda$, the formula works for any
+list of bands. But look at the factor $1/N$: every band gets one equal vote.
+
+To see what that does, set every weight to 1 (one channel, $\vect{W} = 1$). Then \eqref{eq:pretrain:skip} is the plain
+mean of the band values. Suppose a spectrum takes value $a$ in the visible and $c$ elsewhere, and a fraction $f$ of the
+sensor's bands lie in the visible:
+\begin{align*}
+  s &= \frac{1}{N}\Bigl(\underbrace{a + \dots + a}_{fN \text{ times}} + \underbrace{c + \dots + c}_{(1-f)N\text{ times}}\Bigr)
+\intertext{Add the repeated terms:}
+    &= \frac{1}{N}\bigl(fN a + (1 - f) N c\bigr)
+\intertext{Cancel $N$:}
+    &= f a + (1 - f) c.
+\end{align*}
+The skip path's output depends on $f$, the share of bands in the visible: a property of the \emph{sensor}, not of the
+ground.
+
+\begin{worked}[label={we:pretrain:votes}]{One spectrum, two sensors, two answers}
+Do this on paper. The spectrum is the same for both sensors: value 2 in the visible, $-1$ in the shortwave infrared.
+Sensor A has bands at 500, 505 and 2000\,nm; sensor B at 500 and 2000\,nm.
+\begin{align*}
+  \text{A:}\quad s &= \frac{2 + 2 + (-1)}{3} = \frac{3}{3} = 1.0\\
+  \text{B:}\quad s &= \frac{2 + (-1)}{2} = \frac{1}{2} = 0.5.
+\end{align*}
+Check with the formula $s = fa + (1-f)c$. For A, $f = 2/3$: $\tfrac{2}{3}\times 2 + \tfrac{1}{3}\times(-1) =
+\tfrac{4}{3} - \tfrac{1}{3} = 1.0$. For B, $f = 1/2$: $\tfrac{1}{2}\times 2 + \tfrac{1}{2}\times(-1) = 1 - 0.5 = 0.5$.
+Route 1 does not have this problem: it averages \emph{inside} a bin first, so 500 and 505\,nm become one bin value of 2
+for both sensors.
+\end{worked}
+
+The real lists differ by more than the toy:\tbrk\tagM{indradhanu workings/42-one-band-list.md}
+\begin{center}
+\begin{tabular}{lcccc}
+\toprule
+& bands & visible ($<$700\,nm) & NIR (700--1000) & SWIR ($>$1000)\\
+\midrule
+SpectralEarth (trained on) & 202 & 53 (26\%) & 48 (24\%) & 101 (50\%)\\
+PRISMA native (set1) & 185 & 30 (16\%) & 23 (12\%) & 132 (71\%)\\
+\bottomrule
+\end{tabular}
+\end{center}
+On PRISMA's list the skip path hears the visible at about $16/26 = 0.62$ of the volume it was trained with. Water's
+signal is almost all in the visible (beyond about 750\,nm water is nearly black), so water pixels are distorted most.
+
+\coursefig[0.95\linewidth]{iw-42-band-density}{Left: how each sensor's bands divide between the visible, near-infrared
+and shortwave infrared. PRISMA's native list gives the visible 16\% of its bands against SpectralEarth's 26\%. Right:
+E004's error on water, on SpectralEarth test patches with all 202 bands, on the same pixels thinned to PRISMA's
+spacing, and with the skip path reweighted at inference.}{fig:pretrain:density}
+
+\subsection{Proving it one variable at a time}
+
+Two experiments isolated the band list from everything else, on E004's epoch-18 checkpoint (2026-10-14):
+\begin{itemize}
+  \item \textbf{Thinning.} Take SpectralEarth test patches (the model's own sensor and wavelengths) and keep only the 151
+    of 202 bands nearest PRISMA's. No new sensor, no new wavelength: only fewer bands, spaced like PRISMA.
+  \item \textbf{Reweighting.} At inference, scale each band's vote in the skip path by $n_{\text{train}}(\text{bin}) /
+    n_{\text{now}}(\text{bin})$. A bin that had 8 bands in training and has 5 now gives each of its 5 bands weight
+    $8/5 = 1.6$.
+\end{itemize}
+\begin{center}
+\begin{tabular}{lcc}
+\toprule
+condition (mean L1) & water & land\\
+\midrule
+SpectralEarth, all 202 bands & 0.0155 & 0.0157\\
+same pixels, thinned to PRISMA spacing & 0.0309 & 0.0226\\
+thinned $+$ skip reweighted & 0.0203 & 0.0205\\
+set1 native & 0.0462 & 0.0282\\
+set1 native $+$ skip reweighted & 0.0352 & 0.0200\\
+set1 resampled to SpectralEarth's wavelengths & 0.0138 & 0.0160\\
+\bottomrule
+\end{tabular}
+\end{center}
+Source:\tbrk\tagM{research/experiments/indradhanu-se-pretrain/E004-reduced-attention/} (as quoted in IW42).
+
+Read it in order. Thinning doubles the water error: $0.0309 / 0.0155 = 1.99$. Reweighting closes a fraction of that gap,
+\begin{align*}
+  \text{gap} &= 0.0309 - 0.0155 = 0.0154\\
+  \text{closed} &= 0.0309 - 0.0203 = 0.0106\\
+  \text{fraction} &= 0.0106 / 0.0154 = 0.69,
+\end{align*}
+about two thirds, so the one-vote-per-band average is a real cause. It is not the only one: no fix brings set1 down to
+the resampled 0.0138.
+
+\subsection{The root cause and the three fixes}
+
+Every wavelength-dependent piece of the stem (the in-bin kernel $k(\lambda)$, the skip weights $\vect{W}(\lambda)$, the
+decoder's $\vect{U}(\lambda)$) is a small network fed the band's wavelength. In pretraining those networks were only ever
+evaluated at one list: the same 202 wavelengths, every batch, for 18 epochs. ``Reads any band list'' was a property of the
+\emph{architecture}, never of the \emph{training}.
+\begin{keypoint}
+A function learned from examples is only trustworthy near the examples. A network of the wavelength that has only seen
+one list of 202 wavelengths has learned nothing about what a missing neighbour means.
+\end{keypoint}
+
+The fixes adopted on 2026-10-14:
+
+\paragraph{Fix 1: train on many band lists.}\index{band-list augmentation} With probability \code{band_augment_prob}
+(0.8 in F001) a batch reads a random subset of its bands, in one of three shapes chosen with equal probability
+(\code{sample_band_subset} in \file{spectral_stem_mae_trainer.py}):
+\begin{enumerate}
+  \item \textbf{thinning}: keep each band with a probability drawn uniformly between 0.5 and 0.95;
+  \item \textbf{gaps}: remove one to three windows, each 20--150\,nm wide, at random centres;
+  \item \textbf{even grid}: keep the band nearest each point of a grid with a random step of 6--15\,nm (PRISMA-like at
+    10\,nm, EnMAP-like at 6.5\,nm).
+\end{enumerate}
+If fewer than 40 bands survive, the batch keeps all of them. The kept wavelengths are also jittered by up to
+$\pm 3$\,nm (\code{band_jitter_nm}). The model still reconstructs \emph{all} the bands, so it learns to fill in the ones
+it was not given. Work the expected size of a thinned list on SpectralEarth: the keep probability averages
+$(0.5 + 0.95)/2 = 0.725$, so on average $202 \times 0.725 = 146.45$, about 146 bands are read. An even grid of 10\,nm over
+SpectralEarth's range (about 418 to 2445\,nm, \tagA\ rounded) has about $(2445 - 418)/10 = 202.7$ points, but the bands
+inside the dropped water-vapour regions are missing, so several grid points share a nearest band and the kept list is
+shorter than the grid.
+
+\paragraph{Fix 2: one vote per nanometre.}\index{band width weighting} Weight each band by the width of spectrum it stands
+for, $w_b$, and divide by the total width:
+\begin{equation}\label{eq:pretrain:width}
+  s_w = \frac{\sum_b w_b\, v_b}{\sum_b w_b}.
+\end{equation}
+Why this is the right average: if the spectrum is a function $v(\lambda)$ and band $b$ covers an interval of width $w_b$
+around $\lambda_b$, then $w_b v_b$ approximates the area under $v$ over that interval. The sum is a \emph{Riemann sum}\index{Riemann sum}, an
+approximation of the integral:
+\begin{align*}
+  \sum_b w_b v_b &\approx \int_{\lambda_{\min}}^{\lambda_{\max}} v(\lambda)\,d\lambda,
+  \qquad \sum_b w_b \approx \lambda_{\max} - \lambda_{\min},
+\intertext{so}
+  s_w &\approx \frac{1}{\lambda_{\max} - \lambda_{\min}}\int_{\lambda_{\min}}^{\lambda_{\max}} v(\lambda)\,d\lambda,
+\end{align*}
+the mean value of the spectrum over wavelength. That quantity belongs to the ground, not to the sensor: two sensors that
+cover the same range at different densities approximate the same integral.
+
+\begin{worked}[label={we:pretrain:widths}]{The toy again, with widths}
+Use idealised widths \tagA: in A each visible band covers 5\,nm; in B the one visible band covers 10\,nm; each infrared
+band covers 10\,nm.
+\begin{align*}
+  \text{A:}\quad s_w &= \frac{2\times 5 + 2 \times 5 + (-1)\times 10}{5 + 5 + 10}
+                     = \frac{10 + 10 - 10}{20} = \frac{10}{20} = 0.5\\
+  \text{B:}\quad s_w &= \frac{2 \times 10 + (-1)\times 10}{10 + 10} = \frac{20 - 10}{20} = \frac{10}{20} = 0.5.
+\end{align*}
+Same spectrum, same answer, and no new parameters.
+\end{worked}
+
+\begin{sourcenote}[: how the real widths are computed]
+The course's toy uses idealised widths. The code (\code{band_widths} in
+\file{app/foundation_models/components/spectral_reduced.py}, lines 39--53) sorts the wavelengths, takes the gaps between
+neighbours, \emph{caps each gap at 20\,nm} (\code{MAX_GAP_NM}, ``a band beside an excluded region would otherwise claim the
+whole gap''), gives an interior band the mean of its two gaps, and gives each end band its one gap in full. On the toy's
+three-band list A (500, 505, 2000\,nm) that gives gaps $5$ and $\min(1495, 20) = 20$, so widths $5$, $(5+20)/2 = 12.5$ and
+$20$, and
+\[
+  s_w = \frac{2\times 5 + 2\times 12.5 + (-1)\times 20}{5 + 12.5 + 20} = \frac{10 + 25 - 20}{37.5} = \frac{15}{37.5} = 0.4,
+\]
+while B (gap capped at 20, widths 20 and 20) gives $(40 - 20)/40 = 0.5$. On a three-band toy the end rule and the cap
+dominate; on real lists of 185--372 bands only the two end bands and the bands beside the water-vapour gaps are affected,
+and the capped widths are the point: a band next to a 200\,nm hole must not claim to represent it.
+\end{sourcenote}
+
+\paragraph{Fix 3: ignore wavelengths the model never trained on.} The checkpoint carries its training wavelengths, so a
+band farther than 15\,nm from all of them is dropped when a scene is loaded (\code{trained_band_mask}). The rule comes from
+the checkpoint, not from a fixed grid. On the bench's 185 PRISMA bands, 165 pass and 20 are dropped: those inside
+SpectralEarth's water-vapour gaps (1306--1502 and 1727--1959\,nm) and past its last band. \Cref{ch:finetune} shows how
+fine-tuning grows that record.
+
+\paragraph{Did it work?} E005 carried the three fixes. Extended to 20 epochs it read PRISMA's own bands about as well as E004
+had read the resampled ones: mean ROC-AUC 0.752 against 0.754.\tbrk\tagM{research/experiments/indradhanu-se-pretrain/E005-band-robust/README.md}
+That made E005's configuration the one to train properly.
+
+\section{F001: two hundred epochs on rotating data}\label{sec:pretrain:f001}
+
+\subsection{Why more data, not only more epochs}
+
+F001 is the final SpectralEarth pretraining of the next Indradhanu, with E005's configuration exactly, and the
+checkpoint all fine-tuning starts from. Its plan was 200 epochs. An epoch here is \code{train_samples_per_epoch} =
+30,000 patches.\tbrk\tagM{research/experiments/indradhanu-se-pretrain/F001-final-pretrain/config.json}
+
+The cheap way to train 200 epochs is to show the same 30,000 patches 200 times. A model with millions of parameters can
+then \emph{memorise}\index{overfitting}: improve on those exact patches without improving on patches it has never seen.
+F001 instead walks through ten \emph{blocks}\index{block (of shards)}. A block is 200 consecutive training shards; at 150
+patches per shard that is $200 \times 150 = 30{,}000$ patches, exactly one epoch's worth. Block $k$ is shards $200k$ to
+$200k + 199$ and trains epochs $20k + 1$ to $20(k+1)$:
+\begin{center}
+\begin{tabular}{rcc}
+\toprule
+block $k$ & shards & epochs\\
+\midrule
+0 & 0--199 & 1--20\\
+1 & 200--399 & 21--40\\
+2 & 400--599 & 41--60\\
+$\vdots$ & $\vdots$ & $\vdots$\\
+9 & 1800--1999 & 181--200\\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\begin{worked}[label={we:pretrain:coverage}]{Coverage per epoch and per run}
+Do this on paper. How often is each patch seen, how many different patches does the run see, and what share of the
+training split is that?
+\begin{align*}
+  \text{epochs per block:}&\quad 200 / 10 = 20\\
+  \text{times each patch is seen:}&\quad 20 \text{ (one per epoch of its block)}\\
+  \text{distinct patches:}&\quad 10 \times 30{,}000 = 300{,}000\\
+  \text{share of the split:}&\quad 300{,}000 / 512{,}849 = 0.585 \approx 58\%\\
+  \text{patch presentations in total:}&\quad 200 \times 30{,}000 = 6{,}000{,}000.
+\end{align*}
+Compare the E-runs (E001--E005), capped at 20 epochs on one block: each patch also seen 20 times, but only 30,000 distinct
+patches, $30{,}000/512{,}849 = 0.058$, under 6\% of the split. F001 repeats each patch exactly as often as the E-runs did,
+and sees ten times as many of them.
+\end{worked}
+
+\subsection{Why not put all ten blocks on the disk}
+
+Because they do not fit. From \cref{we:pretrain:patchbytes}, one shard is about 0.99\,GB, so
+\begin{align*}
+  \text{one block:}&\quad 200 \times 0.99 \text{ GB} = 198 \text{ GB}\\
+  \text{all ten:}&\quad 10 \times 198 \text{ GB} = 1{,}980 \text{ GB} \approx 1.98 \text{ TB.}
+\end{align*}
+The L40S instance's local NVMe disk holds about 412\,GB. It fits two blocks, the one training and the one being downloaded
+for next time: $2 \times 198 = 396$\,GB $< 412$\,GB. Three blocks ($594$\,GB) do not.
+
+\subsection{One schedule across all ten blocks}
+
+The learning rate follows the cosine schedule of \cref{ch:trainloop} \citep{loshchilov2017sgdr}, computed over all 200
+epochs, with $\eta_0 = 0.0005$ and $\eta_{\min} = 10^{-6}$:
+\begin{equation}\label{eq:pretrain:cosine}
+  \eta(t) = \eta_{\min} + \tfrac{1}{2}(\eta_0 - \eta_{\min})\Bigl(1 + \cos\frac{\pi t}{200}\Bigr).
+\end{equation}
+Note $\eta_0 - \eta_{\min} = 0.0005 - 0.000001 = 0.000499$. At the first three rotations:
+\begin{align*}
+  t = 20:&\quad \cos(0.1\pi) = 0.9511\\
+         &\quad \eta = 0.000001 + 0.5 \times 0.000499 \times 1.9511 = 0.000001 + 0.0004868 = 0.000488\\
+  t = 40:&\quad \cos(0.2\pi) = 0.8090\\
+         &\quad \eta = 0.000001 + 0.5 \times 0.000499 \times 1.8090 = 0.000001 + 0.0004513 = 0.000452\\
+  t = 60:&\quad \cos(0.3\pi) = 0.5878\\
+         &\quad \eta = 0.000001 + 0.5 \times 0.000499 \times 1.5878 = 0.000001 + 0.0003962 = 0.000397.
+\end{align*}
+The data changes at each rotation; the schedule does not. A rotation resumes the scheduler from the checkpoint, so epoch 21
+continues from epoch 20's learning rate rather than jumping back to 0.0005.
+
+\begin{sourcenote}[: no warm-up]
+The F001 README once described ``one cosine schedule over 200 epochs (5 warm-up)''. The run's \code{config.json} sets
+\code{warmup_epochs: 0}, and \code{FoundationTrainer._build_scheduler}
+(\file{app/abstract_classes/foundation_trainer.py}) builds a plain \code{CosineAnnealingLR} that never reads that field. The
+source wins: F001 has no warm-up, and its first epoch ran at the full 0.0005. The README has since been corrected (``no
+warm-up: \texttt{warmup\_epochs} is 0 in the config'').
+\end{sourcenote}
+
+\coursefig[0.95\linewidth]{iw-43-rotation}{(a) The ten 30,000-patch blocks along F001's 200 epochs, under the one cosine
+learning-rate curve that runs through all of them. (b) The loop in \texttt{rotate\_f001.sh}: every decision is computed
+from \texttt{metrics.csv} and two marker files, so the script can be killed and restarted at any point.}{fig:pretrain:rotation}
+
+\subsection{Early stopping is off}
+
+F001 sets \code{early_stop_patience: null}, which turns early stopping off (the stop test begins with
+\code{bool(cfg.early_stop_patience)}, which is false for \code{null}). The reason is the rotation. Within a block the model
+sees the same 30,000 patches 20 times, so it can flatten out near the end of a block and improve again when fresh data
+arrives. Suppose patience 10 and a best score at epoch 30:
+\begin{center}
+\begin{tabular}{rl}
+\toprule
+epochs 31--40 & no 1\% improvement; bad epochs climb 1, \dots, 10\\
+epoch 40 & patience reached, $40 \ge 20$: \textbf{stop}\\
+epoch 41 & block 2 would have arrived; never trained\\
+\bottomrule
+\end{tabular}
+\end{center}
+\code{best.pt} still tracks the lowest validation score, so the best epoch is kept either way.
+
+\subsection{The driver: state read from the run's own records}
+
+\file{research/experiments/indradhanu-se-pretrain/F001-final-pretrain/rotate_f001.sh} runs on the instance. The trainer
+trains on whatever shard files sit in its local train folder, and \code{auto_resume} continues from \code{last.pt} with the
+optimiser, scheduler and early-stop state. So a rotation is: stop, swap the folder's contents, start again. Each pass of the
+driver's loop does five things:
+\begin{enumerate}
+  \item \textbf{Count the epochs done.} \code{metrics.csv} has a header plus one row per finished epoch, so
+    $\text{done} = \text{lines} - 1$.
+  \item \textbf{Pick the block.} $k = \lfloor \text{done} / 20 \rfloor$ (integer division) and
+    $\text{stop\_at} = 20(k+1)$.
+  \item \textbf{Rotate if needed.} A marker file \code{BLOCK} says which block the train folder holds. If it is not $k$, swap
+    in the staged copy (only if a second marker says the stage holds block $k$ and all 200 files are there); otherwise
+    download block $k$ now.
+  \item \textbf{Prefetch} block $k + 1$ into a staging folder in the background.
+  \item \textbf{Train}: start the trainer, poll every 30 seconds, and stop it once $\text{done} \ge \text{stop\_at}$.
+\end{enumerate}
+
+\begin{worked}[label={we:pretrain:driver}]{One pass of the driver after a crash}
+The instance restarts after a crash and \code{metrics.csv} has 41 lines. Do each step:
+\begin{align*}
+  \text{done} &= 41 - 1 = 40\\
+  k &= \lfloor 40 / 20 \rfloor = 2\\
+  \text{stop\_at} &= 20 \times (2 + 1) = 60.
+\end{align*}
+\code{BLOCK} says 1, not 2, so the driver swaps in block 2 (shards $200 \times 2 = 400$ to $400 + 199 = 599$), starts
+prefetching block 3 (shards 600--799), and resumes from \code{last.pt} (epoch 40): epochs 41 to 60, stopped at 60.
+\end{worked}
+
+\paragraph{Why stopping is safe.} The trainer saves the checkpoint and uploads it before it appends the epoch's row to
+\code{metrics.csv}. So by the time the driver sees row 60, epoch 60's checkpoint is already safe. A state machine whose only
+state is ``how many rows are in this file'' can be killed and restarted at any moment.
+
+\paragraph{What it costs.} About 9.2 minutes per 30,000-patch epoch on the L40S at \$2.69 per hour:
+\begin{align*}
+  200 \times 9.2 \text{ min} &= 1{,}840 \text{ min}\\
+  1{,}840 / 60 &= 30.7 \text{ hours}\\
+  30.7 \times \$2.69 &= \$82.5,
+\end{align*}
+matching the README's pre-launch estimate of ``roughly 30 hours, \textasciitilde\$82''.\tbrk\tagM{research/experiments/indradhanu-se-pretrain/F001-final-pretrain/README.md}
+
+\subsection{What the curves showed}
+
+Two scores answer two questions. Validation L1 and SAM ask how well the model redraws SpectralEarth patches it never trained
+on. The PRISMA bench asks how well it \emph{finds anomalies}: four labelled PRISMA scenes on PRISMA's own bands, scored by
+mean ROC-AUC under the old \code{combined} score and, from epoch 52, under residual Mahalanobis (\cref{ch:residualmaha}).
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}
+\begin{groupplot}[group style={group size=2 by 1, horizontal sep=1.9cm},
+  width=0.47\linewidth, height=5.4cm, xmin=0, xmax=115, xlabel={epoch},
+  tick label style={font=\scriptsize}, label style={font=\small}, legend style={font=\scriptsize}]
+\nextgroupplot[ylabel={validation L1}, ymin=0.017, ymax=0.025, scaled y ticks=false,
+  title={\small (a) reconstruction}, yticklabel style={/pgf/number format/fixed,/pgf/number format/precision=3}]
+\addplot[spec, thick, mark=*] coordinates {(6,0.0241) (13,0.0219) (20,0.0202) (38,0.0192) (60,0.0185) (109,0.0185)};
+\nextgroupplot[ylabel={mean ROC-AUC, PRISMA bench}, ymin=0.62, ymax=0.95, title={\small (b) detection},
+  legend pos=north west, yticklabel style={/pgf/number format/fixed,/pgf/number format/precision=2}]
+\addplot[loss, thick, mark=square*] coordinates {(7,0.664) (14,0.660) (20,0.734) (38,0.727) (60,0.734) (109,0.706)};
+\addlegendentry{combined}
+\addplot[spec, thick, mark=*] coordinates {(60,0.861) (109,0.862)};
+\addlegendentry{residual Mahalanobis}
+\addplot[maskgrey, dashed, thick, domain=0:115] {0.662};
+\addlegendentry{v0.2.0, combined}
+\end{groupplot}
+\end{tikzpicture}
+
+\begin{tikzpicture}
+\begin{axis}[width=0.47\linewidth, height=4.6cm, xmin=0, xmax=115, xlabel={epoch}, ylabel={validation SAM (deg)},
+  ymin=3.8, ymax=6.6, tick label style={font=\scriptsize}, label style={font=\small}, title={\small (c) spectral angle}]
+\addplot[attn, thick, mark=triangle*] coordinates {(6,6.40) (13,5.53) (20,4.90) (38,4.47) (60,4.18) (109,4.16)};
+\end{axis}
+\end{tikzpicture}
+\caption{F001's records drawn to scale from its README (validation rows at epochs 6, 13, 20, 38, 60, 109; bench at 7, 14,
+20, 38, 60, 109). (a) Validation L1 falls at every checkpoint until epoch 60 and then flattens. (b) The bench under the
+\texttt{combined} score jumps above production's 0.662 by epoch 20 and then stays flat; residual Mahalanobis, measured at
+epochs 60 and 109, sits about 0.13 higher. (c) Validation SAM follows L1.}
+\label{fig:pretrain:f001curves}
+\end{figure}
+
+Source for \cref{fig:pretrain:f001curves}:\tbrk\tagM{research/experiments/indradhanu-se-pretrain/F001-final-pretrain/README.md}.
+From epoch 20 to 60 reconstruction improved:
+\begin{align*}
+  \text{L1:}&\quad 0.0202 - 0.0185 = 0.0017;\quad 0.0017 / 0.0202 = 0.084 \approx 8\% \text{ better}\\
+  \text{SAM:}&\quad 4.90 - 4.18 = 0.72^\circ;\quad 0.72 / 4.90 = 0.147 \approx 15\% \text{ better.}
+\end{align*}
+Detection under \code{combined} did not move: 0.734, 0.727, 0.734. There are two ways to read a stall like that: the model
+has stopped learning what matters, or the ruler cannot see the improvement. The same reconstructions scored with residual
+Mahalanobis gave 0.861 at epoch 60, far above \code{combined}'s 0.734. The stall was the ruler: \code{combined} was dominated
+by errors every pixel shares (detector stripes, haze, dark sea), so reducing the model's error on ordinary ground barely moved
+it. \Cref{ch:residualmaha} derives why.
+
+\coursefig[0.95\linewidth]{iw-43-curves}{The course's version of the same records, including the residual-Mahalanobis
+measurement at epoch 52 (0.865) reported in the scoring comparison of 2026-10-15.}{fig:pretrain:coursecurves}
+
+\begin{drift}
+F001 was planned for 200 epochs and stopped at epoch 113 by decision, because the bench under residual Mahalanobis was flat:
+0.861 at epoch 60, 0.862 at epoch 109.\tbrk\tagM{docs/proposals/fine-tuning-and-segmentation.md} Fine-tuning starts from the
+epoch-109 checkpoint, \code{F001_ep109.pt}. Under residual Mahalanobis, production's v0.2.0 scored 0.854, only 0.011 behind F001's
+epoch 52 (0.865), and caught more objects (403 against 383 of 909) (IW43, 2026-10-15). One scene can swing a mean: set1 scored
+0.430 at epoch 14 and 0.702 at epoch 20 under \code{combined}, a swing of 0.27 from one block of training. Four scenes cannot
+give a reliable mean when one of them moves that much, which is why every later gate compares runs on the same scenes with the
+same score (\cref{ch:bootstrap}).
+\end{drift}
+
+\section{Three sensors at their own bands}\label{sec:pretrain:native}
+
+\subsection{Why new data at all}
+
+F001 has only seen SpectralEarth: EnMAP data on one fixed list of 202 bands. The product scores three hyperspectral sensors,
+PRISMA, EnMAP and AVIRIS-NG (\cref{ch:sensors}), each on its own band list and at its own pixel size. Fine-tuning
+(\cref{ch:finetune}) trains on them directly, for three reasons given in
+\file{docs/proposals/fine-tuning-and-segmentation.md}: real sensors; the wavelengths SpectralEarth dropped (including the
+hydrocarbon band near 1730\,nm); and EnMAP's cloud and water labels for a segmentation head (\cref{ch:seghead}).
+
+\begin{definition}[Native and resampled]\index{native band list}
+A \emph{native} band list is the sensor's own list of band centres and its own pixel grid, untouched. A \emph{resampled} list
+holds values interpolated onto some other list, such as the 165-band grid of \cref{ch:sensors} or SpectralEarth's 202.
+\end{definition}
+
+All three sets share SpectralEarth's sample layout: \code{pixels.npy} (or compressed \code{pixels.i16dz}), int16
+\shape{(bands, 128, 128)}, multiplied by 0.0001 for reflectance, $-32768$ for nodata; \code{wavelengths.npy}, float32
+\shape{(bands,)}, the centre of each band in the same order; \code{meta.json} with scene facts; and for EnMAP the provider's
+quality layers \code{label_*.npy}. A tile is kept only if at least 10\% of its pixels are valid.
+
+\coursefig[0.95\linewidth]{iw-44-datasets}{(a) The three shard sets as they stood on 2026-10-16 (colours identify the sensor
+only). (b) The one rule that lets mixed band lists share a trainer: match by wavelength within 0.5\,nm; a target band with no
+match becomes nodata, a source band with no target is dropped.}{fig:pretrain:datasets}
+
+\subsection{EnMAP: 224 bands, labels and a defect map}
+
+210 EnMAP L2A scenes became 14,542 training and 950 test tiles, each with all 224 bands at the scene's own
+wavelengths.\tbrk\tagM{docs/lld/enmap-shards.md}
+
+\paragraph{A renumbered band.} Five early-2023 scenes (processor version V010502) number their shortwave bands one off: there
+band 142 is 1530.29\,nm, elsewhere 1518.87\,nm. Reading ``band 142'' by position would silently mix two wavelengths. So every
+sample carries its wavelengths, and everything downstream matches \emph{by wavelength, never by band number}. Across all scenes
+the stats list 227 distinct wavelengths: 224 per scene plus the renumbered scenes' shifted ones.
+
+\paragraph{The split by datatake.} A \emph{datatake}\index{datatake} is one continuous recording; consecutive scenes from it
+border each other. Whole datatakes go to one side of the split: 6 of the 66 went to test (13 scenes), with cloudy and clear
+ones represented. A random split by scene would put ground a few pixels from a training scene into the test set.
+
+\paragraph{The pixel mask.} EnMAP's \code{QL_PIXELMASK} flags individual voxels (one band of one pixel); the tiler turns each
+flagged voxel into nodata. A probe of three scenes found bands 131 to 135 (about 1343--1390\,nm, the L2A water-vapour blank)
+flagged everywhere, and about 200 other bands with scattered flags whose share is the same in all three scenes to 0.01\%
+(band 187: 5.31\%). A share that does not change with the scene follows the \emph{detector}, not the ground: a fixed defect map.
+Net effect: 85--95\% of pixels lose 2--4 of their 224 bands. That is harmless: a dead band drops out of the wavelength stem
+exactly (\cref{ch:crossstem}) and out of the loss too. A pixel with 221 of 224 bands is a slightly thinner spectrum, not a hole.
+
+\paragraph{Labels.} EnMAP's L2A product ships quality layers: cloud, cirrus (levels 0--3), haze, cloud shadow, snow, and a class
+map. They are stored exactly as delivered and never applied to the pixels: a cloudy tile stays in, because cloudy tiles are what
+a segmentation head learns from. \Cref{ch:seghead} audits them.
+
+\subsection{PRISMA: reading the file without the product pipeline}
+
+223 PRISMA L2D scenes became 14,802 training and 1,570 test tiles.\tbrk\tagM{docs/lld/prisma-shards.md} The product reads PRISMA
+through a builder that resamples onto the 165-band grid; the shards must keep the sensor's bands, so \code{read_scene}
+(\file{app/utils/prisma/scene.py}) opens the HDF5 file directly and applies three rules:
+\begin{align*}
+  \text{reflectance} &= \frac{\text{DN}}{65535}\,\bigl(\text{Max}_{\text{det}} - \text{Min}_{\text{det}}\bigr) + \text{Min}_{\text{det}}\\
+  \text{nodata} &\iff \text{DN} = 0 \text{ or the detector's error flag} \ne 0\\
+  \text{dropped} &\iff \text{the band's flag is 0 (5 of 239 bands).}
+\end{align*}
+DN (digital number\index{digital number}) is the stored integer, 0 to 65,535; the detector \emph{det} is VNIR or SWIR, each with its own scale
+factors in the file. So $239 - 5 = 234$ bands remain.
+
+\begin{worked}[label={we:pretrain:dn}]{From a PRISMA digital number to a stored value}
+Take DN $= 13{,}107$ with illustrative factors \tagA\ Min $= 0.0$, Max $= 1.0$.
+\begin{align*}
+  13{,}107 / 65{,}535 &= 0.2\\
+  \text{reflectance} &= 0.2 \times (1.0 - 0.0) + 0.0 = 0.2\\
+  \text{stored} &= \operatorname{round}(0.2 / 0.0001) = \operatorname{round}(2000) = 2{,}000 \text{ (int16).}
+\end{align*}
+The LLD's check: on set1 at 860\,nm the result differs from the product builder's own read by at most 0.00005 reflectance, which
+is int16 rounding: one stored unit is 0.0001, so rounding moves a value by at most half of that.
+\end{worked}
+
+\paragraph{Odd band order, one list everywhere.} The file lists the VNIR bands from about 980\,nm \emph{downwards}, then the SWIR
+bands upwards, and the detectors overlap between about 920 and 980\,nm. Nothing is sorted or de-duplicated: the stem takes bands
+in any order because each carries its wavelength. All 234 centres were identical to 0.000\,nm across every scene checked, so
+PRISMA batches need no alignment.
+
+\paragraph{234 or 185?} The shards hold 234 PRISMA bands; the bench reads 185, PRISMA's own bands after the product's default band
+filter removes noisy and overlapping ones. Both are native; they are not the same list.
+
+\paragraph{The split by site, single-link.} PRISMA revisits places, so \code{app/utils/prisma/split.py} groups scenes into sites:
+scenes whose centres lie within 15\,km of each other, \emph{chained}. Single-link chaining\index{single-link clustering} means two scenes are in one site if a
+chain of steps, each at most 15\,km, joins them:
+\begin{center}
+\begin{tabular}{lcl}
+\toprule
+pair & distance & \\
+\midrule
+P--Q & 10\,km & $\le 15$: same site\\
+Q--R & 12\,km & $\le 15$: same site\\
+P--R & 21\,km & $> 15$, but P and R are already joined through Q\\
+\bottomrule
+\end{tabular}
+\end{center}
+Result: one site $\{P, Q, R\}$. Any site within 30\,km of a benchmark scene is excluded from both sides (on the real run, none
+was). Of the rest, 10\% of sites went to test: 21 scenes against 202 for training. PRISMA L2D has no cloud or water mask, so PRISMA
+batches teach reconstruction only.
+
+\subsection{AVIRIS-NG: an airborne sensor in four product versions}
+
+AVIRIS-NG flies on an aircraft. The 79 flight lines of the ISRO--NASA India campaign became 22,377 training and 2,270 test
+tiles.\tbrk\tagM{docs/lld/aviris-shards.md} Each line has 425 bands, of which the header's bad-band list marks 53 (the water-vapour
+windows): $425 - 53 = 372$ remain. The campaign ships four product versions that place the 372 centres up to 0.42\,nm apart, so
+across all lines the stats list 1,116 distinct wavelengths in 372 tight groups ($3 \times 372 = 1{,}116$: the 372 bands appear at
+up to three positions). The fine-tuning band list \code{aviris_ng_372.json} takes the \emph{median} of each group; every variant is
+within 0.5\,nm of it.
+
+\paragraph{Pixel size.} 3.2 to 8.2\,m, depending on the line, deliberately not resampled to 30\,m. A tile is always 128 pixels
+across, so the ground it covers changes:
+\begin{align*}
+  \text{EnMAP, PRISMA:}&\quad 128 \times 30 \text{ m} = 3{,}840 \text{ m}\\
+  \text{AVIRIS-NG:}&\quad 128 \times 3.2 \text{ m} = 409.6 \approx 410 \text{ m}, \qquad 128 \times 8.2 \text{ m} = 1{,}049.6 \approx 1{,}050 \text{ m.}
+\end{align*}
+An AVIRIS-NG tile shows a field; a satellite tile shows a district.
+
+\subsection{Making it fit: band-delta compression}
+
+Neighbouring bands of one pixel are similar, so storing each band as its \emph{difference from the previous band} leaves small
+numbers, which a general-purpose compressor (zstd) packs far better (\file{app/utils/shard_codec.py}). The format is
+\code{.i16dz}.\index{band-delta compression}
+
+\begin{worked}[label={we:pretrain:delta}]{Delta-encoding one pixel}
+Four bands of one pixel, 1000, 1012, 1020, 1015. The encoder subtracts a zero band in front, so the first value is kept:
+\begin{align*}
+  \text{deltas:}\quad & 1000 - 0 = 1000,\quad 1012 - 1000 = 12,\\
+                      & 1020 - 1012 = 8,\quad 1015 - 1020 = -5\\
+  \text{decode (running sum):}\quad & 1000;\quad 1000 + 12 = 1012;\\
+                      & 1012 + 8 = 1020;\quad 1020 - 5 = 1015.
+\end{align*}
+\end{worked}
+
+\paragraph{Wrap-around is exact.} The differences are taken in int16, which holds $-32{,}768$ to $32{,}767$. Next to nodata a
+difference overflows, and the codec lets it wrap. Wrapping is arithmetic \emph{modulo}\index{modular arithmetic} $2^{16} = 65{,}536$: a result is replaced
+by the unique number in the int16 range that differs from it by a multiple of 65,536. Encoding and decoding both work modulo
+65,536, and $(a - b) + b \equiv a \pmod{65{,}536}$, so the round trip returns $a$ whenever $a$ itself is in range:
+\begin{align*}
+  \text{encode:}\quad & 1000 - (-32{,}768) = 33{,}768 \quad\text{(too big for int16)}\\
+  & 33{,}768 - 65{,}536 = -31{,}768 \quad\text{(stored, wrapped)}\\
+  \text{decode:}\quad & -32{,}768 + (-31{,}768) = -64{,}536 \quad\text{(too small)}\\
+  & -64{,}536 + 65{,}536 = 1000 \quad\text{(exact).}
+\end{align*}
+
+\paragraph{The size arithmetic.} AVIRIS-NG tiles were written compressed from the start; EnMAP and PRISMA were re-encoded on
+2026-10-16, about 2.1 times smaller.\tbrk\tagM{research/experiments/indradhanu-finetune/README.md} From the sizes in the three shard LLDs
+(GiB, train $+$ test):
+\begin{align*}
+  \text{EnMAP raw:}&\quad 100.9 + 6.6 = 107.5; \quad\text{re-encoded } 107.5 / 2.1 = 51.2\\
+  \text{PRISMA raw:}&\quad 105.8 + 11.2 = 117.0; \quad\text{re-encoded } 117.0 / 2.1 = 55.7\\
+  \text{AVIRIS-NG:}&\quad 116.0 + 11.2 = 127.2 \quad\text{(already compressed)}\\
+  \text{total raw:}&\quad 107.5 + 117.0 + 127.2 = 351.7\\
+  \text{total re-encoded:}&\quad 51.2 + 55.7 + 127.2 = 234.1.
+\end{align*}
+351.7\,GiB would leave no working room on a 412\,GB disk ($351.7 \times 1.0737 = 377.6$\,GB, since 1\,GiB $= 2^{30}$ bytes $=
+1.0737$\,GB); 234.1\,GiB ($251.4$\,GB) fits, with room to spare.
+
+\begin{sourcenote}[: two compression ratios]
+SpectralEarth's shards compress 1.89--1.91 times (\file{docs/lld/spectralearth.md}; the docstring of
+\file{app/utils/shard_codec.py} says 1.91x). The native-v1 EnMAP and PRISMA sets compress about 2.1 times
+(\file{research/experiments/indradhanu-finetune/README.md}). Comments in \file{recompress_shards.py} and \file{recompress_ft.sh}
+still quote SpectralEarth's \textasciitilde 1.9x for the fine-tuning sets. Both numbers are right for their own data; quote the one
+that belongs to the shards you are sizing.
+\end{sourcenote}
+
+\subsection{One batch, one band list}\label{sec:pretrain:onelist}
+
+The reduced stem takes \emph{one wavelength list per call}: a single \shape{(N,)} vector, not one per sample. A batch is a stack
+of samples, so every sample in it must carry the same bands in the same order. Two rules make that true:
+\begin{enumerate}
+  \item \textbf{One sensor per batch} (relaxed in \cref{ch:finetune} to one band list per \emph{stem pass}).
+  \item \textbf{Within a sensor, align by wavelength} (\file{app/utils/band_alignment.py}). Each target band takes the nearest
+    source band within 0.5\,nm; a target band with no match becomes nodata; a source band with no target is dropped. Nothing is
+    interpolated.
+\end{enumerate}
+The tolerance 0.5\,nm is chosen so it ``only absorbs rounding in the metadata and never pairs two neighbouring bands'': EnMAP's
+bands are 6--12\,nm apart, AVIRIS-NG's about 5\,nm, so two real neighbours are always more than ten tolerances apart.
+
+\begin{worked}[label={we:pretrain:align}]{Aligning a sample onto a band list}
+Target list 500, 510, 520\,nm; a sample with bands at 500.2, 520.1 and 530.0\,nm.
+\begin{center}
+\begin{tabular}{lllll}
+\toprule
+target & nearest source & distance & test & result\\
+\midrule
+500 & 500.2 & $|500 - 500.2| = 0.2$ & $\le 0.5$ & take it\\
+510 & 500.2 & $|510 - 500.2| = 9.8$ & $> 0.5$ & nodata\\
+520 & 520.1 & $|520 - 520.1| = 0.1$ & $\le 0.5$ & take it\\
+\bottomrule
+\end{tabular}
+\end{center}
+Source 530.0 is near no target and is dropped. The aligned sample has three bands, one of them dead; the stem skips the dead one
+exactly.
+\end{worked}
+
+Per sensor: EnMAP aligns onto \code{enmap_224.json}, the 224 centres of the standard scenes (the renumbered scenes' shifted bands
+are dropped, and standard bands they lack become nodata); PRISMA needs nothing; AVIRIS-NG aligns onto the medians in
+\code{aviris_ng_372.json}, and every variant pairs.
+
+\begin{confusions}
+\confusion{Should training use the full SAM weight from epoch 1 too?}{No. The ramp exists for the gradients (\cref{ch:losses}):
+early SAM gradients are large and noisy. The fix changes only the number used to compare epochs, not what the model learns from.}
+\confusion{Isn't a minimum of 20 epochs already protection against the trap?}{It delays the stop until the ramp has finished, but
+epoch 1's 0.055 is still the best on record at epoch 20, so the stop fires there and \texttt{best.pt} is epoch 1.}
+\confusion{So the wavelength-aware stem was a mistake?}{No. A fixed $1 \times 1$ compressor cannot even be \emph{asked} to read a
+different list. What was missing was training that exercised the ability. Band-list augmentation provides it.}
+\confusion{Isn't band-list augmentation the ``hiding bands'' trap of an earlier chapter?}{It hides bands from the \emph{input}, but
+the loss is taken only on pixels the token mask hid completely, and a hidden pixel's own bands are never an input. A pixel never
+learns to fill in its own missing bands, so an anomaly cannot rebuild itself.}
+\confusion{Does rotating the data restart the training?}{No. Weights, optimiser state and learning rate all continue from
+\texttt{last.pt}. Only the files in the train folder change.}
+\confusion{Why 20 epochs per block, not 1?}{A block is one epoch's worth of patches, so one epoch per block would mean a 198\,GB
+download every 9 minutes. Twenty epochs per block gives the prefetch about three hours and keeps each patch's repeat count equal to
+the E-runs'.}
+\confusion{Does nodata mean zero?}{No. Nodata is $-32{,}768$ in the file and becomes an invalid voxel in the trainer, which the stem
+skips exactly. A zero would be read as ``black in this band''.}
+\confusion{PRISMA has 234 bands or 185?}{Both. The shards hold all 234 real bands; the bench and the product read 185 after the
+default band filter.}
+\end{confusions}
+
+\begin{checkyourself}
+\item\label{ex:pretrain:1} Using the table of \cref{we:pretrain:ramp}, a later epoch has L1 $= 0.050$ and SAM $= 0.18$ rad at
+  $\lambda = 0.05$. Compute its score with the ramp and at the full weight, and use the decomposition
+  $\Delta L1 + \lambda_e\Delta\SAM + \Delta\lambda\,\SAM_{e+1}$ to explain the change from epoch 1 under the ramp.
+\item\label{ex:pretrain:2} Epoch 1 scores 0.155 at the full weight. What must a later epoch score to count as an improvement under
+  $\delta = 0.01$? If every later epoch scores 0.1540, on which epoch does the run stop (patience 10, minimum 20)?
+\item\label{ex:pretrain:3} A sensor C samples the visible three times (500, 505, 510\,nm, value 2) and the infrared once (2000\,nm,
+  value $-1$). Compute the plain $1/N$ skip output, then the width-weighted output with idealised widths of 5\,nm per visible band
+  and 10\,nm for the infrared band. Explain why the width-weighted answer is not 0.5.
+\item\label{ex:pretrain:4} After a restart \code{metrics.csv} has 128 lines. Work out done, $k$, stop\_at and the shards of the block,
+  and compute the learning rate at $t = 100$ from \eqref{eq:pretrain:cosine}.
+\item\label{ex:pretrain:5} Delta-encode the bands 2000, 2010, 1990, 1995, then decode them. Then encode the pair (nodata $-32{,}768$,
+  then 30{,}000) with int16 wrap-around and decode it again, showing each step.
+\item\label{ex:pretrain:6} Align a sample with bands 500.3, 509.6, 525.0\,nm onto the list 500, 510, 520\,nm. Which bands are kept,
+  which targets become nodata, which source bands are dropped?
+\end{checkyourself}
+
+\nextchapter{ch:seghead}
+\endgroup

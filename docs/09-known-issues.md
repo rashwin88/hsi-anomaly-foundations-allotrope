@@ -60,10 +60,6 @@ exist in every shard.
 **6. Saved checkpoints have an empty `optimizer_state_dict`**, so `resume_mode="resume"`
 restores an empty optimizer state. (Noted in the old checkpoint inventory; still true.)
 
-**7. `HotSatDatasetBuilder` silently drops `units`.** It passes `units=_DN_UNITS` to
-`VendableThermalDataset`, which has no such field and no `extra="allow"` — Pydantic v2
-discards it. The intended guard against treating raw DN as °C is therefore not in effect.
-
 **8. Scene search strips `_` and `%` instead of escaping them.** `list_scenes` in
 `backend/allotrope/api/scenes.py` removes both characters from `q` before the `ILIKE`, so
 any search containing an underscore — which is every PRISMA/EnMAP product id
@@ -103,7 +99,9 @@ of the man-made library experiments do), or lower `min_lib_points_per_band` for 
   this repo's code, every action that `pickle.load`s such a vendable fails on its first
   array operation. That includes SAM in `spectral_library_match`.
 - **Status:** found 2026-10-16 while testing family matching. The deployed images carry code
-  this repo does not.
+  this repo does not. Since 2026-11-01 `spectral_library_match` opens the dict form itself
+  (`_open_memmap_form` in `_spectral_library_match_run.py`), and `band_filter_apply` re-reads
+  the raw scene, so the full AVIRIS-NG chain runs on such a scene (`ang20160211t075004`).
 
 ## Deliberate limitations in segmentation sharding
 
@@ -194,21 +192,44 @@ Rationale and results in [`lld/spectral-family-match.md`](lld/spectral-family-ma
 - **Fill is not reported.** No estimator recovered fill on real deployed materials without an
   in-scene or field spectrum of the material.
 
+## Spectral namer in the product — open gaps
+
+Added 2026-11-01 with the namer stage of `spectral_library_match`. Rationale in
+[`lld/spectral-namer-in-product.md`](lld/spectral-namer-in-product.md).
+
+- **The man-made call is not scene-calibrated.** Objects are man-made at mean P(man-made)
+  > 0.5, the model's own boundary; the proposal's per-scene thresholds were not built. Tanager
+  is not one of the three training sensors.
+- **An unseen material still gets a known class.** Run N002: abstention sent only 1-4 % of a
+  held-out class to "unknown". The product says "closest known class" and flags tentative
+  ones, but a confident class can still be wrong for a material outside the seven.
+- **No real-target check in the product yet.** Verified end to end on one Tanager and one
+  PRISMA scene for plumbing and plausibility only; no labelled material targets.
+- **Natural objects are not matched at all**, so a man-made object the namer misses also
+  loses its SAM / family name. Set `namer=false` to match every pixel as before.
+
 ## Spectral-stem models — open gaps
 
 Added 2026-10-14 with the `spectral_stem_mae` trainer; rewritten 2026-10-19 when FT04 shipped as Indradhanu V2, and
 2026-10-29 when V2 moved to Indradhanu Heavy (`v2.1.0`). Rationale in
 [`lld/spectral-stem.md`](lld/spectral-stem.md) and [`lld/enmap-shards.md`](lld/enmap-shards.md).
 
-- **Indradhanu V2 is opt-in, not the default** (2026-10-19, docs/proposals/ship-ft04.md, Phase 1). The
-  hyperspectral defaults still route to Indradhanu v0.2.0 and `band_filter_apply` still defaults to the 165-band grid;
-  making V2 the default is Phase 2, after it has been used in the product.
-- **One `anomaly_scoring` action cannot mix V2 and v0.2.0.** V2 needs a native-band band filter, v0.2.0 the 165-band
-  grid; both read the same upstream output, so `anomaly_scoring` refuses whichever one does not match (at run time -
-  `validate_config` cannot see the upstream band filter's settings). Classical detectors take either grid.
-- **V2's masks are written but not shown.** `models/<codename>/mask_cloud.tif` and `class_map.tif` (0 land, 1 water,
-  2 cloud, 3 shadow, 4 snow) and the stats keys `bands_read`, `excluded_classes`, `excluded_percent` are on disk; the
-  viewer has no panel for them, no erosion knob or flow diagram for the new architecture (frontend work).
+- **Indradhanu V2 is not the default codename** (2026-10-19, docs/proposals/ship-ft04.md, Phase 1): the
+  hyperspectral `anomaly_scoring` defaults still name Indradhanu v0.2.0 (the dialog makes the user pick models). Since
+  2026-10-31 `band_filter_apply`'s sensor defaults keep **native bands** (docs/proposals/aigc-evaluation-submission.md
+  C3), so V2 runs from the UI without any setting; the pydantic field default stays `true`, so an API call that omits
+  the flag behaves as before.
+- **V2 refuses a 165-grid band filter.** v0.2.0 on a native-band filter is resampled to the 165-band grid inside
+  `anomaly_scoring` (`_to_common_grid`, the band filter's own resampler), so one action can now mix V2 and v0.2.0 on a
+  native filter; the other way round (V2 on the 165 grid) is refused at run time. Classical detectors take either.
+- **V2's masks are written but not shown - viewer built, hook pending.** Since 2026-11-01 the head runs as its own
+  step (`scene_segmentation` method `indradhanu_v2`, [`lld/segmentation-v2.md`](lld/segmentation-v2.md)) with a
+  viewer, `frontend/src/components/SegmentationViewer.tsx` (map with class overlay, per-class toggles, coverage,
+  excluded classes marked). `ActionDetailPane` does not render it yet - until that hook lands a V2 segmentation shows
+  in the index viewer (preview image only) - and `NewActionDialog` offers `method` as free text. Inside
+  `anomaly_scoring`, `models/<codename>/mask_cloud.tif` / `class_map.tif` and the stats keys `bands_read`,
+  `excluded_classes`, `excluded_percent`, `segmentation` are still not shown, and there is no erosion knob or flow
+  diagram for the new architecture.
 - **Thin cloud is not excluded, by design.** V2 zeros thick cloud only (`thin_cloud_is_cloud=False` in the resolver,
   `stats.json` `cloud_rule: "thick"`). Heavy's thin-cloud output fires on haze: on PRISMA set4 it covers 75.4% of
   valid pixels and 209 of 230 targets, so excluding it would blank the scene (FTH1 mask diagnosis). Thin cirrus over a

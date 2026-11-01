@@ -1,0 +1,63 @@
+== ring counts
+LocalRX defaults half-sizes 25/5: 2480 = 4(o-i)(o+i+1) = 2480
+course exercise 15/3: 912
+corner pixel 25/5: 640  edge pixel: 1260
+PCA-RX full widths 21/61: 3280  fallback below 60
+5x5 example outer 2 inner 1: 16  inner 0: 24
+== local RX on a 5x5 single-band grid, via batch_mahalanobis
+ inner=1: n=16 mean=21.0000 var(N-1)=1.0667 score=15.0000 (reg 1e-4: 14.9986)
+   sum sq dev 16.0
+ inner=0: n=24 mean=22.3333 var(N-1)=4.4058 score=1.6140 (reg 1e-4: 1.6140)
+   sum sq dev 101.33333333333334
+== padding: two pixels, max_bg 4
+ correct mean pixel 1 0.32 wrong 0.16
+ scores of x=0.40 (reg 1e-4) [6.391304 7.111111]
+ check pixel1 by hand: var 0.0008000000000000014 score 7.111111111111103
+== rank of a sample covariance from n points in B dims
+ n= 2 B=10 rank=1
+ n= 3 B=10 rank=2
+ n= 5 B=10 rank=4
+ n=10 B=10 rank=9
+ n=11 B=10 rank=10
+ n=20 B=10 rank=10
+== cost arithmetic (PRISMA 1210 x 1219 from docs/lld/local-background.md)
+ pixels 1474990
+ B=10: per-pixel cov 248,000 + solve 333 -> total 3.663e+11 multiply-adds; batch bytes per elem (2*max_bg*B + B^2)*4 = 198,800
+ B=177: per-pixel cov 77,695,920 + solve 1,848,411 -> total 1.173e+14 multiply-adds; batch bytes per elem (2*max_bg*B + B^2)*4 = 3,636,996
+ global: one cov from N pixels at B=10: 1.475e+08
+== MNF noise estimate from a 2-band strip of 5 pixels
+ diffs [ 0.2 -0.3  0.2 -0.1] [ 0.1  0.  -0.1  0. ]
+ cov of diffs [[ 0.06     -0.      ]
+ [-0.        0.006667]] noise cov = /2 [[ 0.03     -0.      ]
+ [-0.        0.003333]]
+ repo _estimate_noise_covariance [[ 0.03     -0.      ]
+ [-0.        0.003333]]
+== MNF by hand: Sigma = [[8,2],[2,1.25]], Sigma_n = diag(4, 0.25)
+ signal cov [[4. 2.]
+ [2. 1.]] rank 1
+ whitened cov [[2. 2.]
+ [2. 5.]]
+ eig [1. 6.] V [[-0.894427  0.447214]
+ [ 0.447214  0.894427]]
+  MNF1: lambda=6.0000 direction(original)=[0.223607 1.788854] signal=5.0000 noise=1.0000 SNR=5.0000
+  MNF2: lambda=1.0000 direction(original)=[-0.447214  0.894427] signal=0.0000 noise=1.0000 SNR=0.0000
+  PCA: lambda=8.5481 u=[-0.964441 -0.2643  ] signal=4.8100 noise=3.7380 SNR=1.2868
+  PCA: lambda=0.7019 u=[ 0.2643   -0.964441] signal=0.1900 noise=0.5120 SNR=0.3710
+ scipy generalized eigh(S, Sn): [1. 6.] [[-0.447214  0.223607]
+ [ 0.894427  1.788854]]
+== MNF in the repo's code on a synthetic cube, and MNF-RX identities
+ true noise var (first 4) [0.0025 0.01   0.0225 0.04  ]  estimated diag [0.00352  0.011741 0.022067 0.042363]
+ true noise var (last 2) [0.3025 0.36  ]  estimated diag [0.297754 0.350157]
+ MNF eigenvalues [65.431184  4.016642  2.178768  1.070892  1.057067  1.018141  1.001548
+  0.98536   0.980391  0.96774   0.947762  0.933911]
+ full-rank MNF-RX equals raw RX: max abs diff 7.105427357601002e-14 max score 46.56064879123764
+ k=3: MNF-RX vs sum y^2/var: max abs diff 4.973799150320701e-14
+ cov of MNF components (should be diag of eigenvalues) [[65.4312  0.     -0.    ]
+ [ 0.      4.0166  0.    ]
+ [-0.      0.      2.1788]]
+ mean in-sample score k=3: 2.9988  expected 3(N-1)/N = 2.9988
+ PCA eigenvalues of the raw cube [1.256778 0.528453 0.310128 0.257349 0.195486 0.165578 0.142859 0.085267
+ 0.058818 0.034546 0.023812 0.010218]
+== PCA-RX: local_mean_score on a tiny case (d = 1, window (1, 5) full widths)
+ ring count at centre: 24  score at centre 9.0 = (4 - 1)^2 = 9.0
+ whitened_pca output variance check: [1. 1. 1.]

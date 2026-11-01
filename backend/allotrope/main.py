@@ -8,8 +8,10 @@ from fastapi import Depends, FastAPI
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+from .api.action_class_pack import class_pack_router
 from .api.action_export import action_export_router
 from .api.action_files import action_files_router, outputs_router
+from .api.action_story import action_story_router
 from .api.action_threshold import anomaly_threshold_router
 from .api.actions import (
     action_types_router,
@@ -43,10 +45,11 @@ from .api.projects import router as projects_router
 from .api.scenes import router as scenes_router
 from .api.visualizations import router as visualizations_router
 from .db import get_db
+from .version import APP_NAME, __version__
 
 app = FastAPI(
     title="Allotrope api",
-    version="0.0.1",
+    version=__version__,
 )
 
 app.include_router(auth_router)
@@ -66,6 +69,8 @@ app.include_router(actions_router)
 app.include_router(anomaly_threshold_router)
 app.include_router(action_files_router)
 app.include_router(action_export_router)
+app.include_router(class_pack_router)
+app.include_router(action_story_router)
 app.include_router(outputs_router)
 app.include_router(action_types_router)
 app.include_router(project_visualizations_router)
@@ -83,6 +88,12 @@ app.include_router(exports_detail_router)
 def healthz() -> dict[str, str]:
     """Liveness — does the process answer?"""
     return {"status": "ok"}
+
+
+@app.get("/version")
+def version() -> dict[str, str]:
+    """The product name and version (allotrope/version.py), unauthenticated, for the UI."""
+    return {"name": APP_NAME, "version": __version__}
 
 
 @app.get("/healthz/db")

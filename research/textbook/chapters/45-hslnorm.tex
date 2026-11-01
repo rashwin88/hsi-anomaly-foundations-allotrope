@@ -1,0 +1,423 @@
+\chapter{Per-scene min-max, and a library with nowhere to stand}\label{ch:hslnorm}
+\def\tbrk{\hfil\penalty50\hfilneg}% local: a line may break before a provenance tag
+
+\begin{onething}
+Per-scene min-max scaling makes a pixel's input depend on the brightest and darkest pixels of its scene, so the same
+material reads differently in every scene, one bright anomaly changes every other pixel, and a library spectrum, which
+has no scene, has no defined input at all; measured on four PRISMA scenes, HyperSL's embeddings did not name man-made
+targets better than plain spectral angle, and one vegetation spectrum absorbed 60\% of a scene's anomalies.
+\end{onething}
+
+Library matching (\cref{sec:material:naming}, \cref{ch:namer}) asks whether a pixel looks like a laboratory spectrum.
+That question has a precondition so basic it is easy to miss: \emph{the pixel and the library spectrum must be put on
+the same footing before they are compared}. This chapter shows, on numbers small enough to do by hand, that HyperSL's
+input scaling cannot meet that precondition, and then shows what happened when the team tried anyway.
+
+\begin{analogy}
+Marks graded on a curve. In each class the weakest student is given 0 and the strongest 100, and everyone else is
+placed proportionally between. A mark of 75 means one thing in a class of strong students and another in a weak one;
+a single brilliant newcomer pushes everyone else's mark down; and an external candidate who sat the exam alone has no
+curved mark at all, because there is no class to curve against. Comparing that candidate with a student in some class
+means inventing a class for them. The library spectrum is the external candidate.
+\end{analogy}
+
+%======================================================================
+\section{The scaling, as a formula}\label{sec:hslnorm:formula}
+
+\begin{definition}[Per-scene, per-band min-max scaling]
+For a scene with pixels $\vect{x}^{(1)},\dots,\vect{x}^{(N)}$ and band $b$, let
+$m_b=\min_n x^{(n)}_b$ and $M_b=\max_n x^{(n)}_b$. Each pixel's value in band $b$ becomes
+\begin{equation}
+x'_b=\frac{x_b-m_b}{M_b-m_b}. \label{eq:hslnorm:minmax}
+\end{equation}
+This is \cref{eq:hslwhat:minmax}, the operation \code{sklearn.preprocessing.minmax_scale} applies to each column of the
+pixels-by-bands table in \file{upstream/mutihsi.py}.
+\end{definition}
+
+Rewrite it to see its shape:
+\begin{align}
+x'_b &= \frac{x_b-m_b}{M_b-m_b} \notag\\
+&= \frac{1}{M_b-m_b}\,x_b-\frac{m_b}{M_b-m_b} && \text{split the fraction}\notag\\
+&= s_b\,x_b+c_b, \quad s_b=\frac{1}{M_b-m_b},\ c_b=-\frac{m_b}{M_b-m_b}. \label{eq:hslnorm:affine}
+\end{align}
+\begin{definition}[Per-band affine map]
+A map that multiplies band $b$ by a number $s_b$ and adds a number $c_b$, with each band allowed its own $s_b$ and
+$c_b$, is a \emph{per-band affine map}\index{per-band affine map}.
+\end{definition}
+So min-max is a per-band affine map, and so is the fixed z-score our own models use
+(\code{WavelengthStats}, \cref{sec:specdecoder:traps}): $z_b=(x_b-\mu(\lambda_b))/\sigma(\lambda_b)$, which is
+\cref{eq:hslnorm:affine} with $s_b=1/\sigma(\lambda_b)$ and $c_b=-\mu(\lambda_b)/\sigma(\lambda_b)$.
+
+\begin{keypoint}
+The two maps have the same form. The difference is where $s_b$ and $c_b$ come from: from the \emph{scene} for min-max,
+from a \emph{fixed curve} stored in the checkpoint for \code{WavelengthStats}. Everything in this chapter follows from
+that one difference.
+\end{keypoint}
+
+%======================================================================
+\section{A three-pixel scene, by hand}\label{sec:hslnorm:toy}
+
+Two bands are enough. Scene $S_1$ has three pixels:
+\[
+\vect{p}_1=(0.10,\ 0.30),\qquad \vect{p}_2=(0.20,\ 0.50),\qquad \vect{p}_3=(0.30,\ 0.40)\quad\tagA .
+\]
+
+\begin{worked}[label={we:hslnorm:s1}]{Scaling scene $S_1$}
+Band 1 holds 0.10, 0.20, 0.30, so $m_1=0.10$, $M_1=0.30$, $M_1-m_1=0.20$. Band 2 holds 0.30, 0.50, 0.40, so $m_2=0.30$,
+$M_2=0.50$, $M_2-m_2=0.20$.
+\begin{align*}
+\vect{p}'_1 &= \left(\frac{0.10-0.10}{0.20},\ \frac{0.30-0.30}{0.20}\right) = (0,\ 0),\\
+\vect{p}'_2 &= \left(\frac{0.20-0.10}{0.20},\ \frac{0.50-0.30}{0.20}\right) = \left(\frac{0.10}{0.20},\ \frac{0.20}{0.20}\right) = (0.5,\ 1.0),\\
+\vect{p}'_3 &= \left(\frac{0.30-0.10}{0.20},\ \frac{0.40-0.30}{0.20}\right) = \left(\frac{0.20}{0.20},\ \frac{0.10}{0.20}\right) = (1.0,\ 0.5).
+\end{align*}
+\end{worked}
+
+\subsection{(a) The same spectrum, two different inputs}
+
+Scene $S_2$ contains the very same spectrum $(0.20,0.50)$, beside two others: $(0.05,0.20)$ and $(0.40,0.60)$\tagA.
+
+\begin{worked}[label={we:hslnorm:s2}]{The same spectrum in scene $S_2$}
+Band 1: $m_1=0.05$, $M_1=0.40$, $M_1-m_1=0.35$. Band 2: $m_2=0.20$, $M_2=0.60$, $M_2-m_2=0.40$.
+\begin{align*}
+x'_1 &= \frac{0.20-0.05}{0.35} = \frac{0.15}{0.35} = 0.4286,\\
+x'_2 &= \frac{0.50-0.20}{0.40} = \frac{0.30}{0.40} = 0.75 .
+\end{align*}
+In $S_1$ the spectrum $(0.20,0.50)$ entered the model as $(0.5,1.0)$; in $S_2$ as $(0.4286,0.75)$\tagC.
+\end{worked}
+\textbf{One material, two inputs.} A model fed these will produce two different embeddings for the same surface, and
+nothing in its training told it the two are the same thing: the scenes' extremes, not the material, decided the
+difference.
+
+\subsection{(b) One bright anomaly moves everybody}
+
+Add a bright fourth pixel, $\vect{a}=(0.60,0.90)$, to $S_1$\tagA: a metal roof, say.
+
+\begin{worked}[label={we:hslnorm:anom}]{Scene $S_1$ after a bright pixel arrives}
+The minima do not change ($m_1=0.10$, $m_2=0.30$). The maxima become $M_1=0.60$ and $M_2=0.90$, so the spans are
+$0.60-0.10=0.50$ and $0.90-0.30=0.60$.
+\begin{align*}
+\vect{p}'_2 &= \left(\frac{0.20-0.10}{0.50},\ \frac{0.50-0.30}{0.60}\right)=\left(\frac{0.10}{0.50},\ \frac{0.20}{0.60}\right)=(0.2,\ 0.3333),\\
+\vect{p}'_3 &= \left(\frac{0.30-0.10}{0.50},\ \frac{0.40-0.30}{0.60}\right)=\left(\frac{0.20}{0.50},\ \frac{0.10}{0.60}\right)=(0.4,\ 0.1667),\\
+\vect{a}' &= \left(\frac{0.50}{0.50},\ \frac{0.60}{0.60}\right)=(1,\ 1).
+\end{align*}
+$\vect{p}_2$ was $(0.5,1.0)$ and is now $(0.2,0.3333)$; $\vect{p}_3$ was $(1.0,0.5)$ and is now $(0.4,0.1667)$\tagC. Not
+one of their reflectances changed.
+\end{worked}
+
+For detection this is perverse. The arrival of an anomaly rewrites the input of every \emph{ordinary} pixel in the
+scene, and the anomaly itself is pinned to the corner $(1,1)$ of the box the model was trained in. A real scene has a
+million pixels and the extremes are usually set by a handful of them: glint, a metal roof, a fire, a cloud. Those
+handful decide the frame for the million.
+
+\subsection{(c) A library spectrum has no frame}
+
+A laboratory spectrum $\vect{t}=(0.70,0.20)$\tagA{} was measured alone. It has no scene, so \cref{eq:hslnorm:minmax}
+has no $m_b$ and $M_b$ to use. There are three ways to force it in, and each fails.
+
+\paragraph{Borrow the scene's frame.} Use $S_1$'s $m$ and $M$:
+\begin{align*}
+t'_1 &= \frac{0.70-0.10}{0.20} = \frac{0.60}{0.20} = 3.0, & t'_2 &= \frac{0.20-0.30}{0.20} = \frac{-0.10}{0.20} = -0.5 .
+\end{align*}
+Both lie outside $[0,1]$, the range every training input occupied, and outside the range the sigmoid output can
+reach (\cref{tab:hslwhat:trace}). Clipping gives $(1,0)$ and throws away how far outside it was. On real data this is
+not rare: the team's first attempt clipped 41\% of all ECOSTRESS library values, and the clipping fell mostly on
+natural entries\tbrk\tagMr{\texttt{4bbf91d}: hypersl\_model.py docstring}.
+
+\paragraph{Put the spectrum into the scene.} Append $\vect{t}$ to $S_1$ as a fourth pixel and recompute. Now
+$m=(0.10,0.20)$ and $M=(0.70,0.50)$, $\vect{t}'=(1,0)$, and $\vect{p}_1$ moves from $(0,0)$ to $(0,0.3333)$\tagC. The
+library entry has changed the scene it is being compared against. With 2,000 library entries there would be 2,000
+different frames.
+
+\paragraph{Scale each spectrum by itself.} Use each spectrum's own minimum and maximum over its bands (``per-curve'').
+That treats pixel and library alike, but it is not what the model was trained on: the validation measured the loss
+roughly doubling under it (row~I in \cref{sec:hslwhat:repro}).
+
+\begin{definition}[Circular]
+A procedure is \emph{circular}\index{circular procedure} when its answer is needed to set up its own input. Borrowing the
+scene's frame is circular for matching: a scene's extremes in each band are typically set by its unusual pixels, the
+very ones being named, so the frame the library is placed in depends on what the target is.
+\end{definition}
+
+\subsection{(d) Spectral angle does not survive the map}
+
+\begin{definition}[Spectral angle]
+The angle between two spectra $\vect{u}$ and $\vect{v}$ (\cref{ch:rx}, \cref{ch:material}) is
+\[
+\theta=\arccos\frac{\vect{u}\cdot\vect{v}}{\norm{\vect{u}}\,\norm{\vect{v}}}.
+\]
+It ignores overall brightness: $\theta(k\vect{u},\vect{v})=\theta(\vect{u},\vect{v})$ for any $k>0$. That is why
+library matching uses it.
+\end{definition}
+
+A tempting hope: the angle ignores brightness, so perhaps it ignores the min-max map too. It does not.
+
+\begin{worked}[label={we:hslnorm:angle}]{The angle between $\vect{p}_2$ and $\vect{p}_3$, before and after}
+\emph{Before}, in reflectance:
+\begin{align*}
+\vect{p}_2\cdot\vect{p}_3 &= 0.20\times0.30+0.50\times0.40 = 0.06+0.20 = 0.26,\\
+\norm{\vect{p}_2} &= \sqrt{0.20^2+0.50^2} = \sqrt{0.04+0.25} = \sqrt{0.29} = 0.5385,\\
+\norm{\vect{p}_3} &= \sqrt{0.30^2+0.40^2} = \sqrt{0.09+0.16} = \sqrt{0.25} = 0.5000,\\
+\cos\theta &= 0.26/(0.5385\times0.5000) = 0.26/0.26926 = 0.9656, \qquad \theta = 15.07^\circ .
+\end{align*}
+\emph{After}, in $S_1$'s frame, $\vect{p}'_2=(0.5,1.0)$ and $\vect{p}'_3=(1.0,0.5)$:
+\begin{align*}
+\vect{p}'_2\cdot\vect{p}'_3 &= 0.5\times1.0+1.0\times0.5 = 1.0,\\
+\norm{\vect{p}'_2} &= \norm{\vect{p}'_3} = \sqrt{0.25+1.0} = \sqrt{1.25} = 1.1180,\\
+\cos\theta' &= 1.0/(1.1180\times1.1180) = 1.0/1.25 = 0.8000, \qquad \theta' = 36.87^\circ .
+\end{align*}
+Two spectra $15.07^\circ$ apart in reflectance are $36.87^\circ$ apart after the map\tagC. And $\vect{p}_1$, the darkest pixel
+in both bands, became $(0,0)$: a vector of length zero, for which no angle is defined at all.
+\end{worked}
+
+Why, in general? Take a per-band map with no offset, $x'_b=s_bx_b$. Then
+\begin{align*}
+\cos\theta' &= \frac{\sum_b (s_bu_b)(s_bv_b)}{\sqrt{\sum_b s_b^2u_b^2}\,\sqrt{\sum_b s_b^2v_b^2}}
+ && \text{substitute }u'_b=s_bu_b,\ v'_b=s_bv_b\\
+&= \frac{\sum_b s_b^2u_bv_b}{\sqrt{\sum_b s_b^2u_b^2}\,\sqrt{\sum_b s_b^2v_b^2}} .
+ && \text{collect } s_b\cdot s_b
+\end{align*}
+If every $s_b$ equals one number $s$, then $s^2$ comes out of each sum, $s^2/\sqrt{s^2}\sqrt{s^2}=1$, and
+$\cos\theta'=\cos\theta$. If the $s_b$ differ, each band's product is weighted by its own $s_b^2$, and the angle changes.
+With $s=(1/0.20,\,1/0.10)$, the pair above goes from $15.07^\circ$ to $9.25^\circ$\tagC. An offset $c_b$ changes it again,
+because $\vect{u}+\vect{c}$ is no longer a multiple of anything related to $\vect{u}$. Min-max has both unequal scales
+and offsets.
+
+\begin{keypoint}
+The fixed z-score changes angles too: it is also a per-band affine map. What it does not do is change them
+\emph{differently in each scene}. A spectrum's z-scores are a property of the spectrum alone, identical for an image
+pixel in any scene and for a library entry; that, not angle preservation, is what matching needs.
+\end{keypoint}
+
+%======================================================================
+\section{A convolution over band index}\label{sec:hslnorm:conv}
+
+The second obstacle sits in the tokenizer. Recall the convolutions of \cref{tab:hslwhat:trace}, step 1.
+
+\begin{definition}[1-D convolution over band index; kernel; span]
+A 1-D convolution with \emph{kernel} size $k$ makes band $i$'s output from bands $i-h,\dots,i+h$ with $h=(k-1)/2$,
+using the same $k$ weights at every $i$. It knows the bands' \emph{positions in the list}, not their wavelengths. The
+\emph{span} of the window at $i$ is $\lambda_{i+h}-\lambda_{i-h}$, the wavelength range its $k$ bands cover.
+\end{definition}
+
+The same $k$ weights are used everywhere, so the convolution assumes that ``two places along'' means the same
+wavelength distance everywhere. On a list with roughly even spacing that is nearly true. On a list with a
+water-absorption window removed it is false at the edges of the window.
+
+\begin{worked}[label={we:hslnorm:span}]{A 5-band window on PRISMA's 149-band list}
+PRISMA's 149-band list (the one every HyperSL experiment in this part used) drops 1325--1495\,nm. Its bands just below
+and above that gap are, in nm\tagC:
+\begin{align*}
+\text{below: }&\dots,\ 1250.98,\ 1262.53,\ 1273.50,\ 1284.49,\ 1295.42,\ 1306.22,\ 1317.26,\\
+\text{above: }&1502.02,\ 1512.63,\ 1523.22,\ \dots
+\end{align*}
+\emph{Window centred on 1273.50}, five bands 1250.98 to 1295.42:
+\begin{align*}
+\text{span} = 1295.42-1250.98 = 44.44\text{ nm}.
+\end{align*}
+\emph{Window centred on 1317.26}, five bands 1295.42, 1306.22, 1317.26, 1502.02, 1512.63. Its four steps are
+\begin{align*}
+1306.22-1295.42 &= 10.80,\\
+1317.26-1306.22 &= 11.04,\\
+1502.02-1317.26 &= 184.76,\\
+1512.63-1502.02 &= 10.61,
+\end{align*}
+and its span is $1512.63-1295.42=217.21$\,nm\tagC. The kernel's third and fourth weights, which elsewhere connect two
+bands 10\,nm apart, here connect 1317\,nm to 1502\,nm, across the 1.4\,$\mu$m water band.
+\end{worked}
+
+\Cref{tab:hslnorm:spans} gives the spans for the three kernels on four band lists, and \cref{fig:hslnorm:span} draws
+the 5-band span along PRISMA's 149 bands.
+
+\begin{table}[htbp]
+\centering\small
+\begin{tabular}{@{}p{50mm}rrrr@{}}
+\toprule
+band list & bands & $k=5$: median / max & $k=9$: max & $k=13$: median / max \\
+\midrule
+PRISMA, all 234 good bands (water kept) & 234 & 36.4 / 45.0 & 88.7 & 108.9 / 132.7 \\
+PRISMA, 149 (water and noisy ranges cut) & 149 & 39.7 / 280.4 & 319.4 & 122.5 / 358.9 \\
+EnMAP via SpectralEarth (water cut) & 202 & 31.0 / 291.6 & 335.0 & 93.1 / 379.2 \\
+product 165-band grid & 165 & 40.0 / 200.0 & 240.0 & 120.0 / 280.0 \\
+\bottomrule
+\end{tabular}
+\caption{How many nanometres (nm) a kernel over band index covers, for windows that fit inside the list\tagC. With the
+water bands kept (first row; HyperSL trained on EnMAP this way) the spans are even: the design is consistent with its
+own data. Every band list this product uses removes the water windows, and the largest span grows six- to sevenfold.}
+\label{tab:hslnorm:spans}
+\end{table}
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}
+\begin{axis}[width=0.92\linewidth, height=55mm, xlabel={centre wavelength (nm)}, ylabel={span (nm)},
+  ymin=0, ymax=380, xmin=450, xmax=2400, unbounded coords=jump, legend style={at={(0.02,0.98)},anchor=north west,font=\small}]
+\addplot[spec, thick, mark=*, mark size=0.6pt] table[x=wl, y=span5] {figdata/hsl_kernel_span_prisma149.dat};
+\addplot[loss, thick, mark=*, mark size=0.6pt] table[x=wl, y=span13] {figdata/hsl_kernel_span_prisma149.dat};
+\legend{kernel 5, kernel 13}
+\end{axis}
+\end{tikzpicture}
+\caption[The span of HyperSL's kernels along PRISMA's 149-band list]{The span of HyperSL's kernels along PRISMA's
+149-band list. Away from the gaps a 5-band window covers about
+40\,nm; next to the three removed ranges (1120--1186, 1317--1502 and 1785--2036\,nm) it jumps to 100--280\,nm. Data: \texttt{figdata/\allowbreak hsl\_kernel\_span\_prisma149.dat}, written by
+\texttt{tools/\allowbreak compute\_hypersl.py}.}
+\label{fig:hslnorm:span}
+\end{figure}
+
+\begin{sourcenote}[: the authors saw the effect and drew it]
+The paper's Fig.~4 caption notes that ``the nonlinear segments in the figure are due to the removal of bad bands from
+the ENMap data'' \citep{kong2025hypersl}. It refers to the position code, which knows wavelength and handles a gap
+correctly. The convolutions in front of it do not; the code (\code{nn.Conv1d(1, 256, k, stride=1, padding='same')})
+has no wavelength input.
+\end{sourcenote}
+
+Our own stem answers this differently: it groups bands into 40\,nm wavelength \emph{bins} (\cref{ch:specdecoder}), so a
+band that is absent is simply absent, and no weight ever connects 1317\,nm to 1502\,nm as if they were neighbours.
+
+%======================================================================
+\section{What happened when it was tried}\label{sec:hslnorm:measured}
+
+\subsection{The four-scene matching run (2026-09-23)}
+
+The experiment \file{research/experiments/hypersl-splib-match/} (commits \code{f554fe4} to \code{4bbf91d}, no longer in
+the working tree) matched every ground-truth anomaly pixel of the four labelled PRISMA scenes against two libraries:
+ECOSTRESS (1,947 entries, 45 of them man-made) and USGS splib07 (518 entries)\tbrk\tagMr{the run's
+\texttt{summary.json}, in \texttt{C:/Users/FITT/Documents/hypersl\_match\_data/results/}, 2026-09-23 22:02}. Three methods,
+each ranked by cosine similarity:
+\begin{itemize}
+\item \textbf{HyperSL}: the embedding of pixel and library entry, each scaled \emph{per curve} (its own minimum and maximum
+over bands), mask 0. Per-curve scaling was chosen because the scene frame clipped 41\% of the library and because a
+spectrum cannot find itself across two different scalings (the control \code{frame_control.py});
+\item \textbf{HyperSL raw}: the embedding of unscaled reflectance;
+\item \textbf{SAM}: the cosine of the reflectances themselves, the classical reference.
+\end{itemize}
+
+\paragraph{Did anomalies match man-made entries?} The measure is the share of anomaly pixels whose best ECOSTRESS match is a
+man-made entry, beside the same share for brightness-matched background pixels. A useful matcher should put the first well
+above the second.
+
+\begin{table}[htbp]
+\centering\small
+\begin{tabular}{@{}lrrrrrr@{}}
+\toprule
+& \multicolumn{2}{c}{HyperSL, per-curve} & \multicolumn{2}{c}{HyperSL, raw} & \multicolumn{2}{c}{SAM} \\
+\cmidrule(lr){2-3}\cmidrule(lr){4-5}\cmidrule(lr){6-7}
+scene (anomaly px) & anomaly & background & anomaly & background & anomaly & background \\
+\midrule
+set1 (638) & 7.2\% & 2.7\% & 0.16\% & 0.0\% & 9.6\% & 1.9\% \\
+set2 (992) & 0.40\% & 0.0\% & 0.30\% & 0.0\% & 0.81\% & 0.20\% \\
+set3 (778) & 0.26\% & 0.51\% & 0.39\% & 0.13\% & 2.7\% & 2.1\% \\
+set4 (1,165) & 8.3\% & 33.0\% & 0.0\% & 0.0\% & 6.4\% & 24.3\% \\
+\bottomrule
+\end{tabular}
+\caption{Share of pixels whose top ECOSTRESS match is man-made\tagMr{\texttt{summary.json}, \texttt{m1}}. HyperSL is below
+SAM on three of four scenes, and on set4 both call a third or a quarter of ordinary background man-made.}
+\label{tab:hslnorm:m1}
+\end{table}
+
+\paragraph{Where did the matches go?} The run also recorded the single library entry that took the most anomaly pixels
+as its top match. With HyperSL per-curve, \emph{Salvia leucophylla 3}, a sage leaf, was the best match for 59.6\% of set2's
+992 anomaly pixels, and \emph{Dolomitic Marble} for 31.2\% of set4's. Against USGS, a buckbrush spectrum took 52.5\% of
+set2's. SAM's largest attractor on ECOSTRESS took 19.9\% (set2, \emph{Misc Grass Litter})\tagMr{\texttt{summary.json},
+\texttt{top1\_share}}. An embedding in which one leaf is the nearest neighbour of most of a scene's anomalies is
+describing the scene, not the anomalies.
+
+\paragraph{Does the embedding at least organise the library?} For each library entry, take its 5 nearest other entries
+and count the share in its own class:
+
+\begin{center}\small
+\begin{tabular}{@{}lrrrr@{}}
+\toprule
+& \multicolumn{2}{c}{ECOSTRESS} & \multicolumn{2}{c}{USGS} \\
+\cmidrule(lr){2-3}\cmidrule(lr){4-5}
+space & all classes & man-made & all classes & man-made \\
+\midrule
+HyperSL, per-curve & 0.965 & 0.124 & 0.827 & 0.373 \\
+HyperSL, raw & 0.962 & 0.196 & 0.841 & 0.454 \\
+SAM (reflectance) & 0.949 & 0.093 & 0.795 & 0.278 \\
+\bottomrule
+\end{tabular}
+\end{center}
+To be fair to HyperSL: its space groups library classes a little \emph{better} than raw angle, by 1.6 to 4.6 points
+overall and 3 to 18 points for man-made entries\tagMr{\texttt{summary.json}, \texttt{purity}}. But look at the man-made
+column on ECOSTRESS: 12\% means that seven out of eight of a man-made entry's nearest neighbours are natural. Vegetation,
+minerals and soils dominate the library and the embedding; man-made materials are not a region of it.
+
+\begin{sourcenote}[: why the USGS rows of the man-made table are all zero]
+The run's man-made test is \code{e.chapter == "manmade"}. USGS splib07 calls its man-made chapter ``artificial'', so the
+test is false for every USGS entry and every USGS share is 0 by construction (the library summary even reports
+\code{"manmade": 0}). The purity measure uses \code{np.isin(cls, ["manmade", "artificial"])} and counts them. So read the
+USGS purity, and ignore the USGS man-made shares; \cref{tab:hslnorm:m1} shows ECOSTRESS only for this reason.
+\end{sourcenote}
+
+\subsection{Band sampling moves the embedding as much as material does}
+
+One more measurement shaped the decision, and it is the only one in this part whose raw output was not kept. On
+2026-09-23 an ECOSTRESS entry fed at its own laboratory sampling found its \emph{own} PRISMA-resampled copy as nearest
+neighbour only 28\% of the time\tbrk\tagM{docs/proposals/spectral-matching-foundation-model.md}. The proposal draws the
+conclusion: ``that is the property a matching model must not have, and the reason not to start from HyperSL's
+checkpoint''. The cloud-mask experiment of \cref{ch:hslcloud} took the lesson seriously and resampled every training
+spectrum onto PRISMA's exact bands for that reason.
+
+\begin{sourcenote}[: the 28\% has no output file]
+The figure is quoted in the proposal (line 63) and in the team's memory note, both citing the 2026-09-23 run. The
+experiment's committed scripts do not save it, and the run's \texttt{summary.json} does not contain it. Treat it as
+recorded by the people who ran it, not as re-checkable. The related control in \code{frame_control.py} (can a pixel
+find itself across two scalings?) printed its result to the screen and did not save it either.
+\end{sourcenote}
+
+%======================================================================
+\section{What we do instead}\label{sec:hslnorm:ours}
+
+\begin{center}\small
+\begin{tabular}{@{}>{\raggedright\arraybackslash}p{34mm}>{\raggedright\arraybackslash}p{50mm}>{\raggedright\arraybackslash}p{50mm}@{}}
+\toprule
+requirement & HyperSL & this product \\
+\midrule
+one input per spectrum, in every scene & min-max of the scene: input depends on the scene's extremes &
+\code{WavelengthStats}: one mean and spread curve over wavelength, fixed in the checkpoint \\
+a library spectrum has an input & none; must borrow a frame (clips 41\%) or change the scaling &
+the same curve read at the library's wavelengths, the same stem (\cref{ch:namer}) \\
+brightness survives & removed per band, per scene & kept; the namer and ACE see reflectance \\
+gaps in the band list & convolution over index joins 1317 and 1502\,nm & 40\,nm wavelength bins; an absent band is
+absent \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\begin{drift}
+The four-scene matching numbers belong to the 2026-09-23 run (ECOSTRESS 1,947 entries, USGS 518, PRISMA 149-band axis),
+whose outputs live outside the repository. The span table depends on the band lists: PRISMA's from Set-1's HE5, the
+SpectralEarth table, and the product grid as of 2026-10-31.
+\end{drift}
+
+%======================================================================
+\begin{confusions}
+\confusion{Min-max only changes brightness, and the spectral angle ignores brightness.}{It changes each band by its own
+scale and offset; the angle changes (15.07° became 36.87° in \cref{we:hslnorm:angle}).}
+\confusion{Then our z-score is just as bad.}{It is also affine, so it changes angles too, but identically in every scene and
+for every library entry. Scene-dependence, not affinity, is the problem.}
+\confusion{Scaling each spectrum by itself fixes it.}{It treats pixel and library alike, which is why the matching run used
+it, but it is off the training distribution (the loss roughly doubles) and it erases brightness entirely.}
+\confusion{The position code tells the tokenizer about the gap.}{The code is added after the convolutions; the convolutions
+have already mixed 1317 and 1502\,nm.}
+\confusion{HyperSL's embedding is worse than SAM at grouping the library.}{It is slightly better (0.965 against 0.949). It is
+worse at the job that matters: anomalies matched to man-made entries.}
+\confusion{The USGS man-made rate of 0\% means HyperSL never matched USGS man-made entries.}{It is 0 by construction: the
+label test looked for ``manmade'' and USGS calls the chapter ``artificial''.}
+\end{confusions}
+
+\begin{checkyourself}
+\item\label{ex:hslnorm:1} Scene $S_3$ has pixels $(0.15,0.25)$, $(0.20,0.50)$, $(0.25,0.55)$. Compute the min-max input of
+  $(0.20,0.50)$ and compare with \cref{we:hslnorm:s1,we:hslnorm:s2}.
+\item\label{ex:hslnorm:2} In $S_1$ plus the bright pixel $\vect{a}$, what is $\vect{p}_1$'s input? Why did it not move?
+\item\label{ex:hslnorm:3} Compute the angle between $\vect{p}_2=(0.20,0.50)$ and $\vect{p}_3=(0.30,0.40)$ after the scaling
+  $s=(1/0.20,\,1/0.10)$ with no offset. (The script gives 9.25°.)
+\item\label{ex:hslnorm:4} Show that with $s_1=s_2=5$ and no offset the angle between any two 2-band spectra is unchanged.
+\item\label{ex:hslnorm:5} On the product's 165-band grid the bands are 10\,nm apart except at the gaps; the 1790--1960\,nm gap
+  removes the bands between. Find the span of the 5-band window whose centre is 1780\,nm, and the 13-band window centred
+  at 1740\,nm.
+\item\label{ex:hslnorm:6} A library spectrum is $(0.70,0.20)$. Write its fixed z-score with mean $(0.25,0.35)$ and spread
+  $(0.10,0.12)$. Does the answer depend on which scene you are matching against?
+\end{checkyourself}
+
+\nextchapter{ch:hsldetect}

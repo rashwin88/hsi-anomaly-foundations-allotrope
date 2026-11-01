@@ -1,0 +1,842 @@
+\chapter{Naming the material, export, and using Indradhanu V2 in a chain}\label{ch:material}
+
+\begin{onething}
+A score map ranks pixels; a person turns the ranking into a decision by choosing a percentile, the flagged
+pixels are then compared with a library of laboratory spectra to propose what they are made of, and the
+result leaves the system as a bundle whose coordinates are recovered, at the last moment, from the raw file.
+Running the newer model, Indradhanu~V2, in that chain needs a band filter that keeps native bands, the
+default since 2026-10-31. A redesign of the naming step, agreed and built on 2026-10-31 (\cref{ch:namer}),
+asks first whether nature could explain a pixel and only then which man-made class it is.
+\end{onething}
+
+\Cref{ch:inference} reconstructed a whole scene and \cref{ch:residualmaha} turned the residual into a score
+per pixel. The product's chain does not stop there (\cref{fig:inference:chain}). Three steps remain, and this
+chapter takes them in order: the threshold, which only a person may set; the naming of materials, whose
+mathematics fills a companion volume and is only sketched here; and the export, where geography returns.
+The chapter ends with the analyst's view of Indradhanu~V2: what to change in the chain to use it, what goes
+wrong if you do not, and what extra files it leaves behind.
+
+%======================================================================
+\section{Why a threshold is a person's job}\label{sec:material:why}
+
+You have a score map. Which pixels are anomalies? The obvious fix, a fixed cut on the score, cannot work,
+because typical scores differ by an order of magnitude between scenes (AD12; the numbers are
+illustrative \tagA):
+\begin{center}\small
+\begin{tabular}{@{}lccl@{}}
+\toprule
+scene & typical score & fixed cut & result\\
+\midrule
+calm lake & 0.01 & 0.05 & almost nothing flagged\\
+burned area & 0.10 & 0.05 & most of the scene flagged\\
+\bottomrule
+\end{tabular}
+\end{center}
+The same number is far too strict for one scene and far too loose for the other. Residual Mahalanobis makes
+this worse, not better: it is a squared distance whose scale depends on the scene's own covariance and on how
+many directions were kept.
+
+So the convention is a \emph{percentile}\index{percentile threshold}: ``flag the top $1\%$ of this scene''.
+That adapts to each scene's own distribution, as a person looking at the map would. And \emph{which}
+percentile is not a property of the data at all: it depends on how many candidates the team can review, how
+costly a miss is, and what the scene is. That is why the action that prepares the decision,
+\code{anomaly_detection_prep}, ends in a status no other action uses, \code{needs_threshold}, and waits for a
+person (\file{backend/allotrope/action_types/anomaly_detection_prep.py}, line 53).
+
+%======================================================================
+\section{From score maps to an anomaly mask}\label{sec:material:mask}
+
+\subsection{Rescale, weight, combine}
+
+\code{anomaly_detection_prep} reads every model's \file{anomaly_score.tif} from one upstream
+\code{anomaly_scoring} output and builds one \emph{composite score}\index{composite score}
+(\file{backend/allotrope/action_types/_anomaly_detection_prep_run.py}, lines 88--191). Three steps:
+\begin{enumerate}
+\item \textbf{Min--max rescale each map} over its finite pixels,
+  \begin{equation}
+  \tilde{s}(p)=\frac{s(p)-s_{\min}}{s_{\max}-s_{\min}}\in[0,1],
+  \end{equation}
+  so that maps in different units (squared distances, angles, reflectance) become comparable. A flat map
+  becomes all zeros.
+\item \textbf{Normalise the weights}: the user's \code{algorithm_weights} (equal by default) are divided by
+  their sum, $\omega_m=w_m/\sum_k w_k$, so the composite stays in $[0,1]$.
+\item \textbf{Combine}: $c(p)=\sum_m\omega_m\tilde{s}_m(p)$. A pixel is finite in the composite only if it is
+  finite in every contributing map; otherwise it is NaN (not a number).
+\end{enumerate}
+Note that this is a different normalisation from \texttt{combined}'s, which divides by the maximum only
+(\cref{we:inference:combined}).
+
+\begin{worked}[label={we:material:composite}]{A two-model composite at one pixel}
+Indradhanu's map runs from 0 to 36 and MNF-RX's from 2 to 82 over the scene; at one pixel they read 7.2 and
+30 \tagA. The user gives Indradhanu weight 2 and MNF-RX weight 1. On paper:
+\begin{align*}
+\tilde{s}_{\text{Indradhanu}} &= \frac{7.2-0}{36-0} = \frac{7.2}{36} = 0.20,\\
+\tilde{s}_{\text{MNF-RX}} &= \frac{30-2}{82-2} = \frac{28}{80} = 0.35,\\
+\omega_{\text{Indradhanu}} &= \frac{2}{2+1} = \frac23, \qquad \omega_{\text{MNF-RX}} = \frac{1}{2+1} = \frac13,\\
+c &= \tfrac23\times0.20+\tfrac13\times0.35\\
+&= 0.1333+0.1167\\
+&= 0.25.
+\end{align*}
+\end{worked}
+
+\subsection{The percentile, as the code computes it}
+
+The viewer shows a slider. Each press of \emph{Apply} calls
+\code{POST /actions/\{id\}/anomaly_detection_preview}, which converts the slider value $q$ (a percentile,
+0 to 100) into an absolute threshold and binarises the composite
+(\file{backend/allotrope/api/_anomaly_detection_preview.py}, lines 168--208):
+\begin{lstlisting}
+absolute_threshold = float(np.percentile(finite_values, q))   # finite_values: sorted, (N,)
+raw_mask = composite >= np.float32(absolute_threshold)         # (H, W) bool
+raw_mask &= valid_mask                                         # NaN pixels are never flagged
+\end{lstlisting}
+An optional square dilation\index{dilation} then grows the mask by a user-chosen odd kernel, and if a ground-truth annotation
+is attached the endpoint reports precision, recall and F1 (\cref{ch:measures}). Nothing is written until the
+user presses \emph{Commit}, which calls \code{POST /actions/\{id\}/anomaly_detection_commit} and writes
+\file{anomaly_mask.tif} and \file{metrics.json} (\file{backend/allotrope/api/action_threshold.py}, lines
+283--330).
+
+\begin{sourcenote}[: commit is an endpoint, not an action]
+The prep action's docstring says finalisation ``is deferred to a separate \texttt{anomaly\_detection\_commit}
+action'' (\file{anomaly_detection_prep.py}, lines 21--25). In the source, commit is an api endpoint on the
+prep action itself, \code{anomaly_detection_commit} in \file{backend/allotrope/api/action_threshold.py}; there
+is no such action type in \file{backend/allotrope/action_types/}.
+\end{sourcenote}
+
+\paragraph{How many pixels does a percentile flag?} \code{np.percentile} with its default (linear)
+interpolation places the $q$-th percentile of $N$ sorted values at position
+\begin{equation}
+\text{pos}=\frac{q}{100}\,(N-1)
+\end{equation}
+in the list, counting from 0, interpolating between neighbours when \text{pos} is not whole. If the values are
+all different, the ones at or above that threshold are those at positions $\lceil\text{pos}\rceil,\dots,N-1$,
+so the number flagged is
+\begin{equation}
+n_{\text{flag}}=N-\lceil\text{pos}\rceil.
+\label{eq:material:nflag}
+\end{equation}
+
+\begin{worked}[label={we:material:percentile}]{Flagging the top 30\% of ten pixels, and the top 0.5\% of a scene}
+Ten composite values, sorted: $0.02, 0.05, 0.07, 0.10, 0.12, 0.15, 0.21, 0.33, 0.48, 0.90$ \tagA. The slider is
+at $q=70$:
+\begin{align*}
+\text{pos} &= \frac{70}{100}\times(10-1) = 0.7\times9 = 6.3.
+\end{align*}
+Position 6 holds $0.21$ and position 7 holds $0.33$; interpolate $0.3$ of the way:
+\begin{align*}
+\text{threshold} &= 0.21+0.3\times(0.33-0.21) = 0.21+0.3\times0.12 = 0.21+0.036 = 0.246.
+\end{align*}
+Flagged: the values $\ge0.246$, which are $0.33, 0.48, 0.90$: three pixels, and
+\cref{eq:material:nflag} agrees, $10-\lceil6.3\rceil=10-7=3$.
+
+Now the scene of \cref{we:inference:funnel}, with $N=956{,}679$ kept pixels and $q=99.5$:
+\begin{align*}
+\text{pos} &= 0.995\times(956{,}679-1) = 0.995\times956{,}678 = 951{,}894.61,\\
+n_{\text{flag}} &= 956{,}679-\lceil951{,}894.61\rceil = 956{,}679-951{,}895 = 4{,}784.
+\end{align*}
+The course's ``$956{,}679\times0.005=4{,}783$'' rounds the other way; the code flags 4,784 (checked by the
+book's script on distinct values \tagC). Ties, which are common in maps with many exact zeros, can push the
+count higher, because every pixel equal to the threshold is flagged.
+\end{worked}
+
+\subsection{Which pixels the percentile counts}
+
+Whether ``$N$'' above is the kept pixels or the whole scene depends on the upstream models, because of how
+each kind marks the pixels it did not score.
+\begin{itemize}
+\item A \emph{classical} detector writes NaN outside its mask (\file{_anomaly_scoring_run.py}, lines
+  535--541, the comment on classical NaNs). NaN pixels are not finite, so they are left out of the percentile
+  population.
+\item A \emph{foundation} model's score is set to exactly $0$ outside the keep mask
+  (\file{app/utils/anomaly_detection/scoring.py}, line 114), and the GeoTIFF is written with no nodata value.
+  Zero is finite, so those pixels \emph{are} in the population, at the bottom.
+\end{itemize}
+
+\begin{sourcenote}[: a model-only chain takes the percentile over the whole frame]
+The anomaly course's end-to-end walk (AD13) flags ``the top 0.5\%'' of the 956,679 kept pixels. That holds
+when a classical detector (MNF-RX) is in the composite, because its NaNs remove the unkept pixels from the
+population. With Indradhanu alone, every one of the $1{,}474{,}990$ pixels of the frame is finite, the
+$518{,}311$ unkept ones being exact zeros, so $q=99.5$ flags
+\begin{align*}
+1{,}474{,}990-\lceil0.995\times1{,}474{,}989\rceil = 1{,}474{,}990-1{,}467{,}615 = 7{,}375 \text{ pixels},
+\end{align*}
+which is $7{,}375/956{,}679=0.771\%$ of the kept pixels, not $0.5\%$ \tagC. To flag about 4,784 the slider would
+have to be at $q\approx99.676$. The cut is still applied to a ranking the analyst can see, so nothing is
+wrong; but ``top 0.5\%'' means 0.5\% of the finite pixels, and which pixels are finite depends on the models
+chosen. Sources: \file{_anomaly_detection_preview.py}, line 84 (\code{valid_mask = np.isfinite}), and
+\file{_anomaly_detection_prep_run.py}, lines 179--191.
+\end{sourcenote}
+
+%======================================================================
+\section{Naming the material}\label{sec:material:naming}
+
+\subsection{The question, and why only hyperspectral can answer it}
+
+\begin{sloppypar}
+A shortlist of unusual pixels is not yet useful. An analyst wants ``probably a metal roof'' or ``probably
+calcite''. Hyperspectral data can propose that, because a spectrum is close to a material's fingerprint
+(\cref{ch:light}); a single thermal band cannot. The step that does it is the action
+\code{spectral_library_match}, implemented in
+\file{backend/allotrope/action_types/_spectral_library_match_run.py} on top of \file{app/spectral_match/}.
+Its full mathematics (resampling a laboratory spectrum through each band's response, the spectral angle,
+whitened target detection, cones of mixtures, non-negative least squares and the calibration against a
+scene's ordinary pixels) is the subject of \emph{the companion volume on spectral matching}
+(\file{research/math/spectral-matching/}). This section gives the intuition and the outputs, so that you can
+read the chain end to end.
+\end{sloppypar}
+
+\subsection{It reads the native cube, not the band-filtered one}
+
+The action loads the \emph{native onboarding vendable}, not \code{band_filter_apply}'s output
+(\file{_spectral_library_match_run.py}, lines 155--164). Resampling onto the 165-band common grid
+(\cref{ch:bandpipeline}) is what makes sensors comparable for a model, but it blunts narrow absorption
+features, and those features are the evidence a material match relies on.
+
+\subsection{The spectral angle against a library, in one example}
+
+The library is USGS splib07 \citep{kokaly2017usgs}, curated to 519 laboratory spectra in
+\file{data/splib07_slim/} \tagM{docs/training/anomaly-detection/14-material-and-export.md}. Each library spectrum
+is first simulated through each band of the sensor: a band is not a point measurement but a weighted
+average over a range of wavelengths, roughly Gaussian with full width at half maximum (FWHM)
+$\text{FWHM}=2\sqrt{2\ln2}\,\sigma\approx2.3548\,\sigma$. For a 10~nm band,
+\begin{align*}
+\sigma &= \frac{10}{2.3548} = 4.247\text{ nm}.
+\end{align*}
+The first matcher, the \emph{spectral angle mapper}\index{spectral angle mapper} \citep{kruse1993spectral},
+then ranks library entries by the angle between the pixel and each entry (\cref{ch:losses}). The angle ignores
+brightness, which is what you want for sun versus shadow, but it has a basic problem at 30-metre pixels: a
+roof, a truck or a tarpaulin rarely fills a pixel.
+
+\begin{worked}[label={we:material:mixed}]{SAM names the grass around a roof}
+The anomaly course's three-band example (AD15): grass $\vect{g}=(0.05,0.40,0.25)$, roof
+$\vect{r}=(0.30,0.32,0.35)$, and a pixel that is 80\% grass and 20\% roof:
+\begin{align*}
+x_1 &= 0.8\times0.05+0.2\times0.30 = 0.040+0.060 = 0.100,\\
+x_2 &= 0.8\times0.40+0.2\times0.32 = 0.320+0.064 = 0.384,\\
+x_3 &= 0.8\times0.25+0.2\times0.35 = 0.200+0.070 = 0.270.
+\end{align*}
+Angle to grass:
+\begin{align*}
+\vect{x}\cdot\vect{g} &= 0.100\times0.05+0.384\times0.40+0.270\times0.25 = 0.0050+0.1536+0.0675 = 0.2261,\\
+\norm{\vect{x}} &= \sqrt{0.0100+0.147456+0.0729} = \sqrt{0.230356} = 0.47995,\\
+\norm{\vect{g}} &= \sqrt{0.0025+0.1600+0.0625} = \sqrt{0.2250} = 0.47434,\\
+\cos\theta_g &= \frac{0.2261}{0.47995\times0.47434} = \frac{0.2261}{0.22766} = 0.99315,
+\quad\theta_g = 6.7^\circ.
+\end{align*}
+Angle to roof:
+\begin{align*}
+\vect{x}\cdot\vect{r} &= 0.0300+0.12288+0.0945 = 0.24738,\\
+\norm{\vect{r}} &= \sqrt{0.09+0.1024+0.1225} = \sqrt{0.3149} = 0.56116,\\
+\cos\theta_r &= \frac{0.24738}{0.47995\times0.56116} = \frac{0.24738}{0.26933} = 0.91851,
+\quad\theta_r = 23.3^\circ.
+\end{align*}
+SAM confidently names the surroundings. Subtracting the background first fixes it: with a ring of pure grass
+around the pixel, $\vect{x}-\vect{g}=(0.050,-0.016,0.020)$, which is exactly $0.2\times(\vect{r}-\vect{g})$.
+The difference points along ``roof minus grass''; the 80\% grass has vanished.
+\end{worked}
+
+That subtraction is the first of five ideas in the \emph{family matcher}\index{family matcher}
+(\file{app/spectral_match/family_match.py}) that has run after SAM since 2026-10-16 (AD15), and whose answer the viewer and the export now lead with. In one line each:
+\begin{enumerate}
+\item subtract the mean of a ring around the pixel ($13\times13$ minus the central $5\times5$, 144 pixels;
+  the same ring idea as \cref{ch:residualmaha}, smaller);
+\item measure how well the difference points along ``library spectrum minus ring'', after whitening, with the
+  adaptive coherence estimator;
+\item score a whole \emph{family} of spectra (roofing, metal, plastic, \dots) as any non-negative mix of its
+  members, found by non-negative least squares, for man-made families only;
+\item calibrate each family score as a percentile against up to 10,000 ordinary pixels of the same scene;
+\item give a man-made name only if that percentile reaches $p^*=1-\alpha/F$, where $\alpha$ is the share of
+  ordinary pixels you accept being given a man-made name and $F$ the number of man-made families.
+\end{enumerate}
+With the defaults, $\alpha=0.05$ (\code{DEFAULT_ALPHA}, \file{family_match.py}, line 36) and $F=10$ man-made
+families in the shipped library \tagM{docs/training/anomaly-detection/15-naming-the-family.md}:
+\begin{align*}
+\frac{\alpha}{F} &= \frac{0.05}{10} = 0.005,\\
+p^* &= 1-0.005 = 0.995.
+\end{align*}
+By the union bound\index{union bound}, an ordinary pixel then gets \emph{some} man-made name with probability at most
+$10\times0.005=0.05=\alpha$. Why this works, and what it does not promise, is worked in full in the companion
+volume.
+
+\subsection{What the action writes}
+
+\begin{center}\small
+\begin{tabular}{@{}lp{0.62\linewidth}@{}}
+\toprule
+file & contents\\
+\midrule
+\texttt{matches.parquet} & SAM: top-$K$ library entries and angles per flagged pixel\\
+\texttt{match\_map.tif} & SAM: top-1 library index per pixel; $-2$ outside the mask, $-1$ no match\\
+\texttt{family\_matches.parquet} & family, group, calibrated confidence, named or not, best single entry\\
+\texttt{family\_map.tif} & int16 family code per pixel (below)\\
+\texttt{family\_legend.json} & code $\to$ family, group, colour; $\alpha$ and $p^*$\\
+\texttt{summary.json} & counts per family, timings, \texttt{family.status}\\
+\bottomrule
+\end{tabular}
+\end{center}
+The family codes (\file{_spectral_library_match_run.py}, lines 53--56 and 396--399):
+\begin{center}\small
+\begin{tabular}{@{}cl@{}}
+\toprule
+code & meaning\\
+\midrule
+$-2$ & not an anomaly pixel\\
+$-1$ & not scored (nodata on a band the matcher uses)\\
+$0$ & best family is man-made but below $p^*$: ``man-made, type unconfirmed''\\
+$1,\dots,17$ & that family, in sorted name order, plus one (natural families are shown at any confidence)\\
+\bottomrule
+\end{tabular}
+\end{center}
+Family matching never fails the action: an exception is recorded as \code{family.status = "failed"} in the
+summary, and the SAM outputs still make a complete result. It runs only in \code{mode="anomaly_pixels"},
+because its per-pixel least squares cost about 2.5~ms per pixel (45~s for about 18,000 pixels, AD15): a
+million pixels would take about $1{,}000{,}000\times0.0025\text{ s}=2{,}500\text{ s}\approx42$ minutes.
+
+\begin{keypoint}
+The output is a ranked hypothesis about a pixel the analyst already kept, not a filter that decides which
+pixels are real: false alarms outnumber targets about 50 to 1 on the PRISMA scenes, so most man-made names in
+a scene still land on false alarms (AD15).
+\end{keypoint}
+
+%======================================================================
+\section{A redesign: natural first, then the class}\label{sec:material:twolevel}
+
+\begin{sourcenote}[: the design; the model is in \cref{ch:namer}]
+This section is the \emph{why} of a redesign of the naming step agreed between the user and Claude on 2026-10-31.
+It was written up the same day as \file{docs/proposals/spectral-namer.md} and \emph{built} the same day in
+\file{app/spectral_match/namer/}; its first run, N001, started training on an H100 at 11:30 UTC and has no results
+yet. \Cref{ch:namer} teaches the model as built, which departs from this section's design in places, most of all in
+how level~1 is trained (the note after \cref{we:material:openset}). Nothing here runs in the product: the namer is
+wired into no action until it passes. The experiment README's heading ``Design so far'' predates the proposal.
+The one classical measurement, the separability check of \cref{sec:material:separability}, is
+\file{research/experiments/spectral-namer/separability.py}. The companion volume's Part~VII derives the
+mathematics slowly.
+\end{sourcenote}
+
+\subsection{Where the ten man-made families came from}
+
+\file{scripts/curate_family_library.py} builds \file{data/family_library/} from the USGS and ECOSTRESS libraries
+and gives every spectrum a group and a family by \emph{regular expressions}\index{regular expression} (text
+patterns) on its file name, read top to bottom, first match wins. Four of the USGS chapter-A rules, in order:
+\begin{lstlisting}
+(r"asphalt_shingle|asphalt_tar|tar_paper|roofing_felt|roofng|roofing|clear_roof|cedar_shake", "manmade", "roofing"),
+(r"asphalt|concrete_gds375|brick.*pav", "manmade", "pavement"),
+(r"brick|cinder|concrete", "manmade", "building"),
+(r"plastic|polystyrene|tyvek|visqueen|fiberglass", "manmade", "plastic"),
+\end{lstlisting}
+So an asphalt shingle is roofing and an asphalt road is pavement; \texttt{concrete\_gds375} is pavement and every
+other concrete is building. Three consequences:
+\begin{enumerate}
+\item \textbf{Families by use, not material.} Asphalt sits in two families and concrete in two, decided by a word in
+  a file name. From orbit a sensor sees what a surface is made of, not what it is for.
+\item \textbf{Family sizes reflect the libraries.} From \file{index.json}: building 11, glass 1, metal 13, oil 40,
+  paint 8, pavement 15, plastic 39, roofing 27, textile 14, wood\_paper 8; the 40s are \code{FAMILY_CAP = 40}
+  (\file{app/spectral_match/family_library.py}). Man-made $11+1+13+40+8+15+39+27+14+8=176$, natural $235$, total
+  $411$.
+\item \textbf{Some families cannot be told apart.} The smallest principal angle between the rank-3 subspaces of
+  pavement and building is $0.51^\circ$; metal and plastic $2.04^\circ$; paint and plastic $5.92^\circ$ (companion
+  volume, \texttt{tab:angles}, computed there). At $0.51^\circ$ the share of a unit target's energy outside the
+  other family is $\sin^2(0.51^\circ)=0.0089^2=0.00008$: one material with two names.
+\end{enumerate}
+
+\subsection{What can be named from orbit}
+
+A car of $4.5\times1.8=8.1$\,m$^2$ fills $8.1/900=0.009$ of a 30\,m pixel and $8.1/25=0.32$ of a 5\,m one. At
+PRISMA's and EnMAP's 30\,m only large objects can be named; AVIRIS-NG, flown low, reaches vehicle scale (about
+5\,m in the discussion; it depends on flight height \tagA). The discussion replaced the use-based families with a
+defence-oriented class list: \emph{camouflage} and \emph{military coatings} (no library spectra at all; they need
+field spectra), \emph{painted metal}, \emph{bare metal}, \emph{vessels on water}, \emph{synthetic fabric and
+tarpaulins}, \emph{fuel and oil}, \emph{concrete and asphalt} (one class, ending the split above), \emph{disturbed
+earth}, \emph{cut vegetation}, \emph{glass and photovoltaic panels}, and \emph{none / natural}. The two classes an
+analyst wants most are the two no library holds.
+
+\subsection{The two-level model}
+\index{two-level namer}
+
+Naming becomes two questions in turn. Level~1: could nature explain this pixel? Level~2, only if not: which
+man-made class? There are three possible answers: \emph{natural}, \emph{man-made, class unknown}, and \emph{man-made
+plus a class}. Write $M$ for ``man-made'' and $k$ for a class. Because a class can only be man-made, the event
+``class $k$'' is the event ``man-made and class $k$'', and the definition of conditional probability gives
+\begin{equation}
+P(k)=P(M)\,P(k\mid M).
+\label{eq:material:twolevel}
+\end{equation}
+
+\begin{worked}[label={we:material:twolevel}]{The product of the two levels}
+Level~1 gives $P(M)=0.9$; level~2 gives painted metal 0.6, bare metal 0.25, tarp 0.15 \tagA.
+\begin{align*}
+P(\text{painted metal}) &= 0.9\times0.6 = 0.54\\
+P(\text{bare metal}) &= 0.9\times0.25 = 0.225\\
+P(\text{tarp}) &= 0.9\times0.15 = 0.135\\
+P(\text{natural}) &= 1-0.9 = 0.10\\
+\text{sum} &= 0.54+0.225+0.135+0.10 = 1.00 .
+\end{align*}
+With $P(M)=0.3$ instead, painted metal is $0.3\times0.6=0.18$. The same level-2 answer is worth 0.54 behind a
+confident level~1 and 0.18 behind a doubtful one: the product stops a confident class name from hiding a doubtful
+``is it man-made at all?''.
+\end{worked}
+
+\paragraph{Level 1 is a model of nature.} The obvious level~1 is a classifier trained on library spectra of both
+kinds. Its man-made side would only know library materials, and camouflage is not in the library. The natural side
+is different: every scene is mostly natural pixels, and the project holds billions of them (SpectralEarth and the
+native shards). So level~1 is trained to say whether nature explains a pixel, and anything it cannot explain is
+called man-made, library or not. This is \emph{open-set}\index{open-set recognition} recognition: the model may meet
+something it has never seen and say so.
+
+\begin{worked}[label={we:material:openset}]{Near the natural average, off the natural line}
+In two dimensions, let nature lie on the line $x+y=1$, sampled at $(0.1,0.9)$, $(0.3,0.7)$, $(0.5,0.5)$, $(0.7,0.3)$,
+$(0.9,0.1)$; the library has one man-made spectrum at $(0.9,0.9)$; a camouflage net sits at $(0.4,0.4)$ \tagA.
+\begin{align*}
+\text{natural average} &= (0.5,\ 0.5)\\
+\text{camouflage to it} &= \sqrt{0.1^2+0.1^2}=\sqrt{0.02}=0.141\\
+\text{camouflage to the library} &= \sqrt{0.5^2+0.5^2}=\sqrt{0.5}=0.707\\
+&\Rightarrow\ \text{``natural'' by nearest average;}\\
+\text{residual } |x+y-1| \text{ of each natural sample} &= 0\\
+\text{residual of the camouflage} &= |0.4+0.4-1|=0.2\\
+&\Rightarrow\ \text{not natural.}
+\end{align*}
+The camouflage is closer to the natural average than the two end samples are (each $\sqrt{0.4^2+0.4^2}=0.566$ from
+it), so no rule built on distance to an average can catch it. It is off the line nature lives on, and a model of that
+line notices.
+\end{worked}
+
+\begin{sourcenote}[: as built, level 1 is a two-class head]
+The built namer does not train level~1 as a model of nature. Its level-1 logit is trained with binary cross-entropy
+on planted samples, library \emph{man-made} spectra mixed into real pixels against natural library spectra and plain
+pixels (\file{app/spectral_match/namer/train.py}, \code{loss}; \file{generator.py}, the three sample kinds). It
+does see man-made examples. Whether it still flags a material it never saw is what run N002 measures, by holding the
+whole paint/coatings class out (\cref{ch:namer}).
+\end{sourcenote}
+
+\subsection{How ACE matches, and why the fill drops out}
+
+Level~2 needs a match score. The separability check uses ACE in the form of \cref{sec:material:naming}:
+$\vect{d}=\vect{x}-\vect{m}$ (pixel minus ring mean), $\vect{s}_j=\vect{t}_j-\vect{m}$ (library spectrum $j$ minus ring
+mean), both whitened, and
+\begin{equation}
+\text{ACE}_j=\frac{(\vect{s}_j\cdot\vect{d})^2}{(\vect{s}_j\cdot\vect{s}_j)(\vect{d}\cdot\vect{d})},
+\end{equation}
+the squared cosine between the two whitened directions.
+
+\begin{worked}[label={we:material:ace}]{ACE on three bands, at two fills}
+Ring mean grass $(0.05,0.40,0.25)$, roof $(0.30,0.32,0.35)$, soil $(0.20,0.25,0.30)$, band standard deviations
+$(0.02,0.04,0.01)$ \tagA. Whitened directions (difference divided band by band):
+\begin{align*}
+\vect{s}_{\text{roof}} &= (0.25/0.02,\ -0.08/0.04,\ 0.10/0.01)=(12.5,\ -2,\ 10), & \vect{s}\cdot\vect{s}&=260.25\\
+\vect{s}_{\text{soil}} &= (0.15/0.02,\ -0.15/0.04,\ 0.05/0.01)=(7.5,\ -3.75,\ 5), & \vect{s}\cdot\vect{s}&=95.3125 .
+\end{align*}
+A 20\% roof: $\vect{d}=0.2\,\vect{s}_{\text{roof}}=(2.5,\ -0.4,\ 2)$, $\vect{d}\cdot\vect{d}=6.25+0.16+4=10.41$.
+\begin{align*}
+\text{soil: } \vect{s}\cdot\vect{d} &= 18.75+1.5+10=30.25,\\
+\text{ACE} &= 30.25^2/(95.3125\times10.41)=915.06/992.20=0.9223 .
+\end{align*}
+Roof scores 1.00 (the directions are parallel). A 50\% roof: $\vect{d}=(6.25,\ -1,\ 5)$, $\vect{d}\cdot\vect{d}=65.0625$,
+soil $\vect{s}\cdot\vect{d}=75.625$, ACE $=5719.14/6201.27=0.9223$, the same. Scaling $\vect{d}$ by the fill $a$
+multiplies the numerator by $a^2$ and the denominator by $a^2$: \textbf{fill changes the length of $\vect{d}$, not its
+direction}.
+
+Noise does not scale with fill. Add one standard deviation per band, whitened $(1,1,-1)$. At fill 0.2,
+$\vect{d}=(3.5,\ 0.6,\ 1)$, roof $\vect{s}\cdot\vect{d}=52.55$, $\vect{d}\cdot\vect{d}=13.61$, ACE $=2761.50/3542.00=0.780$.
+At fill 0.5, $\vect{d}=(7.25,\ 0,\ 4)$, $\vect{s}\cdot\vect{d}=130.625$, $\vect{d}\cdot\vect{d}=68.5625$, ACE
+$=17062.89/17843.39=0.956$ \tagC.
+\end{worked}
+
+\paragraph{Leave one spectrum out.} To measure naming, the check plants each library spectrum and matches it against
+the other 410, setting its own score to $-1$ (\code{ace[e] = -1}); matching a spectrum against itself would always
+win and measure nothing.
+
+\subsection{Matching versus a classifier}
+\index{dual encoder}
+
+A \emph{closed classifier} ends in one output per class; a new class needs a new output and retraining. A
+\emph{matching model} (a dual encoder) has two networks: one embeds the pixel and its ring as a short vector, the
+other embeds a library spectrum as a vector of the same length; the score is their cosine, and naming takes the
+best library entry. A new library needs no retraining: embed its spectra and they are candidates. With a pixel
+embedded at $(0.8,0.6)$ and library entries painted metal $(1,0)$, tarp $(0,1)$ and a newly added glass spectrum
+$(0.6,0.8)$, the cosines are $0.80$, $0.60$ and $0.8\times0.6+0.6\times0.8=0.96$: the new entry wins without any
+training \tagA. ACE is itself a matching model whose two ``encoders'' are fixed: subtract the ring and whiten.
+\textbf{Level~1 does not depend on any library}, because it models nature; a new library changes only level~2's
+candidates. The price is that a matching model generalises only to spectra like those its encoder learned from,
+while a classifier trained on a fixed list can be sharper on that list. The companion volume's Part~VII derives the
+contrastive loss that trains a dual encoder; \cref{ch:namer} shows the class-level version that was built.
+
+\subsection{The separability check}\label{sec:material:separability}
+
+Before training anything, \file{separability.py} bounds what a strong classical matcher can do: ``No training - this
+bounds what the physics and the library allow before we design classes.'' For each scene (the four PRISMA bench
+scenes; three implant-bench host scenes each for EnMAP and AVIRIS-NG) it resamples the 411 spectra to the scene's
+bands, plants each into 12 real background pixels at least 8 pixels from any object as
+$\vect{x}=g\,(a\vect{t}+(1-a)\vect{b})+\vect{n}$, with a smooth gain error $|g-1|\le0.1$ and the scene's own per-band
+noise, and matches $\vect{d}=\vect{x}-g\,\vect{m}$ by ACE against every other spectrum, whitened with the scene's
+covariance (30 components plus a ridge). The best match's family is level~2, its group level~1. Plantings per fill:
+PRISMA $411\times12\times4=19{,}728$; EnMAP and AVIRIS-NG $411\times12\times3=14{,}796$.
+
+\begin{table}[htbp]
+\centering\small
+\begin{tabular}{ccccccc}
+\toprule
+ & \multicolumn{3}{c}{L1: man-made right / natural right} & \multicolumn{3}{c}{L2: class right}\\
+\cmidrule(lr){2-4}\cmidrule(lr){5-7}
+fill & PRISMA & EnMAP & AVIRIS-NG & PRISMA & EnMAP & AVIRIS-NG\\
+\midrule
+0.10 & 0.61 / 0.78 & 0.48 / 0.72 & 0.59 / 0.77 & 0.38 & 0.23 & 0.36\\
+0.25 & 0.77 / 0.83 & 0.66 / 0.79 & 0.76 / 0.81 & 0.55 & 0.44 & 0.53\\
+0.50 & 0.85 / 0.86 & 0.80 / 0.84 & 0.84 / 0.85 & 0.61 & 0.58 & 0.59\\
+1.00 & 0.87 / 0.86 & 0.87 / 0.87 & 0.87 / 0.85 & 0.64 & 0.64 & 0.62\\
+\bottomrule
+\end{tabular}
+\caption{The separability check, all three sensors, final on 2026-10-31. On PRISMA, level~2 right \emph{given} level~1
+right is 0.63 / 0.72 / 0.72 / 0.73. Source: \tagM{research/experiments/spectral-namer/README.md} and the three
+\texttt{separability\_<sensor>.json} files.}
+\label{tab:material:separability}
+\end{table}
+
+A class can be right only if level~1 was, so \cref{eq:material:twolevel} holds on the counts: at PRISMA fill 0.10,
+$0.6096\times0.6309=0.3846$, the table's 0.38 \tagC.
+
+Per family, PRISMA at fill 0.25 (from the JSON's confusion counts \tagC): oil $1537/1920=80\%$, plastic
+$1319/1872=70\%$, textile $464/672=69\%$, wood and paper $239/384=62\%$, paint $174/384=45\%$, metal $255/624=41\%$,
+building $205/528=39\%$ (16\% called pavement), roofing $398/1296=31\%$, pavement $75/720=10\%$ (15\% called soil,
+13\% rock, 12\% building), glass $0/48$.
+
+\begin{sourcenote}[: pavement is 10\%, not 12\%]
+The experiment README gives pavement at fill 0.25 as ``$\sim$12\%''. The JSON's pavement row has 75 of 720 right,
+10.4\%; the 12\% is pavement called \emph{building}, 87 of 720.
+\end{sourcenote}
+
+Four readings. Level~1 is the harder half at small fills: at 10\% fill, 39\% of man-made plantings are called
+natural on PRISMA and 52\% on EnMAP, and most targets at 30\,m are that small; at full fill all three sensors reach
+0.87. Materials with their own absorption features (hydrocarbon, polymer C-H, cellulose) separate well: oil,
+plastic, textile, wood and paper. The use-based families fail as the regex section predicted: roofing is scattered,
+building and pavement confuse each other and natural rock and soil, and glass, with one spectrum, can never be
+matched once it is left out. And these are library spectra planted in real pixels, so the laboratory-to-satellite
+gap is absent: a real namer will do worse.
+
+The README turns this into level~2's class list: \emph{oil/fuel, plastic, textile/fabric, wood/paper,
+paint/coatings, metal, concrete/asphalt} (building and pavement merged, roofing dissolved into its materials), with
+glass/PV once spectra exist and camouflage and military coatings once field spectra arrive. ``These classical
+numbers are the baseline the learned namer must beat, mainly at 10-25\% fill.'' This list of \emph{materials} is
+narrower than the analyst's list of \emph{things} above: vessels, disturbed earth and cut vegetation are contexts
+or mixtures, not single spectra.
+
+\begin{keypoint}
+Name what nature cannot explain before naming what it is, multiply the two answers, and match against spectra
+rather than classify into a fixed list, so that the unknown is flagged and a new library costs no retraining.
+\end{keypoint}
+
+\begin{drift}
+The design (2026-10-31, now \file{docs/proposals/spectral-namer.md}), the class lists, the family counts (411 spectra,
+cap 40), and every separability number; a new library, class list or set of host scenes changes them.
+\end{drift}
+
+%======================================================================
+\section{Export: where geography comes back}\label{sec:material:export}
+
+\subsection{Every action GeoTIFF has an identity transform}
+
+A GeoTIFF places its pixel grid on the Earth through an \emph{affine transform}\index{affine transform}: six
+numbers $(a,b,c,d,e,f)$ that map a column $j$ and row $i$ to map coordinates,
+\begin{equation}
+X=a\,j+b\,i+c,\qquad Y=d\,j+e\,i+f,
+\label{eq:material:affine}
+\end{equation}
+together with a \emph{coordinate reference system}\index{coordinate reference system} (CRS) that says what
+$X$ and $Y$ mean (degrees of longitude and latitude, metres in a UTM zone, \dots). Vendables carry no spatial
+reference (\cref{ch:product}), so every raster an action writes uses the \emph{identity} transform,
+$a=e=1$ and $b=c=d=f=0$, and no CRS (\file{_anomaly_scoring_render.py}, line 61)\index{identity transform}:
+\[
+X=j,\qquad Y=i.
+\]
+Pixel coordinates pretending to be map coordinates. Analysis works in pixel grids and does not need more;
+only the deliverable does.
+
+\subsection{Recovering the CRS at export}
+
+The export endpoint, \code{POST /actions/\{id\}/export} in \file{backend/allotrope/api/action_export.py},
+runs synchronously in the api. It re-opens the raw scene file through \file{app/georef/from_scene_file.py},
+which knows each sensor:
+\begin{itemize}
+\item \textbf{EnMAP L2A, AVIRIS-NG, Landsat~9, HotSat}: the raw file is already a georeferenced raster;
+  rasterio reads its CRS and transform. If the vendable's shape differs from the source's, the transform is
+  scaled so that the outer corners stay pinned.
+\item \textbf{PRISMA L2D}: since 2026-10-31 the product's own UTM grid, from the HE5's root attributes
+  \code{Epsg_Code} and \code{Product_{UL,UR,LL}corner_{easting,northing}}, which are the corner pixels'
+  \emph{centres} (\code{prisma_utm_grid}; worked for Set-1 in \cref{we:submission:set1}). Only if those are
+  missing, or the vendable's shape differs from the product's, does it fall back to the older method: the minimum and
+  maximum of the per-pixel latitude and longitude arrays, as an axis-aligned EPSG:4326 transform built with
+  rasterio's \code{from_bounds}.
+\end{itemize}
+If none can be recovered the export returns \code{422 crs_missing} rather than a bundle that a downstream
+evaluation would disqualify for having no projection.
+
+\begin{sourcenote}[: the bounding box was not a fit, and it was pixels off]
+The anomaly course used to say export ``reads the per-pixel latitude and longitude arrays \dots\ and fits an affine
+transform'' (AD13). The code never fitted: it took $\min$ and $\max$ of the arrays and called
+\code{from_bounds(min_lon, min_lat, max_lon, max_lat, W, H)}, which is exact only for a north-aligned swath and treats
+pixel-centre coordinates as edges. Its docstring called that ``the industry-standard simplification for L2D HCO data''.
+Measured on Set-1, it put pixels a median 2.4\,px (95\% 4.1, max 5.6) from the product grid
+\tagM{docs/proposals/aigc-evaluation-submission.md}; the evaluation, which compares masks in pixel space, was never
+affected. Since 2026-10-31 it is only the fallback, and the docstring now says ``approximate, can be pixels off''.
+\end{sourcenote}
+
+The worked example below is the fallback, kept because it shows what an affine transform does; the product grid is
+worked in \cref{we:submission:set1}.
+
+\begin{worked}[label={we:material:georef}]{An axis-aligned transform from a bounding box (the fallback)}
+A PRISMA frame of $W=1219$ columns and $H=1210$ rows whose latitude and longitude arrays span
+$77.00^\circ$ to $77.36^\circ$ east and $12.80^\circ$ to $13.13^\circ$ north (an assumed box, for
+illustration \tagA). \code{from_bounds} sets
+\begin{align*}
+a &= \frac{\text{east}-\text{west}}{W} = \frac{77.36-77.00}{1219} = \frac{0.36}{1219} = 0.00029532^\circ,\\
+e &= -\frac{\text{north}-\text{south}}{H} = -\frac{13.13-12.80}{1210} = -\frac{0.33}{1210} = -0.00027273^\circ,\\
+c &= \text{west} = 77.00, \qquad f = \text{north} = 13.13, \qquad b=d=0.
+\end{align*}
+$e$ is negative because rows count downwards while latitude grows northwards. The centre of the pixel in row
+605, column 610 is at $j=610.5$, $i=605.5$:
+\begin{align*}
+X &= 0.00029532\times610.5+77.00 = 0.18029+77.00 = 77.18029^\circ\text{ E},\\
+Y &= -0.00027273\times605.5+13.13 = -0.16514+13.13 = 12.96486^\circ\text{ N}.
+\end{align*}
+How big is a pixel on the ground? A degree of latitude is about 110.6~km; a degree of longitude at
+$13^\circ$ north is about $111.32\times\cos13^\circ=111.32\times0.9744=108.47$~km. So
+\begin{align*}
+\text{width} &\approx 0.00029532\times108{,}470\text{ m} = 32.0\text{ m},\\
+\text{height} &\approx 0.00027273\times110{,}574\text{ m} = 30.2\text{ m},
+\end{align*}
+close to PRISMA's 30~m, as it should be. The book's script reproduces these with rasterio \tagC.
+\end{worked}
+
+\subsection{What the bundle holds}
+\index{export bundle}
+
+For hyperspectral scenes the zip is built by \file{app/spectral_match/export.py}. Every name starts with
+\texttt{hyper\_}, as the submission rules require, and the manifest records the schema:
+\texttt{allotrope-export-hyper/2} for actions with family matching, \texttt{/1} for older SAM-only ones.
+\begin{lstlisting}[language={}]
+hyper_<scene8>_<action8>/
+    hyper_anomaly_materials.tif      int16 family codes, nodata -2, real CRS and transform
+    hyper_anomaly_materials.shp      one point per anomaly pixel (+ .shx .dbf .prj .cpg)
+                                     DBF: family, group, fconf, named, best_ent, mat1..3, scr1..3
+    hyper_material_legend.json       code -> family, group, colour; alpha and p*
+    hyper_sam_legend.json            SAM's library index -> material
+    hyper_match_summary.csv          flat table, no geometry
+    MANIFEST.json                    schema allotrope-export-hyper/2
+\end{lstlisting}
+Material identity travels three ways (a GeoTIFF metadata tag, the DBF columns, the legend file) because
+different GIS tools read different parts, and a shortlist nobody can open is worthless. A committed
+\code{anomaly_detection_prep} has its own bundle, from \file{app/anomaly_detection/export.py}: a binary 0/1 mask and
+one point per anomaly pixel. Until 2026-10-31 it was always named \texttt{thermal\_}; it is now \texttt{thermal\_}
+for Landsat~9 and HotSat-1 and \texttt{hyper\_} otherwise, with no score attribute in its shapefile. That bundle, not
+the materials bundle above, is what an evaluation submission uses (\cref{ch:submission}).
+
+%======================================================================
+\section{Using Indradhanu V2 in an action chain}\label{sec:material:v2}
+
+\subsection{Two words, and what V2 is}
+
+A \emph{codename}\index{codename} is the name you pick a model by in the scoring action: ``Indradhanu'',
+``MNF-RX'', ``Indradhanu V2''. The resolver maps it to a checkpoint and its capabilities
+(\file{backend/allotrope/foundation_models/resolver.py}). \emph{Native bands}\index{native bands} are the
+wavelengths the sensor actually measured, PRISMA's own list or EnMAP's own list, as opposed to the 165-band
+common grid that \code{band_filter_apply} resampled to by default until 2026-10-31 (\cref{ch:bandpipeline}).
+
+Indradhanu~V2 is the spectral-stem model of Part~IV, fine-tuned with a segmentation head (\cref{ch:finetune})
+and shipped as an opt-in codename (\cref{ch:shipping}). It reads native bands, scores with residual
+Mahalanobis like Indradhanu, and sets to 0 the pixels its own head calls cloud.
+
+\begin{drift}
+Indradhanu~V2 was wired into \code{anomaly_scoring} on 2026-10-19 serving FT04 (\texttt{v2.0.0}); on
+2026-10-29 it was switched to Indradhanu Heavy, FTH3 epoch~5 (\texttt{v2.1.0}, 35.3~M parameters)
+(\file{final design/ROADMAP.md}, row OB-14; \file{docs/04-models.md}). On the real PRISMA bench with cloud
+exclusion: v0.2.0 pAUC 0.165, FT04 0.170 (a tie), Heavy 0.189 ($+0.020$ over FT04, resolved). CPU cost on the
+worker: 1819~s per PRISMA scene for Heavy against 1058~s for FT04 on 2 threads (ROADMAP OB-14); 454~s and 274~s
+since the compose file raised the worker to 16 threads on 2026-10-29 (\cref{we:heavy:threads}). The scoring codename
+defaults still pick the old ``Indradhanu'' (v0.2.0); since 2026-10-31 the band-filter defaults keep native bands
+(\cref{ch:submission}).
+\end{drift}
+
+\begin{analogy}
+A film lab with two developers. The old one only takes 35~mm film; the new one only takes medium format. You
+choose the format when you load the camera, long before you reach the lab. Hand the new developer a 35~mm
+roll and it is refused at the door with a note: ``medium format only, reload the camera''. And one trip to
+the lab cannot develop both, because one camera was loaded with one kind of film. The camera is
+\code{band_filter_apply}; the developers are the two codenames; the note is the error below.
+\end{analogy}
+
+\subsection{The chain, setting by setting}
+
+Two settings matter; since 2026-10-31 the first is the sensor default, so in the UI only the second is a choice:
+\begin{lstlisting}[language={}]
+Scene -> Project
+  band_filter_apply        use_common_wavelength_grid: false     <- change 1 (default since 2026-10-31)
+  anomaly_scoring          model_codenames: ["Indradhanu V2"]    <- change 2
+  anomaly_detection_prep   unchanged: reads models/indradhanu_v2/anomaly_score.tif
+  spectral_library_match   unchanged: reads the native onboarding cube anyway
+\end{lstlisting}
+The per-model folder is the codename in lower case with spaces turned into underscores (\code{_safe_dirname}):
+\begin{align*}
+\text{``Indradhanu V2''}\ \to\ \text{``indradhanu v2''}\ \to\ \text{``indradhanu\_v2''}.
+\end{align*}
+
+\subsection{The error you get otherwise}
+\index{band-grid check}
+
+Give V2 a band filter on the 165-band grid (before 2026-10-31 the default; now \code{use_common_wavelength_grid: true},
+or an API call that omits the field, whose pydantic default is still \code{true}) and the action is still accepted
+(the api cannot see the upstream band filter's settings when you submit). The worker starts and, before loading the
+model, runs \code{_check_band_grid} (\file{_anomaly_scoring_run.py}). The action fails with:
+\begin{lstlisting}[language={}]
+model 'Indradhanu V2' reads native bands: run band_filter_apply with
+use_common_wavelength_grid=false (this one resampled to the 165-band grid)
+\end{lstlisting}
+The reverse, the old ``Indradhanu'' on a native band filter, used to fail with ``needs the 165-band grid: run
+\code{band_filter_apply} with \code{use_common_wavelength_grid=true}''. Since 2026-10-31 it runs: the worker resamples
+the cube to the grid for that model alone (\code{_to_common_grid}, ``the same resampler \code{band_filter_apply} uses''), and
+a comment where the check was says common165 on native bands ``is not an error''. Before 2026-10-19 nothing checked
+any of this.
+
+How does the worker know which grid it was given? Not by counting bands:
+\begin{lstlisting}
+on_grid = len(wavelengths) == len(grid) and np.allclose(wavelengths, grid)   # grid: 460, 470, ..., 2450 nm
+\end{lstlisting}
+A native list with exactly 165 bands would still not equal $460, 470, \dots, 2450$~nm and would count as
+native. Classical detectors skip the check and run on either grid; so do thermal scenes.
+
+\subsection{Running both models}
+
+\code{anomaly_scoring} takes one upstream band filter (\code{input_band_filter_output_id}), and every model in
+\code{model_codenames} reads that one output. Since 2026-10-31, on a native band filter, one action can run both: V2
+reads the native cube and v0.2.0 gets it resampled. Whether v0.2.0 on a resampled native cube matches v0.2.0 on a
+165-grid band filter exactly has not been measured; the resampler is the same function. Before 2026-10-31, V2 needed
+native bands and v0.2.0 the grid, whichever did not match failed the whole action, and comparing them took two
+branches in the same Project:
+
+\begin{figure}[htbp]\centering
+\begin{tikzpicture}[node distance=5mm and 7mm,
+  box/.style={draw,rounded corners,fill=#1!8,draw=#1!70!black,minimum height=8mm,align=center,font=\small}]
+\node[box=maskgrey] (s) {Scene $\to$ Project};
+\node[box=spec,above right=2mm and 8mm of s] (b1) {\texttt{band\_filter\_apply}\\grid: true};
+\node[box=spec,below right=2mm and 8mm of s] (b2) {\texttt{band\_filter\_apply}\\grid: false};
+\node[box=attn,right=of b1] (a1) {\texttt{anomaly\_scoring}\\{}[``Indradhanu'']};
+\node[box=attn,right=of b2] (a2) {\texttt{anomaly\_scoring}\\{}[``Indradhanu V2'']};
+\draw[-Stealth] (s.east) -- (b1.west);
+\draw[-Stealth] (s.east) -- (b2.west);
+\draw[-Stealth] (b1) -- (a1);
+\draw[-Stealth] (b2) -- (a2);
+\end{tikzpicture}
+\caption{Before 2026-10-31, comparing the two Indradhanu models on one scene took two branches, each with its
+own band filter and scoring action. Since then one native band filter and one scoring action serve both. A
+classical detector can ride along in either.}\label{fig:material:branches}
+\end{figure}
+
+One consequence of the old limit: \code{anomaly_detection_prep} reads a single scoring output
+(\code{input_anomaly_scoring_output_id}), so V2 and v0.2.0 could not be weighted into one composite. With both in one
+action on a native band filter, they can.
+
+\subsection{What comes out, and how to read it}
+
+Under the scoring action's output, in \file{models/indradhanu_v2/}, next to the usual files
+(\file{_anomaly_scoring_run.py}, lines 471--491 and 595--601):
+\begin{center}\small
+\begin{tabular}{@{}lp{0.62\linewidth}@{}}
+\toprule
+output & contents\\
+\midrule
+\texttt{mask\_cloud.tif} & uint8, 1 where the score was set to 0 (V2 called the pixel cloud)\\
+\texttt{class\_map.tif} & uint8, V2's classes: 0 land, 1 water, 2 cloud, 3 shadow, 4 snow\\
+\texttt{stats.json}: \texttt{bands\_read} & how many bands V2 read (bands it never trained on are dropped first)\\
+\texttt{stats.json}: \texttt{excluded\_classes} & \texttt{["cloud"]}\\
+\texttt{stats.json}: \texttt{cloud\_rule} & \texttt{"thick"} or \texttt{"cloud\_or\_thin"}\\
+\texttt{stats.json}: \texttt{excluded\_percent} & $100\times$ cloud pixels / spatially valid pixels, to 3 places\\
+\bottomrule
+\end{tabular}
+\end{center}
+The class map is built from the segmentation head's five sigmoid outputs, averaged over $128\times128$ windows
+at stride 64, by priority: cloud over snow over shadow over water over land
+(\file{app/foundation_models/inferencers/spectral_stem_inferencer.py}, lines 112--141). Only cloud is
+excluded; water is in the class map but \emph{not} zeroed, because vessels on water are in scope.
+
+\begin{sourcenote}[: since 2026-10-29 ``cloud'' means thick cloud only]
+The anomaly course (AD23, written for FT04) says \texttt{mask\_cloud.tif} marks pixels V2 ``called cloud or
+thin cloud''. Since V2 became Indradhanu Heavy, the resolver sets \code{thin_cloud_is_cloud=False}
+(\file{backend/allotrope/foundation_models/resolver.py}, line 176): Heavy's thin-cloud output fires on haze, so
+only thick cloud is zeroed, and the new stats key \texttt{cloud\_rule} records \texttt{"thick"}
+(\file{_anomaly_scoring_run.py}, lines 471--481).
+\end{sourcenote}
+
+\paragraph{The order matters.}\index{cloud exclusion} V2 scores every pixel in the keep mask first and sets cloud to 0
+\emph{afterwards}. A cloud pixel still takes part in fitting the residual Mahalanobis statistics of
+\cref{ch:residualmaha}; only its own score becomes 0. That is the semantics the evaluator measured. A pixel
+scored 0 is not ``unknown'': it sinks to the bottom of the ranking. Read \texttt{excluded\_percent} as the share
+of the scene in which you cannot find anything.
+
+\begin{worked}[label={we:material:excluded}]{The excluded percentage}
+A scene of $1000\times1200$ pixels, $72{,}000$ invalid, $90{,}240$ called cloud (AD23's example \tagA):
+\begin{align*}
+\text{total} &= 1000\times1200 = 1{,}200{,}000,\\
+\text{valid} &= 1{,}200{,}000-72{,}000 = 1{,}128{,}000,\\
+\texttt{excluded\_percent} &= \frac{100\times90{,}240}{1{,}128{,}000} = \frac{9{,}024{,}000}{1{,}128{,}000} = 8.000.
+\end{align*}
+\end{worked}
+
+\paragraph{Two caveats.} EnMAP is cleaned twice: its default band filter applies the provider's quality masks
+(cloud, cloud shadow, haze) before scoring, and V2 then zeros its own cloud on top; this is the product's
+convention, but it is not how V2's PRISMA numbers were measured. And native PRISMA bands run downwards in
+wavelength (\cref{ch:sortbug}); \code{scene_segmentation} now picks its visible bands by wavelength, not by
+position, so a native-band chain gets the right brightness too. The viewer does not show V2's masks yet; they
+are on disk only.
+
+%======================================================================
+\begin{confusions}
+\confusion{Why not a fixed threshold on residual Mahalanobis, which has a chi-squared-like scale?}{Its scale
+depends on the scene's covariance, the number of kept directions and the local ring; the tail is heavy and
+scene-specific. A percentile adapts; a fixed number does not.}
+\confusion{Top 0.5 percent means 0.5 percent of the kept pixels.}{Only if a classical detector's NaNs remove
+the unkept pixels from the composite. With foundation models alone, the unkept pixels are finite zeros and the
+percentile is taken over the whole frame.}
+\confusion{A confident family name means the pixel is that material.}{No. The confidence is a percentile
+against the scene's ordinary pixels, and false alarms are unusual by definition. It is a lead for a person.}
+\confusion{ACE ignores the fill, so the fill does not matter for naming.}{ACE's formula ignores it; its accuracy
+does not, because noise stays the same size while the signal shrinks with the fill
+(\cref{we:material:ace}, \cref{tab:material:separability}).}
+\confusion{The two-level namer and the companion volume's two-level covariance are the same idea.}{No. The
+two-level covariance is a model of noise (a few loud directions, many quiet ones). The two-level namer is two
+questions asked in turn.}
+\confusion{The export can be georeferenced because the score map is.}{The score map is not: every action
+raster has an identity transform. The CRS is recovered from the raw file at export, or the export fails with
+422.}
+\confusion{The error from V2 means the model is broken.}{It means the band filter is on the wrong grid. The
+message names the setting to change.}
+\confusion{One scoring action cannot run both Indradhanus.}{It could not before 2026-10-31. On a native band filter it
+now can: v0.2.0's cube is resampled inside scoring.}
+\confusion{\texttt{mask\_cloud.tif} is the keep mask.}{No. The keep mask comes from
+\texttt{scene\_segmentation}'s thresholds and decides which pixels the statistics are fitted on.
+\texttt{mask\_cloud.tif} comes from V2's own head and is applied after scoring.}
+\confusion{\texttt{spectral\_library\_match} needs the native band filter now.}{It never used the band filter's
+output; it reads the native onboarding cube.}
+\end{confusions}
+
+\begin{checkyourself}
+\item\label{ex:material:1} A scene has $2{,}400{,}000$ finite composite pixels with all values different. How
+  many does $q=99.75$ flag? Use \cref{eq:material:nflag} and show every step.
+\item\label{ex:material:2} Two models with weights 1 and 3. At a pixel the first reads 0.4 on a range
+  $[0.1,1.6]$, the second 12 on $[0,60]$. Compute the composite value.
+\item\label{ex:material:3} With $\alpha=0.02$ and 15 man-made families, compute $p^*$, and the bound on the
+  chance that an ordinary pixel gets some man-made name.
+\item\label{ex:material:4} A GeoTIFF has $a=30$, $b=0$, $c=500{,}000$, $d=0$, $e=-30$, $f=1{,}400{,}000$ in a
+  UTM zone (metres). Where is the centre of the pixel in row 10, column 20? What would the identity transform
+  give for the same pixel?
+\item\label{ex:material:5} A PRISMA Project has a band filter created with \code{use_common_wavelength_grid: true}
+  and an \code{anomaly_scoring} action with \code{model_codenames: ["Indradhanu V2", "MNF-RX"]}. What happens, and
+  which single setting fixes it? What happens with today's default band filter?
+\item\label{ex:material:6} A scene is $800\times900$ pixels, $20{,}000$ invalid, and V2 calls $35{,}800$ valid
+  pixels cloud. Compute \texttt{excluded\_percent}. Is a cloud-shadowed vessel's score zero?
+\item\label{ex:material:7} Level~1 gives $P(M)=0.7$ and level~2 gives bare metal 0.5, painted metal 0.3, tarp 0.2.
+  Compute every class's probability and $P(\text{natural})$, and check that they add to 1.
+\item\label{ex:material:8} In \cref{we:material:ace}, make the pixel 100\% roof with no noise. Compute the whitened
+  $\vect{d}$ and ACE against soil, and say why the answer could have been written down without arithmetic. Then, from
+  \cref{tab:material:separability} at fill 0.25, compute $P(\text{L1 right})\times P(\text{L2 right}\mid\text{L1
+  right})$ from the unrounded 0.7724 and 0.7151.
+\end{checkyourself}
+
+\nextchapter{ch:measures}

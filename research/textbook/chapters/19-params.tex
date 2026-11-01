@@ -1,0 +1,498 @@
+\chapter{The parameter budget, counted by hand}\label{ch:params}
+
+\begin{onething}
+With three counting rules (a convolution has $c_{\text{in}} c_{\text{out}} k^2 + c_{\text{out}}$ numbers,
+a depthwise one $c k^2 + c$, a LayerNorm $2c$) you can derive the size of Indradhanu layer by layer,
+5,506,629 trainable numbers for the 165-band model, and land on the real model's figure to the last
+digit; then the same rules tell you where the parameters live (blocks and decoder), where the compute
+lives (the decoder), and which parameters a masked pass never trains.
+\end{onething}
+
+Every chapter of this part ended with a shape. This one ends with a count. Counting parameters is the
+strongest test of understanding an architecture: if any layer in your head is the wrong size, the total
+will not match, and you will know. The totals are checked against two independent sources: the
+\texttt{torchinfo} table in \file{research/model_break_down/05_hyperspectral_segformer_mae.md}, and a
+build of the real classes on CPU by \file{research/textbook/tools/compute_params.py}, whose output is
+saved beside it as \file{compute_params_output.txt}.
+
+\section{What a parameter is, and what it is not}\label{sec:params:what}
+
+\begin{definition}[Parameter, buffer]
+A \index{parameter}\emph{parameter} is one number that training adjusts: a single weight or bias. A
+\index{buffer}\emph{buffer} is a number stored in the model file that training does not adjust by
+gradient: the normalisation means and standard deviations, and BatchNorm's running statistics.
+\end{definition}
+
+Each parameter is a 32-bit float, 4 bytes, so the parameter count fixes the file size:
+\[
+5{,}506{,}629 \times 4 = 22{,}026{,}516 \text{ bytes} \approx 22.03 \text{ MB},
+\]
+which is the ``Params size (MB): 22.03'' that \texttt{torchinfo} reports.
+The figure is measured: \tagM{research/model_break_down/05_hyperspectral_segformer_mae.md}.
+
+Why bother counting? Three reasons. A count that matches proves you know every layer's shape. A count
+tells you where capacity is spent, which matters when you decide what to widen or shrink
+(\cref{ch:heavy}). And a count is \emph{not} a measure of cost, which is a lesson worth learning
+with real numbers (\cref{sec:params:compute}).
+
+\section{Three counting rules}\label{sec:params:rules}
+
+\paragraph{A convolution.}\index{convolution!parameter count} \code{Conv2d(c_in, c_out, k)} has, for each of its $c_{\text{out}}$ output
+channels, one kernel of $c_{\text{in}} \times k \times k$ weights (it reads every input channel over a
+$k \times k$ window) and one bias:
+\begin{equation}\label{eq:params:conv}
+P_{\text{conv}} = c_{\text{out}}\,(c_{\text{in}} k^2 + 1) = c_{\text{in}} c_{\text{out}} k^2 + c_{\text{out}} .
+\end{equation}
+\paragraph{A depthwise convolution.}\index{depthwise convolution!parameter count} With \code{groups = c}, each channel has its own $k \times k$ kernel
+and reads only itself, so the factor $c_{\text{in}}$ drops to 1:
+\begin{equation}\label{eq:params:dw}
+P_{\text{dw}} = c\,(k^2 + 1) = c k^2 + c .
+\end{equation}
+\paragraph{A linear layer and a LayerNorm.}\index{linear layer!parameter count}\index{LayerNorm!parameter count}\index{BatchNorm!buffers}\code{Linear(a, b)} is a $b \times a$ weight matrix plus $b$
+biases; it is a convolution with $k = 1$. A LayerNorm over $c$ features learns one scale and one shift
+per feature (\cref{ch:block}):
+\begin{equation}\label{eq:params:lin}
+P_{\text{lin}} = a b + b, \qquad P_{\text{LN}} = 2c .
+\end{equation}
+BatchNorm also learns $2c$ (scale and shift) and in addition keeps $2c + 1$ buffers: a running mean and a
+running variance per channel and one counter of batches seen.
+
+\begin{worked}[label={we:params:tiny}]{The rules on a tiny convolution}
+\code{Conv2d(2, 3, k=2)}. Each of the 3 output channels has a kernel of $2 \times 2 \times 2 = 8$
+weights and one bias. Count on paper:
+\begin{align*}
+\text{weights} &= 2 \times 3 \times 2^2 = 2 \times 3 \times 4 = 24,\\
+\text{biases} &= 3,\\
+P &= 24 + 3 = 27 .
+\end{align*}
+The depthwise version with 3 channels, \code{Conv2d(3, 3, k=2, groups=3)}: $3 \times 4 + 3 = 12 + 3 =
+15$. The number of heads in an attention layer, the patch size and the batch size never appear in any
+rule: they change shapes, not parameters.
+\end{worked}
+
+\section{The configuration being counted}\label{sec:params:config}
+
+\begin{table}[htbp]\centering
+\caption{The configuration of the 165-band Indradhanu (v0.2.0).}\label{tab:params:config}
+\begin{tabular}{@{}ll@{}}\toprule
+Input bands & 165 \\
+Compressed width $D$ & 32 \\
+Stage widths $C_1..C_4$ & 32, 64, 160, 256 \\
+Reduction ratios $R_1..R_4$ & 8, 4, 2, 1 \\
+Blocks per stage & 2, 2, 2, 2 \\
+Mix-FFN expansion $E$ & 4 \\
+Decoder width & 256 \\
+Heads & 2, 2, 5, 8 (no effect on the count) \\\bottomrule
+\end{tabular}
+\end{table}
+
+\section{The front end: the spectral compressor}\label{sec:params:compressor}
+
+\Cref{ch:compressor}: a \code{Conv2d(165, 32, k=1)} and a \code{BatchNorm2d(32)}.
+\begin{align*}
+\text{conv} &= 165 \times 32 \times 1 \times 1 + 32 = 5{,}280 + 32 = 5{,}312,\\
+\text{BatchNorm} &= 2 \times 32 = 64,\\
+\text{compressor} &= 5{,}312 + 64 = 5{,}376 .
+\end{align*}
+
+\section{The encoder}\label{sec:params:encoder}
+
+\subsection{The four patch embeddings}
+
+Each is a convolution followed by a LayerNorm over its output width (\cref{ch:patchembed}). Stage 1
+reads $D = 32$ channels with $k = 4$; stages 2--4 read the previous width with $k = 3$
+(\cref{ch:encoder}).
+\begin{align*}
+\text{stage 1:}\quad & 32 \times 32 \times 16 + 32 = 16{,}384 + 32 = 16{,}416; & +\ 2 \times 32 &= 16{,}480\\
+\text{stage 2:}\quad & 32 \times 64 \times 9 + 64 = 18{,}432 + 64 = 18{,}496; & +\ 2 \times 64 &= 18{,}624\\
+\text{stage 3:}\quad & 64 \times 160 \times 9 + 160 = 92{,}160 + 160 = 92{,}320; & +\ 2 \times 160 &= 92{,}640\\
+\text{stage 4:}\quad & 160 \times 256 \times 9 + 256 = 368{,}640 + 256 = 368{,}896; & +\ 2 \times 256 &= 369{,}408
+\end{align*}
+\[
+16{,}480 + 18{,}624 + 92{,}640 + 369{,}408 = 497{,}152 .
+\]
+
+\subsection{One block, as a formula}
+
+A block (\cref{ch:block}) of width $C$ with reduction ratio $R$ and expansion 4 contains:
+\begin{itemize}
+\item \textbf{ESA} (\cref{ch:esa}): four \code{Linear(C, C)} (query, key, value, output projection),
+and, only when $R > 1$, a reduction \code{Conv2d(C, C, k=R, s=R)} and a \code{LayerNorm(C)};
+\item \textbf{Mix-FFN}: \code{Linear(C, 4C)}, a depthwise \code{Conv2d(4C, 4C, k=3)}, \code{Linear(4C, C)};
+\item \textbf{two LayerNorms} (pre-norm before each sub-layer).
+\end{itemize}
+Count each piece with the rules, in symbols:
+\begin{align*}
+\text{q, k, v, out} &= 4\,(C^2 + C) = 4C^2 + 4C,\\
+\text{reduction conv} + \text{norm} &= (C \cdot C \cdot R^2 + C) + 2C = R^2 C^2 + 3C \quad (\text{if } R > 1),\\
+\text{fc1} &= C \cdot 4C + 4C = 4C^2 + 4C,\\
+\text{depthwise} &= 4C \cdot 9 + 4C = 40C,\\
+\text{fc2} &= 4C \cdot C + C = 4C^2 + C,\\
+\text{two LayerNorms} &= 2 \times 2C = 4C .
+\end{align*}
+Add them, collecting the $C^2$ terms ($4 + 4 + 4 = 12$) and the $C$ terms ($4 + 4 + 40 + 1 + 4 = 53$):
+\begin{equation}\label{eq:params:block}
+P_{\text{block}}(C, R) = 12 C^2 + 53 C + [R > 1]\,\big(R^2 C^2 + 3C\big),
+\end{equation}
+where $[R > 1]$ is 1 when $R > 1$ and 0 otherwise. A closed form for the whole block\index{transformer block!parameter count}.
+
+\begin{worked}{The four stages from \texorpdfstring{\eqref{eq:params:block}}{the block formula}}\label{we:params:blocks}
+Do each on paper and compare with the column-by-column count of the course in
+\cref{tab:params:blockdetail}.
+
+Stage 1, $C = 32$, $R = 8$:
+\begin{align*}
+12 \times 32^2 &= 12 \times 1{,}024 = 12{,}288, & 53 \times 32 &= 1{,}696,\\
+8^2 \times 32^2 &= 64 \times 1{,}024 = 65{,}536, & 3 \times 32 &= 96,\\
+P &= 12{,}288 + 1{,}696 + 65{,}536 + 96 = 79{,}616; & \times 2 \text{ blocks} &= 159{,}232 .
+\end{align*}
+Stage 2, $C = 64$, $R = 4$:
+\begin{align*}
+12 \times 4{,}096 &= 49{,}152, & 53 \times 64 &= 3{,}392,\\
+16 \times 4{,}096 &= 65{,}536, & 3 \times 64 &= 192,\\
+P &= 49{,}152 + 3{,}392 + 65{,}536 + 192 = 118{,}272; & \times 2 &= 236{,}544 .
+\end{align*}
+Stage 3, $C = 160$, $R = 2$:
+\begin{align*}
+12 \times 25{,}600 &= 307{,}200, & 53 \times 160 &= 8{,}480,\\
+4 \times 25{,}600 &= 102{,}400, & 3 \times 160 &= 480,\\
+P &= 307{,}200 + 8{,}480 + 102{,}400 + 480 = 418{,}560; & \times 2 &= 837{,}120 .
+\end{align*}
+Stage 4, $C = 256$, $R = 1$ (no reduction):
+\begin{align*}
+12 \times 65{,}536 &= 786{,}432, & 53 \times 256 &= 13{,}568,\\
+P &= 786{,}432 + 13{,}568 = 800{,}000; & \times 2 &= 1{,}600{,}000 .
+\end{align*}
+The round 800,000 is a coincidence of these widths. Blocks in total:
+\[
+159{,}232 + 236{,}544 + 837{,}120 + 1{,}600{,}000 = 2{,}832{,}896 .
+\]
+Every stage figure matches \texttt{torchinfo} and the CPU build.
+\end{worked}
+
+\begin{table}[htbp]\centering
+\caption{One block per stage, piece by piece (two blocks per stage in the model). These per-module
+figures are exactly what the CPU build reports for stage 1 (q, k, v and proj 1,056 each, reduction
+65,568, reduction norm 64, fc1 4,224, dwconv 1,280, fc2 4,128).}\label{tab:params:blockdetail}
+\begin{tabular}{@{}lrrrr@{}}\toprule
+Piece & Stage 1 & Stage 2 & Stage 3 & Stage 4 \\\midrule
+q, k, v, out & 4,224 & 16,640 & 103,040 & 263,168 \\
+reduction conv & 65,568 & 65,600 & 102,560 & -- \\
+reduction norm & 64 & 128 & 320 & -- \\
+fc1 & 4,224 & 16,640 & 103,040 & 263,168 \\
+depthwise conv & 1,280 & 2,560 & 6,400 & 10,240 \\
+fc2 & 4,128 & 16,448 & 102,560 & 262,400 \\
+two LayerNorms & 128 & 256 & 640 & 1,024 \\\midrule
+one block & 79,616 & 118,272 & 418,560 & 800,000 \\\bottomrule
+\end{tabular}
+\end{table}
+
+Two things stand out in \eqref{eq:params:block}. The parameters grow with $C^2$: doubling the width
+quadruples the block. And the reduction convolution $R^2 C^2$ is as large as all the rest of the block
+at stage 1 ($65{,}536$ against $14{,}080$): a stride-8 kernel over 32 channels has $8 \times 8 \times 32
+\times 32$ weights. Stages 1 and 2 have the same reduction weight count, $64 \times 32^2 = 16 \times
+64^2 = 65{,}536$, because $R C$ is 256 in both.
+
+\subsection{The stage-output norms, and the encoder total}
+
+One LayerNorm per stage: $2 \times (32 + 64 + 160 + 256) = 2 \times 512 = 1{,}024$. The encoder:
+\[
+497{,}152 + 2{,}832{,}896 + 1{,}024 = 3{,}331{,}072 .
+\]
+
+\section{The decoder and the back end}\label{sec:params:decoder}
+
+From \cref{ch:decoder}, with the rule \eqref{eq:params:conv}:
+\begin{align*}
+\text{projections:}\quad & 32 \times 256 + 256 = 8{,}448\\
+ & 64 \times 256 + 256 = 16{,}640\\
+ & 160 \times 256 + 256 = 41{,}216\\
+ & 256 \times 256 + 256 = 65{,}792\\
+\text{fuse:}\quad & 1{,}024 \times 256 + 256 = 262{,}144 + 256 = 262{,}400\\
+\text{refine 1:}\quad & 256 \times 256 \times 9 + 256 = 589{,}824 + 256 = 590{,}080\\
+\text{refine 2:}\quad & 256 \times 512 \times 9 + 512 = 1{,}179{,}648 + 512 = 1{,}180{,}160
+\end{align*}
+\[
+8{,}448 + 16{,}640 + 41{,}216 + 65{,}792 + 262{,}400 + 590{,}080 + 1{,}180{,}160 = 2{,}164{,}736 .
+\]
+Pixel shuffle, bilinear interpolation and GELU have no parameters.
+\code{Conv2d(32, 165, k=1)} is the decompressor:
+\[
+32 \times 165 + 165 = 5{,}280 + 165 = 5{,}445 .
+\]
+
+\section{The grand total, and the buffers}\label{sec:params:total}
+
+\begin{table}[htbp]\centering
+\caption{Indradhanu (165 bands, $D = 32$), every parameter. Measured by
+\texttt{torchinfo}\tagM{research/model_break_down/05_hyperspectral_segformer_mae.md} and by the CPU
+build\tagM{research/textbook/tools/compute_params_output.txt}; both report 5,506,629.}\label{tab:params:total}
+\begin{tabular}{@{}lrr@{}}\toprule
+Component & Parameters & Share \\\midrule
+Spectral compressor & 5,376 & 0.10\% \\
+Patch embeddings & 497,152 & 9.03\% \\
+Transformer blocks & 2,832,896 & 51.44\% \\
+Stage-output norms & 1,024 & 0.02\% \\
+Decoder & 2,164,736 & 39.31\% \\
+Spectral decompressor & 5,445 & 0.10\% \\\midrule
+\textbf{Total} & \textbf{5,506,629} & 100\% \\\bottomrule
+\end{tabular}
+\end{table}
+
+Add the column on paper:
+\begin{align*}
+5{,}376 + 497{,}152 &= 502{,}528\\
+502{,}528 + 2{,}832{,}896 &= 3{,}335{,}424\\
+3{,}335{,}424 + 1{,}024 &= 3{,}336{,}448\\
+3{,}336{,}448 + 2{,}164{,}736 &= 5{,}501{,}184\\
+5{,}501{,}184 + 5{,}445 &= 5{,}506{,}629 .
+\end{align*}
+\texttt{torchinfo} reports ``Total params: 5,506,629''. Exact to the last digit. (Shares: each component
+divided by 5,506,629; for the blocks $2{,}832{,}896 / 5{,}506{,}629 \approx 0.5144$.)
+
+\begin{worked}[label={we:params:buffers}]{Where the manifest's 5,507,354 comes from}
+The checkpoint manifest says \code{"params": 5507354}, as the model breakdown
+records\tagM{research/model_break_down/05_hyperspectral_segformer_mae.md}. The difference is
+\[
+5{,}507{,}354 - 5{,}506{,}629 = 725 .
+\]
+Count the buffers. The normaliser and denormaliser each store a mean and a standard deviation per
+band:
+\[
+4 \times 165 = 660 .
+\]
+The compressor's BatchNorm keeps a running mean and running variance for each of its 32 channels and
+one batch counter:
+\[
+32 + 32 + 1 = 65 .
+\]
+Together $660 + 65 = 725$, and $5{,}506{,}629 + 725 = 5{,}507{,}354$. The CPU build reports 725 buffer
+numbers. Those 660 normalisation values live inside the checkpoint, which is why you cannot swap
+normalisation statistics without rebuilding the model (\cref{ch:bandpipeline}).
+\end{worked}
+
+\section{Where the parameters live}\label{sec:params:where}
+
+\begin{figure}[htbp]\centering
+\begin{tikzpicture}
+\begin{axis}[
+  xbar, width=0.82\linewidth, height=9.2cm,
+  xmin=0, xmax=1900000,
+  bar width=7pt, enlarge y limits=0.04,
+  xlabel={parameters},
+  scaled x ticks=false,
+  xticklabel style={/pgf/number format/fixed,/pgf/number format/1000 sep={,}},
+  xtick={0,500000,1000000,1500000},
+  symbolic y coords={decompressor,refine 2,refine 1,fuse,projections,stage norms,blocks S4,blocks S3,blocks S2,blocks S1,patch embeds,compressor},
+  ytick=data, y tick label style={font=\small},
+  nodes near coords, nodes near coords align={horizontal},
+  every node near coord/.append style={font=\scriptsize,/pgf/number format/fixed,/pgf/number format/1000 sep={,}},
+  axis x line*=bottom, axis y line*=left]
+\addplot[fill=spec, draw=spec] coordinates {(5376,compressor) (5445,decompressor)};
+\addplot[fill=spat, draw=spat] coordinates {(497152,patch embeds) (159232,blocks S1) (236544,blocks S2) (837120,blocks S3) (1600000,blocks S4) (1024,stage norms)};
+\addplot[fill=attn, draw=attn] coordinates {(132096,projections) (262400,fuse) (590080,refine 1) (1180160,refine 2)};
+\end{axis}
+\end{tikzpicture}
+\caption{Where Indradhanu's 5,506,629 parameters live, drawn to scale from the counts of this chapter.
+Spectral layers teal, encoder indigo, decoder plum. Stage 4's two blocks (16 tokens) hold more than any
+other component; the decoder's two refine convolutions hold 1,770,240 between them; the spectral
+compressor and decompressor are invisible at this scale (0.2\% together).}
+\label{fig:params:bars}
+\end{figure}
+
+\coursefig[0.95\linewidth]{iw-26-params}{The course's view of the same budget by component, bar widths to
+scale: the blocks (51.4\%) and decoder (39.3\%) carry almost all of it.}{fig:params:course}
+
+Five lessons follow from the table and the chart.
+
+\begin{enumerate}
+\item \textbf{Stage 4 is the most expensive stage}: 1.6 million parameters, 29\% of the model, while
+processing 16 tokens. Parameters follow width squared, not token count.
+\item \textbf{The decoder is 39\% of the model.} ``Lightweight'' means light compared with a
+segmentation decoder running at full resolution with skip connections, not small.
+\item \textbf{Two layers are 32\% of everything.} The refine convolutions hold
+$590{,}080 + 1{,}180{,}160 = 1{,}770{,}240$, and $1{,}770{,}240 / 5{,}506{,}629 \approx 0.321$.
+\item \textbf{The spectral bottleneck costs 0.2\% and saves far more.} Without it, stage 1's patch
+embedding would read 165 channels: $165 \times 32 \times 16 + 32 = 84{,}480 + 32 = 84{,}512$ instead of
+16,416, and every activation in the encoder's first convolution would be five times larger.
+\item \textbf{Parameters are not compute}, which needs its own section.
+\end{enumerate}
+
+\section{Parameters are not compute}\label{sec:params:compute}
+
+\index{multiply-add}\index{compute versus parameters}A layer's work is its multiply-adds per output position times the number of positions. A layer with few
+parameters applied at many positions can cost more than a large layer applied at few.
+
+\begin{worked}[label={we:params:macs}]{Multiply-adds of three layers}
+For one 128 $\times$ 128 patch, weights per output position (no biases) times positions:
+\begin{align*}
+\text{compressor:}\quad & 165 \times 32 = 5{,}280 \text{ per pixel}; & 5{,}280 \times 16{,}384 &= 86{,}507{,}520\\
+\text{stage-4 fc1:}\quad & 256 \times 1{,}024 = 262{,}144 \text{ per token}; & 262{,}144 \times 16 &= 4{,}194{,}304\\
+\text{decoder refine 2:}\quad & 256 \times 512 \times 9 = 1{,}179{,}648; & 1{,}179{,}648 \times 1{,}024 &= 1{,}207{,}959{,}552
+\end{align*}
+The compressor has 50 times fewer parameters than stage 4's fc1 ($5{,}312$ against $263{,}168$) but does
+about 20 times the work, because it runs at 16,384 pixels instead of 16 tokens.
+\end{worked}
+
+Hooking every convolution and linear layer of the real model during one unmasked forward pass of a
+128 $\times$ 128 patch gives the totals in \cref{tab:params:macs}\tagC{} (attention's own matrix
+products, at most a few million per block with 16 keys, are not included).
+
+\begin{table}[htbp]\centering
+\caption{Multiply-adds of all convolution and linear layers, one unmasked 128 $\times$ 128 patch,
+counted by \texttt{research/textbook/tools/compute\_params.py}.}\label{tab:params:macs}
+\begin{tabular}{@{}lrrr@{}}\toprule
+Component & Multiply-adds & Share of work & Share of parameters \\\midrule
+compressor & 86,507,520 & 3.58\% & 0.10\% \\
+stage 1 (embed, blocks, norm) & 42,270,720 & 1.75\% & 3.19\% \\
+stage 2 & 29,229,056 & 1.21\% & 4.64\% \\
+stage 3 & 44,318,720 & 1.83\% & 16.89\% \\
+stage 4 & 31,358,976 & 1.30\% & 35.77\% \\
+decoder & 2,096,627,712 & 86.75\% & 39.31\% \\
+decompressor & 86,507,520 & 3.58\% & 0.10\% \\\midrule
+total & 2,416,820,224 & 100\% & \\\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{sourcenote}[: where the compute goes]
+The course says of \texttt{torchinfo}'s 2.32 G multiply-adds that ``most of that happens at stage 1,
+where the parameters are fewest but the tensors are largest''. Counting layer by layer contradicts it:
+the whole encoder does about 147 million multiply-adds (6\%), and the \emph{decoder} does 2.10 billion
+(87\%), because its fuse and refine convolutions run at all 1,024 positions with 256 to 1,024 channels.
+The two refine convolutions alone are 1.81 billion (\cref{ch:decoder}). The lesson the course wanted
+(few parameters at many positions can dominate) is right, and the compressor and decompressor show it;
+but the layer that dominates is the decoder. The count here is 2.42 billion against \texttt{torchinfo}'s
+2.32 (\file{research/model_break_down/05_hyperspectral_segformer_mae.md}, line 293); the 4\% gap is in
+how the two tools count, not in the model, and does not change the ranking.
+\end{sourcenote}
+
+\section{Parameters a masked pass never trains}\label{sec:params:idle}
+
+\index{idle parameters}There is one more thing a count reveals, and it follows from \cref{ch:encoder}. In a masked pass
+stage 1 has fewer than $H \times W$ tokens, so ESA skips its reduction convolution and norm, and Mix-FFN
+skips its depthwise convolution. Layers that are skipped get no gradient. Per stage-1 block:
+\begin{align*}
+\text{reduction conv} + \text{reduction norm} + \text{depthwise} &= 65{,}568 + 64 + 1{,}280 = 66{,}912,\\
+\text{two blocks} &= 2 \times 66{,}912 = 133{,}824 .
+\end{align*}
+That is $133{,}824 / 5{,}506{,}629 \approx 2.4\%$ of the model\tagC. A backward pass through the real
+model with a 65\% keep mask confirms it: exactly these twelve tensors, 133,824 numbers, have zero
+gradient (\file{research/textbook/tools/compute_params_output.txt}).
+
+\begin{sourcenote}[: idle weights during masked training]
+Masked pretraining always passes a keep mask
+(\file{app/foundation_models/trainers/hyperspectral_segformer_mae_trainer.py}, line 231), and masked
+inference does too, so these 133,824 weights keep their initial values through all of reconstruction
+training. They are used, untrained, by any \emph{unmasked} pass: \code{keep_mask=None} in
+\code{forward}, and the segmentation head's pass in fine-tuning, which encodes without a keep mask
+(\file{spectral_stem_seg_former_mae.py}, \code{segment}), where they first receive a gradient
+(\cref{ch:seghead}). The course does not mention this. It is not a bug in the masked path, which never
+uses them, but it is a trap for anyone who evaluates a pretrained model unmasked.
+\end{sourcenote}
+
+\section{Other models: which figure belongs to which}\label{sec:params:others}
+
+The courses quote several parameter figures. They belong to different models, and mixing them up is
+easy.
+
+\subsection{The v0.1.0 model, \texorpdfstring{$D = 24$}{D = 24}}
+
+Shrinking $D$ from 32 to 24 changes four layers: the compressor, stage 1's patch embedding (its input
+width), the decompressor, and the last refine convolution (its output is $16D$).
+\begin{align*}
+\text{compressor:}\quad & 165 \times 24 + 24 + 2 \times 24 = 3{,}960 + 24 + 48 = 4{,}032 && (\text{was } 5{,}376)\\
+\text{patch embed 1:}\quad & 24 \times 32 \times 16 + 32 + 64 = 12{,}288 + 96 = 12{,}384 && (\text{was } 16{,}480)\\
+\text{decompressor:}\quad & 24 \times 165 + 165 = 3{,}960 + 165 = 4{,}125 && (\text{was } 5{,}445)\\
+\text{refine 2:}\quad & 256 \times 384 \times 9 + 384 = 884{,}736 + 384 = 885{,}120 && (\text{was } 1{,}180{,}160)
+\end{align*}
+The differences: $-1{,}344$, $-4{,}096$, $-1{,}320$, $-295{,}040$, together $-301{,}800$. So
+\[
+5{,}506{,}629 - 301{,}800 = 5{,}204{,}829
+\]
+parameters, plus $660 + (24 + 24 + 1) = 709$ buffers, $5{,}205{,}538$ in all: the v0.1.0 manifest's
+figure, and the CPU build's. Ninety-eight percent of the saving is the decoder's last convolution:
+shrinking $D$ mostly shrinks the decoder.
+
+\subsection{The spectral-stem model (Indradhanu V2, FT04)}
+
+From \cref{ch:crossstem} on, the fixed 165-band compressor is replaced by a wavelength-aware stem, and
+fine-tuning adds a segmentation head. \Cref{tab:params:stem} gives that model's split; its encoder and
+reconstruction decoder are \emph{the same classes at the same widths} as above, which is why
+3,331,072 and 2,164,736 reappear.
+
+\begin{table}[htbp]\centering
+\caption{The spectral-stem model with the reduced-attention stem and a 5-class segmentation head, as
+configured for FT04\tagM{research/experiments/indradhanu-finetune/FT04-final-joint/config.json}.
+Counts from the CPU build\tagM{research/textbook/tools/compute_params_output.txt}; the course quotes
+the same split (IW67, IW40, IW47).}\label{tab:params:stem}
+\begin{tabular}{@{}llr@{}}\toprule
+Component & Where it is taught & Parameters \\\midrule
+reduced-attention compressor (\texttt{spectral\_in}) & \cref{ch:specdecoder} & 14,721 \\
+BatchNorm after the stem & & 64 \\
+encoder & \cref{ch:encoder}, this chapter & 3,331,072 \\
+reconstruction decoder & \cref{ch:decoder}, this chapter & 2,164,736 \\
+wavelength decoder (\texttt{spectral\_out}) & \cref{ch:specdecoder} & 4,257 \\
+segmentation head (width 128, 5 classes) & \cref{ch:seghead} & 371,536 \\\midrule
+total & & 5,886,386 \\\bottomrule
+\end{tabular}
+\end{table}
+
+Two checks. Without the segmentation head the reconstruction model has $5{,}886{,}386 - 371{,}536 =
+5{,}514{,}850$ parameters, only 8,221 more than the 165-band model: the new stem and decoder (18,978
+together, plus the BatchNorm's 64) replace a compressor and decompressor of 10,821. And the head is the
+decoder class of \cref{sec:params:decoder} at width 128 with $5 \times 16 = 80$ output channels:
+\begin{align*}
+\text{projections:}\quad & (32 + 64 + 160 + 256) \times 128 + 4 \times 128 = 65{,}536 + 512 = 66{,}048\\
+\text{fuse:}\quad & 512 \times 128 + 128 = 65{,}536 + 128 = 65{,}664\\
+\text{refine 1:}\quad & 128 \times 128 \times 9 + 128 = 147{,}456 + 128 = 147{,}584\\
+\text{refine 2:}\quad & 128 \times 80 \times 9 + 80 = 92{,}160 + 80 = 92{,}240\\
+\text{head:}\quad & 66{,}048 + 65{,}664 + 147{,}584 + 92{,}240 = 371{,}536 .
+\end{align*}
+None of these counts contains the band count 202: the stem and the wavelength decoder work for any band
+list, which is their point (\cref{ch:ceiling}).
+
+\begin{drift}
+As of 2026-10-29 the shipped Indradhanu V2 (v2.1.0) is \emph{Indradhanu Heavy}\index{Indradhanu Heavy!parameter count} (FTH3 epoch 5), a wider
+model with a progressive decoder: stage widths 96, 192, 480, 768, decoder width 512, $D = 64$,
+segmentation width 256\tagM{research/experiments/indradhanu-finetune/FTH3-heavy-joint-more2/config.json}.
+Building it on CPU gives 35,315,314 parameters\tagC: encoder 29,580,288, progressive decoder
+4,279,616, segmentation head 1,431,120, stem 17,825 + 128 + 6,337
+(\file{research/textbook/tools/compute_params_output.txt}). Without the segmentation head the total is
+$35{,}315{,}314 - 1{,}431{,}120 = 33{,}884{,}194$, the figure \cref{ch:heavy} and the pretraining README
+quote. \Cref{ch:heavy} tells that story; every
+count in this chapter is for the standard widths.
+\end{drift}
+
+\begin{confusions}
+\confusion{Does the number of heads change the count?}{No. Multi-head attention splits the same four
+$C \times C$ matrices into groups; no weights are added. The rules never use it.}
+\confusion{Why is the count independent of patch size?}{Convolutions and linear layers reuse the same
+weights at every position. A bigger patch means more positions, more work and more memory, not more
+parameters.}
+\confusion{Are the normalisation statistics parameters?}{No, buffers: saved in the file, never updated
+by gradient. They explain the 725 between 5,506,629 and the manifest's 5,507,354.}
+\confusion{The decoder is called lightweight; is it small?}{It is 39\% of the parameters and 87\% of the
+convolution work. Lightweight compared with full-resolution segmentation decoders, not small.}
+\confusion{Is 5.5 million big?}{Small by modern standards (ResNet-50 has about 25 million). It is
+deliberately compact: it runs in a worker container, sometimes on a CPU.}
+\confusion{Which total is ``Indradhanu's''?}{It depends on the model: 5,506,629 for the 165-band v0.2.0,
+5,204,829 for v0.1.0, 5,886,386 for the spectral-stem FT04 model with its head, 35,315,314 for Heavy.
+Quote the model with the number.}
+\end{confusions}
+
+\begin{checkyourself}
+\item\label{ex:params:1} How many parameters does \code{Conv2d(64, 128, k=3)} have? And the depthwise
+\code{Conv2d(64, 64, k=3, groups=64)}? How many times fewer?
+\item\label{ex:params:2} Use \eqref{eq:params:block} to count one block of width $C = 128$ with $R = 4$,
+and check it against a piece-by-piece count.
+\item\label{ex:params:3} A colleague proposes three blocks at stage 4 instead of two. How many parameters
+does that add, and what fraction of the 165-band model is that?
+\item\label{ex:params:4} Compute the 165-band model's total if the decoder width were 128 instead of 256
+(everything else unchanged). Which decoder layer shrinks most?
+\item\label{ex:params:5} Reconcile 5,506,629 with 5,507,354 from memory of the model's structure, without
+looking: which buffers, how many of each?
+\item\label{ex:params:6} The compressor has 5,376 parameters and the decoder's fuse convolution 262,400.
+For one 128 $\times$ 128 patch, which does more multiply-adds, and by what factor?
+\end{checkyourself}
+
+\nextchapter{ch:chakshu}

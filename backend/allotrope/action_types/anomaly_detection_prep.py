@@ -112,11 +112,8 @@ _DEFAULT_BODY: dict[str, Any] = {
 
 META = ActionTypeMeta(
     type=KIND,
-    label="Anomaly detection (prep)",
-    short_description=(
-        "Combine per-algorithm anomaly scores into one composite, then "
-        "explore thresholds live with precision/recall feedback."
-    ),
+    label="Anomaly detection",
+    short_description="Combine the scores into one map and set the threshold for anomalies.",
     description=(
         "Takes the per-pixel anomaly scores from a prior ``anomaly_scoring`` "
         "run (potentially one map per algorithm — Indradhanu, MNF-RX, "
@@ -142,30 +139,20 @@ META = ActionTypeMeta(
         "separate ``anomaly_detection_commit`` action that can only be "
         "triggered from this prep — see roadmap step 14.6."
     ),
-    when_to_use=(
-        "Run after at least one ``anomaly_scoring`` action has produced "
-        "score maps for the scene. The more algorithms in the upstream "
-        "run, the more interesting this combination step becomes."
-    ),
+    when_to_use="",
     inputs=[
         ActionInputSpec(
             key="input_anomaly_scoring_output_id",
-            label="Upstream anomaly scoring output",
-            description=(
-                "The ``anomaly_scoring`` ActionOutput whose per-algorithm "
-                "score maps will be combined."
-            ),
+            label="Anomaly scoring result",
+            description="",
             ref_kind="action_output",
             producing_action_types=["anomaly_scoring"],
             required=True,
         ),
         ActionInputSpec(
             key="input_annotation_id",
-            label="Ground-truth annotation (optional)",
-            description=(
-                "If attached, the Apply endpoint computes precision / "
-                "recall / F1 against this mask."
-            ),
+            label="Ground truth",
+            description="Optional; shows precision and recall.",
             ref_kind="annotation",
             required=False,
         ),
@@ -222,6 +209,8 @@ META = ActionTypeMeta(
         "landsat9",
         "aviris_ng",
         "hotsat1",
+        "tanager",
+        "generic_hsi",
     ],
     default_config_per_sensor={
         "prisma": _DEFAULT_BODY,
@@ -229,6 +218,8 @@ META = ActionTypeMeta(
         "landsat9": _DEFAULT_BODY,
         "aviris_ng": _DEFAULT_BODY,
         "hotsat1": _DEFAULT_BODY,
+        "tanager": _DEFAULT_BODY,
+        "generic_hsi": _DEFAULT_BODY,
     },
 )
 

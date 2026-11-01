@@ -1,0 +1,114 @@
+== 3-band worked example: four normal residuals ==
+mean [0. 0. 0.]
+covariance (np.cov, /3)
+ [[2. 1. 0.]
+ [1. 2. 0.]
+ [0. 0. 4.]]
+inverse
+ [[ 0.66666667 -0.33333333  0.        ]
+ [-0.33333333  0.66666667  0.        ]
+ [ 0.          0.          0.25      ]] 
+ x3:
+ [[ 2.   -1.    0.  ]
+ [-1.    2.    0.  ]
+ [ 0.    0.    0.75]] 
+ det 11.999999999999995
+eigenvalues [1. 3. 4.] 
+eigenvectors (columns)
+ [[-0.70710678  0.70710678  0.        ]
+ [ 0.70710678  0.70710678  0.        ]
+ [ 0.          0.          1.        ]]
+r1 [ 1.  2. -1.]: |r|=2.4495 L1=1.3333 D2=2.2500 (9/4)
+r2 [ 1. -1. -1.]: |r|=1.7321 L1=1.0000 D2=2.2500 (9/4)
+r3 [-2. -1. -1.]: |r|=2.4495 L1=1.3333 D2=2.2500 (9/4)
+r4 [0. 0. 3.]: |r|=3.0000 L1=1.0000 D2=2.2500 (9/4)
+P [3. 3. 0.]: |r|=4.2426 L1=2.0000 D2=6.0000 (6)
+Q [ 2. -2.  0.]: |r|=2.8284 L1=1.3333 D2=8.0000 (8)
+Rr [0. 0. 4.]: |r|=4.0000 L1=1.3333 D2=4.0000 (4)
+in-sample D2 for N = d + 1 points: (N-1)^2/N = 2.25
+
+== same, through the product's whitened_pca (d=3, global mean) ==
+whitened components
+ [[-0.5        -0.5        -0.5         1.5       ]
+ [ 1.2247449   0.         -1.2247449   0.        ]
+ [ 0.70710677 -1.4142135   0.70710677  0.        ]]
+residual_mahalanobis(local_window=None): [[2.25 2.25 2.25 2.25]]
+
+== truncation: keep only the top 2 directions ==
+P top-2 whitened [0.         2.44948974] score 5.999999999999999
+Q top-2 whitened [0. 0.] score 0.0
+Rr top-2 whitened [2. 0.] score 4.0
+
+== near-singular 2x2 and the floor ==
+0.9 eigs [0.1 1.9] inverse [[5.263, -4.737], [-4.737, 5.263]] D2 of (0.01,-0.01) 0.002000000000000001
+0.99 eigs [0.01 1.99] inverse [[50.251, -49.749], [-49.749, 50.251]] D2 of (0.01,-0.01) 0.019999999999999973
+0.999 eigs [1.000e-03 1.999e+00] inverse [[500.25, -499.75], [-499.75, 500.25]] D2 of (0.01,-0.01) 0.2000000000000027
+contribution 0.001^2/1e-10 = 10000.0
+
+== integral image toy (IW46) ==
+[[ 0  0  0  0  0]
+ [ 0  1  3  3  4]
+ [ 0  4  7  9 10]
+ [ 0  4  9 12 16]
+ [ 0  5 10 15 20]]
+rows1-2 cols1-2: 6.0 check 6.0
+rows2-3 cols2-3: 7.0 check 7.0
+rows0-3 cols0-3: 20.0
+ring around (1,1): outer 12.0 guard 1.0 ring 11.0 mean 1.375
+ring around (2,2): outer 12.0 guard 1.0 ring 11.0 mean 1.375
+product local_mean_score with window (1,3), d=1:
+[[1.         0.36       1.44       0.11111111]
+ [3.24       0.140625   0.5625     1.96      ]
+ [1.96       0.5625     0.140625   3.24      ]
+ [0.11111111 1.44       0.36       1.        ]]
+expected at (1,1): (1 - 1.375)^2 = 0.140625 ; at (2,2): (1 - 1.375)^2 = 0.140625
+note: d=1 so the ring needs >= 2 valid pixels; corner (0,0) ring count = 3
+
+== local covariance via integral images (sums of x x^T), toy 2 channels ==
+channel a
+ [[3. 2. 2. 1. 1.]
+ [0. 0. 0. 0. 3.]
+ [2. 3. 2. 2. 3.]
+ [2. 2. 2. 2. 3.]
+ [1. 3. 2. 0. 1.]] 
+channel b
+ [[3. 2. 0. 3. 2.]
+ [3. 0. 0. 3. 0.]
+ [2. 0. 1. 1. 1.]
+ [1. 0. 0. 0. 0.]
+ [2. 2. 2. 1. 2.]]
+3x3 box at centre (2,2): sums [13.  5.] sum of products aa ab bb 29.0 4.0 11.0
+mean [1.44444444 0.55555556] cov (divide by n)
+ [[ 1.13580247 -0.35802469]
+ [-0.35802469  0.91358025]] 
+np.cov bias=True
+ [[ 1.13580247 -0.35802469]
+ [-0.35802469  0.91358025]]
+
+== ring sizes and costs ==
+(21,61): ring = 61^2 - 21^2 = 3721 - 441 = 3280
+(11,31): ring = 31^2 - 11^2 = 961 - 121 = 840
+(5,13): ring = 13^2 - 5^2 = 169 - 25 = 144
+(7,15): ring = 15^2 - 7^2 = 225 - 49 = 176
+(1,3): ring = 3^2 - 1^2 = 9 - 1 = 8
+1000x1000 = 1000000 px; direct ring sums 3280 x 31 x px = 101,680,000,000; integral 2 boxes x 4 lookups x 31 x px = 248,000,000; ratio 410.0
+1210x1219 = 1474990 px; direct ring sums 3280 x 31 x px = 149,976,983,200; integral 2 boxes x 4 lookups x 31 x px = 365,797,520; ratio 410.0
+local covariance channels d(d+1)/2 = 465 ; plus d sums + 1 count = 496
+float64 integral images for 496 channels padded by 30: 496 x 1271 x 1280 x 8 bytes = 6,455,459,840 bytes
+float64 integral images for 31 channels: 403,466,240 bytes
+
+== eleven-way comparison (IW46, F001 epoch 52) ==
+A 0.715 minus A 0.0 minus D -0.15
+Afade 0.756 minus A 0.041 minus D -0.109
+B 0.709 minus A -0.006 minus D -0.156
+C 0.849 minus A 0.134 minus D -0.016
+D 0.865 minus A 0.15 minus D 0.0
+EC 0.79 minus A 0.075 minus D -0.075
+FC 0.718 minus A 0.003 minus D -0.147
+GC 0.845 minus A 0.13 minus D -0.02
+D - C per scene 0.008
+D - C per scene 0.011
+D - C per scene 0.036
+D - C per scene 0.009
+means of D per scene 0.865 C 0.849 A 0.71525
+sign test two-sided, n=4 all one way: 0.125

@@ -46,7 +46,9 @@ reason. Don't reintroduce it — use MNF-RX.
 The worker narrows the background region *after* `fit()` and *before* `detect()`, by ANDing
 the upstream `keep_mask` into the detector's `_spatial_mask`. That keeps clouds, water and
 shadow out of the covariance estimate. It reaches into a private attribute — ugly, but
-deliberate and documented at the call site.
+deliberate and documented at the call site. With `exclude_classes` on `anomaly_scoring` the
+`keep_mask` is rebuilt from the upstream V2 segmentation's `class_codes.bin` first
+([`lld/segmentation-v2.md`](lld/segmentation-v2.md)).
 
 ## Cloud masking
 
@@ -169,6 +171,12 @@ Two results from the reference run (stage 3, 2026-10-17):
   product default (user, 2026-10-17: "we don't detect anything on water and cloud"); it is **not in `backend/`
   yet**. Today `anomaly_scoring` excludes water and cloud only when an upstream `scene_segmentation` (NDWI /
   brightness thresholds) or `cloud_mask` supplies a `keep_mask`; FT03's learned masks are not used.
+  (Since 2026-10-19 Indradhanu V2 zeros its own thick cloud, and since 2026-11-01 `scene_segmentation` can run V2's
+  head as a step - `method: "indradhanu_v2"`, excluding thick cloud by default and keeping water, which is in scope
+  for vessels; [`lld/segmentation-v2.md`](lld/segmentation-v2.md). Since 2026-11-01 `anomaly_scoring` also takes
+  `exclude_classes` - water, cloud, thin_cloud, shadow, snow - read from that segmentation's class map, so water
+  can be left out per scoring run without a new segmentation; V2 zeroes them after scoring, MNF-RX leaves them
+  out of its covariance.)
 - **The implant bench-v1 is biased**: PCA-RX beats every model on it but loses on the real objects (pAUC 0.128 vs
   0.158). Read bench-v1 numbers as an ordering of models, never on their own ([known issues](09-known-issues.md)).
 
@@ -206,6 +214,18 @@ SAM, on the raw cube, and it is the answer the viewer and the export lead with: 
 material: roofing" only above the bar p\* = 1 − `family_alpha` / F, otherwise "man-made, type
 unconfirmed" or the natural family. SAM's outputs are unchanged and still shown. See
 [`lld/spectral-family-match.md`](lld/spectral-family-match.md).
+
+Since 2026-11-01 the **spectral namer** (`app/spectral_match/namer/`, checkpoint from
+`/models/spectral_namer/current.json`) runs first (`namer=true`, the default). It calls each
+8-connected anomaly object natural or man-made and gives a man-made one its *closest known
+class* among seven (oil / fuel, plastic, textile, wood / paper, paint, metal, concrete /
+asphalt), confident at P(class | man-made) ≥ `namer_confident_p` = 0.55, tentative below.
+Only man-made objects' pixels go on to SAM and family matching; natural ones are labelled
+natural and skipped. The viewer is one map with a man-made / natural filter, class bars and an
+object list (click to zoom); the export gains `nm_*` columns and a georeferenced level-1
+GeoTIFF (bundle schema `/3`), and `?subset=manmade` cuts it to a boolean 0/1 GeoTIFF of the
+man-made objects plus their points - the submission shape.
+See [`lld/spectral-namer-in-product.md`](lld/spectral-namer-in-product.md).
 
 ---
 

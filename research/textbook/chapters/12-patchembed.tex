@@ -1,0 +1,483 @@
+\chapter{Patch embedding}\label{ch:patchembed}
+
+\begin{onething}
+A transformer reads a list of vectors, not a picture; patch embedding makes that list with a strided
+convolution that summarises each block of pixels as one vector (a token), followed by a LayerNorm that
+standardises each token on its own, and at stage~1 the blocks must not overlap so that a hidden token
+leaves no trace in its neighbours.
+\end{onething}
+
+\Cref{ch:compressor} left you with a \shape{(B, 32, 128, 128)} tensor: 32 learned spectral mixtures at
+every pixel. The next module is the entrance to the transformer. Transformers were invented for text,
+where a sentence is a list of tokens (words or word pieces), each represented by a vector of numbers.
+To use one on an image you must decide what a token is, and turn the picture into a list of them. This
+chapter does that for all four stages of Indradhanu's encoder, works a tiny example by hand, derives
+LayerNorm on a four-number token, and counts every parameter.
+
+%======================================================================
+\section{The problem: pixels are too many tokens}\label{sec:patchembed:problem}
+
+The simplest choice would make every pixel a token: $128\times128 = 16{,}384$ tokens of 32 numbers. The
+transformer's central operation, attention (\cref{ch:attention}), compares every token with every
+other, so its cost grows with the square of the number of tokens:
+\begin{align*}
+\text{pixel tokens:}\quad 16{,}384^2 &= 268{,}435{,}456 \text{ pairs},\\
+\text{$4\times4$ blocks:}\quad 1{,}024^2 &= 1{,}048{,}576 \text{ pairs}.
+\end{align*}
+Grouping $4\times4$ pixels into one token divides the token count by 16 and the number of pairs by
+$16^2 = 256$\tagC. There is a second reason, from \cref{ch:recon}: a single hidden pixel is too easy to
+predict from its eight neighbours, while a hidden $4\times4$ block forces the model to reason from
+further away. So the token is a block.
+
+\begin{definition}[Token, patch embedding]
+At stage~1 of Indradhanu, a \emph{token}\index{token} is a $4\times4$ block of the compressed patch,
+summarised as a vector of 32 numbers. \emph{Patch embedding}\index{patch embedding} is the operation
+that cuts a feature map into such blocks and computes one vector per block; the vector is the block's
+\emph{embedding}\index{embedding}.
+\end{definition}
+
+The word ``embedding'' is borrowed from language models, where a word is embedded into a vector. Here a
+block of $4\times4$ pixels with 32 channels, $4\times4\times32 = 512$ numbers, becomes a token of 32
+numbers: a 16-to-1 summary. Where does $1024$ come from?
+\begin{align*}
+128 / 4 &= 32 \text{ blocks across},\\
+128 / 4 &= 32 \text{ blocks down},\\
+32\times32 &= 1{,}024 \text{ tokens}.
+\end{align*}
+
+\begin{analogy}
+Patch embedding is the executive summary of a long report. Each page (a $4\times4$ block) is replaced by
+a short paragraph (32 numbers) written to a fixed template (the learned kernel), and the board (the
+transformer) reads the paragraphs, not the pages. The template is the same for every page, so a page
+about wheat gets the same kind of summary wherever it sits in the report. And, as \cref{sec:patchembed:overlap}
+shows, if you want to test the board on a page whose summary you withheld, no other summary may quote
+from that page.
+\end{analogy}
+
+%======================================================================
+\section{A strided convolution makes the tokens}\label{sec:patchembed:conv}
+
+The module is \code{OverlapPatchEmbedding} in
+\file{app/foundation_models/components/overlap_patch_embedding.py}. Its core:
+\begin{lstlisting}
+self.proj = nn.Conv2d(c_in, c_out, kernel_size=patch_size,
+                      stride=desired_compression, padding=padding)
+self.norm = nn.LayerNorm(c_out)
+
+def forward(self, x):                  # x: (B, C_in, H, W)
+    x = self.proj(x)                   # x: (B, c_out, H', W')
+    B, _, H_dash, W_dash = x.shape
+    x = x.flatten(2)                   # x: (B, c_out, N),  N = H' * W'
+    x = x.transpose(1, 2)              # x: (B, N, c_out)
+    out = self.norm(x)                 # LayerNorm over each token's c_out features
+    return out, H_dash, W_dash
+\end{lstlisting}
+
+At stage~1 the convolution has kernel $k=4$, stride $s=4$ and padding $p=0$. From \cref{ch:shapes} you
+know what that means: the kernel's windows sit at rows and columns $0, 4, 8, \dots$, each covering
+exactly one $4\times4$ block, with no gap and no overlap. Each window position produces one output
+vector of $C_{\text{out}} = 32$ numbers: one token.
+
+\subsection{The convolution is a matrix applied to each flattened block}
+
+Write out \cref{eq:shapes:multiconv} for this case. Token $(i,j)$ of the $32\times32$ grid, output
+channel $o$:
+\begin{equation}\label{eq:patchembed:conv}
+t_{o}(i,j) = b_o + \sum_{c=0}^{31}\sum_{u=0}^{3}\sum_{v=0}^{3} K_{o,c,u,v}\; x_{c,\,4i+u,\,4j+v}.
+\end{equation}
+The triple sum runs over the $32\times4\times4 = 512$ numbers of block $(i,j)$, each paired with its own
+weight. Line up those 512 numbers as one vector $\vect{p}_{ij}\in\R^{512}$ (the flattened block), and line
+up the matching weights of output channel $o$ as row $o$ of a matrix $\mat{E}\in\R^{32\times512}$. Then
+\cref{eq:patchembed:conv} is
+\begin{equation}\label{eq:patchembed:linear}
+\vect{t}_{ij} = \mat{E}\,\vect{p}_{ij} + \vect{b}.
+\end{equation}
+A non-overlapping patch embedding is a linear layer applied to every flattened block, with the same
+$\mat{E}$ for all 1024 blocks. Its parameter count is that of a linear layer from 512 to 32,
+$512\times32 + 32 = 16{,}416$, identical to the convolution count $32\times32\times4\times4 + 32$.
+The original Vision Transformer \citep{dosovitskiy2021image} described patch embedding in exactly this
+form, ``flatten each patch and apply a linear projection''; the convolution is the efficient way to
+compute it.
+
+\begin{worked}[label={we:patchembed:tiny}]{Four tokens from a $4\times4$ image}
+Take one channel, a $4\times4$ image, kernel $2$, stride $2$, no padding, and two output channels:
+\[
+x = \begin{pmatrix}1&2&0&1\\3&4&1&0\\0&0&2&2\\1&1&2&2\end{pmatrix},\quad
+K_0 = \begin{pmatrix}0.25&0.25\\0.25&0.25\end{pmatrix},\quad
+K_1 = \begin{pmatrix}1&-1\\1&-1\end{pmatrix},
+\]
+biases zero. $K_0$ averages a block; $K_1$ is ``left column minus right column''. The output grid is
+$\lfloor(4-2)/2\rfloor + 1 = 2$ on a side: four tokens of two numbers each.
+
+Top-left block $\begin{pmatrix}1&2\\3&4\end{pmatrix}$:
+\begin{align*}
+t_0 &= 0.25\times(1+2+3+4) = 0.25\times10 = 2.5,\\
+t_1 &= (1 + 3) - (2 + 4) = 4 - 6 = -2.
+\end{align*}
+Top-right block $\begin{pmatrix}0&1\\1&0\end{pmatrix}$:
+\begin{align*}
+t_0 &= 0.25\times(0+1+1+0) = 0.25\times2 = 0.5,\\
+t_1 &= (0 + 1) - (1 + 0) = 0.
+\end{align*}
+Bottom-left block $\begin{pmatrix}0&0\\1&1\end{pmatrix}$:
+\begin{align*}
+t_0 &= 0.25\times2 = 0.5, & t_1 &= (0+1) - (0+1) = 0.
+\end{align*}
+Bottom-right block $\begin{pmatrix}2&2\\2&2\end{pmatrix}$:
+\begin{align*}
+t_0 &= 0.25\times8 = 2, & t_1 &= (2+2) - (2+2) = 0.
+\end{align*}
+After \code{flatten(2)} and \code{transpose(1, 2)}, in row-major order (top-left, top-right,
+bottom-left, bottom-right), the token sequence of shape \shape{(1, 4, 2)} is
+\[
+\begin{pmatrix}2.5 & -2\\ 0.5 & 0\\ 0.5 & 0\\ 2 & 0\end{pmatrix}.
+\]
+Each row is one token: ``how bright'' and ``how much brighter on the left''. PyTorch gives the same
+matrix\tagC. In the real model the 32 recipes are learned, not chosen.
+\end{worked}
+
+\subsection{Why the module returns the grid size}
+
+After \code{flatten(2)}, the fact that the 1024 tokens came from a $32\times32$ grid is gone from the
+tensor's shape. Later modules need it: attention's spatial reduction (\cref{ch:esa}) and the
+feed-forward network's depthwise convolution (\cref{ch:block}) both reshape the token list back into a
+grid, do something spatial, and flatten again. So the module returns \code{H_dash} and \code{W_dash}
+alongside the tokens, and you will see \code{forward(self, x, H, W)} in every later signature.
+
+%======================================================================
+\section{LayerNorm: each token standardised on its own}\label{sec:patchembed:ln}
+
+The last line of the module is a LayerNorm \citep{ba2016layer}. It looks like BatchNorm
+(\cref{ch:compressor}) and differs from it in one decisive way: the axis it averages over.
+
+\begin{definition}[Layer normalisation]
+For one token $\vect{t} = (t_1,\dots,t_C)$, \emph{layer normalisation}\index{layer normalisation}
+computes the mean and the (biased) variance of that token's own $C$ features,
+\begin{equation}\label{eq:patchembed:lnstats}
+\mu = \frac{1}{C}\sum_{f=1}^{C} t_f,\qquad
+\sigma^2 = \frac{1}{C}\sum_{f=1}^{C} (t_f - \mu)^2,
+\end{equation}
+standardises, and applies a learned scale $\gamma_f$ and shift $\beta_f$ \emph{per feature}:
+\begin{equation}\label{eq:patchembed:ln}
+\LN(\vect{t})_f = \gamma_f\,\frac{t_f - \mu}{\sqrt{\sigma^2 + \varepsilon}} + \beta_f,\qquad
+\varepsilon = 10^{-5}.
+\end{equation}
+\end{definition}
+
+\begin{center}
+\begin{tabular}{lll}
+\toprule
+& BatchNorm (\cref{ch:compressor}) & LayerNorm\\
+\midrule
+statistics computed over & the batch and all pixels, per channel & one token's features\\
+one output depends on & other examples in the batch & its own token only\\
+train and eval behave & differently (running statistics) & identically\\
+learned parameters & $2\times$ channels & $2\times$ features\\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\begin{worked}[label={we:patchembed:ln}]{LayerNorm on a four-number token}
+Token $\vect{t} = (2,\ 4,\ 4,\ 6)$, with $\gamma = (1,1,1,1)$ and $\beta = (0,0,0,0)$, the initial
+values. Do this on paper.
+
+Mean of the token's own features:
+\begin{align*}
+2 + 4 + 4 + 6 &= 16,\\
+\mu &= 16/4 = 4.
+\end{align*}
+Deviations: $2-4 = -2$, $4-4 = 0$, $4-4 = 0$, $6-4 = 2$. Squares: $4,\ 0,\ 0,\ 4$. Sum:
+\[
+4 + 0 + 0 + 4 = 8.
+\]
+Variance:
+\[
+\sigma^2 = 8/4 = 2.
+\]
+Denominator (the $\varepsilon$ changes only the sixth decimal):
+\[
+\sqrt{2 + 0.00001} = 1.41422.
+\]
+Outputs:
+\begin{align*}
+-2/1.41422 &= -1.4142, & 0/1.41422 &= 0,\\
+0/1.41422 &= 0, & 2/1.41422 &= 1.4142.
+\end{align*}
+Now let training have moved the parameters to $\gamma = (1,1,2,2)$ and $\beta = (0,0,0,1)$. Apply
+\cref{eq:patchembed:ln} feature by feature:
+\begin{align*}
+1\times(-1.4142) + 0 &= -1.4142,\\
+1\times0 + 0 &= 0,\\
+2\times0 + 0 &= 0,\\
+2\times1.4142 + 1 &= 2.8284 + 1 = 3.8284.
+\end{align*}
+PyTorch gives $(-1.4142, 0, 0, 1.4142)$ and $(-1.4142, 0, 0, 3.8284)$\tagC.
+\end{worked}
+
+\subsection{What LayerNorm keeps and what it discards}
+
+LayerNorm keeps the \emph{pattern} across a token's features and discards the token's overall level and
+spread. Two tokens that differ only by a constant shift or a positive scale come out identical: for
+$\vect{t}' = a\vect{t} + c$ with $a>0$, the mean becomes $a\mu + c$, the deviations become
+$a(t_f-\mu)$, the standard deviation becomes $a\sigma$, and the ratio is unchanged (up to $\varepsilon$).
+The tiny tokens of \cref{we:patchembed:tiny} show the extreme case. With only two features, every token
+whose two values differ normalises to $(1, -1)$ or $(-1, 1)$:
+\begin{align*}
+(2.5,\ -2):&\quad \mu = 0.25,\ \text{deviations } \pm2.25,\ \sigma = 2.25 \ \Rightarrow\ (1,\ -1),\\
+(0.5,\ 0):&\quad \mu = 0.25,\ \text{deviations } \pm0.25,\ \sigma = 0.25 \ \Rightarrow\ (1,\ -1),
+\end{align*}
+up to the fifth decimal (the $\varepsilon$ matters slightly when $\sigma$ is small: PyTorch gives
+$0.99992$ for the second\tagC). A bright block with a strong left-right edge and a faint flat block become indistinguishable. With 32
+features the loss is far milder, since only 2 of 32 degrees of freedom are removed, but the lesson
+stands: after LayerNorm, a token's absolute brightness lives only in how its features differ from one
+another. The learned $\gamma$ and $\beta$ can restore a fixed scale and offset per feature, not the
+per-token ones.
+
+\subsection{Why LayerNorm and not BatchNorm here}
+
+The code's own comment: ``BatchNorm normalizes across the batch per-channel -- wrong for sequences''.
+Two reasons make it concrete for this model. First, BatchNorm couples each token's output to whatever
+else is in the batch, so a scene would be encoded differently depending on its batch-mates. Second,
+masking (\cref{ch:masking}) deletes a different random set of tokens in every patch, so the set of
+tokens a batch statistic would be computed over changes from step to step; LayerNorm, which never looks
+beyond one token, is indifferent to how many tokens survive.
+
+%======================================================================
+\section{Four stages, two kinds of window}\label{sec:patchembed:stages}
+
+Every encoder stage begins with its own patch embedding. Stages~2 to~4 do not cut up the original
+image; they cut up the previous stage's output grid, after it has been reshaped back to
+\shape{(B, C, H, W)}. The encoder builds them in
+\file{app/foundation_models/components/seg_former_encoder.py}, lines~108--123:
+\begin{lstlisting}
+for i in range(self.num_stages):
+    c_in = in_channels if i == 0 else embed_dims[i - 1]
+    patch_size = 4 if i == 0 else 3
+    stride = 4 if i == 0 else 2
+    padding = 0 if i == 0 else None      # None means patch_size // 2
+\end{lstlisting}
+with \code{embed_dims = [32, 64, 160, 256]} and, for Indradhanu, \code{in_channels} $= D = 32$.
+
+\begin{table}[htbp]\centering\small
+\caption{The four patch embeddings for a $128\times128$ patch. Sizes from \cref{eq:shapes:outsize};
+every shape checked by running the real encoder (\texttt{tools/compute\_shapes.py}).}
+\label{tab:patchembed:stages}
+\begin{tabular}{ccccccll}
+\toprule
+stage & $k$ & $s$ & $p$ & in & grid & input shape & tokens out\\
+\midrule
+1 & 4 & 4 & 0 & 32 & $128\to32$ & \shape{(B, 32, 128, 128)} & \shape{(B, 1024, 32)}\\
+2 & 3 & 2 & 1 & 32 & $32\to16$ & \shape{(B, 32, 32, 32)} & \shape{(B, 256, 64)}\\
+3 & 3 & 2 & 1 & 64 & $16\to8$ & \shape{(B, 64, 16, 16)} & \shape{(B, 64, 160)}\\
+4 & 3 & 2 & 1 & 160 & $8\to4$ & \shape{(B, 160, 8, 8)} & \shape{(B, 16, 256)}\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Each stage halves the grid in each direction, so the token count falls by four each time: 1024, 256,
+64, 16. Meanwhile the token width grows: 32, 64, 160, 256. Fewer, richer tokens at coarser scales.
+
+\subsection{Overlapping and non-overlapping windows}\label{sec:patchembed:overlap}
+
+When $k = s$ the windows tile the input: each pixel belongs to exactly one window. When $k > s$ they
+overlap by $k - s$ pixels, and a pixel can feed several tokens. Plain Vision Transformers use
+non-overlapping windows; SegFormer \citep{xie2021segformer} normally overlaps them, which preserves
+continuity across token boundaries and avoids visible seams. That is where the module's name,
+\emph{Overlap}PatchEmbedding, comes from.
+
+Indradhanu uses both, on purpose. Stages~2 to~4 overlap ($k=3$, $s=2$, overlap 1). Stage~1 does not
+($k = s = 4$, $p = 0$). The encoder's comment gives the reason in one line: ``NON-OVERLAPPING - zero
+information leakage for MAE token removal. Each token sees exactly its own 4x4 block.''
+
+\coursefig[\linewidth]{iw-11-patch-embed}{Turning pixels into tokens. (a) At stage~1 a \texttt{Conv2d}
+with kernel~4 and stride~4 summarises each $4\times4$ block of the 32-channel input as one 32-number
+token (amber: one block and its token), giving a $32\times32$ token grid that is flattened to 1{,}024
+tokens. (b) Stage~1's windows tile exactly, so each pixel feeds one token, which hiding requires; stages
+2 to 4 use kernel~3, stride~2, padding~1, whose windows overlap by one. (Course figure IW~11.1.)}{fig:patchembed:overview}
+
+\subsection{Why stage 1 must not overlap: counting the leak}
+
+Stage~1 is the only place where tokens are hidden (\cref{ch:recon,ch:masking}). Suppose stage~1's
+windows overlapped. Hide token $B$, keep its neighbour $A$; any pixel of $B$'s block that also lies in
+$A$'s window still reaches the encoder through $A$. The model could partly see what it is graded on,
+and by \cref{eq:recon:shrink} every such leak shrinks the anomaly evidence.
+
+You can count the leak along one axis. A window of token $n$ starts at padded position $ns$, that is at
+original pixel $ns - p$, and covers $k$ pixels. Count how many windows cover each pixel.
+
+\begin{worked}[label={we:patchembed:leak}]{How many windows see each pixel}
+Pixels $0$ to $11$ of one row.
+
+The real stage~1, $k=4$, $s=4$, $p=0$. Windows: $n=0$ covers $0..3$, $n=1$ covers $4..7$, $n=2$ covers
+$8..11$. Every pixel is in exactly one window:
+\[
+1\ 1\ 1\ 1\ \ 1\ 1\ 1\ 1\ \ 1\ 1\ 1\ 1 .
+\]
+The stale design, $k=7$, $s=4$, $p=3$. Window $n$ covers $4n-3$ to $4n+3$: $n=0$ covers $-3..3$ (only
+$0..3$ are real), $n=1$ covers $1..7$, $n=2$ covers $5..11$, $n=3$ covers $9..15$. Counting:
+\[
+1\ 2\ 2\ 2\ \ 1\ 2\ 2\ 2\ \ 1\ 2\ 2\ 2 .
+\]
+Take token $n=1$, whose own block is pixels $4..7$. Pixels $5$, $6$ and $7$ also lie in window $n=2$. If
+token~1 is hidden and token~2 is visible, three of the hidden block's four pixels per row still reach the
+encoder. In two dimensions the same happens along both axes.
+
+Stages~2 to~4, $k=3$, $s=2$, $p=1$. Window $n$ covers $2n-1$ to $2n+1$, and the counts alternate:
+\[
+1\ 2\ 1\ 2\ \ 1\ 2\ 1\ 2\ \ 1\ 2\ 1\ 2 .
+\]
+Half the pixels feed two tokens. That is harmless there, because nothing is hidden after stage~1.
+The compute script reproduces all three rows\tagC.
+\end{worked}
+
+The average number of windows covering a pixel is $k/s$ per axis: $4/4 = 1$ for the real stage~1,
+$7/4 = 1.75$ for the stale design, $3/2 = 1.5$ for stages~2 to~4. In two dimensions square it: $1$,
+$3.06$ and $2.25$.
+
+There is a second, quieter reason for $p=0$ at stage~1: the masking code turns a token mask into a pixel
+mask by blowing each token up into a $4\times4$ block of pixels (\cref{ch:masking}). That is exact only
+when token $(i,j)$ is computed from pixels $4i..4i+3$ by $4j..4j+3$ and nothing else, which is what
+$k=s=4$, $p=0$ guarantees. \Cref{we:shapes:pad} showed that the default padding $p=2$ would even change
+the grid to $33\times33$.
+
+\begin{sourcenote}[: stale ``kernel 7'' descriptions of stage 1]
+The encoder builds stage~1 with kernel~4, stride~4, padding~0
+(\file{app/foundation_models/components/seg_former_encoder.py}, lines~110--114; confirmed by
+printing the built module: \code{Conv2d(32, 32, kernel_size=(4, 4), stride=(4, 4))}\tagC). Three
+pieces of prose disagree:
+\begin{itemize}
+\item the header of \file{app/foundation_models/components/overlap_patch_embedding.py} (lines~8--10):
+  ``Example for Stage 1 \ldots{} kernel=7, stride=4 -> overlap = 7 - 4 = 3 pixels shared between
+  neighbors, (B, 1, 128, 128) -> (B, 1024, 64)''. Kernel, overlap, input channels and token width are
+  all stale; the real stage~1 maps \shape{(B, 32, 128, 128)} to \shape{(B, 1024, 32)} with no overlap;
+\item the class docstring of the same file (line~27) describes the convolution as using
+  \code{padding=patch_size//2}, which is false for stage~1;
+\item the docstring of \code{erode_mask} in \file{app/foundation_models/components/token_masking.py}
+  (lines~47--62): ``Should match OPE kernel\_size (7 for Stage 1)'', with a worked example built on a
+  $7\times7$ kernel.
+\end{itemize}
+The prose is left over from an earlier design that used overlapping stage-1 patches; it was changed,
+presumably to close exactly the leak of \cref{we:patchembed:leak}, and the comments were not updated.
+The code is right and the comments are stale. Do not ``fix'' the code to match them.
+\end{sourcenote}
+
+%======================================================================
+\section{Parameter counts, derived and checked}\label{sec:patchembed:count}
+
+Two formulas from earlier chapters:
+\begin{align*}
+\text{Conv2d}(c_{\text{in}}, c_{\text{out}}, k) &: \quad c_{\text{in}}\cdot c_{\text{out}}\cdot k\cdot k + c_{\text{out}},\\
+\text{LayerNorm}(c) &: \quad 2c \quad (\text{one } \gamma \text{ and one } \beta \text{ per feature}).
+\end{align*}
+
+\begin{worked}[label={we:patchembed:count}]{All four patch embeddings}
+Stage~1, $32\to32$, $k=4$:
+\begin{align*}
+\text{weights} &= 32\times32\times4\times4 = 1{,}024\times16 = 16{,}384,\\
+\text{biases} &= 32,\\
+\text{conv} &= 16{,}384 + 32 = 16{,}416,\\
+\text{LayerNorm} &= 2\times32 = 64,\\
+\text{stage 1} &= 16{,}416 + 64 = 16{,}480.
+\end{align*}
+Stage~2, $32\to64$, $k=3$:
+\begin{align*}
+\text{weights} &= 32\times64\times9 = 2{,}048\times9 = 18{,}432,\\
+\text{conv} &= 18{,}432 + 64 = 18{,}496,\\
+\text{stage 2} &= 18{,}496 + 2\times64 = 18{,}496 + 128 = 18{,}624.
+\end{align*}
+Stage~3, $64\to160$, $k=3$:
+\begin{align*}
+\text{weights} &= 64\times160\times9 = 10{,}240\times9 = 92{,}160,\\
+\text{conv} &= 92{,}160 + 160 = 92{,}320,\\
+\text{stage 3} &= 92{,}320 + 2\times160 = 92{,}320 + 320 = 92{,}640.
+\end{align*}
+Stage~4, $160\to256$, $k=3$:
+\begin{align*}
+\text{weights} &= 160\times256\times9 = 40{,}960\times9 = 368{,}640,\\
+\text{conv} &= 368{,}640 + 256 = 368{,}896,\\
+\text{stage 4} &= 368{,}896 + 2\times256 = 368{,}896 + 512 = 369{,}408.
+\end{align*}
+All four:
+\begin{align*}
+16{,}480 + 18{,}624 &= 35{,}104,\\
+35{,}104 + 92{,}640 &= 127{,}744,\\
+127{,}744 + 369{,}408 &= 497{,}152.
+\end{align*}
+\end{worked}
+
+\begin{table}[htbp]\centering\small
+\caption{Patch-embedding parameters: by hand, in the \texttt{torchinfo} table of
+\texttt{research/model\_break\_down/05\_hyperspectral\_segformer\_mae.md}, and from the built model.}
+\label{tab:patchembed:count}
+\begin{tabular}{cllrrr}
+\toprule
+stage & conv & conv params & LN & total & torchinfo\\
+\midrule
+1 & $32\to32$, $k=4$ & 16{,}416 & 64 & 16{,}480 & 16{,}480\\
+2 & $32\to64$, $k=3$ & 18{,}496 & 128 & 18{,}624 & 18{,}624\\
+3 & $64\to160$, $k=3$ & 92{,}320 & 320 & 92{,}640 & 92{,}640\\
+4 & $160\to256$, $k=3$ & 368{,}896 & 512 & 369{,}408 & 369{,}408\\
+\midrule
+& & & & 497{,}152 & \\
+\bottomrule
+\end{tabular}
+
+\smallskip
+torchinfo column\tagM{research/model_break_down/05_hyperspectral_segformer_mae.md}
+\end{table}
+
+All four match the \code{torchinfo} table and the built model\tagC. The four patch embeddings are $497{,}152/5{,}506{,}629 \approx 9.0\%$ of the
+model, and stage~4's alone is three quarters of that: its kernel sees $160\times9 = 1{,}440$ inputs per
+output, and it has 256 outputs. Do not confuse these LayerNorms with the separate LayerNorm at the
+\emph{end} of each stage (64, 128, 320 and 512 parameters, \code{self.norms} in the encoder), which
+\cref{ch:encoder} covers.
+
+\subsection{What the compressor bought, in this layer}
+
+Without the spectral compressor, stage~1 would read 165 channels:
+\begin{align*}
+165\times32\times16 &= 84{,}480,\\
+84{,}480 + 32 &= 84{,}512 \text{ (conv)},\\
+84{,}512 + 64 &= 84{,}576 \text{ (with LayerNorm)}.
+\end{align*}
+Against 16{,}480, that is $84{,}576/16{,}480 \approx 5.1$ times as many parameters, on the stage that
+runs at the finest resolution\tagC. The compressor itself costs 5{,}376 (\cref{ch:compressor}), so the
+trade saves $84{,}576 - 16{,}480 - 5{,}376 = 62{,}720$ parameters here, besides the memory.
+
+%======================================================================
+\begin{confusions}
+\confusion{Is a token the same as a pixel?}{No. At stage~1 one token summarises a $4\times4$ block, 16
+pixels. At stage~4 the grid spacing is 32 pixels (\cref{ch:shapes}).}
+\confusion{Does every stage cut the original image into blocks?}{No. Only stage~1 reads the
+(compressed) image. Stages~2 to~4 cut up the previous stage's output grid.}
+\confusion{Why ``Overlap'' patch embedding when stage 1 does not overlap?}{The module is SegFormer's,
+whose default is to overlap. Indradhanu passes $k=s=4$, $p=0$ at stage~1 to switch the overlap off
+there, and keeps it at stages~2 to~4.}
+\confusion{Could a plain reshape replace the convolution?}{A reshape can cut the blocks out, and the
+original Vision Transformer then applied a linear layer to each, which is the same computation as the
+non-overlapping convolution (\cref{eq:patchembed:linear}). A reshape alone would give 512-number tokens
+with no learned summary.}
+\confusion{Does LayerNorm mix information between tokens?}{No. Each token is standardised using only
+its own features; the transformer blocks do the mixing.}
+\end{confusions}
+
+\begin{checkyourself}
+\item\label{ex:patchembed:1} How many stage-1 tokens does a $96\times96$ patch produce? How many
+tokens at each of stages~2 to~4?
+\item\label{ex:patchembed:2} Compute the parameters of \code{Conv2d(64, 160, kernel_size=3)} plus its
+LayerNorm, and of a hypothetical stage~1 that read 24 compressed channels ($24\to32$, $k=4$).
+\item\label{ex:patchembed:3} Apply LayerNorm (with $\gamma = 1$, $\beta = 0$, $\varepsilon$
+negligible) to the token $(1,\ 3,\ 5,\ 7)$. Then to $(10,\ 30,\ 50,\ 70)$. Explain the result.
+\item\label{ex:patchembed:4} Repeat the tiny patch embedding of \cref{we:patchembed:tiny} for the image
+\[
+\begin{pmatrix}4&0&1&1\\4&0&1&1\\2&2&0&3\\2&2&0&3\end{pmatrix},
+\]
+giving the token sequence.
+\item\label{ex:patchembed:5} For a 1-D stage-1 design with $k=6$, $s=4$, $p=1$, list which pixels
+$0..11$ each window covers and count the windows per pixel. If token~1 is hidden and its neighbours are
+visible, how many of its block's four pixels leak?
+\item\label{ex:patchembed:6} Why does \code{OverlapPatchEmbedding} return \code{H_dash} and
+\code{W_dash}, and why does it use LayerNorm rather than BatchNorm?
+\end{checkyourself}
+
+\nextchapter{ch:attention}

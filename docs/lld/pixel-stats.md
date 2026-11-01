@@ -11,7 +11,8 @@ there is more than one.
 ## The problem it solves
 
 Normalisation turns raw sensor values into something a network can learn from. A thermal
-model trained on Landsat sees Celsius, roughly 290 plus or minus 10. Feed the same model
+model trained on Landsat sees Celsius: Chakshu's stored statistics are 24.58 plus or minus 13.57 (an earlier
+version of this page said "290 plus or minus 10", which is Kelvin-sized and wrong). Feed the same model
 HotSat-1, which ships raw digital numbers around 5000 plus or minus 400, and the input is
 nowhere near the distribution it learned.
 
@@ -20,13 +21,13 @@ Celsius figures:
 
 ```
 HotSat DN value       = 5000
-baked-in mean         =  290
-baked-in std          =   10
+baked-in mean         =  24.58
+baked-in std          =  13.57
 
-(5000 - 290) / 10     = 471.0
+(5000 - 24.58) / 13.57 = 366.6
 ```
 
-A network that saw inputs in roughly the -3 to +3 range during training now receives 471.
+A network that saw inputs in roughly the -3 to +3 range during training now receives 366.6.
 It does not degrade gracefully; it reconstructs noise, and since the anomaly score is the
 reconstruction error, every pixel looks anomalous and none of them usefully so.
 
@@ -64,6 +65,17 @@ one std; `hyperspectral.json` holds 165 of each, one per band on the common grid
 ## Invariants
 
 **The override wins outright. It never merges with the file, and never falls back to it.**
+
+Two fixes on 2026-10-31 made this true in practice. Until then:
+- **The checkpoint overwrote the override.** `FoundationInferencer._load_weights` loaded the checkpoint's
+  `PixelNormalize` / `PixelDenormalize` buffers over the ones `build_model` had set from the override, so runs with
+  and without it were identical. It now keeps those buffers when `pixel_stats_override` is set, loads everything
+  else, and refuses any other missing key.
+- **HotSat-1's `units` were dropped.** `VendableThermalDataset` had no `units` field, so the `DN_` test that switches
+  the override on never fired. The field now exists, but HotSat-1 scenes onboarded before 2026-10-31 still lack it
+  and must be onboarded again.
+
+Tests: `tests/test_pixel_stats_override_load.py`.
 
 That is not a stylistic choice. When `_anomaly_scoring_run.py` sets an override it also sets
 `pixel_stats_path=None`, precisely so the baked figures cannot be read. If this function

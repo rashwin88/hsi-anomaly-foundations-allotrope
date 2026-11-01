@@ -49,11 +49,15 @@ SENSOR_MODULES = [
     "app.utils.files.enmap_helper",
     "app.utils.files.envi_helper",
     "app.utils.files.hotsat_helper",
+    "app.utils.files.tanager_helper",
+    "app.utils.files.generic_hsi_helper",
     "app.utils.dataset_builder.prisma_dataset_builder",
     "app.utils.dataset_builder.enmap_dataset_builder",
     "app.utils.dataset_builder.landsat_dataset_builder",
     "app.utils.dataset_builder.aviris_ng_dataset_builder",
     "app.utils.dataset_builder.hotsat_dataset_builder",
+    "app.utils.dataset_builder.tanager_dataset_builder",
+    "app.utils.dataset_builder.generic_hsi_dataset_builder",
 ]
 
 

@@ -1,0 +1,5 @@
+cls idx recallC recallB precC precB
+clear 0 89.0 89.4 88.1 90.8
+cloud 1 87.1 80.4 77.8 84.2
+cirrus 2 28.9 67.9 55.5 55.6
+snow 3 86.5 96.8 93.5 91.0

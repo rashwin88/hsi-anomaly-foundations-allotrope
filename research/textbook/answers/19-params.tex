@@ -1,0 +1,61 @@
+\answersfor{ch:params}
+
+\begin{solution}{ex:params:1}
+Full convolution: $64 \times 128 \times 9 + 128 = 73{,}728 + 128 = 73{,}856$. Depthwise:
+$64 \times 9 + 64 = 576 + 64 = 640$. Ratio: $73{,}856 / 640 \approx 115$ times fewer.
+\end{solution}
+
+\begin{solution}{ex:params:2}
+Formula, $C = 128$, $R = 4$:
+\begin{align*}
+12 C^2 &= 12 \times 16{,}384 = 196{,}608, & 53 C &= 53 \times 128 = 6{,}784,\\
+R^2 C^2 &= 16 \times 16{,}384 = 262{,}144, & 3C &= 384,\\
+P &= 196{,}608 + 6{,}784 + 262{,}144 + 384 = 465{,}920 .
+\end{align*}
+Piece by piece:
+\begin{align*}
+\text{q, k, v, out} &= 4 \times (128 \times 128 + 128) = 4 \times 16{,}512 = 66{,}048\\
+\text{reduction conv} &= 128 \times 128 \times 16 + 128 = 262{,}144 + 128 = 262{,}272\\
+\text{reduction norm} &= 2 \times 128 = 256\\
+\text{fc1} &= 128 \times 512 + 512 = 65{,}536 + 512 = 66{,}048\\
+\text{depthwise} &= 512 \times 9 + 512 = 4{,}608 + 512 = 5{,}120\\
+\text{fc2} &= 512 \times 128 + 128 = 65{,}536 + 128 = 65{,}664\\
+\text{two LayerNorms} &= 4 \times 128 = 512
+\end{align*}
+Sum: $66{,}048 + 262{,}272 = 328{,}320$; $+ 256 = 328{,}576$; $+ 66{,}048 = 394{,}624$; $+ 5{,}120 =
+399{,}744$; $+ 65{,}664 = 465{,}408$; $+ 512 = 465{,}920$. The two agree.
+\end{solution}
+
+\begin{solution}{ex:params:3}
+One more stage-4 block adds $P_{\text{block}}(256, 1) = 800{,}000$ parameters. The model grows from
+5,506,629 to $5{,}506{,}629 + 800{,}000 = 6{,}306{,}629$; the addition is $800{,}000 / 5{,}506{,}629
+\approx 0.145$, about 14.5\% of the original model, for a block that processes 16 tokens.
+\end{solution}
+
+\begin{solution}{ex:params:4}
+With decoder width 128 the decoder becomes:
+\begin{align*}
+\text{projections} &= (32 + 64 + 160 + 256) \times 128 + 4 \times 128 = 65{,}536 + 512 = 66{,}048\\
+\text{fuse} &= (4 \times 128) \times 128 + 128 = 65{,}536 + 128 = 65{,}664\\
+\text{refine 1} &= 128 \times 128 \times 9 + 128 = 147{,}456 + 128 = 147{,}584\\
+\text{refine 2} &= 128 \times 512 \times 9 + 512 = 589{,}824 + 512 = 590{,}336
+\end{align*}
+Decoder: $66{,}048 + 65{,}664 + 147{,}584 + 590{,}336 = 869{,}632$. Model:
+$5{,}506{,}629 - 2{,}164{,}736 + 869{,}632 = 4{,}211{,}525$. The largest single saving is refine 2,
+$1{,}180{,}160 - 590{,}336 = 589{,}824$; refine 1 saves $590{,}080 - 147{,}584 = 442{,}496$ (it shrinks
+by a factor 4 because both its widths halve, refine 2 only by 2 because its output stays at 512).
+\end{solution}
+
+\begin{solution}{ex:params:5}
+Normaliser mean and standard deviation, denormaliser mean and standard deviation: $4 \times 165 = 660$.
+The compressor's BatchNorm: running mean 32, running variance 32, batch counter 1, total 65.
+$660 + 65 = 725$ and $5{,}506{,}629 + 725 = 5{,}507{,}354$.
+\end{solution}
+
+\begin{solution}{ex:params:6}
+Compressor: $165 \times 32 = 5{,}280$ multiply-adds per pixel, $\times 16{,}384$ pixels $=
+86{,}507{,}520$. Fuse: $1{,}024 \times 256 = 262{,}144$ per position, $\times 1{,}024$ positions $=
+268{,}435{,}456$. The fuse does more, by $268{,}435{,}456 / 86{,}507{,}520 \approx 3.1$. It has about 49
+times the compressor's parameters but runs at 16 times fewer positions, so it does about $49/16 \approx
+3$ times the work.
+\end{solution}

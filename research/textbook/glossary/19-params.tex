@@ -1,0 +1,14 @@
+\glossentry{Parameter}{One number that training adjusts by gradient: a single weight or bias.}
+\glossentry{Buffer}{A number saved in the model file that training does not adjust by gradient, such as normalisation statistics and BatchNorm running statistics.}
+\glossentry{Parameter count}{The total number of parameters; 5,506,629 for the 165-band Indradhanu v0.2.0.}
+\glossentry{Convolution parameter rule}{A convolution has c\_in times c\_out times k squared weights plus c\_out biases.}
+\glossentry{Depthwise parameter rule}{A depthwise convolution over c channels has c times k squared weights plus c biases.}
+\glossentry{LayerNorm parameters}{One learned scale and one learned shift per feature: 2c numbers.}
+\glossentry{BatchNorm running statistics}{A running mean and variance per channel and one batch counter, kept as buffers for evaluation.}
+\glossentry{Block parameter formula}{One transformer block of width C, reduction ratio R and expansion 4 has 12 C squared + 53 C parameters, plus R squared C squared + 3C when R is above 1.}
+\glossentry{Manifest parameter figure}{The count recorded with a checkpoint; it includes buffers, so it exceeds the trainable count (5,507,354 against 5,506,629).}
+\glossentry{Multiply-adds}{The work of a layer: its weights per output position times the number of positions. Not the same as its parameter count.}
+\glossentry{Idle parameters}{The 133,824 stage-1 weights (reduction convolutions, their norms and the depthwise convolutions) that receive no gradient in a masked pass because their layers are skipped.}
+\glossentry{torchinfo}{A PyTorch library that prints a per-layer table of shapes, parameter counts and multiply-adds.}
+\glossentry{Spectral-stem model}{The wavelength-aware variant of Indradhanu (V2) that replaces the fixed 165-band compressor and decompressor; same encoder and decoder classes.}
+\glossentry{Indradhanu Heavy}{The widened model (stage widths 96 to 768, progressive decoder) shipped as Indradhanu V2 v2.1.0; about 35.3 million parameters.}

@@ -1,0 +1,28 @@
+\answersfor{ch:hslverdict}
+
+\begin{solution}{ex:hslverdict:1}
+Matching: per-scene min-max scaling, which gives a library spectrum no input (\cref{ch:hslnorm}). Detection: band masking
+within a pixel, so the pixel completes itself (\cref{ch:hsldetect}). Unmixing: the $3\times3$ head and the TV penalty, which
+shrink small targets to zero (\cref{ch:hslunmix}). Cloud: pretraining on near-cloud-free scenes, compounded by min-max
+turning one cirrus layer into a different step per scene (\cref{ch:hslcloud}).
+\end{solution}
+
+\begin{solution}{ex:hslverdict:2}
+Only item 6 (publishing the data and a licence), and that needs the authors, not us. Items 1--5 change what the weights
+were trained to read or do: the input scaling, the first layer, the masking, the data, the heads. Weights trained under the
+old choices are off-distribution under new ones; \cref{sec:hslwhat:repro} measured how far (wavelengths in micrometres raised
+the loss from 0.0024 to 0.173; per-spectrum scaling roughly doubled it).
+\end{solution}
+
+\begin{solution}{ex:hslverdict:3}
+$449-369=80$ objects; $80/909=0.088$, 8.8 points. The bootstrap row ``HyperSL RM $-$ FTH3 ep.\ 5, cloud excl.'' gives
+$-8.8$ points, interval $[-11.7,-6.2]$: the same number, resolved.
+\end{solution}
+
+\begin{solution}{ex:hslverdict:4}
+(1) Library grouping, 0.965 against 0.949: grouping entries is not naming anomalies, where it lost. (2) Thick-cloud recall
+87.1\% against 80.4\%: thick cloud is the easy class, and cirrus, the hard one, fell to 28.9\%. (3) Fewer plateau false calls,
+4.34\% against 6.62\%: a smaller error on a corrected subset does not outweigh losing 39 points of cirrus. (4) The
+false-alarm filter with a hindsight cut: the honest cut lost up to 58\% of objects. (5) Agreement with FCLS references on
+Samson, Jasper and Urban: those references are themselves unmixings, and on exact truth it lost every set.
+\end{solution}

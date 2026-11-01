@@ -1,0 +1,533 @@
+\chapter{The cross-attention compressor, dead bands and what it costs}\label{ch:crossstem}
+
+\begin{onething}
+Thirty-two learned queries attend over a pixel's band tokens and each answer becomes one output channel; the result has almost exactly the parameters of the 1$\times$1 convolution it replaces (5,345 against 5,376), skips a dead band exactly by setting its score to $-\infty$, and costs about 163 times the arithmetic and hundreds of mebibytes of memory per patch, which is where the design meets its wall.
+\end{onething}
+
+\Cref{ch:ceiling} set three requirements for a replacement of the spectral compressor (per-pixel adaptivity, exact skipping of a broken band, any band list) and supplied two ingredients: cross-attention and band tokens that carry their wavelength. This chapter assembles the ingredients into a working module, \code{SpectralCrossAttentionCompressor} in \code{app/foundation_models/components/spectral_attention.py}, and then does three things to it with a pencil. It counts the parameters by hand and checks the count against the real module (\cref{sec:crossstem:params}). It proves the masking trick that removes a dead band exactly (\cref{sec:crossstem:mask}). And it counts the arithmetic and the bytes (\cref{sec:crossstem:cost,sec:crossstem:memory}), which turn out to be the real story: the module has the parameter budget of the old compressor and the appetite of something a hundred times larger.
+
+One design rule runs through the chapter: \textbf{change one thing, measure it.} The new compressor hands the SegFormer encoder exactly the tensor the old one did, \shape{(B, 32, H, W)}, so everything downstream (\cref{ch:encoder,ch:decoder}) stays as it is.
+
+%-----------------------------------------------------------------------------
+\section{The data flow for one pixel}\label{sec:crossstem:flow}
+
+Follow one SpectralEarth pixel through the module. Its spectrum is 202 normalised reflectances.
+
+\begin{enumerate}
+\item \emph{Tokenise} (\cref{ch:ceiling}, \cref{eq:ceiling:token}). Each band $b$ becomes $\vect{t}_b = v_b\vect{w} + \vect{\beta} + \vect{e}(\lambda_b)$, a vector of $d = 32$ numbers. Shape \shape{(202, 32)}.
+\item \emph{Keys and values.} Two linear layers map every token to a key $\vect{k}_b = \mat{W}_K\vect{t}_b + \vect{b}_K$ and a value $\vect{v}_b = \mat{W}_V\vect{t}_b + \vect{b}_V$. Shapes \shape{(202, 32)} each.
+\item \emph{Queries.} The module stores a table $\mat{Q}_0$ of 32 learned queries, shape \shape{(32, 32)}. A third linear layer projects them, $\mat{Q} = \mat{Q}_0\mat{W}_Q\T + \vect{b}_Q$, still \shape{(32, 32)}. The table does not depend on the pixel, so this projection is the same for every pixel.
+\item \emph{Attend.} The 32 queries attend over the 202 keys with 4 heads (\cref{sec:crossstem:heads}): answers of shape \shape{(32, 32)}, one 32-number answer per query.
+\item \emph{Output projection.} A fourth linear layer $\mat{W}_O$ mixes the heads back together: still \shape{(32, 32)}.
+\item \emph{To channels.} A final \code{Linear(32, 1)}, shared by all 32 answers, turns each answer vector into one number: shape \shape{(32,)}. These are the 32 channels of the compressed pixel.
+\end{enumerate}
+
+\coursefig[0.95\linewidth]{iw-34-cross-comp}{The per-band cross-attention compressor for one pixel. Each of 202 bands becomes a token; keys and values are projected from the tokens; 32 learned queries, shared by every pixel, attend over them with 4 heads, and each answer becomes one output channel. None of the 5,345 parameters depends on the band count.}{fig:crossstem:flow}
+
+\subsection{A whole patch as a batch of pixels}
+
+A \index{batch}\emph{batch} is a set of examples processed together in one tensor (\cref{ch:shapes}). Here the trick is that the \emph{pixels} of a patch are the batch: nothing in the module moves information between pixels, so the $128\times128 = 16{,}384$ pixels of a patch are treated as 16,384 independent rows. In the code this is one \code{permute} and one \code{reshape}:
+
+\begin{table}[htbp]\centering
+\caption{Tensor shapes in the cross-attention compressor for $B$ patches of $128\times128$ pixels and $N = 202$ bands ($P = 16{,}384B$ pixel rows; from \texttt{spectral\_attention.py}, lines 73--94).}\label{tab:crossstem:shapes}
+\begin{tabular}{lll}\toprule
+tensor & shape & note\\\midrule
+input & \shape{(B, 202, 128, 128)} & $B$ patches\\
+pixels as rows & \shape{(P, 202, 1)} & each row one spectrum\\
+tokens & \shape{(P, 202, 32)} & value stretch + wavelength tag\\
+keys, values & \shape{(P, 4, 202, 8)} & 4 heads $\times$ 8 = 32\\
+queries & \shape{(P, 4, 32, 8)} & the same learned queries for every pixel\\
+answers & \shape{(P, 4, 32, 8)} & \\
+after $\mat{W}_O$ & \shape{(P, 32, 32)} & heads joined again\\
+channels & \shape{(P, 32)} $\to$ \shape{(B, 32, 128, 128)} & back to an image\\\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Heads, by reshaping}\label{sec:crossstem:heads}
+
+Multi-head attention (\cref{ch:attention}) splits each 32-number key, value and query into 4 groups of 8 and runs attention separately on each group. In code no new weights appear: the 32 numbers are \emph{viewed} as a \shape{(4, 8)} block and the head axis is moved forward. For keys, line 78 reads
+\begin{lstlisting}
+k = self.k(tokens).view(p, n, self.heads, hd).transpose(1, 2)   # (P, N, 32) -> (P, N, 4, 8) -> (P, 4, N, 8)
+\end{lstlisting}
+\code{view} reinterprets the last axis of 32 as $4\times8$ without copying; \code{transpose(1, 2)} swaps the band axis and the head axis, so each head sees its own \shape{(N, 8)} key matrix. The scale used inside each head is $1/\sqrt{8} = 0.3536$, because $d_k$ in \cref{eq:ceiling:xattn} is now the per-head width 8. The queries are projected once (shape \shape{(4, 32, 8)} after the same reshaping) and then \code{expand}ed to every pixel, which creates a view, not 16,384 copies.
+
+\subsection{The code}
+
+Here is the forward pass of the real module, lightly trimmed (the line numbers are those of \code{spectral_attention.py}):
+
+\begin{lstlisting}
+def forward(self, x, wavelengths_nm, band_valid=None):
+    b, n, h, w = x.shape                                  # x: (B, N, H, W)
+    p, hd = b * h * w, self.d // self.heads               # P pixels, head width 8
+    rows = x.permute(0, 2, 3, 1).reshape(p, n, 1)         # (P, N, 1)
+    wl = _per_pixel_wavelengths(wavelengths_nm.to(x.device), b, h * w)
+    tokens = self.value_embed(rows) + wavelength_encoding(wl, self.d).to(x.dtype)  # (P, N, d)
+    k = self.k(tokens).view(p, n, self.heads, hd).transpose(1, 2)    # (P, h, N, hd)
+    v = self.v(tokens).view(p, n, self.heads, hd).transpose(1, 2)
+    q = self.q(self.queries).view(self.D, self.heads, hd).transpose(0, 1)  # (h, D, hd)
+    q = q.unsqueeze(0).expand(p, -1, -1, -1)                          # (P, h, D, hd)
+    mask, empty = None, None
+    if band_valid is not None:
+        mask = band_valid.permute(0, 2, 3, 1).reshape(p, 1, 1, n)    # True = attend
+        empty = ~mask.any(dim=-1, keepdim=True)                       # (P, 1, 1, 1)
+        mask = mask | empty
+    out = _attend(q, k, v, mask)                                      # (P, h, D, hd)
+    out = self.to_channel(self.o(out.transpose(1, 2).reshape(p, self.D, self.d)))  # (P, D, 1)
+    if empty is not None:
+        out = out.masked_fill(empty.view(p, 1, 1), 0.0)
+    return out.view(b, h, w, self.D).permute(0, 3, 1, 2)              # (B, D, H, W)
+\end{lstlisting}
+
+The two lines about \code{empty} are explained in \cref{sec:crossstem:empty}, and \code{_attend} in \cref{sec:crossstem:chunk}.
+
+%-----------------------------------------------------------------------------
+\section{Predict the parameter count}\label{sec:crossstem:params}
+
+Do this on paper before reading the code. A \index{linear layer}\emph{linear layer} \code{Linear(n_in, n_out)} stores a weight matrix of $n_{\text{out}}\times n_{\text{in}}$ numbers and one bias per output, so
+\begin{equation}\label{eq:crossstem:linear}
+  \text{parameters} = n_{\text{out}}\times n_{\text{in}} + n_{\text{out}} .
+\end{equation}
+A table of learned vectors (\code{nn.Parameter}) has no bias: its count is rows times columns. With $d = 32$ and $D = 32$:
+
+\begin{worked}[label={we:crossstem:params}]{The cross-attention compressor's parameters by hand}
+Apply \cref{eq:crossstem:linear} to every piece. Do it on paper, one line at a time.
+\begin{align*}
+  \text{value stretch, }\texttt{Linear(1, 32)}:&\quad 32\times1 + 32 = 64\\
+  \text{learned queries, table }(32, 32):&\quad 32\times32 = 1{,}024\\
+  \text{Q projection, }\texttt{Linear(32, 32)}:&\quad 32\times32 + 32 = 1{,}024 + 32 = 1{,}056\\
+  \text{K projection, }\texttt{Linear(32, 32)}:&\quad 1{,}056\\
+  \text{V projection, }\texttt{Linear(32, 32)}:&\quad 1{,}056\\
+  \text{output projection, }\texttt{Linear(32, 32)}:&\quad 1{,}056\\
+  \text{to one channel, }\texttt{Linear(32, 1)}:&\quad 1\times32 + 1 = 33
+\end{align*}
+Add them in two steps. The four projections:
+\begin{align*}
+  4\times1{,}056 &= 4{,}224 .
+\end{align*}
+Everything:
+\begin{align*}
+  64 + 1{,}024 + 4{,}224 + 33 &= 1{,}088 + 4{,}224 + 33\\
+  &= 5{,}312 + 33\\
+  &= 5{,}345 .
+\end{align*}
+The wavelength tag contributes nothing: it is a formula (\cref{ch:ceiling}).
+\end{worked}
+
+Instantiating the real module on a CPU and counting its parameters gives\tagC{}
+\begin{lstlisting}
+compressor params 5345
+{'queries': 1024, 'value_embed.weight': 32, 'value_embed.bias': 32, 'q.weight': 1024, 'q.bias': 32,
+ 'k.weight': 1024, 'k.bias': 32, 'v.weight': 1024, 'v.bias': 32, 'o.weight': 1024, 'o.bias': 32,
+ 'to_channel.weight': 32, 'to_channel.bias': 1}
+\end{lstlisting}
+(\file{research/textbook/tools/compute_crossstem.py}, output saved beside it). Your hand count matches line for line, and so does the module's own docstring: ``Parameters at D = d = 32: 5,345, whatever N is.'' The repository pins the figure in a test (\code{docs/lld/spectral-stem.md}, invariant 5).
+
+\subsection{The general formula}
+
+Redo the count with symbols to see what it depends on:
+\begin{align}
+  \text{params}(d, D) &= \underbrace{(d + d)}_{\text{stretch}} + \underbrace{Dd}_{\text{queries}} + \underbrace{4(d^2 + d)}_{\text{Q, K, V, O}} + \underbrace{(d + 1)}_{\text{to channel}} \nonumber\\
+  \intertext{collect the powers of $d$:}
+  &= 4d^2 + Dd + (2 + 4 + 1)d + 1 \nonumber\\
+  &= 4d^2 + Dd + 7d + 1 . \label{eq:crossstem:paramformula}
+\end{align}
+Check at $d = D = 32$:
+\begin{align*}
+  4\times1{,}024 + 32\times32 + 7\times32 + 1 &= 4{,}096 + 1{,}024 + 224 + 1 = 5{,}345 .
+\end{align*}
+Two observations. First, \textbf{the band count $N$ appears nowhere in \cref{eq:crossstem:paramformula}.} Every layer acts on one token at a time with shared weights, or on the fixed query table; no layer has a weight per band. The band count sets how many tokens there are, not how many weights. That is the sensor independence of \cref{ch:ceiling} showing up in the arithmetic. Second, the count is dominated by the $4d^2$ of the projections: halving $d$ roughly quarters the module.
+
+\subsection{Against the old compressor}
+
+\begin{table}[htbp]\centering
+\caption{Old and new spectral compressors, parameters.}\label{tab:crossstem:compare}
+\begin{tabular}{lr}\toprule
+compressor & parameters\\\midrule
+\texttt{Conv2d(165, 32, 1)} + \texttt{BatchNorm2d(32)}: $5{,}280 + 32 + 64$ & 5,376\\
+cross-attention compressor, \cref{we:crossstem:params} & 5,345\\\bottomrule
+\end{tabular}
+\end{table}
+
+Thirty-one fewer. The new compressor is \emph{not bigger}; it spends the same budget differently, on questions and projections instead of one fixed recipe per output.
+
+\begin{sourcenote}[: where the BatchNorm went]
+The old count includes a \code{BatchNorm2d(32)}; the new module has none. That is deliberate and documented: \code{spectral_attention.py}, module docstring, ``No BatchNorm inside; the model adds the BatchNorm2d all variants share.'' In \code{spectral_stem_seg_former_mae.py}, line 75, one \code{nn.BatchNorm2d(D)} sits after \emph{every} stem (design decision 8 of \code{docs/proposals/spectral-attention-bottleneck.md}), so the encoder sees the same kind of input whichever stem produced it. The course's guess that the normalisation ``will come back as a LayerNorm'' did not happen; the shared BatchNorm is what the code does.
+\end{sourcenote}
+
+%-----------------------------------------------------------------------------
+\section{The 1x1 convolution is a special case}\label{sec:crossstem:special}
+
+\Cref{ch:ceiling} claimed that cross-attention is ``the compressor with data-dependent weights''. Here is the derivation, for one output channel $c$ and, to keep the algebra short, one head (the four-head case follows the same steps, \cref{sec:crossstem:fourheads}).
+
+Write the pieces with the names of \cref{sec:crossstem:flow}: $a_{cb}$ is the attention weight that query $c$ gives band $b$; $\mat{W}_V, \vect{b}_V$ the value projection; $\mat{W}_O, \vect{b}_O$ the output projection; $\vect{u}, \gamma$ the weights and bias of \code{to_channel}. Then
+\begin{align}
+  y_c &= \vect{u}\T\Bigl(\mat{W}_O \sum_b a_{cb}\,(\mat{W}_V\vect{t}_b + \vect{b}_V) + \vect{b}_O\Bigr) + \gamma .\nonumber\\
+  \intertext{Move $\vect{u}\T\mat{W}_O$ inside the sum (a matrix times a sum is the sum of the products), and collect the terms that do not depend on $b$ into one constant $C = \vect{u}\T\vect{b}_O + \gamma$:}
+  &= \sum_b a_{cb}\,\vect{r}\T(\mat{W}_V\vect{t}_b + \vect{b}_V) + C, \qquad \vect{r} = \mat{W}_O\T\vect{u}. \nonumber\\
+  \intertext{Substitute the token $\vect{t}_b = v_b\vect{w} + \vect{\beta} + \vect{e}(\lambda_b)$ and split it into the part that carries the measured value and the part that does not:}
+  &= \sum_b a_{cb}\,\bigl(v_b\,\underbrace{\vect{r}\T\mat{W}_V\vect{w}}_{\kappa} + \underbrace{\vect{r}\T(\mat{W}_V(\vect{\beta}+\vect{e}(\lambda_b)) + \vect{b}_V)}_{\phi(\lambda_b)}\bigr) + C \nonumber\\
+  &= \kappa\sum_b a_{cb}\,v_b + \sum_b a_{cb}\,\phi(\lambda_b) + C . \label{eq:crossstem:special}
+\end{align}
+Here $\kappa$ is one number (a row vector times a matrix times a column vector) and $\phi(\lambda_b)$ is one number per wavelength. Put \cref{eq:crossstem:special} beside the 1$\times$1 convolution:
+\begin{align*}
+  \text{1$\times$1 convolution:}\quad & y_c = \sum_b W_{cb}\,v_b + b_c,\\
+  \text{cross-attention, one head:}\quad & y_c = \sum_b \kappa\,a_{cb}(\vect{v})\,v_b + \text{(a wavelength-dependent offset)}.
+\end{align*}
+In the convolution the weight $W_{cb}$ is a fixed number. In attention the weight $\kappa\,a_{cb}(\vect{v})$ is a softmax of scores that depend on the whole spectrum $\vect{v}$, because the keys are computed from the tokens. Freeze the $a_{cb}$ to constants and attention collapses back into a fixed weighted sum. \textbf{The cross-attention compressor is the 1$\times$1 convolution with data-dependent weights}: that is the entire idea, and why it answers the first requirement of \cref{ch:ceiling}.
+
+\begin{worked}[label={we:crossstem:special}]{One channel of a one-head compressor}
+Take three bands with values $\vect{v} = [0.1, 0.4, 0.2]$, a channel with $\kappa = 2$, and suppose the softmax gave $a_{c\cdot} = [0.5, 0.3, 0.2]$ for this pixel. Ignore the offset terms ($\phi = 0$, $C = 0$). Do it on paper.
+\begin{align*}
+  \sum_b a_{cb}v_b &= 0.5\times0.1 + 0.3\times0.4 + 0.2\times0.2\\
+  &= 0.05 + 0.12 + 0.04\\
+  &= 0.21,\\
+  y_c &= 2\times0.21 = 0.42 .
+\end{align*}
+The effective recipe for this pixel is $\kappa a_{c\cdot} = [1.0, 0.6, 0.4]$. A different pixel produces different keys, so different scores and a different softmax, say $[0.2, 0.2, 0.6]$, and therefore a different effective recipe $[0.4, 0.4, 1.2]$. The convolution would have used one recipe for both.
+\end{worked}
+
+\subsection{A limit hidden in the derivation, and why there are four heads}\label{sec:crossstem:fourheads}
+
+Look again at the effective recipe $\kappa a_{cb}$ of one head. The softmax weights $a_{cb}$ are all positive and sum to 1, so the effective weights all have the \emph{sign of $\kappa$}, and they sum to $\kappa$. A single head therefore computes ``$\kappa$ times a weighted average of the bands'', and cannot compute a \emph{difference} such as ``band 40 minus band 41'', which is what a slope or the depth of an absorption dip needs. A 1$\times$1 convolution can: $W_{c,40} = 1$, $W_{c,41} = -1$.
+
+With 4 heads the derivation goes through head by head. The output projection reads the concatenation of the four 8-number head outputs, so $\vect{r} = \mat{W}_O\T\vect{u}$ splits into four blocks $\vect{r}_1, \ldots, \vect{r}_4$ of 8 numbers, each head $h$ has its own value matrix $\mat{W}_V^{(h)}$ (the rows of $\mat{W}_V$ that feed head $h$) and its own weights $a^{(h)}_{cb}$, and
+\begin{equation}\label{eq:crossstem:fourhead}
+  y_c = \sum_{h=1}^{4}\kappa_h\sum_b a^{(h)}_{cb}\,v_b + \text{(offsets)},\qquad \kappa_h = \vect{r}_h\T\mat{W}_V^{(h)}\vect{w}.
+\end{equation}
+Now the four $\kappa_h$ can have different signs, so one channel can be ``head 1's average around 700\,nm minus head 2's average around 680\,nm'': a difference of two data-chosen averages. This is one concrete reason (this book's derivation, not a statement from the course or the code) why the module uses several heads even though, as \cref{sec:crossstem:params} showed, the head count changes no parameter count.
+
+%-----------------------------------------------------------------------------
+\section{Skipping a dead band, exactly}\label{sec:crossstem:mask}
+
+\Cref{ch:ceiling}, \cref{eq:ceiling:contam}, showed that a fixed weighted sum cannot leave an input out: a dead band filled with 0.0 moved the toy output from $-0.50$ to $-0.30$. Attention has a lever the convolution lacks: the weights are \emph{computed}, so one can be forced to zero.
+
+\subsection{Minus infinity in softmax}
+
+Recall the \index{softmax}softmax of a row of scores $s_1, \ldots, s_N$ (\cref{ch:attention}):
+\begin{equation}\label{eq:crossstem:softmax}
+  a_j = \frac{e^{s_j}}{\sum_{k=1}^{N}e^{s_k}} .
+\end{equation}
+Now replace a score by $-\infty$. The exponential of a very negative number is a very small positive number, and it shrinks towards zero without limit: $e^{-10} = 0.0000454$, $e^{-20} = 0.000000002$, and in the limit
+\begin{equation}\label{eq:crossstem:expinf}
+  \lim_{s\to-\infty} e^{s} = 0, \qquad\text{so by convention } e^{-\infty} = 0 .
+\end{equation}
+Floating-point arithmetic follows the convention: \code{torch.exp(torch.tensor(float('-inf')))} is exactly \code{0.}, not a tiny number.
+
+\begin{definition}[Masked softmax]\index{softmax!masked}\index{masking!attention}
+Given scores $s_1, \ldots, s_N$ and a set $\mathcal{V}$ of \emph{valid} positions, the masked softmax sets $s_j = -\infty$ for every $j\notin\mathcal{V}$ and then applies \cref{eq:crossstem:softmax}.
+\end{definition}
+
+What does that give? Every masked position contributes $e^{-\infty} = 0$ to both its own numerator and to the sum in the denominator. So for a valid position $j$,
+\begin{align}
+  a_j &= \frac{e^{s_j}}{\sum_{k\in\mathcal{V}}e^{s_k} + \sum_{k\notin\mathcal{V}}0}
+       = \frac{e^{s_j}}{\sum_{k\in\mathcal{V}}e^{s_k}}, \label{eq:crossstem:renorm}
+\end{align}
+and for a masked position $a_j = 0/(\ldots) = 0$ \emph{exactly}. Read \cref{eq:crossstem:renorm} as a theorem: \textbf{the masked softmax is the ordinary softmax computed over the valid positions only}, as if the masked bands had never existed. Two consequences:
+\begin{itemize}
+\item The surviving weights still sum to 1, because the valid terms are divided by their own sum. This is called \index{renormalisation}\emph{renormalisation}.
+\item The ratio of any two surviving weights is unchanged: $a_i/a_j = e^{s_i}/e^{s_j} = e^{s_i - s_j}$ both before and after masking, because the common denominator cancels. Masking takes the dead band's share and hands it out to the others in proportion to what they already had.
+\end{itemize}
+
+\begin{worked}[label={we:crossstem:mask4}]{Masking a dead band among four}
+Four bands with scores $[2, 1, 0, -1]$. Band 2 (the third, score 0) is dead. Do this on paper.
+
+\emph{Without the mask.} Exponentiate:
+\begin{align*}
+  e^{2} &= 7.3891, & e^{1} &= 2.7183, & e^{0} &= 1.0000, & e^{-1} &= 0.3679 .
+\end{align*}
+Sum:
+\begin{align*}
+  7.3891 + 2.7183 + 1.0000 + 0.3679 &= 11.4753 .
+\end{align*}
+Weights:
+\begin{align*}
+  7.3891/11.4753 &= 0.6439, & 2.7183/11.4753 &= 0.2369,\\
+  1.0000/11.4753 &= 0.0871, & 0.3679/11.4753 &= 0.0321 .
+\end{align*}
+The dead band receives 8.71\% of the attention, and whatever garbage it holds is mixed in with that weight.
+
+\emph{With the mask.} Its score becomes $-\infty$ and its exponential becomes 0:
+\begin{align*}
+  e^{2} &= 7.3891, & e^{1} &= 2.7183, & e^{-\infty} &= 0, & e^{-1} &= 0.3679 .
+\end{align*}
+Sum:
+\begin{align*}
+  7.3891 + 2.7183 + 0 + 0.3679 &= 10.4753 .
+\end{align*}
+Weights:
+\begin{align*}
+  7.3891/10.4753 &= 0.7054, & 2.7183/10.4753 &= 0.2595,\\
+  0/10.4753 &= 0, & 0.3679/10.4753 &= 0.0351 .
+\end{align*}
+Check the sum: $0.7054 + 0.2595 + 0 + 0.0351 = 1.0000$. Check a ratio: before, $0.6439/0.2369 = 2.718$; after, $0.7054/0.2595 = 2.718$, both equal to $e^{2-1} = e$. PyTorch's \code{softmax} on the same rows gives the same weights\tagC{}.
+\end{worked}
+
+The dead band's weight is \emph{exactly} zero, so its value is multiplied by zero, whatever that value is. The answer is built only from bands that were really measured. Compare the fill-with-zero approach of \cref{ch:ceiling}: a zero \emph{value} is still a claim that the reflectance was 0, and it still receives a weight. Only a zero \emph{weight} removes the band.
+
+\coursefig[0.95\linewidth]{iw-35-dead-band}{Minus infinity before softmax. Left: three valid scores $[2, 1, 0]$ give weights $[0.6652, 0.2447, 0.0900]$. Middle: marking band 3 dead sets its score to $-\infty$, its weight to exactly 0, and the other two renormalise to $[0.7311, 0.2689]$. Right: the same mask lets a 202-band SpectralEarth pixel share a batch with 239-band PRISMA pixels, its 37 padding tokens masked out.}{fig:crossstem:deadband}
+
+\subsection{In code: a boolean mask}
+
+PyTorch's \code{F.scaled_dot_product_attention} takes an \code{attn_mask}. A boolean mask means: \textbf{True where attention is allowed}, False where the score must become $-\infty$. The compressor takes \code{band_valid}, shape \shape{(B, N, H, W)}, one boolean per band per pixel, and reshapes it to \shape{(P, 1, 1, N)} (line 84) so that the same mask applies to every head (the first 1) and every query (the second 1). Broadcasting fills those two size-1 axes.
+
+Getting the polarity backwards masks every valid band and keeps only the dead ones. The cheapest guard is a test that cannot be fooled.
+
+\begin{drift}
+\textbf{The 99 test.} Take 16 pixels with SpectralEarth's real 202 wavelengths, mark band 100 dead, then change band 100's value to a wild 99.0. If masking works, the output must not move at all.
+\begin{itemize}
+\item Course run (IW35, the study prototype): masked, maximum change 0.0; unmasked, 3.1075 \tagM{indradhanu workings/35-skipping-a-dead-band.md}.
+\item This book's run (2026-10-29, real module, random untrained weights, seed 0, \file{research/textbook/tools/compute_crossstem.py}): masked, maximum change 0.0\tagC; unmasked, 2.1322\tagC.
+\end{itemize}
+The unmasked figure depends on the random initial weights and will differ from run to run. The masked figure is 0.0 in every run, and that is the point: not ``very little'', nothing.
+\end{drift}
+
+\Cref{ch:ceiling}'s contamination is gone \emph{by construction}, not by hoping an interpolation guessed well.
+
+\subsection{A pixel with no valid band}\label{sec:crossstem:empty}
+
+What if every band of a pixel is masked? Then every term in the denominator of \cref{eq:crossstem:renorm} is zero, and each weight is $0/0$, which is undefined (\code{NaN}, ``not a number'', in floating point). One NaN in a batch spreads through the loss to every weight in the model during the backward pass.
+
+\begin{sourcenote}[: what the code does with an empty pixel]
+The course (IW35) says such pixels ``must be dropped before [they reach] attention''. The code does something different and more robust, \code{spectral_attention.py}, lines 85--93: it finds the empty pixels (\code{empty = ~mask.any(dim=-1, keepdim=True)}), lets them attend to \emph{every} band (\code{mask = mask | empty}) so the softmax is well defined, and then overwrites their output with exactly 0 (\code{out.masked_fill(empty, 0.0)}). The comment explains why: a plain softmax gives NaN, ``zeros in torch 2.5's fused CPU kernel, unspecified elsewhere''. Invariant 2 of \code{docs/lld/spectral-stem.md} pins the result: ``A pixel with no valid band outputs exactly 0.''
+
+A second line of defence sits one level up. \code{SpectralStemSegFormerMAE._stem} (\code{spectral_stem_seg_former_mae.py}, lines 142--145) normalises the input and then sets every dead voxel to 0 \emph{before} any stem sees it, so even an unmasked dead band arrives as the mean of the normalisation curve, never as 99.0. The 99 test above calls the compressor directly, bypassing that step, which is what a test of the mask should do.
+\end{sourcenote}
+
+The existing pixel-level rule still makes sense on top: a pixel with more than 40\% invalid voxels is invalid (\code{BandFilterConfig.max_invalid_voxel_fraction}, \cref{ch:bandpipeline}). Masking 150 of 202 bands leaves an answer built from 52; honest, but thin.
+
+\subsection{The same trick, a second use: mixing sensors}\label{sec:crossstem:padding}
+
+A tensor is rectangular: every row of a batch must have the same number of band tokens. SpectralEarth pixels have 202; PRISMA pixels 239. To put both in one batch, \index{padding}\emph{pad} the shorter rows up to the longest with dummy tokens and mark the padding invalid:
+\begin{center}
+\begin{tabular}{lll}\toprule
+pixel & tokens & mask\\\midrule
+SpectralEarth & 202 real + 37 padding = 239 & 202 True, 37 False\\
+PRISMA & 239 real & 239 True\\\bottomrule
+\end{tabular}
+\end{center}
+The padding count is $239 - 202 = 37$. The padding gets weight zero exactly as a dead band does, so whatever value and wavelength the padding tokens carry is irrelevant. One mechanism handles broken bands, missing bands and different sensors. The price is wasted arithmetic: the SpectralEarth rows compute 37 scores per query that are then thrown away, $37/239 = 15.5\%$ of their attention work.
+
+The compressor supports this directly: \code{wavelengths_nm} may be \shape{(B, N)}, one wavelength list per sample, and \code{_per_pixel_wavelengths} (lines 48--52) repeats each sample's list for its $H\times W$ pixels.
+
+\begin{sourcenote}[: how the model really mixes sensors]
+Padding is supported by the compressor, but the model does not use it to mix sensors. \code{SpectralStemSegFormerMAE.forward_mixed} (\code{spectral_stem_seg_former_mae.py}, lines 159--180) takes a list of groups, one per band list, runs the stem \emph{separately} on each group with its own \shape{(N,)} wavelengths, and concatenates the 32-channel outputs before the shared BatchNorm, encoder and decoder. No padding tokens are built at all, and the waste computed above does not arise. The reduced stem of \cref{ch:specdecoder} cannot take per-sample lists at all, which is one reason this group-wise design was chosen.
+\end{sourcenote}
+
+The loss must skip padded and dead bands too: there is no truth to compare a reconstruction against. \Cref{ch:specdecoder} returns to this.
+
+%-----------------------------------------------------------------------------
+\section{What it costs in arithmetic}\label{sec:crossstem:cost}
+
+\Cref{sec:crossstem:params} found 5,345 parameters against today's 5,376. That says how much the model must \emph{store and learn}. It says nothing about how much \emph{work} each pixel needs, or how much \emph{memory} the work occupies while it runs. Those are different numbers, and here they differ enormously.
+
+A \index{multiply-add}\emph{multiply-add} (MAC) is one multiplication followed by one addition, the basic unit of a dot product. A dot product of two 32-number vectors is 32 multiply-adds. A matrix-vector product with an $(m\times n)$ matrix is $m$ dot products of length $n$: $mn$ multiply-adds.
+
+\subsection{Today: 5,280 multiply-adds per pixel}
+
+\code{Conv2d(165, 32, kernel_size=1)} computes 32 dot products of length 165 per pixel:
+\begin{align*}
+  165\times32 = 5{,}280 \text{ multiply-adds per pixel.}
+\end{align*}
+
+\subsection{Cross-attention: 861,184 multiply-adds per pixel}
+
+\begin{worked}[label={we:crossstem:macs}]{Counting the compressor's multiply-adds}
+202 band tokens, $d = 32$, $D = 32$. Count each stage as (number of dot products) $\times$ (their length). Do it on paper.
+
+\emph{K and V projections.} Each of the 202 tokens is multiplied by two $32\times32$ matrices; one $32\times32$ matrix-vector product is $1{,}024$ multiply-adds:
+\begin{align*}
+  2\times202\times1{,}024 &= 404\times1{,}024 = 413{,}696 .
+\end{align*}
+\emph{Scores.} 32 queries times 202 keys, each a dot product of length 32 (split over 4 heads of 8, which is the same total):
+\begin{align*}
+  32\times202\times32 &= 6{,}464\times32 = 206{,}848 .
+\end{align*}
+\emph{Weighted values.} Each of the 32 answers is a weighted sum of 202 value vectors of 32 numbers:
+\begin{align*}
+  32\times202\times32 &= 206{,}848 .
+\end{align*}
+\emph{Output projection and to-channel.} 32 answers through a $32\times32$ matrix, then 32 dot products of length 32:
+\begin{align*}
+  32\times1{,}024 + 32\times32 &= 32{,}768 + 1{,}024 = 33{,}792 .
+\end{align*}
+\emph{Total.}
+\begin{align*}
+  413{,}696 + 206{,}848 + 206{,}848 + 33{,}792 &= 620{,}544 + 206{,}848 + 33{,}792\\
+  &= 827{,}392 + 33{,}792\\
+  &= 861{,}184 .
+\end{align*}
+The query projection is the same for every pixel, so it is computed once per batch, not per pixel, and is left out.
+\end{worked}
+
+The course's count also leaves out the value stretch, \code{Linear(1, 32)} on 202 tokens, $202\times32 = 6{,}464$ multiplications, and the addition of the wavelength tags. Including the stretch gives $861{,}184 + 6{,}464 = 867{,}648$, a 0.75\% difference. This book keeps the course's 861,184 so that the ratios below agree with the course and with \code{research/experiments/indradhanu-se-pretrain/S01-laptop-smoke/README.md}.
+
+Compare:
+\begin{align*}
+  \frac{861{,}184}{5{,}280} = 163.1 .
+\end{align*}
+About \textbf{163 times} the arithmetic of today's 165-band compressor. Against a 1$\times$1 compressor reading SpectralEarth's 202 bands, $202\times32 = 6{,}464$ multiply-adds, the ratio is
+\begin{align*}
+  \frac{861{,}184}{6{,}464} = 133.2,
+\end{align*}
+which is the ``133x'' quoted in the S01 smoke-test notes and in \cref{ch:specdecoder}. Both numbers are right; they answer different questions (``against the shipped model'' and ``against variant A on the same data'').
+
+Per $128\times128$ patch:
+\begin{align*}
+  861{,}184\times16{,}384 &= 14{,}109{,}638{,}656 \approx 14.1 \text{ billion multiply-adds.}
+\end{align*}
+At batch 128 that is $14{,}109{,}638{,}656\times128 = 1{,}806{,}033{,}747{,}968$, about 1.8 trillion per step for the compressor alone\tagC. A modern training GPU does tens to hundreds of trillions of multiply-adds per second in half precision, so this is significant but affordable. \textbf{Arithmetic is not what breaks first.}
+
+%-----------------------------------------------------------------------------
+\section{The memory wall}\label{sec:crossstem:memory}
+
+To compute attention, the scores, the softmax weights, the keys and the values must exist in memory at the same time. Count the bytes. A 32-bit float (\emph{fp32}) takes 4 bytes; a 16-bit \emph{bfloat16} (\emph{bf16}) takes 2. A \index{mebibyte}\emph{mebibyte} (MiB) is $2^{20} = 1{,}048{,}576$ bytes and a gibibyte (GiB) is $2^{30} = 1{,}073{,}741{,}824$ bytes.
+
+\begin{worked}[label={we:crossstem:bytes}]{Bytes of attention for one patch}
+One $128\times128$ patch, 16,384 pixels, 202 bands, 32 queries, 4 heads, fp32. Do it on paper; multiply left to right.
+
+\emph{Attention weights, if stored.} One weight per (pixel, head, query, key):
+\begin{align*}
+  16{,}384\times4 &= 65{,}536,\\
+  65{,}536\times32 &= 2{,}097{,}152,\\
+  2{,}097{,}152\times202 &= 423{,}624{,}704 \text{ weights},\\
+  423{,}624{,}704\times4 \text{ bytes} &= 1{,}694{,}498{,}816 \text{ bytes},\\
+  1{,}694{,}498{,}816/1{,}048{,}576 &= 1{,}616 \text{ MiB}.
+\end{align*}
+\emph{Keys and values}, which must exist. Two tensors of (pixel, band, 32):
+\begin{align*}
+  16{,}384\times2 &= 32{,}768,\\
+  32{,}768\times202 &= 6{,}619{,}136,\\
+  6{,}619{,}136\times32 &= 211{,}812{,}352 \text{ numbers},\\
+  211{,}812{,}352\times4 &= 847{,}249{,}408 \text{ bytes} = 808 \text{ MiB}.
+\end{align*}
+\end{worked}
+
+One patch: 1,616 MiB of weights and 808 MiB of keys and values. A batch of 128 would need over 200\,GB for the weights alone. That is not a tuning problem; it is impossible. (A version of this estimate in an early design note came out near 400\,MB: it left out the 4 heads. Count heads.)
+
+\subsection{And self-attention would be far worse}
+
+\Cref{ch:ceiling} noted that self-attention compares every band with every band. Its weights, per patch, fp32:
+\begin{align*}
+  16{,}384\times4\times202\times202\times4 &= 65{,}536\times40{,}804\times4\\
+  &= 2{,}674{,}130{,}944\times4\\
+  &= 10{,}696{,}523{,}776 \text{ bytes}\\
+  &= 10{,}696{,}523{,}776/1{,}073{,}741{,}824 = 9.96 \text{ GiB per patch}.
+\end{align*}
+Ten gigabytes per patch, for the weights only. \textbf{This is the concrete reason the design is cross-attention}: 32 questions against 202 bands, not 202 against 202. Decision 1 of \code{docs/proposals/spectral-attention-bottleneck.md} records exactly this rejection.
+
+\subsection{Three ways the cost comes down}
+
+\begin{table}[htbp]\centering
+\caption{Ways to cut the compressor's memory.}\label{tab:crossstem:levers}
+\begin{tabular}{p{0.24\linewidth}p{0.34\linewidth}p{0.32\linewidth}}\toprule
+technique & what it removes & effect per patch\\\midrule
+\textbf{fused attention} (\texttt{F.scaled\_\allowbreak dot\_\allowbreak product\_\allowbreak attention}) & never stores the full weight matrix; computes the softmax in small tiles & 1,616 MiB of weights $\to$ near zero\\
+\textbf{half precision} (bf16, 2 bytes) & halves every tensor & K+V 808 $\to$ 404 MiB\\
+\textbf{band grouping} & one token per about 4 adjacent bands: 202 $\to$ 51 tokens & K+V and scores shrink about 4$\times$\\\bottomrule
+\end{tabular}
+\end{table}
+
+A \index{fused attention}\emph{fused} kernel is one GPU routine that computes scores, softmax and the weighted sum together, tile by tile, so the full $32\times202$ weight matrix of a pixel never exists in memory at once. It is not an approximation: it computes the same numbers in a different order (and the 99 test of \cref{sec:crossstem:mask} ran through it).
+
+Band grouping, worked:
+\begin{align*}
+  16{,}384\times2\times51\times32\times4 &= 213{,}909{,}504 \text{ bytes} = 204 \text{ MiB per patch},
+\end{align*}
+and $204/2 = 102$ MiB in bf16, against $808 + 1{,}616 = 2{,}424$ MiB naively. Grouping is a genuine trade-off: four neighbouring bands become one token, so detail finer than about 4 bands (roughly 25--40\,nm on SpectralEarth) is mixed before attention sees it. \Cref{ch:specdecoder} shows how the shipped design took this lever and repaired its weakness.
+
+\subsection{Training memory is not inference memory}
+
+The arithmetic so far is about one forward pass. Training is worse. The backward pass (\cref{ch:trainloop}) needs every intermediate the forward pass made: the tokens, the stretched values, the keys, the values, the attention output and more. Many of them have the shape \shape{(pixels, 202, 32)}. One such tensor, one patch, bf16:
+\begin{align*}
+  16{,}384\times202\times32\times2 &= 3{,}309{,}568\times32\times2\\
+  &= 105{,}906{,}176\times2\\
+  &= 211{,}812{,}352 \text{ bytes}\\
+  &= 211{,}812{,}352/1{,}048{,}576 = 202 \text{ MiB}.
+\end{align*}
+The measured training memory of about 3.7\,GiB per patch (below) is about
+\begin{align*}
+  \frac{3.7\times1{,}024}{202} = \frac{3{,}789}{202} = 18.8 \approx 19
+\end{align*}
+such tensors, and $19\times202 = 3{,}838$ MiB $= 3{,}838/1{,}024 = 3.75$ GiB. \textbf{Inference-time memory is not training-time memory}: count every tensor the backward pass must keep, not only the ones a forward pass holds at its peak.
+
+\coursefig[0.95\linewidth]{iw-36-activations}{Why training, not inference, hits the wall. (a) For backpropagation the per-band stem keeps about 19 intermediates of shape (16,384 pixels, 202 bands, 32), 202 MiB each in bf16: about 3.75 GiB per $128\times128$ patch, matching the measured 3.7 GiB. (b) The reduced stem of \cref{ch:specdecoder} never builds a band-by-32 tensor; its largest per-pixel tensor has 53 bin slots, 53 MiB.}{fig:crossstem:activations}
+
+\begin{figure}[htbp]\centering
+\begin{tikzpicture}
+\begin{axis}[xbar,width=0.66\linewidth,height=7.4cm,xmin=0,xmax=11500,
+  bar width=8pt,enlarge y limits=0.07,scaled x ticks=false,
+  xticklabel style={/pgf/number format/1000 sep={,}},
+  xlabel={MiB per $128\times128$ patch},
+  symbolic y coords={redtensor,kvgroupbf,kvgroup,kvbf,kv,weights,train,self},
+  ytick=data,
+  yticklabels={{reduced stem, largest tensor (bf16)},{K+V, 51 groups, bf16},{K+V, 51 groups, fp32},{K+V, bf16},{K+V, fp32},{attention weights, fp32},{training, per-band (19 tensors, bf16)},{self-attention weights, fp32}},
+  tick label style={font=\footnotesize},label style={font=\small},
+  nodes near coords,nodes near coords style={font=\footnotesize,anchor=west},
+  point meta=explicit symbolic]
+\addplot[fill=attn!45,draw=attn] coordinates {
+  (53,redtensor)[53] (102,kvgroupbf)[102] (204,kvgroup)[204] (404,kvbf)[404] (808,kv)[808]
+  (1616,weights)[1{,}616] (3838,train)[3{,}838] (10201,self)[10{,}201]};
+\end{axis}
+\end{tikzpicture}
+\caption{Memory per patch of the quantities computed in this section, to scale (linear axis). All are this book's arithmetic from the shapes; the training bar is $19\times202$ MiB, matching the measured 3.7\,GiB. The self-attention bar, 9.96\,GiB, is why the design is cross-attention.}\label{fig:crossstem:memorybars}
+\end{figure}
+
+\subsection{A hardware limit nobody mentions}\label{sec:crossstem:chunk}
+
+The GPU's fused attention kernel puts the batch on one axis of its launch grid, and that axis is capped at $2^{16} - 1 = 65{,}535$ blocks. Here the ``batch'' is pixels, so 4 patches, $4\times16{,}384 = 65{,}536$ rows, failed with \texttt{invalid configuration argument}: one row over. The module now splits the call:
+
+\begin{lstlisting}
+SDPA_MAX_ROWS = 32_768   # spectral_attention.py, line 35
+
+def _attend(q, k, v, mask=None):
+    """scaled_dot_product_attention over (P, h, L, hd), at most SDPA_MAX_ROWS pixels per call."""
+    if q.shape[0] <= SDPA_MAX_ROWS:
+        return F.scaled_dot_product_attention(q, k, v, attn_mask=mask)
+    return torch.cat([F.scaled_dot_product_attention(q[i:i + SDPA_MAX_ROWS], k[i:i + SDPA_MAX_ROWS],
+                          v[i:i + SDPA_MAX_ROWS], attn_mask=None if mask is None else mask[i:i + SDPA_MAX_ROWS])
+                      for i in range(0, q.shape[0], SDPA_MAX_ROWS)])
+\end{lstlisting}
+
+Because pixels are independent, cutting the rows into chunks and concatenating the results gives \emph{identical} numbers. 4 patches become $65{,}536/32{,}768 = 2$ calls. The general count is $\lceil P/32{,}768\rceil$, where $\lceil\cdot\rceil$ rounds up.
+
+\subsection{Measured on a real GPU}
+
+\begin{drift}
+\textbf{S01, 2026-10-14}, laptop RTX 4000 SFF Ada 20\,GB, one training step, real Indradhanu encoder (embedding widths 32, 64, 160, 256), $128\times128$ patches, bf16. Best batch and throughput \tagM{research/experiments/indradhanu-se-pretrain/S01-laptop-smoke/README.md}:
+\begin{center}
+\begin{tabular}{lrrr}\toprule
+stem & best batch & patches/s & memory per patch\\\midrule
+today's 1$\times$1 compressor (A) & 64 & 391 & about 0.08 GiB\\
+per-pixel gate (B, \cref{ch:specdecoder}) & 64 & 282 & about 0.11 GiB\\
+cross-attention (this chapter) & 4 & 5.0 & \textbf{about 3.7 GiB}\\\bottomrule
+\end{tabular}
+\end{center}
+At batch 8 and above the cross-attention stem exceeded the 20\,GB card and Windows spilled to shared system memory, collapsing throughput (batch 16: 0.8 patches/s). End to end the cross-attention model was $391/5 = 78$ times slower than today's, not 163: the shared SegFormer costs the same in all three and dilutes the difference.
+
+\textbf{L40S, 2026-10-14}, AWS 48\,GB: the per-band stem trained at 13.5 patches/s at batch 4 (11.3\,GiB peak), 12.2 at batch 8, 10.2 at batch 16 (32.4\,GiB) and ran out of memory at batch 32 \tagM{docs/lld/spectral-stem.md}. \Cref{ch:specdecoder} puts the full table on a chart.
+\end{drift}
+
+Why did the toy run of 16 pixels never hint at this? \textbf{Costs that scale with the pixel count do not show up in a toy run.} Always redo the byte arithmetic at the real patch and batch size before trusting a design.
+
+%-----------------------------------------------------------------------------
+\begin{confusions}
+\confusion{Each query gives a 32-number answer; why is \texttt{to\_channel} needed?}{The encoder expects 32 \emph{numbers} per pixel, not 32 vectors. \texttt{Linear(32, 1)} turns each answer vector into one number, and it is shared by all 32 queries: 33 parameters, not $32\times33$.}
+\confusion{Why 4 heads?}{Four groups of 8 numbers can learn four different ways of scoring relevance, and, by \cref{eq:crossstem:fourhead}, one channel can then combine averages with different signs, which a single head cannot. The head count changes no parameter count: the projections are $32\times32$ either way.}
+\confusion{Does every pixel get its own queries?}{No. All 16,384 pixels of a patch share the same 1,024-number query table. Only the keys and values differ per pixel.}
+\confusion{Why not set the dead band's value to zero instead of its score?}{A zero value still receives a weight (8.71\% in \cref{we:crossstem:mask4}), and a zero is a claim that the reflectance is 0. Only a zero weight removes the band.}
+\confusion{Is the boolean mask True for valid or invalid?}{In \texttt{scaled\_dot\_product\_attention} a boolean \texttt{attn\_mask} is \textbf{True where attention is allowed}. Getting it backwards masks everything valid. The 99 test catches a flipped mask immediately.}
+\confusion{Same parameters, so same speed?}{No. Parameters are stored once; arithmetic and activations are paid per pixel, per patch, per step. Here 5,345 parameters cost 861,184 multiply-adds per pixel.}
+\confusion{Is fused attention an approximation?}{No. It computes exactly the same result in a different order, never holding the full weight matrix at once.}
+\confusion{Is 163$\times$ going to make training 163$\times$ slower?}{No. The compressor is one part of the model and the SegFormer dominates the arithmetic; the measured end-to-end slowdown was 78$\times$. The real limit was memory: 4 patches per batch on a 20\,GB card.}
+\end{confusions}
+
+\begin{checkyourself}
+\item\label{ex:crossstem:1} Recompute the compressor's parameter count for $d = 16$, $D = 32$ (16 numbers per token, still 32 output channels), line by line. Check your total against \cref{eq:crossstem:paramformula}.
+\item\label{ex:crossstem:2} Scores $[3, 1, 1]$, with the second band dead. Compute the masked weights by hand, and check that the ratio of the two surviving weights is the same as before masking.
+\item\label{ex:crossstem:3} Compute the multiply-adds per pixel for an EnMAP pixel (224 bands), $d = D = 32$, using the four lines of \cref{we:crossstem:macs}.
+\item\label{ex:crossstem:4} Compute the K+V memory per patch for 224 bands in bf16 (2 bytes), in MiB.
+\item\label{ex:crossstem:5} Training needs about 3.7\,GiB per patch. On a 48\,GB card, leaving 4\,GB for everything else, how many patches fit in one batch? How many pixel rows is that, and how many calls to the fused kernel does \texttt{\_attend} make?
+\item\label{ex:crossstem:6} Using \cref{eq:crossstem:special}, show that a \emph{single} head with frozen weights $a_{cb}$ cannot compute $y_c = v_0 - v_1$ (ignore the offsets). Then give $\kappa_1, \kappa_2$ and head weights for two heads over two bands that do compute it with \cref{eq:crossstem:fourhead}.
+\end{checkyourself}
+
+\nextchapter{ch:specdecoder}

@@ -1,0 +1,521 @@
+\chapter{The decoder, pixel shuffle and one full forward trace}\label{ch:decoder}
+
+\begin{onething}
+The decoder brings the four encoder maps to one width (256 channels, by 1 $\times$ 1 convolutions) and
+one size (32 $\times$ 32, by bilinear interpolation), stacks and fuses them, refines at quarter
+resolution, and then reaches full resolution by \emph{rearranging} 512 channels into 4 $\times$ 4 blocks
+of 32 channels, so that every output pixel gets its own learned prediction.
+\end{onething}
+
+\Cref{ch:encoder} ended with four feature maps of the same ground: F1 \shape{(B, 32, 32, 32)}, F2
+\shape{(B, 64, 16, 16)}, F3 \shape{(B, 160, 8, 8)} and F4 \shape{(B, 256, 4, 4)}. The model must return a
+reconstruction of the input's shape, \shape{(B, 165, 128, 128)}, because a residual is a subtraction and
+you can only subtract tensors of the same shape (\cref{ch:recon}). This chapter builds that last stretch:
+the decoder (\code{app/foundation_models/components/seg_former_decoder.py}, 176 lines), the
+decompressor and the denormalisation. It ends by walking one batch through the whole model.
+
+\section{The problem, and why the obvious fixes fail}\label{sec:decoder:why}
+
+Three things must happen: the four maps have to be combined, the result has to reach 128 $\times$ 128,
+and the 32 compressed channels have to become 165 bands again. The obvious ways to do the first two
+each fail.
+
+\begin{itemize}
+\item \textbf{Use only F4 and upsample it 32 times.} Sixteen tokens cannot say where a single odd pixel
+is; all fine detail is lost.
+\item \textbf{Run convolutions at full resolution} (a U-Net style decoder). It works, but a 3 $\times$ 3
+convolution at 128 $\times$ 128 costs sixteen times as much as at 32 $\times$ 32, because there are
+$128^2 / 32^2 = 16$ times as many positions.
+\item \textbf{Work at 32 $\times$ 32 and finish with bilinear upsampling.} Cheap, but bilinear
+interpolation \emph{averages} neighbours, so a single anomalous pixel's prediction is blended with its
+fifteen ordinary neighbours, and the residual that should flag it is diluted. That is exactly the
+signal this system measures.
+\end{itemize}
+
+The SegFormer decoder \citep{xie2021segformer}, as modified here, takes a fourth route: do all the
+expensive thinking at 32 $\times$ 32, and jump to full size with a free rearrangement,
+\index{pixel shuffle}\emph{pixel shuffle} \citep{shi2016realtime}, that gives each output pixel its own
+channel and therefore its own weights.
+
+\begin{analogy}
+A mixing desk combines a 48-track recording into one stereo master. Each track first goes through its
+own fader and equaliser so that all tracks sit at a common level (the 1 $\times$ 1 projections to 256
+channels). Tracks recorded at different sample rates are resampled to one rate (the bilinear
+upsampling). The desk sums them into a mix bus (the concatenation and the fuse convolution) and a
+mastering stage polishes the result (the refine convolutions). The last step is the one the analogy
+makes vivid: a surround-sound master is not ``stretched'' to more speakers; each speaker gets its own
+dedicated channel. Pixel shuffle is that: 16 channels per position, one for each of the 16 output
+pixels in the 4 $\times$ 4 block.
+\end{analogy}
+
+\section{Step 1: one width for all four maps}\label{sec:decoder:project}
+
+You cannot stack maps of 32, 64, 160 and 256 channels into one tensor and treat every channel alike, so
+each map first passes through its own \index{convolution!1x1}1 $\times$ 1 convolution to the common
+\index{decoder width}\emph{decoder width} $D_{\text{dec}} = 256$:
+\begin{lstlisting}
+self.linear_projections = nn.ModuleList([
+    nn.Conv2d(embed_dim, decoder_dim, kernel_size=1)    # 32/64/160/256 -> 256
+    for embed_dim in embed_dims])
+\end{lstlisting}
+A 1 $\times$ 1 convolution looks at one position at a time and mixes only channels: at every position
+$(h, w)$ it computes
+\begin{equation}\label{eq:decoder:proj}
+\vect{p}_{h,w} = \mat{W}_i\, \vect{f}_{h,w} + \vect{b}_i, \qquad \mat{W}_i \in \R^{256 \times C_i},\ \vect{b}_i \in \R^{256},
+\end{equation}
+with the same $\mat{W}_i$ and $\vect{b}_i$ at every position (\cref{ch:shapes}). It is a linear layer
+applied per pixel.
+
+\begin{worked}[label={we:decoder:proj}]{A 1 \texorpdfstring{$\times$}{x} 1 projection at one position}
+Shrink the sizes: 2 input channels, 3 output channels. At one position the feature vector is
+$\vect{f} = (2, -1)\T$. Let
+\[
+\mat{W} = \begin{pmatrix} 1 & 0\\ 0.5 & 2\\ -1 & 1 \end{pmatrix}, \qquad \vect{b} = \begin{pmatrix} 0\\ 1\\ 0.5 \end{pmatrix}
+\]
+(illustrative weights). Multiply row by row, then add the bias. Do it on paper:
+\begin{align*}
+p_0 &= 1 \cdot 2 + 0 \cdot (-1) + 0 = 2 + 0 + 0 = 2,\\
+p_1 &= 0.5 \cdot 2 + 2 \cdot (-1) + 1 = 1 - 2 + 1 = 0,\\
+p_2 &= -1 \cdot 2 + 1 \cdot (-1) + 0.5 = -2 - 1 + 0.5 = -2.5 .
+\end{align*}
+So $\vect{p} = (2, 0, -2.5)\T$. The decoder does the same with $\mat{W}_1 \in \R^{256 \times 32}$ at each
+of F1's $32 \times 32 = 1024$ positions, and similarly for F2--F4.
+\end{worked}
+
+Shapes after step 1:
+\[
+\begin{array}{lll}
+\text{F1}: (B, 32, 32, 32) & \to & (B, 256, 32, 32)\\
+\text{F2}: (B, 64, 16, 16) & \to & (B, 256, 16, 16)\\
+\text{F3}: (B, 160, 8, 8) & \to & (B, 256, 8, 8)\\
+\text{F4}: (B, 256, 4, 4) & \to & (B, 256, 4, 4)
+\end{array}
+\]
+F4 already has 256 channels but still gets its own projection: the four maps live in different learned
+spaces and each needs its own mapping into the shared one.
+
+\section{Step 2: one size for all four maps, by bilinear interpolation}\label{sec:decoder:bilinear}
+
+Every projected map is resized to F1's 32 $\times$ 32:
+\begin{lstlisting}
+if proj.shape[2] != target_h or proj.shape[3] != target_w:          # F1 is skipped
+    proj = F.interpolate(proj, size=(target_h, target_w),
+                         mode='bilinear', align_corners=False)      # (B, 256, 32, 32)
+\end{lstlisting}
+F2 grows by a factor 2, F3 by 4, F4 by 8. What does \emph{bilinear} compute?
+
+\subsection{Linear interpolation on a line}
+
+\begin{definition}[Linear interpolation]
+Given values $f_0$ at position 0 and $f_1$ at position 1, the \index{interpolation!linear}\emph{linear
+interpolation} at a position $u \in [0, 1]$ between them is
+\begin{equation}\label{eq:decoder:lerp}
+f(u) = (1 - u)\, f_0 + u\, f_1 .
+\end{equation}
+\end{definition}
+Derive it: the straight line through $(0, f_0)$ and $(1, f_1)$ has slope $(f_1 - f_0)/(1 - 0) = f_1 -
+f_0$ and starts at $f_0$, so $f(u) = f_0 + u (f_1 - f_0)$. Expand the bracket: $f_0 + u f_1 - u f_0$.
+Collect the $f_0$ terms: $(1 - u) f_0 + u f_1$. The two weights $1 - u$ and $u$ are non-negative and sum
+to 1, so $f(u)$ is a weighted average of the two neighbours, weighted by closeness. At $u = 0$ you get
+$f_0$, at $u = 1$ you get $f_1$, at $u = 0.25$ you get three parts $f_0$ to one part $f_1$.
+
+\subsection{Where does an output pixel sit on the input grid?}
+
+To resize a row of $n_{\text{in}}$ values to $n_{\text{out}}$ values you must decide where each output
+pixel falls among the inputs. With \code{align_corners=False}, PyTorch treats every pixel as a cell of
+width 1 whose \emph{centre} is the sample, and lines up the outer edges of the two grids. Output pixel
+$d$ has its centre at $d + \frac12$ in output units; multiplying by the scale $s = n_{\text{in}} /
+n_{\text{out}}$ converts to input units; subtracting $\frac12$ converts from ``centre'' back to an index:
+\begin{equation}\label{eq:decoder:src}
+u_d = \Big(d + \tfrac12\Big)\, \frac{n_{\text{in}}}{n_{\text{out}}} - \tfrac12, \qquad \text{clamped below at } 0 .
+\end{equation}
+The output value is then the linear interpolation between input indices $\lfloor u_d \rfloor$ and
+$\lfloor u_d \rfloor + 1$ with weight $u_d - \lfloor u_d \rfloor$; when $\lfloor u_d \rfloor + 1$ falls
+off the end, the last input value is used.
+
+\begin{worked}[label={we:decoder:lerp}]{Upsampling a row of two values to four}
+Input $[0, 4]$, so $f_0 = 0$, $f_1 = 4$; $n_{\text{in}} = 2$, $n_{\text{out}} = 4$, scale $s = 2/4 =
+0.5$. On paper, one output at a time:
+\begin{align*}
+d = 0:&\quad u = (0.5)(0.5) - 0.5 = -0.25 \to \text{clamp to } 0, & \text{value} &= f_0 = 0\\
+d = 1:&\quad u = (1.5)(0.5) - 0.5 = 0.25, & \text{value} &= 0.75 \cdot 0 + 0.25 \cdot 4 = 1\\
+d = 2:&\quad u = (2.5)(0.5) - 0.5 = 0.75, & \text{value} &= 0.25 \cdot 0 + 0.75 \cdot 4 = 3\\
+d = 3:&\quad u = (3.5)(0.5) - 0.5 = 1.25, & \text{value} &= f_1 = 4
+\end{align*}
+(At $d = 3$ there is no input index 2 to interpolate towards, so the last value is used.)
+Output $[0, 1, 3, 4]$. \code{F.interpolate} returns exactly this
+(\file{research/textbook/tools/compute_masking_output.txt}).
+\end{worked}
+
+\subsection{Bilinear: two linear interpolations}
+
+On a grid, a point at fractional position $(u, v)$ (row, column) sits inside a square of four samples
+$f_{00}, f_{01}$ (upper row) and $f_{10}, f_{11}$ (lower row), with fractional offsets $\alpha = u -
+\lfloor u \rfloor$ down and $\beta = v - \lfloor v \rfloor$ across. \index{interpolation!bilinear}\emph{Bilinear}
+interpolation interpolates along each row first, then between the two results:
+\begin{align}
+\text{upper row:}\quad g_0 &= (1 - \beta) f_{00} + \beta f_{01},\notag\\
+\text{lower row:}\quad g_1 &= (1 - \beta) f_{10} + \beta f_{11},\notag\\
+\text{between rows:}\quad f &= (1 - \alpha)\, g_0 + \alpha\, g_1 .\label{eq:decoder:bilinear}
+\end{align}
+Substitute $g_0$ and $g_1$ and expand to see all four weights at once:
+\[
+f = (1-\alpha)(1-\beta) f_{00} + (1-\alpha)\beta f_{01} + \alpha(1-\beta) f_{10} + \alpha\beta f_{11} .
+\]
+The four weights are products of the two one-dimensional weights and sum to $\big((1-\alpha)+\alpha\big)
+\big((1-\beta)+\beta\big) = 1$. The expansion is symmetric in the two directions, so interpolating the
+columns first gives the same answer.
+
+\begin{worked}[label={we:decoder:bilinear}]{Bilinear upsampling of a 2 \texorpdfstring{$\times$}{x} 2 grid to 4 \texorpdfstring{$\times$}{x} 4}
+Input $\begin{pmatrix} 1 & 3\\ 5 & 7\end{pmatrix}$. Rows and columns each go from 2 to 4, so by
+\cref{we:decoder:lerp} the fractional positions are $0, 0.25, 0.75, 1$ (after clamping) in both
+directions. First interpolate along each input row, using the weights of \cref{we:decoder:lerp}:
+\begin{align*}
+\text{row } [1, 3]:&\quad [\,1,\ 0.75 \cdot 1 + 0.25 \cdot 3,\ 0.25 \cdot 1 + 0.75 \cdot 3,\ 3\,] = [1,\ 1.5,\ 2.5,\ 3],\\
+\text{row } [5, 7]:&\quad [\,5,\ 0.75 \cdot 5 + 0.25 \cdot 7,\ 0.25 \cdot 5 + 0.75 \cdot 7,\ 7\,] = [5,\ 5.5,\ 6.5,\ 7].
+\end{align*}
+Now interpolate down each column between these two rows, with the same weights $0, 0.25, 0.75, 1$. For
+the second output column (values $1.5$ above, $5.5$ below):
+\begin{align*}
+\text{out row 0}&: 1.5, \\
+\text{out row 1}&: 0.75 \cdot 1.5 + 0.25 \cdot 5.5 = 1.125 + 1.375 = 2.5,\\
+\text{out row 2}&: 0.25 \cdot 1.5 + 0.75 \cdot 5.5 = 0.375 + 4.125 = 4.5,\\
+\text{out row 3}&: 5.5 .
+\end{align*}
+Doing every column the same way:
+\[
+\begin{pmatrix} 1 & 1.5 & 2.5 & 3\\ 2 & 2.5 & 3.5 & 4\\ 4 & 4.5 & 5.5 & 6\\ 5 & 5.5 & 6.5 & 7 \end{pmatrix}.
+\]
+This is exactly what \code{F.interpolate(..., mode='bilinear', align_corners=False)} returns (checked in
+\file{research/textbook/tools/compute_masking.py}). Notice that no output value is outside the range
+$[1, 7]$ of the inputs, and that no output differs from its neighbour by more than 2: bilinear
+interpolation can only smooth.
+\end{worked}
+
+That last remark is why bilinear interpolation is fine \emph{here}, on smooth coarse context from F2--F4,
+and wrong as the final step to full resolution (\cref{sec:decoder:shuffle}).
+
+\section{Steps 3 and 4: stack, then fuse}\label{sec:decoder:fuse}
+
+\begin{lstlisting}
+fused = torch.cat(unified, dim=1)     # 4 x (B, 256, 32, 32) -> (B, 1024, 32, 32)
+fused = self.fuse_conv(fused)         # Conv2d(1024, 256, k=1) -> (B, 256, 32, 32)
+fused = self.fuse_act(fused)          # GELU
+\end{lstlisting}
+\index{concatenation}\index{fuse convolution}\code{torch.cat(..., dim=1)} glues along the channel axis: $4 \times 256 = 1024$ channels. At every
+one of the 1024 positions there are now 1024 numbers: 256 describing fine texture there (from F1), 256
+medium structure (F2), 256 coarse (F3) and 256 global context (F4). The fuse convolution is another 1
+$\times$ 1 convolution, \eqref{eq:decoder:proj} with $\mat{W} \in \R^{256 \times 1024}$: at each
+position it learns how much of each scale to use. Splitting $\mat{W}$ into four $256 \times 256$ blocks
+$[\mat{W}^{(1)}\ \mat{W}^{(2)}\ \mat{W}^{(3)}\ \mat{W}^{(4)}]$ shows what it does:
+\[
+\mat{W} \begin{pmatrix} \vect{p}^{(1)}\\ \vect{p}^{(2)}\\ \vect{p}^{(3)}\\ \vect{p}^{(4)} \end{pmatrix}
+= \mat{W}^{(1)}\vect{p}^{(1)} + \mat{W}^{(2)}\vect{p}^{(2)} + \mat{W}^{(3)}\vect{p}^{(3)} + \mat{W}^{(4)}\vect{p}^{(4)} :
+\]
+a learned sum of the four scales, one linear map per scale. The nonlinearity $\GELU$
+(\cref{ch:block}) follows. The result: one 256-channel map at 32 $\times$ 32 carrying all four scales.
+This projection, upsample, concatenate and fuse pattern is what the SegFormer paper calls an
+\index{all-MLP decoder}\emph{all-MLP decoder}, because 1 $\times$ 1 convolutions are per-pixel MLP layers.
+
+\begin{keypoint}
+Up to the fuse, the decoder is a per-pixel linear mix of four interpolated maps; everything spatial in
+it so far is the smoothing of bilinear interpolation.
+\end{keypoint}
+
+\section{Step 5: refine at quarter resolution, then pixel shuffle}\label{sec:decoder:shuffle}
+
+\begin{lstlisting}
+self.refine = nn.Sequential(
+    nn.Conv2d(decoder_dim, decoder_dim, kernel_size=3, padding=1),          # 256 -> 256
+    nn.GELU(),
+    nn.Conv2d(decoder_dim, out_channels * 4 * 4, kernel_size=3, padding=1)) # 256 -> 512
+...
+out = F.pixel_shuffle(refined, 4)          # (B, 512, 32, 32) -> (B, 32, 128, 128)
+\end{lstlisting}
+
+\subsection{The two 3 \texorpdfstring{$\times$}{x} 3 convolutions}
+
+Both keep the grid at 32 $\times$ 32: by the output-size formula of \cref{ch:encoder} with $k = 3$, $s =
+1$, $p = 1$, a side of 32 becomes $\lfloor (32 + 2 - 3)/1 \rfloor + 1 = 31 + 1 = 32$. They are the
+decoder's only spatial layers. A 3 $\times$ 3 window at quarter resolution spans 3 cells of 4 pixels,
+$3 \times 4 = 12$ original pixels across; two in a row reach $1 + 2 \cdot 2 = 5$ cells, 20 pixels (the
+receptive-field recurrence of \cref{ch:encoder} with $j = 4$). That is local context around every
+point at one sixteenth of the cost of full resolution.
+
+The second convolution, a \index{sub-pixel convolution}\emph{sub-pixel convolution}, outputs $D \times 4 \times 4 = 32 \times 16 = 512$ channels, where $D = 32$ is the
+compressed band count, and has \textbf{no activation after it}. Its output flows through the
+decompressor into denormalisation and must be free to take any value, including large negatives; a
+GELU or sigmoid would make whole ranges of reflectance unreachable. The same reasoning keeps the
+decompressor bare (\cref{ch:compressor}).
+
+\subsection{Pixel shuffle: the index map}
+
+\begin{definition}[Pixel shuffle]
+For an upscale factor $r$, \code{pixel_shuffle} maps a tensor of shape $(B, C r^2, H, W)$ to $(B, C, rH,
+rW)$ by
+\begin{equation}\label{eq:decoder:shuffle}
+\text{out}[b, c,\ rh + i,\ rw + j] = \text{in}[b,\ c r^2 + r i + j,\ h, w],
+\end{equation}
+for $0 \le c < C$, $0 \le h < H$, $0 \le w < W$ and $0 \le i, j < r$.
+\end{definition}
+
+Read it from right to left. Input channels come in $C$ consecutive groups of $r^2$; group $c$ becomes
+output channel $c$. Inside a group, channel offset $ri + j$ is a row-major position $(i, j)$ in an $r
+\times r$ block (row $i = \lfloor \text{offset}/r \rfloor$, column $j = \text{offset} \bmod r$). That
+block is placed at rows $rh .. rh + r - 1$ and columns $rw .. rw + r - 1$, the output block that sits
+over input position $(h, w)$.
+
+\paragraph{Inverting it.} Given an output pixel $(c, Y, X)$, which input number made it? Divide each
+coordinate by $r$ with remainder: $h = \lfloor Y/r \rfloor$, $i = Y \bmod r$, $w = \lfloor X/r \rfloor$,
+$j = X \bmod r$. Then the source is channel $c r^2 + r i + j$ at position $(h, w)$. Every output pixel
+has exactly one source and every input number has exactly one destination: pixel shuffle is a
+permutation of the numbers, with no arithmetic and no parameters.
+
+\begin{worked}[label={we:decoder:shuffle}]{Pixel shuffle by hand, and PyTorch's order}
+Take $C = 2$, $r = 2$, $H = W = 1$: an input of $C r^2 = 8$ channels, each a single number. Let channel
+$k$ hold the value $k$, so in $= [0, 1, 2, 3, 4, 5, 6, 7]$. Apply \eqref{eq:decoder:shuffle} with $h = w
+= 0$, so the output rows are $i$ and columns $j$. On paper:
+\begin{align*}
+c = 0:&\quad (i,j) = (0,0) \leftarrow 0\cdot 4 + 0 + 0 = 0, & (0,1) &\leftarrow 0 + 0 + 1 = 1,\\
+      &\quad (1,0) \leftarrow 0 + 2 + 0 = 2, & (1,1) &\leftarrow 0 + 2 + 1 = 3,\\
+c = 1:&\quad (0,0) \leftarrow 1\cdot 4 + 0 + 0 = 4, & (0,1) &\leftarrow 4 + 0 + 1 = 5,\\
+      &\quad (1,0) \leftarrow 4 + 2 + 0 = 6, & (1,1) &\leftarrow 4 + 2 + 1 = 7.
+\end{align*}
+\[
+\text{out}[0] = \begin{pmatrix} 0 & 1\\ 2 & 3\end{pmatrix}, \qquad
+\text{out}[1] = \begin{pmatrix} 4 & 5\\ 6 & 7\end{pmatrix}.
+\]
+Running \code{F.pixel_shuffle} on this input in PyTorch 2.5.1 gives exactly these two blocks
+(\file{research/textbook/tools/compute_masking_output.txt}), which confirms the ordering: channels are
+grouped by output channel first, and within a group the offset runs along a row before moving down.
+
+Now the real case, $r = 4$, $C = 32$. Which input number produces output pixel $(c, Y, X) = (1, 5, 6)$?
+\begin{align*}
+h &= \lfloor 5/4 \rfloor = 1, & i &= 5 \bmod 4 = 1,\\
+w &= \lfloor 6/4 \rfloor = 1, & j &= 6 \bmod 4 = 2,\\
+\text{channel} &= 1 \cdot 16 + 4 \cdot 1 + 2 = 22 .
+\end{align*}
+So the source is input channel 22 at position $(h, w) = (1, 1)$.
+\end{worked}
+
+The count of numbers is unchanged, as it must be for a permutation:
+\begin{align*}
+\text{before:}\quad 512 \times 32 \times 32 &= 512 \times 1024 = 524{,}288,\\
+\text{after:}\quad 32 \times 128 \times 128 &= 32 \times 16{,}384 = 524{,}288 .
+\end{align*}
+
+\coursefig[0.95\linewidth]{iw-21-decoder}{The decoder. The four encoder maps are projected to 256
+channels by 1 $\times$ 1 convolutions, resized to F1's 32 $\times$ 32, concatenated to 1,024 channels,
+fused and refined, and expanded to $512 = 32 \times 4 \times 4$ channels. PixelShuffle(4) rearranges
+each group of 16 channels into a 4 $\times$ 4 block of pixels (inset, with $r = 2$), returning
+\shape{(B, 32, 128, 128)} without any arithmetic.}{fig:decoder:course}
+
+\subsection{Why pixel shuffle and not a final bilinear upsampling}
+
+With pixel shuffle, output pixel $(i, j)$ of a 4 $\times$ 4 block comes from its own channel $16c + 4i
++ j$, and that channel is produced by its own row of weights in the last convolution. So the 16 pixels
+of a block can take 16 unrelated values. With bilinear upsampling all 16 would be weighted averages of
+the same few coarse values.
+
+\begin{worked}[label={we:decoder:spike}]{A one-pixel anomaly, two ways}
+One row of a 4-pixel block, true values $[0, 0, 8, 0]$ (one hot pixel on a cold background, in
+illustrative units). A bilinear upsampler at factor 4 sees one coarse value per block, the block mean
+\[
+\tfrac14 (0 + 0 + 8 + 0) = 2,
+\]
+and neighbouring blocks with value 0. Whatever it does, it outputs a smooth bump between neighbouring
+coarse values: every pixel of the block gets a value between 0 and 2. The prediction at the hot pixel is
+at most 2, the residual there at least $8 - 2 = 6$, and the three cold pixels pick up spurious residuals
+of up to 2 each. A pixel-shuffle head has four channels for this row, one per pixel, and can output
+$[0, 0, 8, 0]$ exactly if its weights have learned that pattern.
+\end{worked}
+
+The decoder's own comment puts it in the terms of the thermal model it was written for: ``a 1-pixel
+anomaly at 45\textdegree C surrounded by 30\textdegree C background gets its own predicted value, not a
+smoothed average of the 4x4 block'' (\file{seg_former_decoder.py}, lines 107--109). The important
+subtlety: you do \emph{not} want the model to reconstruct an anomaly well. You want it to be
+\emph{able} to give each pixel its own prediction, so that what it predicts at an anomalous pixel is
+``what normally goes here'', unblurred, and the difference is large and sharp.
+
+\subsection{What it costs}
+
+A convolution's work\index{multiply-add} is its multiply-adds per position (the weight count without biases) times the
+number of positions. For the two refine convolutions at 32 $\times$ 32:
+\begin{align*}
+\text{refine 1:}\quad 256 \times 256 \times 9 &= 589{,}824 \text{ per position}, & 589{,}824 \times 1024 &= 603{,}979{,}776,\\
+\text{refine 2:}\quad 256 \times 512 \times 9 &= 1{,}179{,}648 \text{ per position}, & 1{,}179{,}648 \times 1024 &= 1{,}207{,}959{,}552,
+\end{align*}
+about 1.8 billion multiply-adds per patch\tagC. At 128 $\times$ 128 the same two convolutions would do
+sixteen times as much, about 29 billion. Pixel shuffle itself costs nothing but memory movement.
+
+\begin{sourcenote}[: thermal comments in a hyperspectral decoder]
+\code{SegFormerDecoder} was written for the thermal model (Chakshu) and is reused unchanged: its default
+is \code{out_channels=1} and its comments speak of temperatures (lines 49--51, 107--112). The
+hyperspectral model builds it with \code{out_channels=compressed_channels}
+(\file{hyperspectral_seg_former_mae.py}, lines 107--111), 32 in every shipped configuration, so the last
+convolution has $32 \times 16 = 512$ outputs. The same class, built with width 128 and 5 output
+channels, is the segmentation head of \cref{ch:seghead}; a different, progressive decoder is the subject
+of \cref{ch:decoderwork}.
+\end{sourcenote}
+
+\section{Decompress and denormalise}\label{sec:decoder:back}
+
+The decoder's output is still in the compressed 32-channel space. Two last steps bring it back to
+bands and to physical units.
+
+\paragraph{The decompressor}\index{decompressor} (\cref{ch:compressor}) is a 1 $\times$ 1 convolution from 32 to 165
+channels, with no normalisation and no activation:
+\[
+\shape{(B, 32, 128, 128)} \xrightarrow{\text{Conv2d(32, 165, k=1)}} \shape{(B, 165, 128, 128)} .
+\]
+At each pixel it computes $\hat{\vect{z}} = \mat{W}_{\text{dec}}\, \vect{y} + \vect{b}_{\text{dec}}$ with
+$\mat{W}_{\text{dec}} \in \R^{165 \times 32}$: each of the 165 bands is a learned mixture of the 32
+compressed channels.
+
+\paragraph{Denormalisation}\index{denormalisation} undoes the per-band z-score of \cref{ch:bandpipeline}. With the band's
+stored mean $\mu_c$ and standard deviation $\sigma_c$ (buffers baked into the model):
+\begin{equation}\label{eq:decoder:denorm}
+\hat{x}_{c,y,x} = \sigma_c\, \hat{z}_{c,y,x} + \mu_c .
+\end{equation}
+It is the normalisation $z = (x - \mu)/\sigma$ solved for $x$: multiply both sides by $\sigma$, then add
+$\mu$.
+
+\begin{worked}[label={we:decoder:denorm}]{Denormalising one value}
+Suppose a band has $\mu = 0.10$ and $\sigma = 0.08$\tagA{} (illustrative values of the right size for
+reflectance), and the decompressor outputs $\hat{z} = -0.5$ at some pixel. Then
+\begin{align*}
+\hat{x} &= 0.08 \times (-0.5) + 0.10 && \text{multiply by } \sigma, \text{ then add } \mu\\
+        &= -0.04 + 0.10\\
+        &= 0.06 .
+\end{align*}
+A predicted reflectance of 0.06, half a standard deviation below the band mean.
+\end{worked}
+
+\section{One patch, all the way through}\label{sec:decoder:trace}
+
+Every component of the model's \code{forward} method is now yours
+(\file{app/foundation_models/components/hyperspectral_seg_former_mae.py}, lines 116--156). \index{forward pass}\index{shape-preserving model}Here is the whole walk for a batch of $B = 4$ patches of 128 $\times$ 128 with 165 bands,
+compressed to $D = 32$, at $\rho = 0.65$.
+
+\begin{lstlisting}
+def forward(self, x, mask=None, keep_mask=None):   # x (4,165,128,128), mask (4,1,128,128), keep_mask (4,1024)
+    if mask is not None:
+        x = x * mask                                # invalid pixels -> 0.0 in every band
+    if self.normalize is not None:
+        x = self.normalize(x)                       # per-band z-score
+    x = self.compressor(x)                          # (4, 32, 128, 128)
+    features = self.encoder(x, keep_mask=keep_mask) # [F1, F2, F3, F4]
+    x_hat = self.decoder(features)                  # (4, 32, 128, 128)
+    x_hat = self.decompressor(x_hat)                # (4, 165, 128, 128)
+    if self.denormalize is not None:
+        x_hat = self.denormalize(x_hat)             # back to reflectance
+    return x_hat
+\end{lstlisting}
+
+Notice what is \emph{not} here: no loss, no score, no masking strategy. The model reconstructs whatever
+it is given with whatever keep mask it is handed. The trainer chooses random masks (\cref{ch:masking}),
+the inferencer chooses complementary ones (\cref{ch:inference}); the same class serves both.
+
+\begin{longtable}{@{}rlll@{}}
+\caption{One forward pass, every shape. $B = 4$, 165 bands, $D = 32$, 128 $\times$ 128, $\rho = 0.65$
+on fully valid patches. Shapes confirmed by running the real model on CPU
+(\texttt{research/textbook/tools/compute\_params.py}).}\label{tab:decoder:trace}\\
+\toprule
+\# & Operation & Output shape & Note \\\midrule
+\endfirsthead
+\toprule
+\# & Operation & Output shape & Note \\\midrule
+\endhead
+& input $x$ & \shape{(4, 165, 128, 128)} & reflectance \\
+1 & \texttt{x * mask} & \shape{(4, 165, 128, 128)} & mask broadcasts over bands \\
+2 & normalise & \shape{(4, 165, 128, 128)} & z-scores; invalid $\approx -\mu/\sigma$ \\
+3 & compressor & \shape{(4, 32, 128, 128)} & 1 $\times$ 1 conv + BatchNorm \\\midrule
+4 & S1 patch embed & \shape{(4, 1024, 32)} & $k4\,s4\,p0$, grid 32 $\times$ 32 \\
+  & S1 remove tokens & \shape{(4, 359, 32)} & 665 hidden per patch \\
+  & S1 2 blocks + LN & \shape{(4, 359, 32)} & full-attention fallback \\
+  & S1 restore + reshape & \shape{(4, 32, 32, 32)} & F1, zeros at hidden tokens \\
+  & S2 embed, blocks, reshape & \shape{(4, 64, 16, 16)} & F2, $R = 4$ \\
+  & S3 embed, blocks, reshape & \shape{(4, 160, 8, 8)} & F3, $R = 2$ \\
+  & S4 embed, blocks, reshape & \shape{(4, 256, 4, 4)} & F4, $R = 1$ \\\midrule
+5 & 4 projections & \shape{(4, 256, H\_i, W\_i)} & one 1 $\times$ 1 conv per map \\
+  & bilinear to 32 $\times$ 32 & $4 \times$ \shape{(4, 256, 32, 32)} & F1 skipped \\
+  & concatenate & \shape{(4, 1024, 32, 32)} & $4 \times 256$ \\
+  & fuse + GELU & \shape{(4, 256, 32, 32)} & 1 $\times$ 1 conv \\
+  & refine 1 + GELU & \shape{(4, 256, 32, 32)} & 3 $\times$ 3 conv \\
+  & refine 2 & \shape{(4, 512, 32, 32)} & $512 = 32 \times 16$, no activation \\
+  & pixel shuffle(4) & \shape{(4, 32, 128, 128)} & a permutation \\\midrule
+6 & decompressor & \shape{(4, 165, 128, 128)} & 1 $\times$ 1 conv, bare \\
+7 & denormalise & \shape{(4, 165, 128, 128)} & $\sigma_c \hat z + \mu_c$ \\\bottomrule
+\end{longtable}
+
+\coursefig[0.98\linewidth]{iw-22-forward}{The seven steps of \texttt{forward()} for a batch of four 128
+$\times$ 128 patches. Spectral steps are teal, spatial steps indigo. Step 4 expands into the four encoder
+stages (hiding at stage 1 only). The model stops at the reconstruction; the trainer computes the loss
+(amber) in raw reflectance.}{fig:decoder:forward}
+
+The shape story on one line:
+\[
+(4, 165, 128, 128) \to (4, 32, 128, 128) \to \text{tokens} \to \text{F1..F4} \to (4, 32, 128, 128) \to (4, 165, 128, 128).
+\]
+Input and output shapes are identical. Reconstruction models are shape-preserving; they have to be,
+or you could not subtract one from the other.
+
+\subsection{What the caller does next, and in which units}
+
+The trainer takes the output and builds the loss mask of \cref{ch:masking}:
+\begin{lstlisting}
+x_hat = model(pixels, mask=mask, keep_mask=keep_mask)          # (B, 165, H, W), reflectance
+loss_mask = pixel_pred_mask * eroded_mask                       # (B, 1, H, W)
+per_pixel_l1_mean = (x_hat - pixels).abs().mean(dim=1, keepdim=True)   # (B, 1, H, W)
+l1_loss = per_pixel_l1_mean[loss_mask == 1].mean()
+\end{lstlisting}
+It compares the \emph{denormalised} output with the \emph{raw} input: reflectance against reflectance.
+So an L1 of 0.008 means that, averaged over graded pixels, each band's predicted reflectance is off by
+0.008, a few percent of typical values between 0.02 and 0.30. In normalised space the same number would
+mean ``0.008 standard deviations'' and would need translating before it meant anything. The losses
+themselves are \cref{ch:losses}.
+
+\begin{drift}
+The L1 of 0.008 is the upper end of the expectation ``\textasciitilde 0.003--0.008'' at epoch 500 written into the
+v0.2.0 configuration's notes\tagM{configs/hyperspectral_segformer_exp_2.json} (line 15), not a measured
+result of the shipped model; the same file states that the loss is computed in raw reflectance space
+(line 6). Measured losses for each run are in \cref{ch:pretrain} and \cref{ch:ftruns}.
+\end{drift}
+
+\begin{confusions}
+\confusion{Why upsample to F1's size rather than to full resolution?}{Cost. F1's grid is a quarter of the
+patch side, so convolutions there are sixteen times cheaper. The final jump is a free rearrangement.}
+\confusion{Is pixel shuffle learned?}{No. It has no parameters; it moves numbers. What is learned is the
+convolution before it, which produces the 16 sub-pixel channels per output channel.}
+\confusion{Does the decoder know which positions were hidden?}{Not explicitly. F1 arrives with zero
+vectors there, an implicit signal; no mask is passed to the decoder.}
+\confusion{Why is it fine that F1 has holes?}{F2, F3 and F4 cover the same ground without holes, and the
+fuse convolution learns how much to take from each scale at each position.}
+\confusion{Then why use bilinear interpolation at all?}{For the coarse maps it is the right tool: their
+content is smooth context, and smoothing it onto F1's grid loses nothing. Only the last jump to
+individual pixels must not smooth.}
+\confusion{Compress, then decompress: does it undo itself?}{No. The encoder and decoder sit between them
+and change the representation. The compressor makes the transformer affordable; the decompressor turns
+its answer back into bands.}
+\end{confusions}
+
+\begin{checkyourself}
+\item\label{ex:decoder:1} Upsample the row $[2, 10]$ to four values with \code{align_corners=False},
+showing $u_d$ for each output. Then upsample the 2 $\times$ 2 grid $\begin{pmatrix} 0 & 4\\ 8 &
+12\end{pmatrix}$ to 4 $\times$ 4.
+\item\label{ex:decoder:2} Apply \code{pixel_shuffle} with $r = 2$ to a 1 $\times$ 1 input with 4
+channels holding $[9, 8, 7, 6]$.
+\item\label{ex:decoder:3} With $r = 4$ and $C = 32$, which input channel and position produce output
+pixel $(c, Y, X) = (31, 127, 0)$? And which output pixel does input channel 37 at position $(2, 3)$ go
+to?
+\item\label{ex:decoder:4} If the compressed width were $D = 24$, what would the last refine convolution's
+output channel count be, and how many numbers would the tensor before pixel shuffle hold for one
+patch? Check it against the decoder's output size.
+\item\label{ex:decoder:5} Give the shape after each of the seven steps of \code{forward} for a batch of
+2 patches of 256 $\times$ 256 with 165 bands and $D = 32$, including F1--F4.
+\item\label{ex:decoder:6} A band has $\mu = 0.25$, $\sigma = 0.1$. The decompressor outputs $\hat z =
+1.3$. What reflectance does the model predict? If the true reflectance is 0.36, what is that pixel's
+absolute error in this band?
+\end{checkyourself}
+
+\nextchapter{ch:params}

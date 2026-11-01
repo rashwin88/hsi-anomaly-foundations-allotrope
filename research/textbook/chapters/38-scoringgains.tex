@@ -1,0 +1,855 @@
+\chapter{Improving the score on a fixed model, and gated scene adaptation}\label{ch:scoringgains}
+\begingroup\sloppy % long provenance tags need loose lines rather than overfull ones
+
+\begin{onething}
+On 2026-10-19 and 20 four ways to find more targets without a better model were tried on FT04's fixed reconstruction -
+blurring the residual (a spatial matched filter), fusing residual Mahalanobis with PCA-RX by rank, whitening each
+background type separately, and briefly retraining on each scene with the likely anomalies gated out of the loss - and
+every one lost real objects to plain residual Mahalanobis. A pixel measure counts a big object's pixels many times and
+a one-pixel target once, so pass criteria must count objects caught; and a pretrained model has no early window for
+GT-HAD's early stopping to find.
+\end{onething}
+
+\section{The question: change the score, not the model}\label{sec:scoringgains:question}
+
+\Cref{ch:ftruns} closed on a hard fact. v0.2.0, FT03 and FT04 all tie on detection once you score them with residual
+Mahalanobis (RM, \cref{ch:residualmaha}), and \cref{sec:ftruns:absorb} showed why: if a better model shrinks every
+residual by the same factor, the whitening shrinks with it and every score stays put. The experiment record puts it in
+three words: RM ``absorbs model gains''. So the question on 2026-10-19 was the other half: \textbf{keep the
+reconstruction fixed and change only the score.} Can a better score find more?
+
+These are evaluation scorers in \code{app/evaluation/scorers.py}, run by \file{configs/eval/scoring_gains.json} on one
+model (FT04 epoch 10) and two datasets. Nothing in the product's \code{anomaly_scoring} changed, and none of them was
+adopted. The baseline throughout is FT04 with plain RM and \emph{no} cloud exclusion - pAUC 0.162, not the 0.170 of
+Indradhanu V2 with its cloud mask - so every row is on the same footing.
+
+\begin{analogy}
+A school wants better exam results without changing the teaching, so it tries changing the marking. Rule one: give credit
+for answers that are nearly right. The class average rises - but the students who got one hard question exactly right and
+nothing else now look like everyone else. Rule two: average two examiners' rankings. Rule three: grade each class against
+its own class average. Rule three makes the mock exam look great, because the mock spread its hard questions evenly over
+every class, while the real exam's hard cases all sat in one small class - who, graded against themselves, now look
+ordinary. Before trusting any new marking, count how many individual students it identifies correctly, not only the
+average mark. Each rule is one section of this chapter.
+\end{analogy}
+
+\paragraph{The pass criteria, fixed before the run.} A scorer counted as a gain over RM on FT04 if:
+\begin{enumerate}
+\item real PRISMA bench: pAUC up to 1\% false alarms rose by at least 0.005 \emph{and} TPR at 0.1\% false alarms did not
+  fall;
+\item bench-v2.1: objects caught at the top 1\% fell by no more than 0.5 points.
+\end{enumerate}
+Criterion 2 is only a guard. bench-v2.1's implants are blurred with $\sigma = 1.4$ by construction (\cref{ch:benchmarks}),
+so a blur of 1.4 would partly be measuring its own reflection there. The real bench is the judge.
+
+\begin{table}[htbp]
+\centering
+\caption{The scorers on FT04's fixed reconstruction. Real bench: 4 PRISMA scenes, 909 objects; bench-v2.1: 18 hosts.}
+\label{tab:scoringgains:results}
+\small\setlength{\tabcolsep}{4pt}
+\begin{tabular}{lccccc}
+\toprule
+ & \multicolumn{3}{c}{real PRISMA bench} & bench-v2.1 & \\
+\cmidrule(lr){2-4}\cmidrule(lr){5-5}
+scorer & pAUC & TPR @ 0.1\% & caught 1\% / 0.1\% & caught 1\% & criteria \\
+\midrule
+RM (baseline) & 0.162 & 0.061 & \textbf{45.7\% / 14.9\%} & 35.1\% & -- \\
+A1 RM blur 1.0 & 0.177 & 0.064 & 40.7\% / 12.0\% & 33.4\% & 1 met, 2 failed \\
+A1 RM blur 1.4 & 0.177 & 0.069 & 36.3\% / 10.2\% & 29.4\% & 1 met, 2 failed \\
+A1+ RM + RM blur 1.4 & 0.180 & 0.064 & 43.0\% / 12.8\% & 35.0\% & both met \\
+A2 rank mean & 0.162 & 0.057 & 43.8\% / 14.0\% & 34.9\% & failed \\
+A2 rank max & 0.138 & 0.046 & 42.7\% / 11.4\% & 34.8\% & failed \\
+A3 mixture $k = 6$ & 0.111 & 0.045 & 39.4\% / 11.4\% & 41.2\% & failed \\
+A3 mixture $k = 10$ & 0.096 & 0.034 & 34.4\% / 8.1\% & 41.9\% & failed \\
+PCA-RX (no model) & 0.128 & 0.029 & 39.7\% / 8.1\% & 33.2\% & -- \\
+\bottomrule
+\end{tabular}
+
+\smallskip
+{\footnotesize Source: \tagM{research/experiments/scoring-gains/README.md}; full tables in \file{research/experiments/scoring-gains/report.md}.}
+\end{table}
+
+Read the bold column first. \textbf{No scorer catches as many real objects as plain RM, at either budget.}
+\Cref{fig:scoringgains:scatter} draws the puzzle to scale: the A1 points move right on pixel pAUC and down on objects
+caught.
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}
+\begin{axis}[width=0.85\linewidth, height=6.8cm, xlabel={real-bench pAUC to 1\% (pixels)},
+  ylabel={real objects caught at top 1\% (\%)}, xmin=0.09, xmax=0.19, ymin=33, ymax=48,
+  scaled x ticks=false, xticklabel style={/pgf/number format/fixed, /pgf/number format/precision=2},
+  grid=major, grid style={gray!20}, every node near coord/.append style={font=\scriptsize},
+  nodes near coords, point meta=explicit symbolic]
+\addplot[only marks, mark=*, mark size=2.5pt, color=spat, nodes near coords align={anchor=south west}]
+  coordinates {(0.162,45.7)[RM] (0.128,39.7)[PCA-RX]};
+\addplot[only marks, mark=square*, mark size=2.5pt, color=loss, nodes near coords align={anchor=north west}]
+  coordinates {(0.177,40.7)[blur 1.0] (0.177,36.3)[blur 1.4] (0.180,43.0)[A1+]};
+\addplot[only marks, mark=triangle*, mark size=3pt, color=attn, nodes near coords align={anchor=south east}]
+  coordinates {(0.162,43.8)[mean] (0.138,42.7)[max]};
+\addplot[only marks, mark=diamond*, mark size=3pt, color=spec, nodes near coords align={anchor=west}]
+  coordinates {(0.111,39.4)[$k$=6] (0.096,34.4)[$k$=10]};
+\draw[dashed, maskgrey] (axis cs:0.162,33) -- (axis cs:0.162,48);
+\draw[dashed, maskgrey] (axis cs:0.09,45.7) -- (axis cs:0.19,45.7);
+\end{axis}
+\end{tikzpicture}
+\caption{Pixel pAUC against objects caught, real PRISMA bench, drawn to scale from \cref{tab:scoringgains:results}. The
+dashed lines cross at plain RM. Nothing lies above the horizontal line: the A1 blurs (amber) move right and down - more
+pixel pAUC, fewer objects.}
+\label{fig:scoringgains:scatter}
+\end{figure}
+
+\section{A1: the spatial matched filter}\label{sec:scoringgains:a1}
+
+\subsection{The matched filter, derived}
+
+\index{matched filter}
+A \emph{matched filter} is a weighting shaped like the signal you are looking for. Set it up in general. A measurement
+$\vect{x} \in \R^n$ is a known signal shape $\vect{t}$ with unknown amplitude $a$, plus noise $\vect{n}$ with mean
+$\vect{0}$ and covariance $\Cov$:
+\[
+\vect{x} = a\,\vect{t} + \vect{n}.
+\]
+A linear filter $\vect{w}$ turns it into one number, $y = \vect{w}\T\vect{x} = a\,\vect{w}\T\vect{t} + \vect{w}\T\vect{n}$.
+The signal part is $a\,\vect{w}\T\vect{t}$. The noise part has mean 0 and variance
+\[
+\operatorname{Var}[\vect{w}\T\vect{n}] = \E[(\vect{w}\T\vect{n})^2] = \E[\vect{w}\T\vect{n}\vect{n}\T\vect{w}] =
+\vect{w}\T\E[\vect{n}\vect{n}\T]\vect{w} = \vect{w}\T\Cov\vect{w}.
+\]
+(The second step writes a square as a number times its own transpose; the third moves the constant $\vect{w}$ out of
+the expectation.) The \emph{signal-to-noise ratio} per unit amplitude is
+\begin{equation}
+\operatorname{SNR}(\vect{w}) = \frac{\vect{w}\T\vect{t}}{\sqrt{\vect{w}\T\Cov\vect{w}}}. \label{eq:scoringgains:snr}
+\end{equation}
+Which $\vect{w}$ maximises it?
+
+\paragraph{Step 1: the scale does not matter.} Replace $\vect{w}$ by $c\,\vect{w}$ with $c > 0$: the numerator gains a
+factor $c$ and the square root of the denominator gains $\sqrt{c^2} = c$. They cancel. So fix the scale by demanding
+$\vect{w}\T\vect{t} = 1$, and maximising the SNR becomes \emph{minimising the noise variance} $\vect{w}\T\Cov\vect{w}$
+subject to $\vect{w}\T\vect{t} = 1$.
+
+\paragraph{Step 2: a Lagrange multiplier.} \index{Lagrange multiplier}
+To minimise a function subject to a constraint, minimise the \emph{Lagrangian}, the function plus a multiplier $\lambda$
+times the constraint written as ``$= 0$'':
+\begin{align}
+\mathcal{L}(\vect{w}, \lambda) &= \vect{w}\T\Cov\vect{w} - \lambda\,(\vect{w}\T\vect{t} - 1).
+\intertext{Differentiate with respect to $\vect{w}$. For a symmetric $\Cov$, the gradient of $\vect{w}\T\Cov\vect{w}$ is
+$2\Cov\vect{w}$ (in one dimension, $\frac{d}{dw}\sigma^2 w^2 = 2\sigma^2 w$), and the gradient of $\vect{w}\T\vect{t}$ is
+$\vect{t}$. Set the gradient to zero:}
+2\Cov\vect{w} - \lambda\vect{t} &= \vect{0}.
+\intertext{Multiply both sides on the left by $\tfrac12\Cov\inv$:}
+\vect{w} &= \tfrac{\lambda}{2}\,\Cov\inv\vect{t}.
+\intertext{Put this into the constraint $\vect{t}\T\vect{w} = 1$ to find $\lambda$: $\tfrac{\lambda}{2}\,\vect{t}\T\Cov\inv
+\vect{t} = 1$, so $\tfrac{\lambda}{2} = 1 / (\vect{t}\T\Cov\inv\vect{t})$. Therefore}
+\vect{w}^\star &= \frac{\Cov\inv\vect{t}}{\vect{t}\T\Cov\inv\vect{t}}. \label{eq:scoringgains:mf}
+\end{align}
+Its SNR follows by substitution. The numerator is $\vect{w}^{\star\T}\vect{t} = 1$ by construction. The denominator:
+$\vect{w}^{\star\T}\Cov\vect{w}^\star = \frac{\vect{t}\T\Cov\inv\Cov\Cov\inv\vect{t}}{(\vect{t}\T\Cov\inv\vect{t})^2} =
+\frac{1}{\vect{t}\T\Cov\inv\vect{t}}$. So
+\begin{equation}
+\operatorname{SNR}(\vect{w}^\star) = \sqrt{\vect{t}\T\Cov\inv\vect{t}}, \label{eq:scoringgains:mfsnr}
+\end{equation}
+the Mahalanobis length of the signal shape. No linear filter does better: that is what ``matched'' means.
+
+\begin{worked}[label={we:scoringgains:mf2}]{A two-band matched filter}
+Two bands with correlated noise, $\Cov = \begin{psmallmatrix} 2 & 1 \\ 1 & 2 \end{psmallmatrix}$, and a signal only in band
+1, $\vect{t} = (1, 0)$. Do it on paper.
+
+\emph{Invert $\Cov$.} For a $2 \times 2$ matrix $\begin{psmallmatrix} a & b \\ c & d\end{psmallmatrix}$ the inverse is
+$\frac{1}{ad - bc}\begin{psmallmatrix} d & -b \\ -c & a\end{psmallmatrix}$. Here $ad - bc = 2 \times 2 - 1 \times 1 = 3$:
+\[
+\Cov\inv = \tfrac13 \begin{pmatrix} 2 & -1 \\ -1 & 2 \end{pmatrix}.
+\]
+\emph{Apply to $\vect{t}$.} $\Cov\inv\vect{t} = \tfrac13 (2, -1) = (0.667, -0.333)$, and
+$\vect{t}\T\Cov\inv\vect{t} = 1 \times 0.667 + 0 \times (-0.333) = 0.667$.
+
+\emph{The filter.} $\vect{w}^\star = (0.667, -0.333) / 0.667 = (1, -0.5)$. It takes band 1 and \emph{subtracts half of band
+2}: band 2 holds no signal, but its noise is correlated with band 1's, so subtracting part of it cancels noise.
+
+\emph{Check the SNR.} $\Cov\vect{w}^\star = (2 \times 1 + 1 \times (-0.5),\ 1 \times 1 + 2 \times (-0.5)) = (1.5, 0)$;
+$\vect{w}^{\star\T}\Cov\vect{w}^\star = 1 \times 1.5 + (-0.5) \times 0 = 1.5$; SNR $= 1 / \sqrt{1.5} = 0.816$, which equals
+$\sqrt{0.667} = 0.816$, as \eqref{eq:scoringgains:mfsnr} says. The naive filter $\vect{w} = \vect{t} = (1, 0)$ gives
+$\vect{w}\T\Cov\vect{w} = 2$ and SNR $= 1/\sqrt{2} = 0.707$. Matching gains about 15\%. (Script check\tagC.)
+\end{worked}
+
+\paragraph{The spatial version.} Now let $\vect{x}$ be one band's residual over a small neighbourhood of pixels rather than
+several bands at one pixel. If the residual noise is independent from pixel to pixel with equal variance, $\Cov = \sigma^2
+\mat{I}$ and \eqref{eq:scoringgains:mf} gives $\vect{w}^\star \propto \vect{t}$: \textbf{weight the neighbours by the
+target's own footprint}. A target that always arrives smeared by the sensor's point-spread function (PSF, $\sigma \approx
+1.4$\,px on both benches; \cref{ch:benchmarks}) is matched by a Gaussian blur of the same width. That is A1: blur the
+residual (\code{spatial_sigma} 1.0 or 1.4) before whitening.
+
+\begin{worked}[label={we:scoringgains:tap}]{The promise and its price, on a 3-tap kernel}
+One band, already in units of the background's spread (noise variance 1, mean 0). Use the kernel $[0.25, 0.5, 0.25]$ as a
+stand-in for the Gaussian.
+
+\emph{Noise after the blur.} The variance of a weighted sum of independent values is the sum of squared weights times each
+variance:
+\begin{align*}
+0.25^2 + 0.5^2 + 0.25^2 &= 0.0625 + 0.25 + 0.0625 = 0.375\\
+\text{spread} &= \sqrt{0.375} = 0.612
+\end{align*}
+\emph{A footprint-shaped target} $[1, 2, 1]$:
+\begin{align*}
+\text{blurred centre} &= 0.25 \times 1 + 0.5 \times 2 + 0.25 \times 1 = 0.25 + 1 + 0.25 = 1.5\\
+\text{SNR raw} &= 2 / 1 = 2.00, \qquad \text{SNR blurred} = 1.5 / 0.612 = 2.45
+\end{align*}
+The kernel is proportional to $[1, 2, 1]$, so it \emph{is} this target's matched filter, and 2.45 equals
+$\sqrt{\vect{t}\T\vect{t}} = \sqrt{1 + 4 + 1} = \sqrt{6} = 2.449$ from \eqref{eq:scoringgains:mfsnr}.
+
+\emph{A one-pixel target} $[0, 2, 0]$:
+\begin{align*}
+\text{blurred centre} &= 0.25 \times 0 + 0.5 \times 2 + 0.25 \times 0 = 1.0\\
+\text{SNR blurred} &= 1.0 / 0.612 = 1.63 \qquad\text{(raw was 2.00)}
+\end{align*}
+The same filter that helps a footprint-shaped target hurts a sharper one: a matched filter is matched to \emph{one} shape.
+(Script: 2.449 and 1.633\tagC.)
+\end{worked}
+
+In the real code (\code{blurred_mahalanobis}) the whitening is refitted on the blurred residual - the ``divide by the new
+spread'' step above. And \code{blur} uses \emph{normalised convolution}, so nodata does not bleed into the scene's edge:
+
+\begin{lstlisting}
+# app/evaluation/scorers.py, blur
+k = valid.astype(np.float32)                               # (H, W) 1 valid, 0 nodata
+w = np.maximum(gaussian_filter(k, sigma), 1e-6)            # blurred validity
+out[i] = gaussian_filter(x[i] * k, sigma) / w * k          # per band (H, W)
+\end{lstlisting}
+
+\index{normalised convolution}
+Blur the data with nodata set to 0, then divide by the blurred validity. At a pixel next to nodata, the blurred data
+counts fewer real neighbours, and dividing by the blurred validity renormalises the weights over the valid ones only. With
+the 3-tap kernel, values $(2, 4, \text{nodata})$ and the centre pixel: data blur $0.25 \times 2 + 0.5 \times 4 + 0.25
+\times 0 = 2.5$; validity blur $0.25 + 0.5 + 0 = 0.75$; result $2.5 / 0.75 = 3.33$, the average of 2 and 4 with weights
+$0.25/0.75$ and $0.5/0.75$. Without the division you would get 2.5, dragged towards the zeros.
+
+\subsection{What a pixel measure rewards}\label{sec:scoringgains:pixels}
+
+\index{pixel measure}\index{object measure}
+pAUC and TPR are \emph{pixel measures}: they count target pixels above a threshold. ``Objects caught'' is an \emph{object
+measure}: an object counts once if any of its pixels is near a top-scoring pixel (\cref{ch:measures}). A filter that fills
+in more pixels of an object already found raises the first and not the second. You need a pen for the next example; it
+takes about five minutes.
+
+\begin{worked}[label={we:scoringgains:strip}]{A strip of 12 pixels, plain and blurred}
+One band, background mean 0, score $=$ residual squared (a one-band global RM). Pixels 5--8 are a big object, pixel 11 is
+a one-pixel target, pixels 2 and 3 are noise that flips sign from one pixel to the next.
+\begin{center}
+\small\setlength{\tabcolsep}{3.5pt}
+\begin{tabular}{lcccccccccccc}
+\toprule
+pixel & 1 & 2 & 3 & 4 & 5 & 6 & 7 & 8 & 9 & 10 & 11 & 12 \\
+\midrule
+residual & 0 & 4.5 & $-4.2$ & 0 & 3 & 4 & 5 & 3 & 0 & 0 & 4.8 & 0 \\
+score $r^2$ & 0 & 20.25 & 17.64 & 0 & 9 & 16 & 25 & 9 & 0 & 0 & 23.04 & 0 \\
+\bottomrule
+\end{tabular}
+\end{center}
+The analyst's budget is the top 4 pixels. Plain RM's top 4: pixel 7 (25), 11 (23.04), 2 (20.25), 3 (17.64).
+
+Blur each pixel, $b_i = 0.25\,r_{i-1} + 0.5\,r_i + 0.25\,r_{i+1}$, zero outside the strip:
+\begin{align*}
+b_2 &= 0.25 \times 0 + 0.5 \times 4.5 + 0.25 \times (-4.2) = 0 + 2.25 - 1.05 = 1.2 &&\to 1.44\\
+b_3 &= 0.25 \times 4.5 + 0.5 \times (-4.2) + 0.25 \times 0 = 1.125 - 2.1 + 0 = -0.975 &&\to 0.95\\
+b_5 &= 0.25 \times 0 + 0.5 \times 3 + 0.25 \times 4 = 0 + 1.5 + 1 = 2.5 &&\to 6.25\\
+b_6 &= 0.25 \times 3 + 0.5 \times 4 + 0.25 \times 5 = 0.75 + 2 + 1.25 = 4.0 &&\to 16\\
+b_7 &= 0.25 \times 4 + 0.5 \times 5 + 0.25 \times 3 = 1 + 2.5 + 0.75 = 4.25 &&\to 18.06\\
+b_8 &= 0.25 \times 5 + 0.5 \times 3 + 0.25 \times 0 = 1.25 + 1.5 + 0 = 2.75 &&\to 7.56\\
+b_{11} &= 0.25 \times 0 + 0.5 \times 4.8 + 0.25 \times 0 = 2.4 &&\to 5.76
+\end{align*}
+(Pixels 1, 4, 9, 10 and 12 come out at 1.27, 0.09, 0.56, 1.44 and 1.44 - all small.) Blurred top 4: pixel 7 (18.06), 6
+(16), 8 (7.56), 5 (6.25). The target, at 5.76, is fifth.
+\begin{center}
+\small
+\begin{tabular}{lccc}
+\toprule
+ & object pixels in top 4 (of 5) & false alarms in top 4 & objects caught (of 2) \\
+\midrule
+plain & 2 (pixels 7, 11) & 2 (pixels 2, 3) & 2 \\
+blurred & 4 (pixels 5--8) & 0 & 1 \\
+\bottomrule
+\end{tabular}
+\end{center}
+A pixel measure such as TPR doubles, $2/5 = 0.4$ to $4/5 = 0.8$, and the false alarms vanish. Objects caught halves.
+(Every value matches the script\tagC.)
+\end{worked}
+
+\begin{keypoint}
+A pixel measure counts each pixel of an object, so filling in more of an object you had already found looks like progress,
+and losing a one-pixel target costs one pixel's worth.
+\end{keypoint}
+
+The example simplifies three things - one band, a global mean instead of the 21/61 ring, a 3-tap kernel - but the real
+bench shows the same mechanism (\cref{tab:scoringgains:size}). Blur loses objects at \emph{every} size. Turned into counts:
+$0.365 \times 561 = 204.8 \approx 205$ small objects for RM against $0.333 \times 561 = 186.8 \approx 187$ blurred, 18
+lost; $0.524 \times 170 = 89.1 \approx 89$ against $0.453 \times 170 = 77.0 \approx 77$ in the 3--5\,px class, 12 lost. In
+the largest class the loss is one object ($0.80 \times 20 = 16$ against $0.75 \times 20 = 15$), too few to read. And 561 of
+909 real objects, 62\%, are 1--2 pixels: a filter that favours footprint-sized targets works against most of the bench.
+
+\begin{table}[htbp]
+\centering
+\caption{Real-bench objects caught at the top 1\%, by object size (561 / 170 / 158 / 20 objects).}
+\label{tab:scoringgains:size}
+\small
+\begin{tabular}{lcccc}
+\toprule
+scorer & 1--2\,px & 3--5\,px & 6--20\,px & $>$ 20\,px \\
+\midrule
+RM (baseline) & \textbf{36.5\%} & \textbf{52.4\%} & \textbf{66.5\%} & 80.0\% \\
+A1 RM blur 1.0 & 33.3\% & 45.3\% & 57.6\% & 75.0\% \\
+A1+ RM + RM blur 1.4 & 35.1\% & 48.2\% & 60.8\% & 80.0\% \\
+A3 mixture $k = 6$ & 32.6\% & 43.5\% & 54.4\% & 75.0\% \\
+\bottomrule
+\end{tabular}
+
+\smallskip
+{\footnotesize Source: \tagM{research/experiments/scoring-gains/README.md}.}
+\end{table}
+
+\paragraph{A1+ passed its criteria and was still not adopted.} A1+ (rank mean of RM and RM blurred at 1.4) met both
+criteria: pAUC $0.180 - 0.162 = +0.018$, at least $+0.005$; TPR 0.064, not below 0.061; bench-v2.1 $35.0 - 35.1 = -0.1$
+points, within 0.5. It also lost $45.7 - 43.0 = 2.7$ points of real objects at the top 1\% and $14.9 - 12.8 = 2.1$ at the
+top 0.1\%. The README: ``The criteria were pixel-level and missed this; not adopted.'' A criterion that was right to fix in
+advance and wrong in what it measured. From then on, every pass criterion in the record includes real objects caught.
+
+\section{A2: rank fusion with PCA-RX}\label{sec:scoringgains:a2}
+
+\index{rank fusion}
+PCA-RX (local RX on the cube's top principal components, no model; \citet{reed1990adaptive}) wins where a target is foreign
+to the \emph{scene}; RM wins where it is foreign to the \emph{model}. The hope was that they fail on different objects, so
+combining them would catch the union. Their scores live on different scales, so they cannot be averaged directly.
+\code{rank_map} puts them on one footing:
+\begin{equation}
+\operatorname{rank}(p) = \frac{\#\{\text{valid pixels with score} \le s(p)\}}{\#\{\text{valid pixels}\}} \quad
+\text{(ties averaged, 0 outside valid)}, \label{eq:scoringgains:rank}
+\end{equation}
+the empirical cumulative distribution of the scores, evaluated at each pixel. \code{fuse} stacks two such maps and takes
+the mean or the maximum.
+
+\begin{worked}[label={we:scoringgains:rank}]{Rank mean and rank max on five pixels}
+P1 is a real target. P2 is RM's false alarm (a field edge); P4 is PCA-RX's (a roof that is spectrally unusual but ordinary
+to the model).
+\begin{center}
+\small
+\begin{tabular}{lccccc}
+\toprule
+ & P1 & P2 & P3 & P4 & P5 \\
+\midrule
+RM score & 9 & 12 & 3 & 2 & 1 \\
+PCA-RX score & 8 & 1 & 2 & 10 & 3 \\
+RM rank & 4/5 & 5/5 & 3/5 & 2/5 & 1/5 \\
+PCA-RX rank & 4/5 & 1/5 & 2/5 & 5/5 & 3/5 \\
+rank mean & 0.8 & 0.6 & 0.5 & 0.7 & 0.4 \\
+rank max & 0.8 & 1.0 & 0.6 & 1.0 & 0.6 \\
+\bottomrule
+\end{tabular}
+\end{center}
+Each rank counts the pixels at or below: RM's P1 (score 9) has 9, 3, 2, 1 at or below it, four of five, so $4/5$. The mean
+for P1 is $(4/5 + 4/5)/2 = 0.8$; for P4, $(2/5 + 5/5)/2 = 7/10 = 0.7$.
+
+With a budget of one pixel: RM alone picks P2, PCA-RX alone picks P4 - both miss. Rank mean picks P1: a pixel both scorers
+think odd beats a pixel only one thinks odd. Rank max puts P2 and P4 first together (1.0) and P1 third. (Script
+check\tagC.)
+\end{worked}
+
+Why does the maximum let false alarms through? Suppose, on background pixels, the two ranks behave like independent uniform
+numbers $U, V$ on $[0, 1]$. At a threshold $1 - q$:
+\begin{align*}
+P(\max(U, V) > 1 - q) &= 1 - P(U \le 1 - q)\,P(V \le 1 - q) = 1 - (1 - q)^2 = 2q - q^2,\\
+P\big(\tfrac{U + V}{2} > 1 - q\big) &= P(U + V > 2 - 2q) = \tfrac12 (2q)^2 = 2q^2 \quad (q \le \tfrac12).
+\end{align*}
+(The second is the area of the corner triangle with legs $2q$ in the unit square.) At $q = 0.01$, the maximum passes $2
+\times 0.01 - 0.0001 = 0.0199$ of the background - nearly twice either scorer alone - while the mean passes $2 \times 0.0001
+= 0.0002$. The maximum's top is roughly the \emph{union} of the two scorers' tops, false alarms included; the mean's top
+needs agreement. (In the evaluator the fused map is re-ranked and the budget is a fixed share of it, so these numbers
+describe the shape of the fused map, not the final false-alarm rate.)
+
+The real bench gave the expected half and denied the hopeful half: rank max fell to pAUC 0.138, as predicted; rank mean tied
+pAUC (0.162) and \emph{lost} objects (43.8\% against 45.7\%). Rank mean needs the scorers to fail on different objects, and
+on the real bench they did not. PCA-RX alone catches 39.7\%; its wins on bench-v1 ``do not carry to real targets'', so
+averaging in its ranks mostly dilutes RM.
+
+\section{A3: a mixture of backgrounds}\label{sec:scoringgains:a3}
+
+\subsection{Gaussian mixtures and responsibilities}
+
+\index{Gaussian mixture}\index{responsibility}
+One covariance for a whole scene mixes land, water and roofs. A \emph{Gaussian mixture} models the background instead as
+$K$ Gaussian components, each a surface type: component $k$ has a weight $\pi_k$ (its share of the scene, $\sum_k \pi_k =
+1$), a mean $\muv_k$ and a covariance $\Cov_k$. The density of a pixel $\vect{x}$ is
+\begin{equation}
+p(\vect{x}) = \sum_{k=1}^K \pi_k\,\mathcal{N}(\vect{x};\,\muv_k, \Cov_k). \label{eq:scoringgains:gmm}
+\end{equation}
+Which component does a pixel come from? Bayes' rule turns ``probability of the pixel given the component'' into
+``probability of the component given the pixel'' - the \emph{responsibility}:
+\begin{equation}
+r_k(\vect{x}) = P(k \mid \vect{x}) = \frac{P(k)\,p(\vect{x} \mid k)}{p(\vect{x})} =
+\frac{\pi_k\,\mathcal{N}(\vect{x};\,\muv_k, \Cov_k)}{\sum_j \pi_j\,\mathcal{N}(\vect{x};\,\muv_j, \Cov_j)}.
+\label{eq:scoringgains:resp}
+\end{equation}
+A natural per-type anomaly score is then the \emph{responsibility-weighted} squared Mahalanobis distance,
+\begin{equation}
+s(\vect{x}) = \sum_k r_k(\vect{x})\,(\vect{x} - \muv_k)\T\Cov_k\inv(\vect{x} - \muv_k), \label{eq:scoringgains:rwm}
+\end{equation}
+each type's distance counted in proportion to how likely the pixel belongs to it.
+
+\begin{worked}[label={we:scoringgains:gmm}]{Responsibilities and a weighted score in one band}
+Two types: a field ($\pi_1 = 0.8$, mean 0, variance 1) and roofs ($\pi_2 = 0.2$, mean 5, variance 4). A pixel at $x = 3$.
+The one-dimensional normal density is $\mathcal{N}(x; \mu, v) = \frac{1}{\sqrt{2\pi v}} e^{-(x - \mu)^2 / (2v)}$.
+\begin{align*}
+\mathcal{N}(3; 0, 1) &= \tfrac{1}{\sqrt{2\pi}}\,e^{-9/2} = 0.3989 \times 0.01111 = 0.004432\\
+\mathcal{N}(3; 5, 4) &= \tfrac{1}{\sqrt{8\pi}}\,e^{-4/8} = 0.1995 \times 0.6065 = 0.1210\\
+\pi_1 \mathcal{N}_1 &= 0.8 \times 0.004432 = 0.003545\\
+\pi_2 \mathcal{N}_2 &= 0.2 \times 0.1210 = 0.02420\\
+r_1 &= 0.003545 / (0.003545 + 0.02420) = 0.003545 / 0.02774 = 0.128\\
+r_2 &= 0.02420 / 0.02774 = 0.872
+\end{align*}
+Squared distances: to the field $(3 - 0)^2 / 1 = 9$; to the roofs $(3 - 5)^2 / 4 = 1$. Weighted score:
+\[
+s = 0.128 \times 9 + 0.872 \times 1 = 1.15 + 0.87 = 2.02 .
+\]
+A single global Gaussian has mean $0.8 \times 0 + 0.2 \times 5 = 1$ and variance $\E[x^2] - 1^2 = 0.8 \times 1 + 0.2 \times
+(4 + 25) - 1 = 0.8 + 5.8 - 1 = 5.6$, giving $(3 - 1)^2 / 5.6 = 0.71$. (Script: $r_1 = 0.128$, $s = 2.022$\tagC.)
+\end{worked}
+
+\subsection{What the code does: hard types by k-means}
+
+\index{k-means}
+\code{background_types} does not fit a soft mixture. It runs \emph{k-means} (\citet{lloyd1982least}'s algorithm) - the
+hard-assignment limit of a mixture, in which every responsibility is 0 or 1: pick $k$ centres, give each pixel to its
+nearest centre, move each centre to the mean of its pixels, repeat.
+
+\begin{worked}[label={we:scoringgains:kmeans}]{k-means on six numbers}
+Points $0, 1, 2, 8, 9, 10$; two centres starting at 0 and 2.
+\begin{enumerate}
+\item Assign. 0 is nearer 0; 1 is equally near both (distance 1) and the code's \code{argmin} takes the first, 0; 2, 8, 9,
+  10 are nearer 2. Update: centre 1 $= (0 + 1)/2 = 0.5$; centre 2 $= (2 + 8 + 9 + 10)/4 = 29/4 = 7.25$.
+\item Assign. 2 is now $\abs{2 - 0.5} = 1.5$ from centre 1 and $\abs{2 - 7.25} = 5.25$ from centre 2: it moves. Update:
+  centre 1 $= (0 + 1 + 2)/3 = 1$; centre 2 $= (8 + 9 + 10)/3 = 9$.
+\item Assign: nothing moves. Converged at 1 and 9. (Script check\tagC.)
+\end{enumerate}
+\end{worked}
+
+\begin{sourcenote}[: ``mixture'' is hard k-means plus class-aware RM]
+The README calls A3 a ``mixture of backgrounds'', but there is no soft Gaussian mixture in the code.
+\code{background_types} (\code{app/evaluation/scorers.py}) runs Lloyd's k-means, fixed seed, 25 iterations, fitted on a
+50,000-pixel sample, on the \emph{cube's} whitened top 10 principal components - so the types are surfaces, not residual
+patterns - and assigns every valid pixel to its nearest centre. \code{score} then hands those types to
+\code{class_aware_residual_mahalanobis} (\code{app/utils/anomaly_detection/residual_mahalanobis.py}), written for a
+segmentation head's classes: each type gets its own whitening and a ring of same-type neighbours, and types under 5,000
+valid pixels (\code{MIN_CLASS_PX}) join type 0. In the language of \eqref{eq:scoringgains:rwm}, every $r_k$ is 0 or 1.
+\end{sourcenote}
+
+\subsection{Why it won the implant bench and lost the real one}
+
+A3 won bench-v2.1 by 6 points (35.1\% to 41.2\%) and cut the real bench's pAUC by a third (0.162 to 0.111). Here is why, by
+hand.
+
+\begin{worked}[label={we:scoringgains:types}]{Targets that become their type's normal}
+One band, every type's mean 0, score $=$ residual squared $/$ variance. An illustration\tagA:
+\begin{itemize}
+\item field type (16 pixels): seven at $+1$, seven at $-1$, one edge at $+2.5$, one at $-2.5$;
+\item built-up type (6 pixels): $-2, -2, +2, +2$ (ordinary roofs), and two real targets at $-6$ and $+6$.
+\end{itemize}
+\emph{One global variance, all 22 pixels.}
+\begin{align*}
+\text{sum of squares} &= 14 \times 1 + 2 \times 6.25 + 4 \times 4 + 2 \times 36 = 14 + 12.5 + 16 + 72 = 114.5\\
+\text{variance} &= 114.5 / 22 = 5.20\\
+\text{target score} &= 36 / 5.20 = 6.92, \qquad \text{edge score} = 6.25 / 5.20 = 1.20
+\end{align*}
+The targets top the ranking.
+
+\emph{Each type on its own.}
+\begin{align*}
+\text{field:}\quad & (14 + 12.5)/16 = 26.5 / 16 = 1.656; \quad \text{edge score} = 6.25 / 1.656 = 3.77\\
+\text{built-up:}\quad & (16 + 72)/6 = 88 / 6 = 14.67; \quad \text{target score} = 36 / 14.67 = 2.45
+\end{align*}
+Now the two field edges (3.77) outrank both targets (2.45). The targets are two of the built-up type's six pixels, so they
+\emph{are} a large share of what that type's ``normal'' is fitted on. Graded against themselves, they look ordinary.
+\end{worked}
+
+That is what the README found on the real scenes: 60--70\% of target pixels sit in two or three small background types of
+about 5\% of the scene each - the built-up surfaces where targets live. In set4, one type holds 60\% of the target pixels on
+5.2\% of the scene\tagM{research/experiments/scoring-gains/README.md}.
+
+And the implants? bench-v2.1 spreads them over every surface. Put an implant with residual 4 into the field type above:
+globally $16 / 5.20 = 3.07$, per type $16 / 1.656 = 9.66$. A tighter normal makes an implant on an ordinary surface stand out
+more - so per-type whitening only sharpens the implants.
+
+\begin{keypoint}
+bench-v2.1 has a second bias (after bench-v1's cube-level oddity, \cref{ch:benchmarks}): implant placement is not
+conditioned on where real targets occur. Judge scorers on the real bench and use bench-v2.1 to catch regressions.
+\end{keypoint}
+
+\file{docs/09-known-issues.md} records the bias and says the fix (placement on target-bearing surfaces) is not built.
+
+\section{Expectations, a cache bug, and the verdict}\label{sec:scoringgains:verdict}
+
+The README wrote its expectations down before the run. Scored afterwards:
+\begin{center}
+\small
+\begin{tabular}{lp{5.2cm}p{5.6cm}}
+\toprule
+idea & expected & what happened \\
+\midrule
+A1 & a small gain on the real bench & right on pixels, wrong on objects \\
+A2 & rank mean a small gain, rank max a loss & rank max right; rank mean tied pAUC and lost objects \\
+A3 & a gain on multi-surface scenes (set2 / set4) & wrong in direction \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\paragraph{A float16 overflow.} \index{float16}
+The run also exposed a bug in the evaluator's cache (score maps are cached, \cref{ch:runeval}). Maps were stored as
+float16, a 16-bit floating-point format with 1 sign bit, 5 exponent bits and 10 fraction bits. Its largest finite value
+has the largest normal exponent, $2^{15}$, and all ten fraction bits set, a significand of $1 + (1 - 2^{-10}) = 2 -
+2^{-10}$:
+\[
+(2 - 2^{-10}) \times 2^{15} = 2^{16} - 2^{5} = 65{,}536 - 32 = 65{,}504 .
+\]
+Blurred and mixture squared distances went past it, so a reloaded map had \texttt{inf} at its top - exactly the pixels that
+matter. \code{runner.py} now keeps a map float32 if any value is non-finite or at least $6 \times 10^4$ in size; the 13
+overflowed cache files were deleted. The README notes that this run's metrics were computed before the cast and are
+unaffected.
+
+\paragraph{Verdict: RM stays the score.} The lesson carried forward in writing: the next attempt's pass criteria include
+real objects caught at the top 1\% and 0.1\%. The next attempt was on the model side - an uncertainty head, FT06, which
+failed too (\cref{ch:uncertainty}): it learned to expect large errors on the targets themselves, so dividing by that
+expectation hid them (pAUC 0.170 to 0.125).
+
+\section{Gated scene adaptation}\label{sec:scoringgains:adapt}
+
+\subsection{What GT-HAD's gating and early stopping are for}
+
+Every failure so far had one shape: \emph{every attempt to learn ``normal'' from a scene's own context also learned that
+scene's targets} - the mixture made targets their type's normal, and FT06's head learned to expect them. One method in the
+record seemed to have an answer. GT-HAD \citep{lian2025gated}, a published hyperspectral anomaly detector, was reproduced on
+the four PRISMA scenes (\file{research/experiments/gt-had-prisma/summary.md}). It is a reconstruction detector with no
+pretraining: it trains from scratch on the very scene it scores, cut into $9 \times 9$ pixel blocks. Train long enough and
+it learns to reconstruct everything, targets included. It has two defences:
+
+\begin{itemize}
+\item \textbf{Gating.} \index{gating} A periodic search (the paper calls it CMM) decides which blocks look like background;
+  those are routed to a background branch that learns from them, so its idea of normal is built without the likely
+  anomalies.
+\item \textbf{Early stopping.} \index{early stopping} Stop training before the network has had time to learn the rare
+  things: a network learns the common background before the rare targets.
+\end{itemize}
+
+The second defence is visible in the reproduction:
+\begin{center}
+\small
+\begin{tabular}{lccc}
+\toprule
+ & 5 epochs & 25 epochs & 150 epochs (paper's setting) \\
+\midrule
+mean valid-pixel AUC & \textbf{0.873} & 0.780 & 0.843 \\
+mean PD at $10^{-3}$ false alarms & \textbf{5.5\%} & -- & 2.0\% \\
+\bottomrule
+\end{tabular}
+
+\smallskip
+{\footnotesize Source: \tagM{research/experiments/gt-had-prisma/summary.md}.}
+\end{center}
+(PD, probability of detection, is the same idea as TPR.) The summary is careful: ``choosing the epoch count from these GT
+AUCs would leak labels, so 5 epochs is a diagnostic, not a recommendation.'' After the GT-HAD discussion the user's comment -
+``Gating is something we can use'' - started the experiment of 2026-10-20.
+
+\subsection{The transplant}
+
+GT-HAD starts from nothing; this version starts from FT04 and only adapts it. Per scene, starting from FT04's weights each
+time (\file{research/experiments/scene-adaptation/README.md}):
+\begin{enumerate}
+\item score the scene with FT04 + RM (the unadapted score);
+\item gate $=$ the top 1\% of that score, dilated by 2\,px (\code{gate_mask});
+\item adapt $N$ steps on the scene's own tiles, gated pixels left out of the loss (\code{adapt});
+\item reconstruct, score RM with cloud excluded on \emph{unadapted} FT04's masks; restore FT04's weights.
+\end{enumerate}
+
+\code{adapt} (\code{app/foundation_models/scene_adaptation.py}) uses the fine-tuning loss - L1 plus $0.5 \times$ SAM on hidden
+pixels, 65\% of tokens hidden - on batches of 8 random 128\,px tiles from the scene, with an Adam optimiser. Three details
+matter:
+\begin{itemize}
+\item \textbf{The loss mask is hidden $\times$ valid $\times$ not-gated}: \code{learn = valid & ~gate}, then
+  \code{loss_mask = hidden * l[:, None].float()}. A gated pixel can still be \emph{seen} as context; it never counts towards
+  the loss.
+\item \textbf{Eval mode during training.} \code{model.eval()} is called before the loop, so BatchNorm keeps the statistics it
+  learned on many scenes. Gradients still flow; only those stored averages are frozen.
+\item \textbf{The segmentation head is outside the loss}: parameters whose names start \texttt{seg\_head.} or
+  \texttt{scale\_head.} are skipped - which is why cloud is excluded on the unadapted model's masks.
+\end{itemize}
+The evaluator copies the full \code{state_dict} before adapting and reloads it in a \code{finally} block, so a crash
+mid-scene cannot leave the next scene starting from adapted weights.
+
+\paragraph{How far does a 1\% gate reach?} \index{dilation}
+The probe printed ``gated px 4.55\%'' on set1. Why that much, and why not more? \code{binary_dilation} with no structuring
+element uses the cross: each pass adds the four direct neighbours of every gated pixel. Two passes turn an $a \times b$
+rectangle of gated pixels into the rectangle, plus four side strips of width 2, plus four corner triangles:
+\begin{equation}
+\abs{\text{gate}} = ab + \underbrace{2 \cdot 2\,(a + b)}_{\text{side strips}} + \underbrace{4 \times 1}_{\text{corners}}
+= ab + 4(a + b) + 4 . \label{eq:scoringgains:dilate}
+\end{equation}
+(Each corner triangle at distance up to 2 holds the single diagonal pixel at offset $(1, 1)$: $r(r-1)/2 = 1$ for $r = 2$.)
+
+\begin{worked}[label={we:scoringgains:dilate}]{Growth of a gate under two passes}
+\begin{align*}
+1 \times 1:\quad & 1 + 4 \times 2 + 4 = 1 + 8 + 4 = 13 &&\text{growth } 13 / 1 = 13\\
+2 \times 2:\quad & 4 + 4 \times 4 + 4 = 4 + 16 + 4 = 24 &&\text{growth } 24 / 4 = 6.0\\
+3 \times 3:\quad & 9 + 4 \times 6 + 4 = 9 + 24 + 4 = 37 &&\text{growth } 37 / 9 = 4.1
+\end{align*}
+SciPy gives 13, 24 and 37\tagC. If set1's top 1\% were all isolated pixels, the gate would cover about 13\%. It covers
+4.55\%, a growth of 4.55, between the $3 \times 3$ and $2 \times 2$ cases: the top of the score comes in clumps, so a halo
+costs far less than it would for scattered single pixels. More than 95\% of the scene still trains the network.
+\end{worked}
+
+\subsection{Choosing settings without ground truth}
+
+There are two settings: the learning rate and $N$, the number of steps. Choosing either by which detects the labelled targets
+best would be cheating - a setting tuned on the answers looks better than it will be on a new scene.
+
+\paragraph{The learning rate, from the loss alone.} \code{adapt_probe.py} ran 300 steps on set1 at three learning rates and
+recorded only the adaptation loss - no labels (1.6 steps per second on the laptop GPU):
+\begin{center}
+\small
+\begin{tabular}{lcccc}
+\toprule
+lr & first 50 steps & steps 100--150 & last 50 steps & relative fall \\
+\midrule
+$10^{-5}$ & 0.0495 & 0.0409 & 0.0389 & $0.0106 / 0.0495 = 21.4\%$ \\
+$3 \times 10^{-5}$ & 0.0459 & 0.0382 & 0.0368 & $0.0091 / 0.0459 = 19.8\%$ \\
+$10^{-4}$ & 0.0461 & 0.0365 & 0.0354 & $0.0107 / 0.0461 = 23.2\%$ \\
+\bottomrule
+\end{tabular}
+
+\smallskip
+{\footnotesize Losses: \tagM{research/experiments/scene-adaptation/README.md}; relative falls computed here\tagC.}
+\end{center}
+The choice was $3 \times 10^{-5}$: ``as fast as 1e-4 early, a third of the step size - the aim is to learn background without
+reaching the targets.'' Its first-50 average (0.0459) matches $10^{-4}$'s (0.0461) with a third of the step. That is a
+judgement, not a measurement: the loss shows how fast the background is fitted, not whether the targets are being learned,
+because they are a tiny share of it (\cref{sec:scoringgains:lessons}).
+
+\paragraph{N, by leave-one-scene-out.} \index{leave-one-scene-out}\index{cross-validation}
+Four variants were run: $N = 50$, 200 and 1000 gated, and $N = 200$ with the gate at 0\% to isolate the gate's effect.
+\emph{Cross-validation} estimates how a choice made on some data will do on new data by holding data out of the choice.
+\emph{Leave-one-scene-out} is its version with scenes as the units: to report scene $s$, choose $N$ using only the other
+scenes, then read $s$ at that $N$; repeat for every scene and average.
+
+Why bother? Pick $N$ by the best mean over all four scenes and each reported scene has helped choose its own setting - the
+reported number is the maximum of several noisy numbers, which is biased upwards. Leave-one-scene-out guarantees that no
+scene's number comes from a setting tuned on that scene. It is not label-free - the other scenes' labels are used - but it is
+honest about how a setting chosen on old scenes would do on a new one, which is the product's situation.
+
+\begin{table}[htbp]
+\centering
+\caption{Real PRISMA bench, cloud excluded on unadapted FT04's masks.}
+\label{tab:scoringgains:adapt}
+\small
+\begin{tabular}{lcccc}
+\toprule
+ & pAUC $\le$ 1\% & caught top 1\% & caught top 0.1\% & TPR @ 0.1\% \\
+\midrule
+FT04 (the bar) & \textbf{0.170} & 46.0\% & \textbf{15.8\%} & \textbf{0.065} \\
+gated, $N = 50$ & 0.160 & 46.8\% & 15.2\% & 0.059 \\
+gated, $N = 200$ & 0.159 & 46.9\% & 14.9\% & 0.059 \\
+gated, $N = 1000$ & 0.161 & 46.5\% & 15.0\% & 0.057 \\
+ungated, $N = 200$ & 0.159 & 46.9\% & 14.9\% & 0.059 \\
+\bottomrule
+\end{tabular}
+
+\smallskip
+{\footnotesize Source: \tagM{research/experiments/scene-adaptation/README.md} (from \texttt{eval\_report.md}).}
+\end{table}
+
+The pass criteria, fixed before any detection result, asked for a leave-one-scene-out pAUC gain of at least $+0.005$ over
+FT04 with cloud excluded (0.170), objects caught at the top 1\% and 0.1\% not lower, and a bench-v2.1 guard. Part of the
+previous section's lesson is visible: objects caught are in the criteria now.
+
+\begin{worked}[label={we:scoringgains:loso}]{Leave-one-scene-out on the real numbers}
+Per-scene pAUC, cloud excluded, from \file{eval_per_scene.csv}, rounded to three places:
+\begin{center}
+\small
+\begin{tabular}{lcccc}
+\toprule
+ & set1 & set2 & set3 & set4 \\
+\midrule
+FT04 & 0.246 & 0.128 & 0.084 & 0.220 \\
+$N = 50$ & 0.223 & 0.142 & 0.084 & 0.192 \\
+$N = 200$ & 0.228 & 0.142 & 0.081 & 0.185 \\
+$N = 1000$ & 0.240 & 0.139 & 0.083 & 0.181 \\
+\bottomrule
+\end{tabular}
+\end{center}
+The baseline: FT04 mean $= (0.246 + 0.128 + 0.084 + 0.220)/4 = 0.678/4 = 0.1695$. You need a pen; it takes about ten minutes.
+
+\emph{Hold out set1} (mean over set2, set3, set4):
+\begin{align*}
+N = 50:&\quad (0.142 + 0.084 + 0.192)/3 = 0.418/3 = 0.1393\\
+N = 200:&\quad (0.142 + 0.081 + 0.185)/3 = 0.408/3 = 0.1360\\
+N = 1000:&\quad (0.139 + 0.083 + 0.181)/3 = 0.403/3 = 0.1343
+\end{align*}
+Best $N = 50$; set1 reports its $N = 50$ value, \textbf{0.223}.
+
+\emph{Hold out set2} (set1, set3, set4):
+\begin{align*}
+N = 50:&\quad (0.223 + 0.084 + 0.192)/3 = 0.499/3 = 0.1663\\
+N = 200:&\quad (0.228 + 0.081 + 0.185)/3 = 0.494/3 = 0.1647\\
+N = 1000:&\quad (0.240 + 0.083 + 0.181)/3 = 0.504/3 = 0.1680
+\end{align*}
+Best $N = 1000$; set2 reports \textbf{0.139}.
+
+\emph{Hold out set3} (set1, set2, set4):
+\begin{align*}
+N = 50:&\quad (0.223 + 0.142 + 0.192)/3 = 0.557/3 = 0.1857\\
+N = 200:&\quad (0.228 + 0.142 + 0.185)/3 = 0.555/3 = 0.1850\\
+N = 1000:&\quad (0.240 + 0.139 + 0.181)/3 = 0.560/3 = 0.1867
+\end{align*}
+Best $N = 1000$; set3 reports \textbf{0.083}.
+
+\emph{Hold out set4} (set1, set2, set3):
+\begin{align*}
+N = 50:&\quad (0.223 + 0.142 + 0.084)/3 = 0.449/3 = 0.1497\\
+N = 200:&\quad (0.228 + 0.142 + 0.081)/3 = 0.451/3 = 0.1503\\
+N = 1000:&\quad (0.240 + 0.139 + 0.083)/3 = 0.462/3 = 0.1540
+\end{align*}
+Best $N = 1000$; set4 reports \textbf{0.181}.
+
+\emph{The headline.}
+\begin{align*}
+\text{leave-one-scene-out} &= (0.223 + 0.139 + 0.083 + 0.181)/4 = 0.626/4 = 0.1565\\
+\text{gain over FT04} &= 0.1565 - 0.1695 = -0.013
+\end{align*}
+The criterion asked for $+0.005$. On the unrounded CSV the same picks give 0.1567\tagC; the README records 0.157.
+\end{worked}
+
+Notice two things. Set1 picked a different $N$ from the others: three scenes are a small jury, and the choice is not stable.
+And the honest number, 0.1565, is a little worse than the best single row's mean (0.161 for $N = 1000$). \textbf{That gap is
+the size of the flattery you would have reported by choosing $N$ on all four scenes.}
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}
+\begin{axis}[ybar, bar width=6pt, width=0.9\linewidth, height=6cm, ymin=0, ymax=0.27,
+  ylabel={pAUC to 1\% (cloud excluded)}, symbolic x coords={set1,set2,set3,set4}, xtick=data,
+  enlarge x limits=0.18, legend style={at={(0.5,1.02)},anchor=south,legend columns=4,font=\small},
+  every axis plot/.append style={draw=black!50}]
+\addplot[fill=spat!60] coordinates {(set1,0.246) (set2,0.128) (set3,0.084) (set4,0.220)};
+\addplot[fill=loss!40] coordinates {(set1,0.223) (set2,0.142) (set3,0.084) (set4,0.192)};
+\addplot[fill=loss!70] coordinates {(set1,0.228) (set2,0.142) (set3,0.081) (set4,0.185)};
+\addplot[fill=loss] coordinates {(set1,0.240) (set2,0.139) (set3,0.083) (set4,0.181)};
+\legend{FT04, $N = 50$, $N = 200$, $N = 1000$}
+\end{axis}
+\end{tikzpicture}
+\caption{Per-scene pAUC of FT04 and its gated adaptations, drawn to scale. Set2 gains at every $N$; set1 and set4 lose at
+every $N$; nothing peaks at small $N$.}
+\label{fig:scoringgains:perscene}
+\end{figure}
+
+\subsection{Results, and two lessons}\label{sec:scoringgains:lessons}
+
+Read \cref{tab:scoringgains:adapt} in three passes. Every $N$ is below FT04 on pAUC (about $-0.01$) and on objects caught at
+the top 0.1\% ($-0.6$ to $-0.9$ points): criteria 1 and 2 fail. Objects caught at the top 1\% rose by 0.5 to 0.9 points;
+with the top 0.1\% falling, the README reads this as ``a shift of hits from the very top into the top 1\%, not more finds.''
+And gated and ungated $N = 200$ are the same row, to three decimals, on every measure. Both written expectations - a gain
+peaking at small $N$, and ungated worse than gated - were wrong. bench-v2.1 was not run; with criteria 1 and 2 failed it could
+not change the verdict. One scene, set2, gains at every $N$ (0.128 to 0.139--0.142); ``four scenes cannot say whether that is
+signal.''
+
+\paragraph{Lesson 1: the gate changed nothing, because adaptation never learned the targets.}
+If gated and ungated agree to three decimals, the ungated network was not learning the targets either, so the gate had
+nothing to prevent. Why not? Look at their weight in the loss. GT-HAD's summary gives the scale: scenes of about $1200
+\times 1200$ pixels with 600 to 1200 anomaly pixels.
+\begin{align*}
+\text{scene pixels} &= 1{,}200 \times 1{,}200 = 1{,}440{,}000\\
+\text{anomaly pixels} &\approx 1{,}000\\
+\text{share} &= 1{,}000 / 1{,}440{,}000 = 0.0007 = 0.07\%
+\end{align*}
+In a loss that is a mean over pixels, 0.07\% of the pixels contribute about 0.07\% of the gradient. The README puts it as
+the targets being ``$<$ 0.1\% of pixels'' that ``1000 steps of a 5.9\,M-parameter model barely see''. Be precise about
+``barely see'': it is the \emph{weight} that is small, not the number of visits. $1000 \text{ steps} \times 8 \text{ tiles}
+\times 128 \times 128 = 131{,}072{,}000$ pixel-visits, about $131{,}072{,}000 / 1{,}440{,}000 = 91$ per pixel of the scene:
+each target is in a tile many times, but each time it is one voice in 16,384.
+
+So what went wrong? Something that affects every pixel. Nudging the network towards this scene's background moved the
+residual of every pixel a little, and the careful ranking at the very top got slightly shuffled. No gate on 4.55\% of the
+pixels can protect against a change to the other 95\%.
+
+\paragraph{Lesson 2: a pretrained model has no early window.}
+GT-HAD's curve - better at 5 epochs than 150 - is a statement about a network that \emph{started from nothing on this scene}.
+Early on it has learned the common background and not the targets; that moment is what early stopping finds. Place FT04 on
+the same ruler:
+\begin{center}
+\small
+\begin{tabular}{lc}
+\toprule
+ & detection at $10^{-3}$ false alarms \\
+\midrule
+GT-HAD, 150 epochs (paper's setting) & 2.0\% \\
+GT-HAD, 5 epochs (its best, a diagnostic) & 5.5\% \\
+FT04, no adaptation & 6.5\% \\
+\bottomrule
+\end{tabular}
+\end{center}
+(GT-HAD figures are PD on valid pixels; FT04's is TPR at 0.1\% with cloud excluded. Close enough to compare, not identical:
+different band preparation, and GT-HAD did not exclude cloud. Without exclusion FT04's figure is 6.1\%, still ahead.) FT04
+already knows what ordinary land, water and roofs look like, from many scenes, and was never trained on this scene's targets.
+It is already where GT-HAD's early stopping is trying to get to, and beyond it. \textbf{A pretrained model starts past the
+point early stopping finds} - which is why the damage is the same at $N = 50$ as at $N = 1000$. Any adaptation moves it away
+from a good starting point, not towards one.
+
+\begin{keypoint}
+Gating and early stopping protect a network that is about to memorise its targets; a pretrained model adapted for a few
+hundred steps was never about to, so they have nothing to protect.
+\end{keypoint}
+
+\begin{drift}
+All results in this chapter are dated 2026-10-19 (scoring gains) and 2026-10-20 (scene adaptation), on FT04. The next
+model-side attempts - the uncertainty head (FT06), gated training losses and block masking (FT07, FT08), the progressive
+decoder (FT09) and Indradhanu Heavy - are \cref{ch:uncertainty,ch:decoderwork,ch:heavy}.
+\end{drift}
+
+\begin{confusions}
+\confusion{pAUC went up, so A1 is better.}{pAUC and TPR count pixels. A1 filled in more pixels of objects already found and
+lost objects at every size. The analyst reviews objects, not pixels.}
+\confusion{The blur in A1 is the same as bench-v2.1's PSF blur.}{Same shape, different job. bench-v2.1 blurs the implant
+before scoring to imitate a real target; A1 blurs the residual of the whole scene. That overlap is why A1's bench-v2.1
+numbers were treated as partly circular.}
+\confusion{A1+ met the criteria, so it should have shipped.}{The criteria were fixed in advance, which is right, but they
+checked only pixel measures. A1+ lost 2.7 points of real objects. The record changed the criteria rather than shipping a
+regression.}
+\confusion{Rank max is the generous choice - a pixel only needs one scorer to like it.}{That generosity is the problem: any
+pixel either scorer wrongly likes reaches the top too.}
+\confusion{A3 won a benchmark, so it is a better scorer the real bench is too small to show.}{The real bench lost a third of
+its pAUC, and the mechanism is understood: real targets cluster in small built-up types and become their types' normal. The
+benchmark's placement is what is wrong here.}
+\confusion{The mixture scorer is a Gaussian mixture model.}{It is hard k-means types handed to class-aware residual
+Mahalanobis: every responsibility is 0 or 1.}
+\confusion{The gate made no difference, so gating is useless.}{It made no difference here, because the network did not
+memorise the targets in 1000 steps. In a from-scratch method trained for 150 epochs, it does, and gating has a job.}
+\confusion{Eval mode means the model is not training.}{\texttt{model.eval()} only freezes BatchNorm's stored statistics and
+turns dropout off. The optimiser still updates the weights every step.}
+\confusion{Objects caught at the top 1\% went up, so adaptation found more.}{The top 0.1\% went down at the same time. Hits
+moved from the very top into the rest of the top 1\%; the analyst looks at the very top first.}
+\end{confusions}
+
+\begin{checkyourself}
+\item\label{ex:scoringgains:1} Matched filter: $\Cov = \begin{psmallmatrix} 1 & 0.5 \\ 0.5 & 1\end{psmallmatrix}$ and
+  $\vect{t} = (1, 1)$. Compute $\vect{w}^\star$ by \eqref{eq:scoringgains:mf} and its SNR by \eqref{eq:scoringgains:mfsnr}.
+  Compare with the naive $\vect{w} = \vect{t}$. Explain the result.
+\item\label{ex:scoringgains:2} Redo the strip of \cref{we:scoringgains:strip} with the target at pixel 11 raised from 4.8 to
+  5.2. Compute its blurred score and say whether it enters the blurred top 4, and what that does to objects caught.
+\item\label{ex:scoringgains:3} In \cref{we:scoringgains:rank}, change P1's PCA-RX score from 8 to 11. Recompute both ranks of
+  P1 and P4, the rank mean and the rank max. Which pixel does each rule put first?
+\item\label{ex:scoringgains:4} In \cref{we:scoringgains:gmm}, compute the responsibilities and the weighted score for a pixel
+  at $x = 2$.
+\item\label{ex:scoringgains:5} In \cref{we:scoringgains:types}, the built-up type gains two more ordinary roofs at $-2$ and
+  $+2$ (8 pixels, still two targets). Recompute the built-up variance and the target score. Do the targets now beat the field
+  edges' 3.77?
+\item\label{ex:scoringgains:6} Redo the leave-one-scene-out of \cref{we:scoringgains:loso} with only $N = 50$ and $N = 200$
+  as candidates. Which $N$ does each scene pick, and what is the headline?
+\item\label{ex:scoringgains:7} Using \eqref{eq:scoringgains:dilate}, how many pixels does a gated $1 \times 4$ line cover after
+  two passes? What share of a scene would the gate cover if its top 1\% were made entirely of such lines?
+\end{checkyourself}
+\endgroup
+
+\nextchapter{ch:uncertainty}

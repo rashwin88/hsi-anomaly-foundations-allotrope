@@ -1,0 +1,70 @@
+total 5506629 buffers 725
+  normalize 0
+  denormalize 0
+  compressor 5376
+  encoder 3331072
+  decoder 2164736
+  decompressor 5445
+ pe [16480, 18624, 92640, 369408] blocks [159232, 236544, 837120, 1600000] norms [64, 128, 320, 512]
+   blk0 norm1 64
+   blk0 attn 69856
+   blk0 norm2 64
+   blk0 ffn 9632
+   blk0 drop 0
+     attn.q 1056
+     attn.k 1056
+     attn.v 1056
+     attn.proj 1056
+     attn.reduction 65568
+     attn.reduction_norm 64
+     ffn.fc1 4224
+     ffn.dwconv 1280
+     ffn.fc2 4128
+     ffn.act 0
+ dec proj [8448, 16640, 41216, 65792] fuse 262400 refine [590080, 0, 1180160]
+D24 5204829 5205538
+stem total 5886386
+  stats 0
+  spectral_in 14721
+  spectral_out 4257
+  norm 64
+  encoder 3331072
+  decoder 2164736
+  seg_head 371536
+torch.Size([2, 202, 128, 128])
+kept per item tensor([359., 359., 359., 359.])
+[(4, 32, 32, 32), (4, 64, 16, 16), (4, 160, 8, 8), (4, 256, 4, 4)]
+(4, 165, 128, 128)
+no grad: encoder.blocks.0.0.attn.reduction.weight 65536
+no grad: encoder.blocks.0.0.attn.reduction.bias 32
+no grad: encoder.blocks.0.0.attn.reduction_norm.weight 32
+no grad: encoder.blocks.0.0.attn.reduction_norm.bias 32
+no grad: encoder.blocks.0.0.ffn.dwconv.weight 1152
+no grad: encoder.blocks.0.0.ffn.dwconv.bias 128
+no grad: encoder.blocks.0.1.attn.reduction.weight 65536
+no grad: encoder.blocks.0.1.attn.reduction.bias 32
+no grad: encoder.blocks.0.1.attn.reduction_norm.weight 32
+no grad: encoder.blocks.0.1.attn.reduction_norm.bias 32
+no grad: encoder.blocks.0.1.ffn.dwconv.weight 1152
+no grad: encoder.blocks.0.1.ffn.dwconv.bias 128
+idle 133824
+heavy total 35315314
+  stats 0
+  spectral_in 17825
+  spectral_out 6337
+  norm 128
+  encoder 29580288
+  decoder 4279616
+  seg_head 1431120
+macs compressor 86507520
+macs encoder.patch_embeds.0 16777216
+macs encoder.blocks.0 25493504
+macs encoder.patch_embeds.1 4718592
+macs encoder.blocks.1 24510464
+macs encoder.patch_embeds.2 5898240
+macs encoder.blocks.2 38420480
+macs encoder.patch_embeds.3 5898240
+macs encoder.blocks.3 25460736
+macs decoder 2096627712
+macs decompressor 86507520
+macs total conv+linear 2416820224

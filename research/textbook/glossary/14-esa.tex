@@ -1,0 +1,13 @@
+\glossentry{Multiply-add (MAC)}{One multiplication followed by one addition, the unit used here to count the work of matrix products and convolutions.}
+\glossentry{Efficient self-attention (ESA)}{SegFormer's attention, in which queries come from every token while keys and values come from a spatially reduced summary of the tokens.}
+\glossentry{Spatial-reduction attention}{The general name, from the Pyramid Vision Transformer, for attention whose keys and values are computed on a downsampled grid.}
+\glossentry{Reduction ratio}{The factor R by which ESA shrinks the token grid in each direction before forming keys and values; 8, 4, 2 and 1 at the four stages.}
+\glossentry{Strided convolution}{A convolution whose window moves more than one position at a time; with kernel equal to stride the windows tile the grid without overlap.}
+\glossentry{Summary token}{One of the N / R-squared reduced tokens of ESA, each standing for an R-by-R block of the token grid; there are 16 at every stage for a 128-by-128 patch.}
+\glossentry{Average pooling}{Replacing each block of a grid by the plain average of its entries; a special case of the learned reduction convolution.}
+\glossentry{Reduction LayerNorm}{The LayerNorm applied to the summary tokens before they are projected into keys and values.}
+\glossentry{Score tensor}{The tensor of query-key scores, shape (B, h, N, N / R-squared); its size sets the memory cost of attention.}
+\glossentry{MiB}{A mebibyte, 2 to the 20 = 1,048,576 bytes; a float32 number takes 4 bytes.}
+\glossentry{Fallback path (ESA)}{The branch taken when the token count is not H times W (tokens were removed at stage 1): no reduction, plain full attention over the surviving tokens.}
+\glossentry{Keep mask}{The per-token mask saying which stage-1 tokens are shown to the encoder; when it removes tokens, stage 1 attention takes the fallback path.}
+\glossentry{Mask ratio}{The fraction of valid stage-1 tokens hidden for prediction during masked training; 0.65 in FT04.}

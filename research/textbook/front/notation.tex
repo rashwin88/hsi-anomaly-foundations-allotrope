@@ -1,0 +1,125 @@
+\chapter{Notation}\label{ch:notation}
+
+This table collects the symbols used across the book. Each is defined again where it first
+appears; come back here when a later chapter uses a symbol you have forgotten. Two collisions
+inherited from the code are worth learning now: $C$ means \emph{input bands} in the data chapters
+but \emph{channel width} inside the network (written $C_i$ for stage $i$), and $d$ means the
+\emph{per-head width} in attention but the \emph{token width} in the spectral stem. The chapter
+always says which it means.
+
+\section*{Numbers, vectors and matrices}
+\begin{longtable}{@{}p{30mm}p{110mm}@{}}
+\toprule
+Symbol & Meaning \\
+\midrule\endhead
+$a, b, t$ & plain numbers (scalars), in italic \\
+$\vect{x}, \vect{u}$ & vectors, in bold lower case; a column of numbers \\
+$x_k$ & the $k$-th entry of $\vect{x}$ \\
+$\mat{A}, \Cov$ & matrices, in bold upper case \\
+$\mat{A}\T$ & the transpose of $\mat{A}$: rows become columns \\
+$\mat{A}\inv$ & the inverse of $\mat{A}$, with $\mat{A}\mat{A}\inv = \mat{I}$ \\
+$\mat{I}$ & the identity matrix: ones on the diagonal, zeros elsewhere \\
+$\ip{\vect{a}}{\vect{b}} = \vect{a}\T\vect{b}$ & the dot product $\sum_k a_k b_k$ \\
+$\norm{\vect{x}}$ & the Euclidean length $\sqrt{\vect{x}\T\vect{x}}$ \\
+$\abs{x}$ & absolute value \\
+$\R^{C}$ & the set of all lists of $C$ real numbers \\
+$\diag(\lambda_1,\dots,\lambda_C)$ & a diagonal matrix with these entries \\
+$\tr(\mat{A})$ & the trace: the sum of the diagonal entries \\
+$\lambda_k, \vect{u}_k$ & the $k$-th eigenvalue and eigenvector of a symmetric matrix \\
+$\mat{U}, \boldsymbol{\Lambda}$ & eigenvectors as columns, eigenvalues on a diagonal: $\Cov = \mat{U}\boldsymbol{\Lambda}\mat{U}\T$ \\
+$\mat{W}$ & a whitening matrix, or (in a network) a weight matrix; the chapter says which \\
+\bottomrule
+\end{longtable}
+
+\section*{Data}
+\begin{longtable}{@{}p{30mm}p{110mm}@{}}
+\toprule
+Symbol & Meaning \\
+\midrule\endhead
+$\lambda$ & wavelength, in nanometres (nm). Context separates it from an eigenvalue \\
+$C$ & number of spectral bands (165 on the common grid) \\
+$H, W$ & image height and width in pixels \\
+$\vect{x} \in \R^{C}$ & one pixel's spectrum: a reflectance per band \\
+$\xhat$ & the model's reconstruction of $\vect{x}$ \\
+$\vect{r} = \vect{x} - \xhat$ & the residual: what the reconstruction got wrong \\
+$\muv$ & a mean vector (of the background) \\
+$\Cov$ & a covariance matrix; $\Cov_r$ is the covariance of residuals \\
+$m$ & a validity mask: 1 where the measurement is real, 0 where it is not \\
+\bottomrule
+\end{longtable}
+
+\section*{Detection and statistics}
+\begin{longtable}{@{}p{30mm}p{110mm}@{}}
+\toprule
+Symbol & Meaning \\
+\midrule\endhead
+$\mathcal{N}(\muv, \Cov)$ & the Gaussian (normal) distribution with mean $\muv$ and covariance $\Cov$ \\
+$z$ & a z-score: (value $-$ mean) / standard deviation \\
+$D^2(\vect{x})$ & squared Mahalanobis distance $(\vect{x}-\muv)\T\Cov\inv(\vect{x}-\muv)$; the RX score \\
+$\chi^2_C$ & the chi-square distribution with $C$ degrees of freedom \\
+$\epsilon$ & a small regularising constant (for example in $\Cov + \epsilon\mat{I}$) \\
+$\theta$ & a spectral angle, in radians \\
+$s(p)$ & the anomaly score of pixel $p$ \\
+TPR, FPR & true-positive rate and false-positive rate at a threshold \\
+pAUC & partial area under the ROC curve, up to a maximum FPR \\
+$a$ & an abundance (fill fraction) in the linear mixing model $\vect{x} = (1-a)\vect{b} + a\vect{t}$ \\
+\bottomrule
+\end{longtable}
+
+\section*{The network}
+\begin{longtable}{@{}p{30mm}p{110mm}@{}}
+\toprule
+Symbol & Meaning \\
+\midrule\endhead
+$B$ & batch size: how many patches are processed together \\
+$D$ & width after the spectral compressor or stem (32; 64 in Indradhanu Heavy) \\
+$N$ & number of tokens at a stage \\
+$C_i$ & channel width at encoder stage $i$ (32, 64, 160, 256 for the base model; 96, 192, 480, 768 for Heavy;
+16, 32, 64, 96 for Chakshu) \\
+$R_i$ & spatial-reduction ratio for attention at stage $i$ (8, 4, 2, 1) \\
+$h$, $d$ & number of attention heads, and width per head \\
+$E$ & expansion ratio of the feed-forward network (4; 2 in Chakshu) \\
+$\mat{Q}, \mat{K}, \mat{V}$ & queries, keys and values \\
+$k, s, p$ & convolution kernel size, stride and padding \\
+$\rho$ & the mask ratio: the fraction of valid tokens hidden \\
+$\mathcal{L}$ & a loss: the number training makes smaller \\
+$\eta$ & the learning rate \\
+$\beta_1, \beta_2$ & Adam's decay rates for its two moving averages \\
+$\GELU, \LN$ & the GELU activation and Layer Normalisation \\
+\shape{(B, C, H, W)} & a tensor shape in the spatial layout; \shape{(B, N, C)} is the sequence layout \\
+$P$ & in the spectral stem, the number of pixel rows, $B\times H\times W$ \\
+$k, s, p$ (transposed) & a transposed convolution's kernel, stride and padding; output size $(H-1)s-2p+k$ \\
+\bottomrule
+\end{longtable}
+
+\section*{The thermal models}
+\begin{longtable}{@{}p{30mm}p{110mm}@{}}
+\toprule
+Symbol & Meaning \\
+\midrule\endhead
+$T$, $\hat T$ & a pixel's land surface temperature in °C, and the model's reconstruction of it \\
+$\mu_T, \sigma_T$ & the thermal normalisation constants stored in the checkpoints, 24.5756 and 13.5744\,°C \\
+$\tau$ & the trim fraction of Chakshu's trimmed L1 (0.05). In the namer chapter $\tau$ is a temperature that scales
+cosine scores; the chapter says which \\
+$m_\text{valid}, m_\text{input}$ & the validity and input-mask channels of Asanskrita and Drashta \\
+DN & a digital number: the integer a sensor records before calibration \\
+\bottomrule
+\end{longtable}
+
+\section*{HyperSL (Part X)}
+\begin{longtable}{@{}p{30mm}p{110mm}@{}}
+\toprule
+Symbol & Meaning \\
+\midrule\endhead
+$m_b, M_b$ & the smallest and largest value of band $b$ over a scene's pixels \\
+$x'_b$ & a value after per-scene min-max scaling, $(x_b-m_b)/(M_b-m_b)$ \\
+$s_b, c_b$ & the scale and offset of a per-band affine map, $x'_b = s_b x_b + c_b$ \\
+$p$ & HyperSL's wavelength coordinate $(\lambda-400)/10$, $\lambda$ in nm \\
+$\omega_j$ & the $j$-th frequency of HyperSL's position code, $100^{-2j/256}$ \\
+$k$, $h$ & a kernel size over band index and its half-width $(k-1)/2$ \\
+$\mat{E}, \vect{a}$ & endmembers as columns, and their abundances, in $\vect{x}=\mat{E}\vect{a}+\vect{n}$ \\
+$a'$ & a reported fill, against the true fill $a$ \\
+$\lambda$ (Part X) & also the weight of a total-variation penalty; the chapter says which \\
+$\delta$ & a small additive brightening, such as thin cirrus \\
+\bottomrule
+\end{longtable}

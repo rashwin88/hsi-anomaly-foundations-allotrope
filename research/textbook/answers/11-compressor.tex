@@ -1,0 +1,81 @@
+\answersfor{ch:compressor}
+
+\begin{solution}{ex:compressor:1}
+\code{Conv2d(165, 24, kernel_size=1)}:
+\begin{align*}
+165\times24 &= 3{,}960,\\
+3{,}960 + 24 &= 3{,}984.
+\end{align*}
+\code{BatchNorm2d(24)} adds $2\times24 = 48$. The v0.1.0 compressor has
+\[
+3{,}984 + 48 = 4{,}032
+\]
+parameters, against 5{,}376 at $D=32$.
+\end{solution}
+
+\begin{solution}{ex:compressor:2}
+Mean:
+\begin{align*}
+2 + 4 + 4 + 6 &= 16,\\
+\mu &= 16/4 = 4.
+\end{align*}
+Deviations: $2-4=-2$, $4-4=0$, $4-4=0$, $6-4=2$. Squares: $4, 0, 0, 4$; sum $8$. Biased variance
+$\sigma^2 = 8/4 = 2$, so the denominator is $\sqrt{2} = 1.41421$. Outputs:
+\begin{align*}
+-2/1.41421 &= -1.4142, & 0/1.41421 &= 0,\\
+0/1.41421 &= 0, & 2/1.41421 &= 1.4142.
+\end{align*}
+Running statistics. The unbiased variance divides the same sum by $M-1 = 3$: $s^2 = 8/3 = 2.66667$.
+\begin{align*}
+\text{running\_mean} &= 0.9\times0 + 0.1\times4 = 0.4,\\
+\text{running\_var} &= 0.9\times1 + 0.1\times2.66667 = 0.9 + 0.26667 = 1.16667.
+\end{align*}
+\end{solution}
+
+\begin{solution}{ex:compressor:3}
+(1) A BatchNorm would force every output band to the same batch mean $\beta$, erasing information the
+batch shares: two dark-water pixels both correctly predicted at $-1.5$ would both come out as $\beta$,
+``average brightness'', and the result would depend on which patches shared the batch. (2) An activation
+such as ReLU would clip negative values: a band predicted at $-0.8$ (below its average) would come out
+as $0$, so nothing could be reconstructed darker than its band's average. The decompressor's output feeds
+\code{PixelDenormalize} and must be free to take any value.
+\end{solution}
+
+\begin{solution}{ex:compressor:4}
+Compress:
+\begin{align*}
+z_1 &= 1\times0.3 + 0\times0.5 + 0\times0.5 = 0.3,\\
+z_2 &= 0\times0.3 + 0.5\times0.5 + 0.5\times0.5 = 0.25 + 0.25 = 0.5.
+\end{align*}
+Decompress: $\hat{x}_1 = 0.3$, $\hat{x}_2 = 0.5$, $\hat{x}_3 = 0.5$. Residual
+$(0.3-0.3,\ 0.5-0.5,\ 0.5-0.5) = (0, 0, 0)$.
+
+This pixel's bands~2 and~3 are equal, so it has no component along the lost direction
+$\vect{n} = (0, 1, -1)\T$: it already lies in the space $\{\mat{V}\vect{z}\}$ that the decompressor can
+produce, and the bottleneck reproduces it exactly. Only pixels with a band-2-versus-band-3 difference
+lose anything.
+\end{solution}
+
+\begin{solution}{ex:compressor:5}
+With $b = 10$ the values are $11, 12, 13, 16$. Mean:
+\begin{align*}
+11 + 12 + 13 + 16 &= 52,\\
+52/4 &= 13.
+\end{align*}
+Deviations: $11-13 = -2$, $12-13=-1$, $13-13 = 0$, $16-13 = 3$, the same as in
+\cref{we:compressor:bn}. The variance is built from the deviations, so it is again $3.5$, and the
+outputs are again $-1.0690$, $-0.5345$, $0$, $1.6036$. In general, the mean shifts by $b$ and the
+shift cancels in every deviation.
+\end{solution}
+
+\begin{solution}{ex:compressor:6}
+Like MNF, the compressor is a linear projection from many bands to few, a matrix of shape (few, many).
+Unlike MNF, it is found by gradient descent rather than eigen-decomposition, optimises reconstruction
+loss rather than signal-to-noise, is learned once for all scenes rather than computed per scene, and is
+trained jointly with the rest of the network.
+
+The symptom of a too-small $D$ is a spectral-angle (SAM) error that stays high, above 0.3~rad after
+epoch 30 according to the diagnosis rule in the training configuration. The fix was to raise
+\code{compressed_channels} from 24 to 32 between v0.1.0 and v0.2.0, and validation loss fell from 0.077
+to 0.043.
+\end{solution}

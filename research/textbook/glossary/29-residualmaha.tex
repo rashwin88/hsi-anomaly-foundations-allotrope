@@ -1,0 +1,28 @@
+\glossentry{Residual}{The observed spectrum minus the model's reconstruction, one number per band per pixel.}
+\glossentry{Size score}{Any score that measures how large a residual is (L1, MSE, SAM, combined), regardless of its direction.}
+\glossentry{Detector stripe}{A column of pixels that all err the same way because one detector element of a push-broom spectrometer is calibrated slightly off.}
+\glossentry{SAM dark fade}{An opt-in patch that multiplies the spectral angle by clip(mean reflectance / t, 0, 1) so that dark pixels such as open water do not dominate; superseded by residual Mahalanobis.}
+\glossentry{Residual covariance}{The covariance matrix of the residuals of a scene's valid pixels, estimated in the product from up to 200,000 pixels with a fixed seed.}
+\glossentry{Residual Mahalanobis distance}{The squared Mahalanobis distance of a pixel's residual from the scene's mean residual, using the residual covariance; Indradhanu's default score since 2026-10-15.}
+\glossentry{Block-diagonal matrix}{A square matrix whose non-zero entries sit in square blocks along the diagonal; its inverse is the inverse of each block in place.}
+\glossentry{Eigen-decomposition}{Writing a symmetric matrix as U Lambda U transpose, with orthonormal eigenvectors in U and eigenvalues on the diagonal of Lambda.}
+\glossentry{Whitening}{Subtracting the mean, rotating onto the eigenvectors and dividing each coordinate by the square root of its eigenvalue, so that ordinary data spread equally in every direction.}
+\glossentry{Whitened coordinate}{One component of a whitened vector; the sum of their squares is the Mahalanobis distance.}
+\glossentry{Truncation (PCA)}{Keeping only the d directions with the largest eigenvalues (d = 30 here) and discarding the rest, which stabilises the score at the cost of sensitivity in the quietest directions.}
+\glossentry{Eigenvalue floor}{Raising any eigenvalue below 1e-12 to 1e-12 before dividing, which prevents division by zero but does not otherwise regularise.}
+\glossentry{Shrinkage}{Adding a small constant to every eigenvalue (Sigma plus epsilon I) to tame small eigenvalues; a classical regulariser not used by residual Mahalanobis.}
+\glossentry{Plain RX}{The Mahalanobis distance of each pixel of the raw cube over all bands; dropped from the product in 2026-05 because its near-singular covariance gave distances near 1e11.}
+\glossentry{Local mean}{The average of a quantity over a ring of neighbouring pixels, used in place of the scene-wide mean.}
+\glossentry{Local-mean Mahalanobis distance}{The Mahalanobis distance measured from the ring mean but with the scene-wide covariance; the default with a 21/61 window.}
+\glossentry{Guard window}{The inner box (21 x 21 by default) excluded from the ring so that a target does not contaminate its own background estimate.}
+\glossentry{Ring}{The pixels inside the outer window but outside the guard: 61 x 61 minus 21 x 21 = 3,280 pixels by default.}
+\glossentry{Ring fallback}{The rule that a pixel whose ring holds fewer than 2 d valid pixels (60 at d = 30) is scored against the global mean instead.}
+\glossentry{Dual-window RX}{The classical local detector that takes both mean and covariance from the ring; worse than the local mean on the residual.}
+\glossentry{Integral image}{A table in which each entry holds the sum of every value above and to the left of it, with a leading row and column of zeros.}
+\glossentry{Summed-area table}{Another name for an integral image.}
+\glossentry{Box sum}{The sum of a rectangle of values, obtained from an integral image with four look-ups: far corner minus top strip minus left strip plus the doubly removed corner.}
+\glossentry{Inclusion-exclusion}{Counting the union of two overlapping sets as the sum of their sizes minus the size of their overlap.}
+\glossentry{Count channel}{A channel of ones on valid pixels carried through the integral image, whose box sums give the number of valid pixels in each ring.}
+\glossentry{Local z-score}{A spatial post-filter that re-expresses each score against its neighbourhood's mean and spread; it lowered AUC in the comparison.}
+\glossentry{Difference-of-Gaussians boost}{A post-filter that subtracts a wide blur from a narrow one to favour compact blobs; it caught slightly more objects but lost much AUC.}
+\glossentry{Sign test}{A test that counts in how many paired comparisons one method wins; with four scenes the smallest possible two-sided p-value is 0.125.}

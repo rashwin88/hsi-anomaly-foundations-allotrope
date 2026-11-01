@@ -42,9 +42,12 @@ band_filter_apply → scene_segmentation | cloud_mask → anomaly_scoring
 - A **vendable** (`VendableDataset`) is the normalised cube + validity masks that every
   downstream component consumes. It is the currency of the system.
 - All hyperspectral sensors are resampled onto **one common 165-band grid**
-  (10 nm, 460-2450 nm). That is what lets a single model serve PRISMA, EnMAP and AVIRIS-NG.
+  (10 nm, 460-2450 nm). That is what lets a single model serve PRISMA, EnMAP, AVIRIS-NG and
+  Tanager.
 
-Sensors: `prisma`, `enmap`, `aviris_ng` (hyperspectral); `landsat9`, `hotsat1` (thermal).
+Sensors: `prisma`, `enmap`, `aviris_ng`, `tanager` (Planet; native since 2026-11-01)
+(hyperspectral); `landsat9`, `hotsat1` (thermal). Adding one touches a dozen places across
+app/, backend/ and frontend/ - the checklist is "Adding a sensor" in `docs/06-backend.md`.
 
 ## Codebase map
 

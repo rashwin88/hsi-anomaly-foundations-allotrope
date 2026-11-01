@@ -1,0 +1,432 @@
+\chapter{Running an evaluation, and what a mask costs}\label{ch:runeval}
+
+\begin{onething}
+An evaluation here is one JSON config - models, datasets, scorers, measures - run by one command that loops scene by
+scene, caches every score map under a key built from everything that could change it, and reports objects caught
+beside their chance level; its first real run showed that every benchmark needs a model-free baseline in it, and its
+second showed that excluding a surface class is a scope decision with a price you can count in objects.
+\end{onething}
+
+\section{Why one evaluator}\label{sec:runeval:why}
+
+\Cref{ch:measures,ch:benchmarks} gave you the measures and the implant bench. Until 2026-10-17 each was run by its own
+script (\file{scripts/evaluate_prisma_bench.py}, \file{scripts/evaluate_implant_bench.py}, code in
+\file{app/utils/evaluation/}), and each read bands, reconstructed and counted slightly differently. Two scripts that
+disagree in the third decimal cannot tell you whether a model improved in the third decimal. On 2026-10-17 they were
+replaced by one subsystem (commit f6a444b), designed in \file{docs/lld/evaluation.md}:
+
+\begin{center}
+\small
+\begin{tabular}{p{4.6cm}p{8.0cm}}
+\toprule
+file & what it holds \\
+\midrule
+\file{app/evaluation/config.py} & \code{EvaluationConfig} and its four kinds of spec (model, dataset, scorer, metric) \\
+\file{app/evaluation/datasets.py} & \code{PrismaBench}, \code{ImplantBench}, \code{EvalScene} \\
+\file{app/evaluation/models.py} & \code{EvalModel}: reading, reconstruction, segmentation \\
+\file{app/evaluation/scorers.py} & \code{score()}: every scorer kind \\
+\file{app/evaluation/metrics.py} & the measures of \cref{ch:measures}, exact, and the analytic chance \\
+\file{app/evaluation/runner.py}, \file{report.py} & the loop, the cache, the tables and \file{report.md} \\
+\file{scripts/evaluate.py} & the command \\
+\file{configs/eval/stage3.json} & the reference config \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\begin{analogy}
+A driving examiner builds a course of cones. A go-kart, low and twitchy, weaves through it faster than a rally driver in
+a real car; on a real road the rally driver wins by a mile. Nothing was wrong with the stopwatch: the course rewarded
+what go-karts are good at. You only find that out if you put a go-kart on the course on purpose. In this chapter the
+go-kart is a model-free detector, PCA-RX, and the course is bench-v1.
+\end{analogy}
+
+\section{One config}\label{sec:runeval:config}
+
+The command is
+\begin{lstlisting}[language={}]
+python scripts/evaluate.py configs/eval/stage3.json [--output <dir>]
+\end{lstlisting}
+and the config has five blocks (shortened from \file{configs/eval/stage3.json}):
+\begin{lstlisting}[basicstyle=\ttfamily\footnotesize,language={}]
+{"name": "stage3: ...",
+ "models": [
+   {"name": "v0.2.0", "checkpoint": "C:/es/models/...epoch200.pt"},
+   {"name": "FT03_ep10", "checkpoint": "s3://.../FT03-joint/checkpoints/best.pt"}, ...],
+ "datasets": [
+   {"kind": "prisma_bench", "path": "C:/Users/FITT/Documents/stage1_datasets"},
+   {"kind": "implant", "path": "C:/es/implant/bench-v1"}],
+ "scorers": [
+   {"kind": "residual_mahalanobis"},
+   {"kind": "combined"},
+   {"kind": "exclude", "classes": ["water", "cloud"],
+    "segmenter": "FT03_ep10", "fit_on_kept": false,
+    "base": {"kind": "residual_mahalanobis"}}, ...,
+   {"kind": "pca_rx"}],
+ "metrics": [
+   {"kind": "roc_auc"},
+   {"kind": "pauc", "max_fpr": 0.01},
+   {"kind": "tpr_at", "fpr": 0.001},
+   {"kind": "objects_caught", "top_pct": [1.0, 0.1]}],
+ "group_by": ["tier", "source", "sensor"],
+ "output": "C:/es/eval/stage3"}
+\end{lstlisting}
+
+\index{evaluation config}Four things in it need explaining.
+
+\paragraph{A model's reading.} \index{reading (of a scene)}Each model reads a scene its own way (\code{reading}, default \code{auto}): the
+wavelength-reading models read the scene's own bands within their trained-wavelength record; the shipped v0.2.0 reads
+the 165-band common grid (\cref{ch:bandpipeline}). PRISMA scenes reload through the product's band filter; implant
+hosts are linearly resampled, ``close to, not identical with'' the product.
+
+\begin{sourcenote}[: the resample and the sort bug]
+On PRISMA hosts the resample was far from close until commit b94dbfd: PRISMA lists its bands descending and
+\code{np.interp} was called unsorted, so every grid band v0.2.0 read was a copy of one of two near-infrared bands.
+Invariant 2 of \file{docs/lld/evaluation.md} now requires \code{resample} to sort first, and the fixed generic path
+reproduces the product path on the real bench exactly. Every v0.2.0 implant number before 2026-10-18 is void
+(\cref{ch:sortbug}).
+\end{sourcenote}
+
+\paragraph{Two new scorers.} \index{exclude scorer}\code{exclude} takes any base scorer, runs it, then sets chosen classes to 0 using a
+segmentation head's class map (\file{app/evaluation/scorers.py}, lines 60--63):
+\begin{lstlisting}[basicstyle=\ttfamily\footnotesize,literate={~}{{\textasciitilde}}1]
+out = np.isin(classes, [CLASS_IDS[c] for c in spec.classes])   # (H, W) bool: excluded
+s = score(spec.base, cube, recon, valid & ~out if spec.fit_on_kept else valid,
+          classes, log_b)                                       # (H, W) base scores
+return np.where(out, 0.0, s).astype(np.float32)                # excluded -> 0, still valid
+\end{lstlisting}
+\index{PCA-RX}\code{pca_rx} is the classical baseline: residual Mahalanobis (\cref{ch:residualmaha}) handed a reconstruction of all
+zeros, so the ``residual'' is the cube itself. With the defaults \code{d = 30}, \code{local_window = (21, 61)} that is
+local RX (\cref{ch:localrx}) on the scene's top 30 whitened principal components: no model, no training.
+
+\paragraph{Labels.} Each scorer gets a name from its settings, for example
+\begin{lstlisting}[language={}]
+residual_mahalanobis(d=30,w=21x61)
+exclude(water+cloud;mask)[residual_mahalanobis(d=30,w=21x61)]
+\end{lstlisting}
+\texttt{mask} when \code{fit_on_kept} is false (score the whole scene, zero the classes afterwards), \texttt{fit} when
+the base scorer's statistics are fitted on the kept pixels only.
+
+\paragraph{Validation.} The config refuses to start if two models share a name, two scorers share a label, an
+\code{exclude} lacks its classes or segmenter, or a segmenter is not one of the configured models
+(\code{test_config_validation}).
+
+\section{The scene-major loop}\label{sec:runeval:loop}
+
+\index{scene-major loop}\file{app/evaluation/runner.py} goes \textbf{scene first, then model}:
+\begin{lstlisting}[basicstyle=\ttfamily\footnotesize,language={}]
+for each scene (one in memory):
+  for each model:  reconstruct once -> every model-based scorer -> free the reconstruction
+  model-free scorers (pca_rx) once, on the scene's own cube
+  class maps (for exclude) once per scene per segmenter, cached
+  each score map -> the measures -> per-object rows + per-scene rows
+\end{lstlisting}
+
+Why that order: a reconstruction is as large as the cube. One PRISMA scene of about $1{,}000 \times 1{,}000$ pixels
+and 185 bands\tagA{} in 4-byte floats is
+\begin{align*}
+185 \times 1{,}000 \times 1{,}000 &= 185{,}000{,}000 \text{ numbers}\\
+185{,}000{,}000 \times 4 \text{ bytes} &= 740{,}000{,}000 \text{ bytes} \approx 0.74 \text{ GB.}
+\end{align*}
+The old scripts held several reconstructions at once and ran out of memory (LLD, ``Decisions''). Now memory holds one
+scene and one reconstruction.
+
+\begin{worked}[label={we:runeval:count}]{Counting the work of stage 3}
+The stage-3 config has 4 models, 4 model-based scorers (residual Mahalanobis, combined, two exclusions), 1
+model-free scorer, and 4 PRISMA scenes plus 18 implant hosts.
+\begin{align*}
+\text{score maps per scene} &= 4 \text{ models} \times 4 \text{ scorers} + 1 = 16 + 1 = 17\\
+\text{scenes} &= 4 + 18 = 22\\
+\text{score maps in all} &= 22 \times 17 = 374\\
+\text{reconstructions} &= 22 \times 4 = 88 \quad \text{(one per scene per model)}
+\end{align*}
+\code{test_end_to_end_and_cache} pins the ``never more'': a stand-in model counts its calls, and after a run with
+three model-based scorers it has been called once per scene.
+\end{worked}
+
+\section{The cache and its key}\label{sec:runeval:cache}
+
+\index{score-map cache}Every score map is saved, compressed, under \file{<output>/cache/scores/}. As 16-bit floats a
+$1{,}000 \times 1{,}000$ map is $1{,}000{,}000 \times 2 = 2{,}000{,}000$ bytes, about 2 MB before compression, against
+740 MB for the reconstruction it came from. That ratio is why score maps are cached and reconstructions are not.
+
+\paragraph{Float16, and its range.}\index{float16} A 16-bit float stores numbers up to 65,504; anything larger becomes infinity.
+Residual Mahalanobis is a squared distance with a heavy tail, and the blurred and mixture variants of 2026-10-19
+reached $10^5$. A cached infinity would put that pixel at the top of every ranking for ever, so since then a map is
+stored as float16 only if all its values are finite and below $6 \times 10^4$, otherwise as float32
+(\file{runner.py}, lines 115--118).
+
+\paragraph{The key.}\index{cache key} The score map's path is
+\begin{equation}\label{eq:runeval:path}
+\texttt{scores/}\langle\text{dataset}\rangle\texttt{/}\langle\text{scene}\rangle\texttt{/}\langle\text{model id}\rangle\texttt{/}
+\mathrm{sha1}(\text{scorer spec JSON} \,\|\, \texttt{"|"} \,\|\, \text{scene fingerprint})_{[:10]}\texttt{.npz},
+\end{equation}
+where $\|$ means ``joined to'' and $_{[:10]}$ the first ten hexadecimal characters (\code{_score_path}, line 144). The
+\emph{model id} is the model's name followed by the first ten characters of a SHA-1 of the checkpoint's resolved path,
+size, modification time and reading mode, plus adaptation settings and cloud rule when those are set
+(\code{_model_id}, line 130). The \emph{scene fingerprint} is the PRISMA \texttt{.he5} file's size and modification time,
+or an implant host's \texttt{cube.npy} and \texttt{gt.npy} SHA-256s from \file{manifest.json}. A
+\index{hash}\emph{hash} such as SHA-1 turns any text into a fixed-length code that changes completely when any
+character of the text changes, so equal keys mean equal inputs.
+
+Change any part and the map is recomputed. Add a new measure or a new \code{group_by} and \textbf{no model runs at all}:
+the measures are recomputed from cached maps.
+
+\begin{sourcenote}[: what the key did and did not cover]
+When the course part for this chapter was written, the scene's content was not in the key: a benchmark rebuilt in
+place under the same scene names, evaluated into the same output directory, reused the old score maps against the new
+ground truth with no error. Commit 229d423 (2026-10-18) added the fingerprint for score maps. \emph{Class maps} for
+\code{exclude} are still keyed by scene name and segmenter only (\code{classes_for}, \file{runner.py} lines 80--90), so
+a host rebuilt in place keeps a class map computed on its old pixels. And because the key includes the scorer spec's
+full JSON, adding any field to \code{ScorerSpec} changes every key: the scoring-gains maps of 2026-10-19 could not be
+reused for the bootstrap of \cref{ch:bootstrap} after \code{scale_power} and \code{scale_floor_pct} were added
+(\file{docs/lld/evaluation.md}, ``Decisions'').
+\end{sourcenote}
+
+\section{Chance, per object, and the report}\label{sec:runeval:chance}
+
+\Cref{ch:measures} derived the chance level of ``objects caught'': an object with $m$ cells after the 1-pixel dilation
+is caught by random scores at budget $q$\% with probability $1 - (1 - q/100)^m$. The evaluator stores this for every
+object (\code{chance_1}, \code{chance_0.1} in \file{per_object.csv}) and the report averages it into a \code{*chance*}
+row\index{chance row} at the top of every table: \textbf{10.2\%} at the top 1\% on the PRISMA bench and \textbf{10.0\%} on bench-v1
+\hfil\penalty50\hfilneg\tagM{docs/training/anomaly-detection/19-running-an-evaluation.md}.
+
+\begin{worked}[label={we:runeval:chance}]{A bench's chance row}
+A toy bench\tagA{} has 6 one-pixel objects ($m = 5$), 3 dominoes ($m = 8$) and 1 three-by-three square ($m = 21$). At
+the top 1\%:
+\begin{align*}
+\text{one-pixel} &: 1 - 0.99^5 = 0.0490 && \times 6 = 0.2941\\
+\text{domino} &: 1 - 0.99^8 = 0.0773 && \times 3 = 0.2318\\
+\text{square} &: 1 - 0.99^{21} = 0.1903 && \times 1 = 0.1903\\
+\text{chance row} &= (0.2941 + 0.2318 + 0.1903) / 10 = 0.7162 / 10 = 0.0716.
+\end{align*}
+About 7.2\%. A model catching 2 of these 10 objects (20\%) is about 2.8 times chance.
+\end{worked}
+
+\file{report.py} writes one section per dataset, \textbf{never pooled}\index{dataset pooling}, because their objects are different populations
+(LLD, invariant 5). In each: a main table with one row per \texttt{model | scorer} and the chance row first; ``caught top
+$q$\%'' is the share of all objects in that dataset; pixel measures are \emph{means over scenes}; one table per
+\code{group_by} attribute. Model \texttt{-} marks a model-free scorer. The run also writes \file{per_object.csv},
+\file{per_scene.csv}, \file{summary.json} and \file{provenance.json} (commit, checkpoint SHA-256s).
+
+\section{Stage 3: the numbers held}\label{sec:runeval:stage3}
+
+A new framework that disagrees with the old one tells you nothing until you know which is wrong. So the reference run's
+first job was to reproduce every earlier figure. It did: on the PRISMA bench v0.2.0 scored pAUC 0.159, ROC-AUC 0.854
+and 402 of 909 objects at the top 1\%; F001 0.148 / 0.861 / 400; FT03 0.158 / 0.853 / 413
+\hfil\penalty50\hfilneg\tagM{docs/lld/evaluation.md}.
+
+\section{The go-kart: PCA-RX wins on implants and loses on real objects}\label{sec:runeval:pcarx}
+
+\begin{drift}
+Stage 3, \file{configs/eval/stage3.json}, 2026-10-17\hfil\penalty50\hfilneg\tagM{research/experiments/implant-bench/README.md}.
+\begin{center}
+\small
+\begin{tabular}{lccccc}
+\toprule
+ & \multicolumn{2}{c}{implant bench-v1} & \multicolumn{3}{c}{real PRISMA bench} \\
+ & caught top 1\% & pAUC & pAUC & TPR at 0.1\% & caught top 0.1\% \\
+\midrule
+FT03 + res.\ Mahal. & 26.9\% & 0.172 & 0.158 & 0.058 & 14.3\% \\
+PCA-RX, no model & \textbf{30.2\%} & \textbf{0.209} & 0.128 & 0.029 & 8.1\% \\
+\bottomrule
+\end{tabular}
+\end{center}
+\end{drift}
+
+Count it in objects. On the implants PCA-RX catches $0.302 \times 3{,}336 = 1{,}007$ objects to FT03's $0.269 \times
+3{,}336 = 897$. On the real objects it reaches half of FT03's detection rate at 0.1\% false alarms ($0.029 / 0.058 =
+0.5$) and catches $0.081 \times 909 = 74$ objects at the top 0.1\% to FT03's $0.143 \times 909 = 130$. With bench-v1
+as your only benchmark you would conclude that the models add nothing a 1990s detector \citep{reed1990adaptive} cannot
+do. The real objects say the opposite.
+
+\coursefig[0.9\linewidth]{ad-19-two-benches}{pAUC to 1\% false alarms. On implant bench-v1 (a) the model-free PCA-RX
+(teal) is highest; on the real PRISMA bench (b) it is lowest, and excluding water and cloud (hatched) helps the model
+on both.}{fig:runeval:twobenches}
+
+\paragraph{Why.} \Cref{ch:benchmarks} measured it: bench-v1 implants are seven times as foreign as real objects (foreign
+fraction 0.042 against 0.006), and whitening multiplies exactly foreignness. Work the multiplication once. Suppose the
+scene varies with standard deviation 0.05 along its main direction and 0.002 along a minor one\tagA{}, and a pixel
+differs by 0.01 along each in turn. Whitening divides each component by its direction's standard deviation and squares:
+\begin{align*}
+\text{main direction} &: (0.01 / 0.05)^2 = 0.2^2 = 0.04\\
+\text{minor direction} &: (0.01 / 0.002)^2 = 5^2 = 25\\
+\text{ratio} &: 25 / 0.04 = 625.
+\end{align*}
+The same size of difference scores 625 times higher when it points where the scene does not vary. PCA-RX needs nothing
+more to light up a foreign implant. A model earns its keep on real objects, which are unusual mixtures of the scene's
+own materials, by having learnt what each place \emph{should} look like from its surroundings.
+
+\begin{keypoint}
+Put a model-free baseline in every benchmark: if it wins there but loses on real labels, the benchmark is wrong.
+\end{keypoint}
+
+That is why bench-v2 had to pass the ordering test (\cref{sec:benchmarks:accept}) before any model was ranked or
+trained on implants.
+
+\section{Exclusion, and why ROC-AUC falls while the top improves}\label{sec:runeval:exclude}
+
+The first product rule (user, 2026-10-17) was \textbf{``we don't detect anything on water and cloud''}. FT03's
+segmentation head marks them; \code{exclude} zeroes them. \index{invariant 7}Invariant 7 of the LLD spells out the bookkeeping:
+\textbf{excluded pixels stay in the measures}, as negatives tied at 0 at the bottom of the ranking, and any labelled
+object inside them stays a positive that can no longer be found - ``the product would not flag it either''.
+
+Two things happen when a large area is set to 0: its background pixels all tie at the bottom, which is harmless for the
+top of the list; and any target inside it is scored 0 too, which costs it. The AUC counts the second; the top-of-list
+measures mostly see the removal of bright false alarms.
+
+\begin{worked}[label={we:runeval:mini}]{Exclusion in miniature}
+Two targets, A (land) and B (on water); four background pixels, one a bright water glint. ROC-AUC is the share of
+(target, background) pairs the target wins, a tie counting half (\cref{eq:measures:mw}).
+\begin{align*}
+&\text{before: A } 0.9,\ \text{B } 0.6;\ \text{background: glint } 0.95 \text{ (water)}, 0.5, 0.2, 0.1 \text{ (water)}\\
+&\quad \text{A beats } 0.5, 0.2, 0.1 \to 3 \text{ of } 4; \quad \text{B beats } 0.5, 0.2, 0.1 \to 3 \text{ of } 4\\
+&\quad \text{AUC} = (3 + 3)/8 = 0.75; \quad \text{top pixel: the glint, a false alarm}\\[4pt]
+&\text{exclude water: glint} \to 0,\ 0.1 \to 0,\ \text{B} \to 0\\
+&\quad \text{A beats } 0, 0.5, 0.2, 0 \to 4 \text{ of } 4\\
+&\quad \text{B } (0) \text{ loses to } 0.5, 0.2; \text{ ties the two 0s} \to 0 + 0 + \tfrac12 + \tfrac12 = 1\\
+&\quad \text{AUC} = (4 + 1)/8 = 0.625; \quad \text{top pixel: A, a hit.}
+\end{align*}
+AUC fell and the top of the list got better: the same two directions as stage 3.
+\end{worked}
+
+On the real bench, with FT03\hfil\penalty50\hfilneg\tagM{docs/lld/evaluation.md}: excluding water and cloud lifted objects caught at the top
+0.1\% from 14.3\% to 16.5\% ($0.143 \times 909 = 130$ to $0.165 \times 909 = 150$, 20 more objects in the same review
+budget) and pAUC from 0.158 to 0.165, while ROC-AUC fell from 0.853 to 0.830. Most of the fall is set1, which FT03
+calls 55\% water (ROC-AUC 0.932 to 0.851 there). Every model gained at the top 0.1\% by about the same amount, including
+v0.2.0, which has no segmentation head: \textbf{the gain belongs to the mask, not to any model}.
+
+\section{Scope: cloud excluded, water kept}\label{sec:runeval:scope}
+
+\begin{analogy}
+A security guard is told to ignore the car park, because it is full of harmless reflections. Her shift gets quieter. But
+the day somebody breaks into a car, nobody sees it - the instruction did not make the car park safe, it made it
+invisible. And if her map of the car park is drawn too large, she also ignores half the loading bay.
+\end{analogy}
+
+\index{scope}So the question ``should we exclude water?'' is not a modelling question. It is: \textbf{are objects on water something
+the product must find?} For vessels, yes.
+
+\paragraph{The claim that was wrong.} Before the decision the record said ``no real object sits on water''. It came
+from a scan that called a pixel water when its visible reflectance (mean over roughly 450--650 nm) was below 0.04.
+Clear open water is that dark; turbid coastal water, with silt or a shallow bottom, is around 0.08.
+
+\begin{worked}[label={we:runeval:water}]{Two water rules on one turbid pixel}
+A pixel with visible 0.08, red 0.06, near-infrared 0.03\tagA{}.
+\begin{align*}
+\text{scan's rule: } & \mathrm{VIS} < 0.04? \quad 0.08 < 0.04 \text{ is false} \to \text{``land''}\\
+\mathrm{NDVI} &= \frac{\mathrm{NIR} - \mathrm{red}}{\mathrm{NIR} + \mathrm{red}} = \frac{0.03 - 0.06}{0.03 + 0.06}
+  = \frac{-0.03}{0.09} = -0.33\\
+\text{builder's rule: } & \mathrm{NIR} < 0.08 \text{ and } \mathrm{NDVI} < 0? \quad \text{yes and yes} \to \text{water.}
+\end{align*}
+Water is dark in the near-infrared even when it is bright in the visible; the scan used the wrong band.
+\end{worked}
+
+Re-checked on 2026-10-17 against FT03's water / cloud mask, \textbf{39 of the 909 real objects lie wholly inside
+it}\hfil\penalty50\hfilneg\tagM{docs/lld/evaluation.md}:
+
+\begin{center}
+\small
+\begin{tabular}{p{5.8cm}cp{5.2cm}}
+\toprule
+where & objects & what they are \\
+\midrule
+set1, on water, more than 3 px offshore & 13 & single pixels; likely vessels \\
+set1, on water, within 3 px of shore & 14 & single pixels near the coast \\
+set2 and set3, shorelines & 8 & objects on the land--water edge \\
+set4, under haze FT03 calls cloud & 4 & a scope question at the haze edge \\
+\midrule
+total & 39 & \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\coursefig[0.85\linewidth]{ad-21-the-39}{The 39 labelled objects lying wholly inside FT03's water / cloud mask, by kind.
+Excluding water and cloud hides all 39 (amber); excluding cloud only hides the 4 in set4 that sit under haze FT03 calls
+cloud.}{fig:runeval:the39}
+
+The user's rule then changed: \textbf{vessels on water are in scope; only cloud is excluded.}
+
+\paragraph{What each choice buys, counted in objects.} FT03, residual Mahalanobis, PRISMA bench
+(\file{C:/es/eval/cloud\_only/report.md} on the dev laptop):
+
+\begin{drift}
+\file{configs/eval/cloud_only.json}, 2026-10-17\hfil\penalty50\hfilneg\tagM{docs/training/anomaly-detection/21-scope-and-masks.md}.
+Objects caught at the top 0.1\%, per scene, from \file{per_object.csv}:
+\begin{center}
+\small
+\begin{tabular}{lccccc}
+\toprule
+ & set1 & set2 & set3 & set4 & total \\
+\midrule
+plain & 56 & 33 & 7 & 34 & 130 \\
+cloud only & 56 & 33 & 13 & 42 & 144 \\
+water + cloud & 59 & 34 & 14 & 43 & 150 \\
+\bottomrule
+\end{tabular}
+\end{center}
+pAUC 0.158 / 0.166 / 0.165 and ROC-AUC 0.853 / 0.850 / 0.830 (plain / cloud only / water + cloud).
+\end{drift}
+
+Work the shares: $130/909 = 14.3\%$, $144/909 = 15.8\%$, $150/909 = 16.5\%$. Cloud exclusion buys 14 objects
+($144 - 130$: set3 $+6$, set4 $+8$) and costs almost no ROC-AUC. Adding water buys 6 more at the top 0.1\% but none at
+the top 1\% (both catch $419/909 = 46.1\%$), takes ROC-AUC from 0.850 to 0.830, and hides the vessels. pAUC, the
+measure the analyst's view tracks, is no better for it (0.165 against 0.166). \textbf{Water exclusion trades the
+vessels for a slightly tidier top of the list}; with vessels in scope, that is a bad trade. \Cref{ch:bootstrap} shows
+that cloud exclusion's gain is one of the few on this bench whose interval clears zero.
+
+\paragraph{The set4 haze, and a claim that was wrong twice.}\index{haze colour test} Cloud-only exclusion still hides 4 objects in set4. On
+2026-10-17 that was read as a mask error, ``FT03 calls bright desert cloud''. A look at the true-colour picture on
+2026-10-18 showed a bright cloud/smoke streak and a large hazy patch that FT03's 11\% follows. The colour test settles
+it: bright desert is red, its reflectance rising with wavelength, so near-infrared over blue is above 1; haze scatters
+blue most, so near-infrared over blue falls below 1.
+\begin{align*}
+\text{desert-like: } & \text{blue } 0.20, \text{ NIR } 0.35 \to 0.35 / 0.20 = 1.75 \quad \text{(red)}\\
+\text{set4 ``cloud'': } & \text{blue } 0.30, \text{ NIR } 0.18 \to 0.18 / 0.30 = 0.60 \quad \text{(bluish)}
+\end{align*}
+For 75\% of set4's ``cloud'' pixels the ratio is 0.54--0.65
+\hfil\penalty50\hfilneg\tagM{docs/training/anomaly-detection/21-scope-and-masks.md}: haze. The 4 objects are things a labeller could see
+through haze, a scope question (should the product look under thin cloud?), not a mask fault. A negative claim about a
+picture deserves the same check as a positive one: look at the picture.
+
+\paragraph{The arithmetic of a wrong mask.} The next mask may be wrong, so know its price. Had 11\% of set4 been called
+cloud wrongly, the analyst would lose 11\% of the scene, holding 4 of set4's 230 objects
+\hfil\penalty50\hfilneg\tagM{docs/training/anomaly-detection/21-scope-and-masks.md} ($4 / 230 = 1.7\%$). Small
+here; but on a scene full of targets a wrong mask loses them in proportion, \emph{silently} - the score is 0, not
+``unknown''.
+
+\begin{keypoint}
+Decide scope first, then count the labelled objects inside the mask, then audit the mask against the picture, and only
+then judge the result at the top of the list.
+\end{keypoint}
+
+\begin{confusions}
+\confusion{PCA-RX won on the implants, so the models are no better than classical detection?}{It won on implants built
+in a way that suits it. On the 909 real objects it is last. The benchmark was wrong; the stopwatch was fine.}
+\confusion{Exclusion lowered ROC-AUC, so it made detection worse?}{It tied a large area at 0 and hid the objects inside
+it; the top of the list, where the analyst looks, improved for every model. Judge it by pAUC, TPR at 0.1\% and objects
+caught, with ROC-AUC beside them.}
+\confusion{I added a measure and re-ran; the numbers cannot be stale?}{Score maps are keyed by scene fingerprint since
+229d423; class maps are not. Give each benchmark version its own path and output directory.}
+\confusion{\texttt{exclude} with segmenter FT03 only applies to FT03?}{It applies to every model in the config; the
+segmenter only supplies the class map.}
+\confusion{The PRISMA bench and the implant bench are averaged in the summary?}{Never. Each dataset gets its own
+section and its own chance row.}
+\confusion{Cloud-only exclusion also hides the 39 objects?}{No: 35 of them are inside the water mask. Cloud-only hides
+the 4 in set4 under haze.}
+\end{confusions}
+
+\begin{checkyourself}
+\item\label{ex:runeval:1} A config has 3 models, 3 model-based scorers and 1 model-free scorer, over 5 scenes. How many
+score maps and reconstructions does a first run make? And a second run after adding one measure?
+\item\label{ex:runeval:2} In \cref{we:runeval:mini}, suppose B had been on land (not excluded) at 0.6. What are the AUC
+and the top pixel after excluding water?
+\item\label{ex:runeval:3} A pixel has visible 0.07, red 0.05, NIR 0.02. What do the scan's rule and the builder's rule
+call it?
+\item\label{ex:runeval:4} At the top 1\%, plain FT03 catches 101 / 103 / 48 / 161 objects on set1--4, cloud-only 101 /
+103 / 54 / 161, water + cloud 98 / 107 / 53 / 161. Compute each total and share of 909. What does water exclusion swap?
+\item\label{ex:runeval:5} A score map's largest value is 70,000. What happens if it is cached as float16, and what does
+the runner do instead? How many bytes does a $1{,}000 \times 1{,}000$ map take uncompressed in each format?
+\item\label{ex:runeval:6} Put the four questions of the last key point in order for a proposal to exclude snow.
+\end{checkyourself}
+
+\nextchapter{ch:bootstrap}

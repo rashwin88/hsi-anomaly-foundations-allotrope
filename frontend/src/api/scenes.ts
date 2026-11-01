@@ -126,9 +126,12 @@ export async function onboardScene(
    * to "Staging files…" — the api spends a few seconds streaming the
    * multipart spool to disk before it enqueues the job. */
   onUploadComplete?: () => void,
+  /** Extra form fields, e.g. generic_hsi's `scale_override`. */
+  fields?: Record<string, string>,
 ): Promise<OnboardAccepted> {
   const form = new FormData();
   form.append("sensor_type", sensorType);
+  for (const [k, v] of Object.entries(fields ?? {})) form.append(k, v);
   for (const file of files) {
     const filename = (file as File & { webkitRelativePath?: string })
       .webkitRelativePath || file.name;

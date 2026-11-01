@@ -1,7 +1,8 @@
 """Host + workload metrics (Step 20).
 
 Routes:
-    GET /metrics/host       psutil + nvidia-smi snapshot of the api host
+    GET /metrics/host       psutil snapshot of the api host; GPU from its nvidia-smi, else
+                            the freshest worker snapshot (worker_status, allotrope/gpu_status.py)
     GET /metrics/workload   Postgres-derived queue + throughput numbers
 
 The api host on the demo machine is Docker Desktop's VM (Mac). That VM
@@ -21,8 +22,6 @@ from __future__ import annotations
 
 import logging
 import os
-import shutil
-import subprocess
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -73,6 +72,12 @@ class GpuMetrics(BaseModel):
     available: bool
     note: str = ""
     devices: list[dict[str, Any]] = Field(default_factory=list)
+    # Where the numbers come from: "api" (this host's nvidia-smi), "worker" (its snapshot), "none".
+    source: str = "none"
+    worker_id: str | None = None
+    age_seconds: float | None = None       # of the worker snapshot
+    # The torch device the worker's models run on ("cuda:0 (...)", "cpu"); None when no worker reported.
+    torch_device: str | None = None
 
 
 class HostMetrics(BaseModel):
@@ -155,52 +160,47 @@ def _disks() -> list[DiskMetrics]:
     return out
 
 
-def _gpu() -> GpuMetrics:
-    """Best-effort GPU summary via `nvidia-smi`.
+def _gpu(db: Session | None = None) -> GpuMetrics:
+    """This host's nvidia-smi if it lists a GPU, else the freshest worker snapshot (allotrope/gpu_status.py).
 
-    Mac Docker has no MPS/CUDA passthrough, so this gracefully reports
-    `available=false` rather than raising. On Linux + nvidia stack,
-    parses the `--query-gpu` CSV for the standard fields.
+    The GPU compose override gives the GPU to the worker only, so on a GPU box the api's own nvidia-smi is usually
+    absent and the worker's snapshot is the real answer. A snapshot older than STALE_AFTER_S is unavailable. Never
+    raises: a missing worker_status table (a database not yet migrated) reads as "no worker reported".
     """
-    smi = shutil.which("nvidia-smi")
-    if smi is None:
-        return GpuMetrics(
-            available=False,
-            note="nvidia-smi not on PATH — Mac Docker has no GPU passthrough.",
-        )
-    try:
-        proc = subprocess.run(
-            [
-                smi,
-                "--query-gpu=name,utilization.gpu,memory.used,memory.total,temperature.gpu",
-                "--format=csv,noheader,nounits",
-            ],
-            capture_output=True,
-            text=True,
-            timeout=2.0,
-            check=True,
-        )
-    except (subprocess.TimeoutExpired, subprocess.CalledProcessError, OSError) as exc:
-        return GpuMetrics(available=False, note=f"nvidia-smi error: {exc!r}")
+    from ..gpu_status import sample_nvidia_smi
 
-    devices: list[dict[str, Any]] = []
-    for line in (l.strip() for l in proc.stdout.splitlines() if l.strip()):
-        parts = [p.strip() for p in line.split(",")]
-        if len(parts) < 5:
-            continue
-        try:
-            devices.append(
-                {
-                    "name": parts[0],
-                    "utilization_percent": float(parts[1]),
-                    "memory_used_mb": float(parts[2]),
-                    "memory_total_mb": float(parts[3]),
-                    "temperature_c": float(parts[4]),
-                }
-            )
-        except ValueError:
-            continue
-    return GpuMetrics(available=bool(devices), devices=devices)
+    devices, note = sample_nvidia_smi()
+    if devices:
+        return GpuMetrics(available=True, devices=devices, source="api", note="nvidia-smi on the api host")
+    worker = _worker_gpu(db) if db is not None else None
+    if worker is None:
+        return GpuMetrics(available=False, note=f"{note}; no worker has reported a GPU snapshot")
+    return worker
+
+
+def _worker_gpu(db: Session) -> GpuMetrics | None:
+    """GpuMetrics from the freshest worker_status row, or None without one."""
+    from ..gpu_status import STALE_AFTER_S, freshest
+    from ..models import WorkerStatus
+
+    try:
+        rows = list(db.scalars(select(WorkerStatus).order_by(WorkerStatus.updated_at.desc()).limit(5)))
+    except Exception:            # noqa: BLE001 - table missing on an unmigrated database
+        logger.warning("worker_status unreadable", exc_info=True)
+        db.rollback()
+        return None
+    best = freshest(rows, datetime.now(timezone.utc))
+    if best is None:
+        return None
+    row, age = best
+    common = dict(source="worker", worker_id=row.worker_id, age_seconds=round(age, 1), torch_device=row.torch_device)
+    if age > STALE_AFTER_S:
+        return GpuMetrics(available=False, note=f"worker {row.worker_id} last reported {age:.0f} s ago (stale)",
+                          **{**common, "torch_device": None})
+    devices = list(row.gpu_devices or [])
+    note = f"from worker {row.worker_id}, {age:.0f} s ago"
+    return GpuMetrics(available=bool(devices), devices=devices,
+                      note=note if devices else f"{note}: {row.gpu_note or 'no GPU'}", **common)
 
 
 def _cpu() -> CpuMetrics:
@@ -248,13 +248,14 @@ psutil.cpu_percent(interval=None)
 )
 def get_host_metrics(
     _claims: Claims = Depends(current_user_claims),
+    db: Session = Depends(get_db),
 ) -> HostMetrics:
     return HostMetrics(
         timestamp=datetime.now(timezone.utc),
         cpu=_cpu(),
         memory=_memory(),
         disks=_disks(),
-        gpu=_gpu(),
+        gpu=_gpu(db),
     )
 
 
@@ -296,9 +297,8 @@ def get_workload_metrics(
     by_type_queued = {str(t): int(n) for t, n in type_queued_rows}
 
     # Rolling completion windows. completed_at is set on the terminal
-    # transition by the worker (Step 6c).
-    one_min = func.now() - func.cast("1 minute", postgresql_type=None)  # noqa: F841 — placeholder
-    # SQLAlchemy core makes interval arithmetic awkward; use raw SQL.
+    # transition by the worker (Step 6c). Intervals via make_interval(years, months, weeks,
+    # days, hours, mins, secs).
     completed_last_minute = (
         db.scalar(
             select(func.count(Job.id)).where(

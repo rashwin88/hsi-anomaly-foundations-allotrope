@@ -1,0 +1,16 @@
+\glossentry{Spectral namer}{The two-tower network built on 2026-10-31 (app/spectral\_match/namer/) that names flagged pixels: P(man-made), a man-made class and a fill estimate.}
+\glossentry{Embedding}{The short vector an encoder makes of its input; the namer's are 128 numbers of length 1.}
+\glossentry{Tower}{One encoder in a model that has several side by side; the namer has a pixel tower and a library tower.}
+\glossentry{Siamese network}{A network that runs two inputs through the same weights and compares the outputs; the namer's stem is shared this way by the pixel, its ring mean and every library spectrum.}
+\glossentry{Two-tower model}{A model with two encoders whose outputs are compared, usually by a cosine; also called a dual encoder.}
+\glossentry{Fill}{The fraction of a pixel's area covered by the target material, between 0 and 1.}
+\glossentry{Ring mean}{The mean of the valid pixels at Chebyshev distance 3 to 7 from a pixel (15 x 15 box minus 5 x 5), 200 pixels in the interior.}
+\glossentry{Chebyshev distance}{The larger of the row and column offsets, so a diagonal step counts as one.}
+\glossentry{Planted-sample generator}{The namer's source of training data: x = g (a t + (1 - a) b) + n, a library spectrum mixed into a real pixel with a gain curve and noise.}
+\glossentry{Log-uniform distribution}{A distribution whose logarithm is uniform; the namer's fill on [0.05, 1], with P(a <= q) = ln(q / 0.05) / ln 20 and mean 0.95 / ln 20 = 0.3171.}
+\glossentry{Logsumexp}{ln of the sum of exponentials, a smooth maximum; the namer's class score over a class's library cosines divided by tau.}
+\glossentry{Class score}{The logsumexp of a class's scaled cosines; its softmax equals the sum of the per-entry softmax probabilities of the class's members.}
+\glossentry{Level 1 by matching}{The namer's natural-or-man-made answer since run N001b: the natural library entries pooled as an eighth class, and P(man-made) = sigmoid(LSE of the seven man-made class scores - the natural score + b), the share of softmax mass on man-made entries.}
+\glossentry{Prototype}{A stored example in embedding space that an input is compared with; under level 1 by matching every library entry is one.}
+\glossentry{Hash split}{Holding out a library spectrum when the first 8 hex digits of the SHA-1 of its name, over 2 to the 32 minus 1, fall below 0.2.}
+\glossentry{Recall at a fixed false-alarm rate}{The share of man-made plantings above the cut that calls a given share of natural plantings man-made; the namer's level-1 pass test uses ACE's rate.}

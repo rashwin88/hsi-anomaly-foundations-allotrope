@@ -25,13 +25,18 @@ export interface HostMetrics {
   gpu: {
     available: boolean;
     note: string;
+    // nvidia-smi fields it could not read ([N/A]) are null.
     devices: Array<{
       name: string;
-      utilization_percent: number;
-      memory_used_mb: number;
-      memory_total_mb: number;
-      temperature_c: number;
+      utilization_percent: number | null;
+      memory_used_mb: number | null;
+      memory_total_mb: number | null;
+      temperature_c: number | null;
     }>;
+    source?: "api" | "worker" | "none";   // whose nvidia-smi this is
+    worker_id?: string | null;
+    age_seconds?: number | null;           // of the worker snapshot
+    torch_device?: string | null;          // where the worker's models run: "cuda:0 (...)", "cpu"
   };
 }
 

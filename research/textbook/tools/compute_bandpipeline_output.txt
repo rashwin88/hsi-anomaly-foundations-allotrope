@@ -1,0 +1,13 @@
+interp ascending  [550,650]: [1.5 3. ]
+interp descending [520,550,650,690]: [1. 1. 1. 1.]
+q=0.5  natural-not-a-knot spline -0.2500   pchip 0.0000
+q=1.5  natural-not-a-knot spline 0.5000   pchip 0.5000
+q=2.5  natural-not-a-knot spline 1.2500   pchip 1.0000
+resampler (sorts internally): [0.2        0.23333333 0.26666665 0.3       ]
+_assign_families([500,2000]) for src [2000,1500,800,500] fam [SWIR,SWIR,VNIR,VNIR]: ['SWIR', 'VNIR']
+z of a zeroed pixel: band0 -1.2207, min -2.9012 (idx 27), max -1.0257 (idx 164)
+fill 1-D (row 0 of a 2-row image): [30. 32. 32. 32. 25. 25. 28.]
+fill 3x3:
+ [[0.1  0.12 0.12]
+ [0.11 0.11 0.3 ]
+ [0.11 0.3  0.3 ]]

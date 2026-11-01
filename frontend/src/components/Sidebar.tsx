@@ -13,6 +13,7 @@ import { useEffect, useState } from "react";
 import { NavLink } from "react-router-dom";
 
 import { Icon, type IconName } from "./Icon";
+import { APP_VERSION } from "../version";
 
 const COLLAPSE_LS_KEY = "allotrope:sidebar-collapsed";
 
@@ -67,7 +68,7 @@ export function Sidebar({ isAdmin }: SidebarProps) {
     <aside className="sidebar" data-collapsed={collapsed ? "true" : "false"}>
       <header className="sidebar__brand">
         <span className="brand__name">Allotrope</span>
-        <span className="brand__version">v0.0.1</span>
+        <span className="brand__version">v{APP_VERSION}</span>
         <button
           type="button"
           className="sidebar__collapse-btn"

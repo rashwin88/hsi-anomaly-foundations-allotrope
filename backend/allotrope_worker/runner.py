@@ -29,6 +29,7 @@ from .cleanup import reclaim_memory
 from .handlers import HANDLERS, supported_types
 from .heartbeat import Heartbeat
 from .reaper import reap_stale
+from .status_sampler import StatusSampler
 
 logger = logging.getLogger("allotrope.worker")
 
@@ -73,6 +74,10 @@ class _Config:
         )
         self.reap_interval = float(
             os.environ.get("WORKER_REAP_INTERVAL_SEC", "30.0")
+        )
+        # GPU snapshot cadence (status_sampler.py); the monitoring pane polls every ~5 s.
+        self.status_interval = float(
+            os.environ.get("WORKER_STATUS_INTERVAL_SEC", "5.0")
         )
 
     def summary(self) -> str:
@@ -164,6 +169,10 @@ def main() -> None:
         ",".join(supported_types()),
     )
 
+    # GPU / device snapshot for GET /metrics/host, idle or busy (status_sampler.py).
+    sampler = StatusSampler(worker_id, cfg.status_interval)
+    sampler.start()
+
     # Reap on the very first tick so a worker coming up after a crash
     # cleans up its predecessor's stale rows promptly.
     state: dict[str, float] = {"last_reap_at": 0.0}
@@ -185,4 +194,5 @@ def main() -> None:
             time.sleep(slice_sec)
             slept += slice_sec
 
+    sampler.stop()
     logger.info("worker stopped cleanly (id=%s)", worker_id)

@@ -1,0 +1,38 @@
+\answersfor{ch:hsldetect}
+
+\begin{solution}{ex:hsldetect:1}
+Self-completion: $\hat x_2=(0.50+0.40)/2=0.45$, residual $0.45-0.45=0$. Spatial:
+\begin{align*}
+\vect{r} &= (0.50-0.20,\ 0.45-0.30,\ 0.40-0.40) = (0.30,\ 0.15,\ 0),\\
+\norm{\vect{r}}^2 &= 0.09+0.0225+0 = 0.1125 .
+\end{align*}
+Invisible to the self-completer, plainly visible to the spatial one.
+\end{solution}
+
+\begin{solution}{ex:hsldetect:2}
+\begin{align*}
+1{,}050{,}895\times149 &= 156{,}583{,}355,\\
+156{,}583{,}355\times4.8713\times10^{-6} &= 762.8 \approx 763 .
+\end{align*}
+The run logged 736, 27 fewer: about one standard deviation ($\sqrt{763}\approx27.6$).
+\end{solution}
+
+\begin{solution}{ex:hsldetect:3}
+$1-(1-0.01)^5=1-0.99^5=1-0.95099=0.0490$, about 4.9\%.
+\end{solution}
+
+\begin{solution}{ex:hsldetect:4}
+Objects: the interval $[-4.0,+1.5]$ points contains zero, so no difference is shown. pAUC: $[-0.0589,-0.0318]$ lies
+entirely below zero, so HyperSL RM's pAUC is lower, resolved.
+\end{solution}
+
+\begin{solution}{ex:hsldetect:5}
+Chance is what scores unrelated to the objects would catch. Catching fewer means the objects' scores are systematically
+\emph{lower} than the background's: HyperSL's loss is smaller on the anomalies, so it reconstructs them better than
+ordinary ground. That is self-completion, and it matches the AUCs below 0.5 of the 2026-09-23 run.
+\end{solution}
+
+\begin{solution}{ex:hsldetect:6}
+$10^6\times438\times10^{-6}=438$\,s, 7.3 minutes. With one draw, about a quarter, $\approx110$\,s, assuming the time is
+spent per draw\tagA{} (each draw runs the tokenizer, encoder and decoder once).
+\end{solution}

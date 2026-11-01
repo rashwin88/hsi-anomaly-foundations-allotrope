@@ -1,0 +1,556 @@
+\chapter{Shipping Indradhanu V2}\label{ch:shipping}
+\begingroup\sloppy % long provenance tags need loose lines rather than overfull ones
+
+\begin{onething}
+Putting FT04 into the product took six small decisions, each forced by something the product already did: a new
+codename because codename routing is last-wins; a manifest that carries the whole model configuration because the api
+cannot load a checkpoint; a band-grid check because one band filter feeds every model in an action;
+\texttt{read\_bands} because the model must be told which wavelengths it reads; cloud zeroed \emph{after} scoring
+because that is the order the benchmark measured; and a parity run that proves the product path gives the evaluator's
+numbers.
+\end{onething}
+
+\section{From a checkpoint to a product}\label{sec:shipping:why}
+
+\Cref{ch:ftruns} ended with a release candidate: FT04, scored with residual Mahalanobis, with cloud zeroed on its own
+masks. On the real PRISMA bench that reads pAUC 0.170. But that number came from the \emph{evaluator}
+(\code{app/evaluation/}, \cref{ch:runeval}), a research harness that loads checkpoints directly, on a laptop. The
+\emph{product} (\cref{ch:product}) is something else: an api that must stay light and never imports torch, a worker
+that runs actions from a Postgres queue, a chain of actions in which one \code{band_filter_apply} output feeds an
+\code{anomaly_scoring} action, and defaults that every analyst inherits without choosing them.
+
+The obvious way to ship a model - copy the checkpoint into the models folder and point the old code at it - fails in
+six different places, and the six sections below are those six places. On 2026-10-19 FT04 was served in
+\code{anomaly_scoring} under the codename \textbf{Indradhanu V2}, opt-in next to the shipped v0.2.0 ``Indradhanu'',
+which stayed the default. The design was agreed first (\file{docs/proposals/ship-ft04.md}) in two phases: Phase 1 makes
+V2 selectable without changing any default; Phase 2, later, would make it the hyperspectral default.
+
+\begin{analogy}
+A hospital takes on a new specialist who trained abroad. Before her first patient, the hospital gives her a name badge
+that no other doctor on the ward shares (or the switchboard puts calls through to whoever was added last), files her
+credentials in a form the front desk can read without phoning the overseas university, checks every referral is in the
+units she works in, and has her see a few patients the old consultant already examined - to confirm she reaches the
+same findings by the same route before anyone relies on her. Each of those four steps is a section of this chapter.
+\end{analogy}
+
+\begin{table}[htbp]
+\centering
+\caption{What was shipped on 2026-10-19, from the manifest \texttt{current.json} on the dev laptop.}
+\label{tab:shipping:manifest}
+\small
+\begin{tabular}{ll}
+\toprule
+field & value \\
+\midrule
+architecture & \texttt{spectral\_stem\_finetune} \\
+codename & Indradhanu V2 \\
+version, epoch & \texttt{v2.0.0}, epoch 10 (of fine-tuning) \\
+params & 5,886,451 \\
+val\_loss & 0.05578 \\
+checkpoint file & \texttt{spectral\_stem\_finetune\_v2.0.0\_epoch10.pt} \\
+\bottomrule
+\end{tabular}
+
+\smallskip
+{\footnotesize Source: \tagM{C:/es/ship/spectral_stem_finetune/current.json}.}
+\end{table}
+
+\begin{drift}
+Since 2026-10-29 the codename Indradhanu V2 points to Indradhanu Heavy (FTH3 epoch 5, version \texttt{v2.1.0}, 35.3\,M
+parameters; \cref{ch:heavy}), behind the same architecture key, with FT04 (\texttt{v2.0.0}) kept as the manifest's
+first alternative (\file{docs/lld/spectral-stem.md}, ``Serving''). Everything in this chapter describes the FT04 ship
+and still holds for the serving path, except where a box says otherwise.
+\end{drift}
+
+\section{Why the codename had to change}\label{sec:shipping:codename}
+
+\index{codename routing}
+A \emph{codename} is the name an analyst picks in \code{anomaly_scoring}: ``Indradhanu'', ``MNF-RX''. The worker turns
+it into a model with one dictionary:
+
+\begin{lstlisting}
+# _anomaly_scoring_run.py (and anomaly_scoring.py's validate_config)
+by_codename = {m.codename.lower(): m for m in catalog}
+\end{lstlisting}
+
+\code{catalog} comes from \code{list_catalog} in \code{backend/allotrope/foundation_models/resolver.py}, which walks
+the model directories in sorted order (\code{for p in sorted(models_root.iterdir())}). Two facts decide which model a
+repeated codename reaches.
+
+\paragraph{Fact 1: a dictionary built this way keeps the last value.} The comprehension assigns the entries one at a
+time, in catalog order. Assigning to a key that already exists overwrites its value. So if two manifests both say
+``Indradhanu'', the dictionary ends up holding whichever came \emph{last}.
+
+\paragraph{Fact 2: strings sort by character codes, left to right.} \index{lexicographic order}
+Python compares two strings \emph{lexicographically}: compare the first characters; if they differ, the string with
+the smaller character code comes first; if they are equal, move to the second characters, and so on. Character codes
+are the Unicode code points: \texttt{a} is 97, \texttt{h} is 104, \texttt{s} is 115.
+
+\begin{worked}[label={we:shipping:sort}]{Which manifest wins ``Indradhanu''?}
+The two directories are \texttt{hyperspectral\_segformer\_mae} (v0.2.0) and \texttt{spectral\_stem\_finetune} (FT04).
+Compare first characters: \texttt{h} is 104, \texttt{s} is 115.
+\begin{align*}
+104 &< 115\\
+\Rightarrow\ &\texttt{hyperspectral\_segformer\_mae} \text{ sorts first, } \texttt{spectral\_stem\_finetune} \text{ last}\\
+\Rightarrow\ &\text{``indradhanu''} \to \text{v0.2.0, then overwritten by FT04: FT04 wins.}
+\end{align*}
+The script confirms both the sort and the surviving value\tagC.
+\end{worked}
+
+Every default hyperspectral action (\code{_DEFAULT_PRISMA}, \code{_DEFAULT_ENMAP} and \code{_DEFAULT_AVIRIS_NG} in
+\code{anomaly_scoring.py} all say \code{"model_codenames": ["Indradhanu"]}) would have been re-routed to FT04 without
+anyone choosing it - and, with the grid check of \cref{sec:shipping:grid}, every one of them would then fail, because
+the default band filter resamples to the 165-band grid. \code{list_catalog} does log a warning on a collision
+(``codename collision \ldots\ Rename one of them''), but a log line is not a guard. Hence a new name.
+
+\begin{keypoint}
+When routing depends on the order of a directory listing, the only safe collision is no collision: give every model a
+name no other model shares.
+\end{keypoint}
+
+\section{A manifest that carries the whole configuration}\label{sec:shipping:manifest}
+
+\index{manifest}
+The api lists models and validates actions; it never loads torch (the repo's lazy-import rule: action-type modules import
+torch only inside the worker's \code{run()}). So everything the resolver needs must be readable from \file{current.json},
+a JSON file next to each checkpoint. For v0.2.0, \code{_model_config_from_manifest} rebuilds the model configuration from
+a few summary fields. For the spectral-stem models that is not possible:
+
+\begin{lstlisting}
+# backend/allotrope/foundation_models/resolver.py, _model_config_from_manifest
+if arch in ("spectral_stem_finetune", "spectral_stem_mae"):
+    # The stem configs carry far more than a manifest summary can rebuild (sources,
+    # band weighting, the stem variant), and the api cannot torch.load; the manifest
+    # therefore embeds the checkpoint's full config.model_config.
+    cfg = current.get("model_config")
+    if not isinstance(cfg, dict) or cfg.get("model_type") != arch:
+        raise KeyError(f"{arch}: current.json must embed the checkpoint's model_config")
+    return cfg
+\end{lstlisting}
+
+\code{scripts/make_model_manifest.py} is the one place that does load the checkpoint: it copies
+\code{ck["config"]["model_config"]} into \code{current.model_config}, counts the parameters and copies the checkpoint
+next to it as \texttt{<architecture>\_<version>\_epoch<N>.pt}. If the embedded config is missing or names another
+architecture, the resolver raises \code{KeyError} - and \code{list_catalog} skips manifests that raise \code{KeyError},
+so a bad manifest makes the model \emph{disappear} from the picker rather than load wrongly. Failing closed is the right
+direction: a missing model is noticed; a wrongly configured one quietly scores.
+
+The capabilities entry sets \code{pixel_stats_relpath=None}: there is no per-band statistics file, because the
+normalisation curve travels inside the checkpoint as buffers (\texttt{stats.wl}, \texttt{stats.mean},
+\texttt{stats.std}; \cref{ch:finetune}).
+
+\subsection{What ``params'' counts}
+
+\index{parameter!versus buffer}
+A model's \code{state_dict} holds two kinds of tensors. \emph{Parameters} are the numbers training changes by gradient
+descent. \emph{Buffers} are stored numbers that are not trained by gradients - BatchNorm's running statistics, or here
+the normalisation curve and the trained-wavelength record. \code{make_model_manifest.py} counts
+\begin{lstlisting}
+"params": int(sum(v.numel() for k, v in sd.items()
+                  if not k.startswith(("stats.", "trained_wl"))))
+\end{lstlisting}
+that is, every tensor in the state dict except the normalisation and wavelength buffers. Predict the figure from the
+model's parts.
+
+\begin{worked}[label={we:shipping:params}]{Where 5,886,451 comes from}
+Trainable parameters of the shipped FT04, by top-level module (from the checkpoint\tagC):
+\begin{align*}
+\text{spectral stem in (\texttt{spectral\_in})} &\quad 14{,}721\\
+\text{spectral decoder out (\texttt{spectral\_out})} &\quad 4{,}257\\
+\text{BatchNorm scale and shift (\texttt{norm}, } 2 \times 32) &\quad 64\\
+\text{encoder} &\quad 3{,}331{,}072\\
+\text{decoder} &\quad 2{,}164{,}736\\
+\text{segmentation head (\cref{we:ftruns:seghead})} &\quad 371{,}536
+\end{align*}
+Add them: $14{,}721 + 4{,}257 = 18{,}978$; $18{,}978 + 64 = 19{,}042$; $19{,}042 + 3{,}331{,}072 = 3{,}350{,}114$;
+$3{,}350{,}114 + 2{,}164{,}736 = 5{,}514{,}850$; $5{,}514{,}850 + 371{,}536 = 5{,}886{,}386$ parameters.
+
+The manifest says 5,886,451. The difference, $5{,}886{,}451 - 5{,}886{,}386 = 65$, is the BatchNorm's buffers, which the
+manifest's filter does not exclude: running mean (32 numbers), running variance (32) and the step counter
+\texttt{num\_batches\_tracked} (1): $32 + 32 + 1 = 65$.
+\end{worked}
+
+\begin{sourcenote}[: the manifest's ``params'' includes 65 buffers]
+\code{scripts/make_model_manifest.py} (line 59) excludes only \texttt{stats.*} and \texttt{trained\_wl*} from its count,
+so the reported \texttt{params} of 5,886,451 includes the stem BatchNorm's 65 buffer entries. Building the model and
+summing \code{model.parameters()} gives 5,886,386 (\file{research/textbook/tools/compute_shipping.py}). The course
+quotes the manifest's 5,886,451 (``about 5.9\,M''); both round to that. The excluded buffers are \texttt{trained\_wl}
+(733 wavelengths in the checkpoint - the record of \cref{ch:ftruns}) and three 202-point normalisation curves.
+\end{sourcenote}
+
+\section{One band filter, two kinds of model: the grid check}\label{sec:shipping:grid}
+
+\index{band grid check}
+v0.2.0 reads the 165-band common grid (\cref{ch:sensors}). V2 reads each sensor's \emph{native} bands - the wavelengths
+the instrument actually measured. \code{band_filter_apply} can produce either (\code{use_common_wavelength_grid},
+default \texttt{true}), but an \code{anomaly_scoring} action reads \emph{one} upstream band-filter output for every
+model it runs. So the resolver now records which grid each model needs:
+
+\begin{lstlisting}
+# resolver.py, ModelCapabilities
+band_grid: str = "common165"          # v0.2.0 and every older model
+# the spectral_stem_finetune entry:
+band_grid="native", exclude_classes=("cloud",)
+\end{lstlisting}
+
+and the worker checks the vendable before running any foundation model on a hyperspectral scene:
+
+\begin{lstlisting}
+# _anomaly_scoring_run.py, _check_band_grid
+grid = np.asarray(DEFAULT_COMMON_WAVELENGTH_GRID, dtype=np.float64)     # (165,)
+on_grid = len(wavelengths) == len(grid) and np.allclose(wavelengths, grid)
+if band_grid == "native" and on_grid:
+    raise ValueError("... reads native bands: run band_filter_apply with "
+                     "use_common_wavelength_grid=false ...")
+if band_grid == "common165" and not on_grid:
+    raise ValueError("... needs the 165-band grid: run band_filter_apply with "
+                     "use_common_wavelength_grid=true ...")
+\end{lstlisting}
+
+\paragraph{What \texttt{np.allclose} tests.} \index{np.allclose}
+\code{np.allclose(a, b)} is true when every pair of entries satisfies
+\begin{equation}
+\abs{a_i - b_i} \le \mathrm{atol} + \mathrm{rtol} \cdot \abs{b_i}, \qquad \mathrm{rtol} = 10^{-5},\ \mathrm{atol} =
+10^{-8} \ \text{(the defaults)}. \label{eq:shipping:allclose}
+\end{equation}
+The tolerance grows with the size of the number: a relative tolerance.
+
+\begin{worked}[label={we:shipping:allclose}]{How close is ``on the grid''?}
+At the grid's first wavelength, 460\,nm, the allowed difference is
+\[
+10^{-8} + 10^{-5} \times 460 = 0.00000001 + 0.0046 = 0.0046\,\text{nm}.
+\]
+At its last, 2450\,nm: $10^{-8} + 10^{-5} \times 2450 = 0.0245$\,nm. So a list shifted by 0.001\,nm everywhere still
+counts as the grid (0.001 is under 0.0046), while a shift of 0.01\,nm does not (0.01 is over 0.0046 at the short end).
+The script agrees\tagC. No real sensor lists its native bands within a few thousandths of a nanometre of a 10\,nm grid,
+so the test separates ``resampled'' from ``native'' with a wide margin.
+\end{worked}
+
+The test is ``do these wavelengths equal the grid'', not ``are there 165 of them''. A native list that happens to have
+165 bands still fails \code{np.allclose} and counts as native. Classical detectors (MNF-RX and friends) skip the check:
+they take either grid.
+
+\begin{sourcenote}[: the check runs in the worker, not at submit time]
+The design (\file{docs/proposals/ship-ft04.md}, Phase 1 step 4) placed the grid check in
+\code{anomaly_scoring.validate_config}. The code runs it in the worker (\code{_check_band_grid},
+\code{backend/allotrope/action_types/_anomaly_scoring_run.py}, line 93, called at line 297), because the api cannot see
+the upstream band filter's settings when the action is submitted (\file{docs/09-known-issues.md}). The consequence:
+\textbf{one action cannot run V2 and v0.2.0 together} - whichever does not match the band filter makes the action fail at
+run time.
+\end{sourcenote}
+
+\section{\texttt{read\_bands}: tell the model what it is reading}\label{sec:shipping:readbands}
+
+\index{trained band mask}
+A spectral stem reads a band list of any length, but only if it is told the wavelengths (\cref{ch:crossstem}). The
+product's older path never called \code{set_wavelengths}. The new helper does that and drops the bands the model has
+never trained on:
+
+\begin{lstlisting}
+# app/foundation_models/inferencers/spectral_stem_inferencer.py
+def read_bands(self, cube, wavelengths_nm):          # cube: (N, H, W)
+    wl = np.asarray(wavelengths_nm, dtype=np.float64)
+    keep = self.model.inner.trained_band_mask(wl).cpu().numpy()   # (N,) bool
+    self.set_wavelengths(wl[keep])
+    return cube[keep], wl[keep], np.flatnonzero(keep)  # (N_kept, H, W), (N_kept,), indices
+\end{lstlisting}
+
+\code{trained_band_mask} keeps a band when its distance to the nearest recorded wavelength is at most 15\,nm:
+\begin{equation}
+\text{keep}(\lambda) = \Big[\min_{r \in R} \abs{\lambda - r} \le 15\,\text{nm}\Big], \label{eq:shipping:keep}
+\end{equation}
+with $R$ the trained-wavelength record (\code{trained_wl}), which grew during fine-tuning as FT04 read EnMAP, PRISMA and
+AVIRIS-NG. In code it is one line: \code{(wl[:, None] - self.trained_wl[None, :]).abs().min(dim=1).values <= tol_nm} -
+a matrix of all band-to-record distances, shape \shape{(N, |R|)}, then the minimum along each row.
+
+\begin{worked}[label={we:shipping:keep}]{Three bands against a record ending 2395, 2405, 2440}
+Build the distance matrix row by row (do it on paper).
+\begin{center}
+\begin{tabular}{lccccc}
+\toprule
+band & to 2395 & to 2405 & to 2440 & minimum & keep? \\
+\midrule
+2400\,nm & 5 & 5 & 40 & 5 & $5 \le 15$: keep \\
+2452\,nm & 57 & 47 & 12 & 12 & $12 \le 15$: keep \\
+2470\,nm & 75 & 65 & 30 & 30 & $30 > 15$: drop \\
+\bottomrule
+\end{tabular}
+\end{center}
+(Script check\tagC.) A dropped band would meet wavelength networks that never saw anything there; dropping it is safer
+than letting them extrapolate.
+\end{worked}
+
+The docstring states the trap in its second half: it ``also sets the wavelengths for the next predict\_full\_scene /
+segment\_full\_scene''. Skip it and the model keeps the \emph{previous} scene's wavelengths - a mismatch that raises no
+error, the same family of silent bug as \cref{ch:sortbug}. In the worker, the branch is taken only for
+\code{band_grid == "native"}, and everything after it - reconstruction, scoring, segmentation, the reconstruction
+preview - uses the kept cube and wavelengths. The stats record how many bands the model read (\texttt{bands\_read}).
+On the PRISMA bench V2 reads 185 bands of set1 and 186 of set4.
+
+\section{Score first, then zero the cloud}\label{sec:shipping:order}
+
+\subsection{How the head turns a scene into classes}
+
+\index{segmentation!tiled}
+V2 has a segmentation head (\cref{ch:seghead}). \code{segment_full_scene} runs it over the scene in $128 \times 128$
+windows at stride 64, averages the sigmoid probabilities where windows overlap, and assigns each valid pixel one class.
+Three pieces of arithmetic hide in that sentence.
+
+\paragraph{Padding so the windows fit.} With window $T = 128$ and stride $S = 64$, a side of length $n > T$ is padded
+by $\text{pad} = (-(n - T)) \bmod S$, the smallest amount that makes $n + \text{pad} - T$ a multiple of $S$. For $n =
+300$: $n - T = 172$; the next multiple of 64 at or above 172 is 192; $\text{pad} = 192 - 172 = 20$; padded side 320;
+window starts $0, 64, 128, 192$ (since $320 - 128 = 192$). For $n = 256$: $256 - 128 = 128 = 2 \times 64$, pad 0,
+starts $0, 64, 128$\tagC.
+
+\paragraph{Coverage and averaging.} A row $y$ is covered by every window whose start $s$ satisfies $s \le y < s + 128$.
+With starts $0, 64, 128, 192$, row 100 is covered by the windows starting at 0 and 64 - two of them; row 10 only by the
+window at 0. In two dimensions an interior pixel is covered by $2 \times 2 = 4$ windows, and its probability for each
+class is the mean of four predictions. If the four windows say cloud 0.62, 0.48, 0.55 and 0.39, the pixel's cloud
+probability is $(0.62 + 0.48 + 0.55 + 0.39) / 4 = 2.04 / 4 = 0.51$.
+
+\paragraph{Threshold and priority.} \index{class priority}
+A class is ``on'' where its averaged probability exceeds 0.5. The code then assigns classes in a fixed order, each
+assignment overwriting the last:
+
+\begin{lstlisting}
+cls = np.zeros((H, W), np.int64)                        # 0 land
+cls[prob[0] > 0.5] = 1                                  # water
+cls[prob[3] > 0.5] = 3                                  # shadow
+cls[prob[4] > 0.5] = 4                                  # snow
+cls[(np.maximum(prob[1], prob[2]) if thin_cloud else prob[1]) > 0.5] = 2   # cloud (or thin)
+return cls * valid.astype(bool), prob
+\end{lstlisting}
+
+Because the last write wins (the same rule as \cref{sec:shipping:codename}, this time on an array), the effective
+priority is cloud $>$ snow $>$ shadow $>$ water $>$ land. \code{CLASS_NAMES = ("land", "water", "cloud", "shadow",
+"snow")} gives the class-map ids 0 to 4.
+
+\begin{worked}[label={we:shipping:priority}]{One pixel, two cloud rules}
+A pixel's averaged probabilities (water, cloud, thin cloud, shadow, snow) are $(0.70, 0.30, 0.60, 0.55, 0.10)$.
+\begin{enumerate}
+\item Water $0.70 > 0.5$: class 1.
+\item Shadow $0.55 > 0.5$: overwrite, class 3.
+\item Snow $0.10$: no change.
+\item Cloud, \texttt{thin\_cloud=True}: $\max(0.30, 0.60) = 0.60 > 0.5$: overwrite, class 2 (cloud). Excluded.
+\item Cloud, \texttt{thin\_cloud=False}: $0.30$, not above 0.5: stays class 3 (shadow). Not excluded.
+\end{enumerate}
+\end{worked}
+
+\begin{sourcenote}[: thick cloud only, since 2026-10-29]
+At the FT04 ship, ``cloud'' meant cloud or thin cloud. Since 2026-10-29 the resolver sets \code{thin_cloud_is_cloud=False}
+for \texttt{spectral\_stem\_finetune} (\code{backend/allotrope/foundation_models/resolver.py}, the capabilities entry), and
+the worker passes it to \code{segment_full_scene(..., thin_cloud=m.thin_cloud_is_cloud)}: V2 excludes \emph{thick} cloud
+only. The reason is Indradhanu Heavy's thin-cloud output, which fires on haze (75.4\% of PRISMA set4's valid pixels and
+209 of its 230 targets; \file{docs/lld/spectral-stem.md}). \texttt{stats.json} records the rule as \texttt{cloud\_rule}
+(\texttt{"thick"} or \texttt{"cloud\_or\_thin"}). \Cref{ch:heavy} tells that story.
+\end{sourcenote}
+
+\subsection{Why zero after scoring}
+
+The worker then zeros the model's \code{exclude_classes} - for V2, cloud:
+
+\begin{lstlisting}
+# _anomaly_scoring_run.py, after compute_score(...)
+class_map, _ = inferencer.segment_full_scene(model_cube, spatial_valid.astype(bool),
+                                             thin_cloud=m.thin_cloud_is_cloud)
+excluded = np.isin(class_map, [inferencer.CLASS_NAMES.index(c) for c in m.exclude_classes])
+score = np.where(excluded, 0.0, score).astype(np.float32)          # (H, W)
+\end{lstlisting}
+
+Why after, and not ``remove the cloud from the mask, then score''? Residual Mahalanobis (\cref{ch:residualmaha}) first
+fits its whitening - the spread of the residual - over every pixel in the mask, and measures each pixel in units of that
+spread. Which pixels are in the fit changes every score.
+
+\begin{worked}[label={we:shipping:fitset}]{The same pixel, twice the score}
+An illustration in one band, not a measurement\tagA: four land residuals $0.02, -0.02, 0.02, -0.02$, two cloud residuals
+$0.06, -0.06$, and a target residual $0.08$. All have mean 0, so the variance is the mean of the squares.
+
+\emph{Fit on all six.}
+\begin{align*}
+\text{squares:}\quad & 4 \times 0.0004 + 2 \times 0.0036 = 0.0016 + 0.0072 = 0.0088\\
+\text{variance:}\quad & 0.0088 / 6 = 0.001467\\
+\text{spread:}\quad & \sqrt{0.001467} = 0.0383\\
+\text{target:}\quad & 0.08 / 0.0383 = 2.09 \text{ spreads}
+\end{align*}
+\emph{Fit on land only.}
+\begin{align*}
+\text{variance:}\quad & 0.0016 / 4 = 0.0004\\
+\text{spread:}\quad & \sqrt{0.0004} = 0.0200\\
+\text{target:}\quad & 0.08 / 0.0200 = 4.00 \text{ spreads}
+\end{align*}
+(Script: 2.089 and 4.000\tagC.)
+\end{worked}
+
+Same pixel, nearly twice the score. Neither order is wrong in principle, but \textbf{the benchmark measured ``fit on
+everything valid, then zero the cloud''}, and the product must run what was measured. The evaluator's other order
+(\code{fit_on_kept: true} in \code{app/evaluation/scorers.py}) was tried on FT03 and was no better: 15.7\% against 16.5\%
+caught at the top 0.1\%\tagM{docs/lld/evaluation.md}.
+
+A note on the keep mask: if the analyst also attaches an upstream \code{scene_segmentation} keep mask, that mask does feed
+the fit, as it always has. The parity run below used no upstream keep mask - only the valid pixels - which is the
+configuration the numbers describe.
+
+\subsection{What is written}
+
+Three things are written per model, under \file{models/<codename>/}:
+\begin{center}
+\small
+\begin{tabular}{ll}
+\toprule
+output & contents \\
+\midrule
+\texttt{mask\_cloud.tif} & uint8, 1 where the score was zeroed \\
+\texttt{class\_map.tif} & uint8, the head's classes, 0 land to 4 snow \\
+\texttt{stats.json} keys & \texttt{bands\_read}, \texttt{excluded\_classes}, \texttt{cloud\_rule}, \texttt{excluded\_percent} \\
+\bottomrule
+\end{tabular}
+\end{center}
+\texttt{excluded\_percent} is \code{round(100 * excluded / valid, 3)}.
+
+\begin{worked}[label={we:shipping:percent}]{excluded\_percent on a small tile}
+A $4 \times 4$ tile has 14 valid pixels, of which 3 are cloud:
+\begin{align*}
+100 \times 3 / 14 &= 300 / 14 = 21.42857\ldots\\
+\text{rounded to 3 places} &= 21.429
+\end{align*}
+\end{worked}
+
+The keys are additive: the frontend reads stats by key, so new keys break nothing - and nothing in the viewer shows them
+yet (\file{docs/09-known-issues.md}).
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}[node distance=5mm and 6mm, font=\small,
+  box/.style={draw, rounded corners=2pt, align=center, minimum height=8mm, text width=3.4cm, fill=white, font=\footnotesize},
+  arr/.style={-{Stealth[length=2mm]}, thick}]
+\node[box, fill=spat!10] (pick) {analyst picks\\ ``Indradhanu V2''};
+\node[box, right=of pick] (cat) {\texttt{list\_catalog}: manifest\\ with embedded config};
+\node[box, right=of cat] (grid) {\texttt{\_check\_band\_grid}:\\ native, not 165};
+\node[box, fill=spec!10, below=of grid] (read) {\texttt{read\_bands}: keep\\ bands within 15\,nm};
+\node[box, left=of read] (pred) {\texttt{predict\_full\_scene}\\ (two checkerboards)};
+\node[box, fill=loss!15, left=of pred] (score) {residual Mahalanobis\\ fit on valid pixels};
+\node[box, fill=attn!10, below=of score] (seg) {\texttt{segment\_full\_scene}\\ 128 px, stride 64};
+\node[box, fill=loss!15, right=of seg] (zero) {zero cloud\\ \emph{after} scoring};
+\node[box, right=of zero] (out) {\texttt{anomaly\_score.tif},\\ \texttt{mask\_cloud.tif}, stats};
+\draw[arr] (pick) -- (cat); \draw[arr] (cat) -- (grid); \draw[arr] (grid) -- (read);
+\draw[arr] (read) -- (pred); \draw[arr] (pred) -- (score); \draw[arr] (score) -- (seg);
+\draw[arr] (seg) -- (zero); \draw[arr] (zero) -- (out);
+\end{tikzpicture}
+\caption{The worker's path for Indradhanu V2, in order. Every box is one of the decisions of this chapter; the parity run
+(\cref{sec:shipping:parity}) runs the same boxes outside the worker and compares with the evaluator.}
+\label{fig:shipping:path}
+\end{figure}
+
+\section{The parity run: the guard}\label{sec:shipping:parity}
+
+\index{parity run}
+There are no behavioural backend tests in this repo. \code{tests/test_backend/test_native_band_models.py} checks the
+plumbing: the resolver reads an embedded config, refuses a missing or mismatched one, applies the thick-cloud rule, and the
+grid check accepts each grid for its own kind of model and refuses the other. It does not check numbers. The guard for the
+numbers is \file{research/experiments/indradhanu-finetune/FT04-final-joint/product_parity.py}: it builds the inferencer
+\emph{from the shipped manifest} through the resolver's \code{_from_manifest} and \code{get_inferencer}, then runs
+\code{read_bands}, \code{predict_full_scene}, \code{compute_score(method="residual_mahalanobis")},
+\code{segment_full_scene} and the zeroing, exactly as the worker does, and compares against the evaluator's FT04 numbers on
+the PRISMA bench.
+
+\begin{table}[htbp]
+\centering
+\caption{The parity run, 2026-10-19: product path against the evaluator, PRISMA bench.}
+\label{tab:shipping:parity}
+\small
+\begin{tabular}{lcccc}
+\toprule
+scene & bands read & pAUC plain & pAUC cloud-excluded & excluded \\
+\midrule
+set1 & 185 & 0.2460 & -- & -- \\
+set4 & 186 & 0.2106 & 0.2199 & 11.83\% of valid pixels \\
+\bottomrule
+\end{tabular}
+
+\smallskip
+{\footnotesize Source: \tagM{docs/lld/spectral-stem.md} (Serving), produced by
+\file{research/experiments/indradhanu-finetune/FT04-final-joint/product_parity.py}.}
+\end{table}
+
+Identical to the evaluator's run; ROC-AUC within 0.0005. Two things made ``identical'' possible. The evaluator
+(\code{app/evaluation/models.py}) now calls the same \code{read_bands} and \code{segment_full_scene}, so there is one
+implementation of band reading and segmentation, not two that could drift. And \cref{ch:sortbug}'s lesson - a
+re-implemented data path that quietly disagreed with the product's - is the reason a parity run exists at all.
+
+These per-scene pAUCs are not comparable with the four-scene 0.170: they are single scenes. What matters is only that
+product and evaluator agree. If set4 has 1,000,000 valid pixels, 11.83\% of them is $0.1183 \times 1{,}000{,}000 =
+118{,}300$ pixels scored 0 by the exclusion.
+
+\begin{drift}
+A second parity run was made when Heavy took over the codename (2026-10-29, thick-cloud rule): pAUC set1 0.2617, set2
+0.1874, set3 0.0861, set4 0.2217 (mean 0.1892), matching the evaluator to four decimals (\cref{we:heavy:parity}). CPU
+cost inside the worker: on the image's 2 torch threads one PRISMA scene took 1,819\,s with Heavy and 1,058\,s with
+FT04, mostly \code{predict_full_scene} at stride 32; since 2026-10-29 the compose file raises the worker to 16 threads
+(\code{WORKER_THREADS}), and the same scene takes 454\,s and 274\,s, about four times faster
+(\file{docs/09-known-issues.md}; \cref{we:heavy:threads}).
+\end{drift}
+
+\begin{keypoint}
+Unit tests prove the plumbing; only a run of the real checkpoint on the real scenes, through the product's own path,
+proves the numbers.
+\end{keypoint}
+
+\section{What did not change}\label{sec:shipping:unchanged}
+
+\begin{itemize}
+\item \textbf{Defaults.} Every hyperspectral default still picks ``Indradhanu'' (v0.2.0); \code{band_filter_apply} still
+  defaults to \code{use_common_wavelength_grid: true}. Phase 2 would change both.
+\item \textbf{EnMAP's band filter} still removes the provider's cloud, cloud-shadow and haze pixels
+  (\code{quality_masks_to_apply}) before scoring, unlike the PRISMA evaluation behind V2's numbers. Kept as the product's
+  convention (decision, 2026-10-19).
+\item \textbf{The detection case.} Like for like, both with cloud exclusion on FT04's masks, the real bench reads v0.2.0
+  0.165 against FT04 0.170 - a tie (\cref{ch:ftruns}). What V2 adds is the masks, native bands and better
+  reconstruction, in one model.
+\item \textbf{One product fix rode along.} \code{scene_segmentation}'s brightness took the mean of ``band 0 up to the VNIR
+  edge''. On native PRISMA, whose bands run downwards (\cref{ch:sortbug}), band 0 is the far SWIR.
+  \code{app/utils/spectral_indices/scene_indices.py} now picks bands by wavelength (\code{find_band}: the index of the
+  nearest wavelength, \code{np.argmin(np.abs(wavelengths - target_nm))}), which works in any order.
+\end{itemize}
+
+Still open (\file{docs/09-known-issues.md}): the viewer has no panel for the masks, and the CPU cost on the stack, measured
+since (drift box above), is several times v0.2.0's. Anything that runs the worker image outside compose is back on 2
+threads, four times slower.
+
+\begin{confusions}
+\confusion{Indradhanu V2 replaced Indradhanu.}{No. It is opt-in. ``Indradhanu'' is still v0.2.0 and still the default.}
+\confusion{The codename collision would only matter if someone picked the name.}{It matters for everyone: the defaults pick
+``Indradhanu'' for you. A collision would have re-routed every default action to FT04 without a single config change.}
+\confusion{The grid check counts bands.}{It compares wavelengths with the grid using \texttt{np.allclose}. 165 native bands
+are still native.}
+\confusion{Zeroing cloud before scoring is the same thing, earlier.}{No. It changes which pixels the whitening is fitted on,
+so it changes every score, not only the cloud's.}
+\confusion{mask\_cloud.tif and the upstream keep\_mask.tif are the same kind of mask.}{\texttt{keep\_mask.tif} comes from
+\texttt{scene\_segmentation} (thresholds) and decides the fit. \texttt{mask\_cloud.tif} comes from V2's own head and is
+applied after scoring. Both can be present.}
+\confusion{The manifest's params is the number of trainable weights.}{It is every state-dict entry except the normalisation
+and wavelength buffers, so it includes the BatchNorm's 65 running-statistics entries: 5,886,451 against 5,886,386 trainable.}
+\confusion{The unit tests prove the product gives the benchmark's numbers.}{They prove the plumbing (config, grid, cloud
+rule). The numbers are guarded by the parity run, which needs the checkpoint and the bench scenes and is not part of
+pytest.}
+\end{confusions}
+
+\begin{checkyourself}
+\item\label{ex:shipping:1} Suppose FT04's directory had been named \texttt{a\_spectral\_stem} and both manifests said
+  ``Indradhanu''. Which model would the defaults route to, and why? Show the character codes.
+\item\label{ex:shipping:2} A trained record contains 1385 and 1460\,nm and nothing between. Does \texttt{read\_bands} keep a
+  band at 1400\,nm? At 1420\,nm? At 1445\,nm? Show the distances.
+\item\label{ex:shipping:3} A band filter output lists wavelengths equal to the 165-band grid plus 0.003\,nm at every band.
+  Does \texttt{\_check\_band\_grid} treat it as on the grid? What about plus 0.03\,nm? Use \eqref{eq:shipping:allclose} at
+  460 and at 2450\,nm.
+\item\label{ex:shipping:4} A 6 $\times$ 5 tile has 26 valid pixels; V2 calls 4 of them cloud. Compute
+  \texttt{excluded\_percent} by hand. Then a scene of side $n = 200$: what padding does \texttt{segment\_full\_scene} add, and
+  where do its windows start?
+\item\label{ex:shipping:5} In \cref{we:shipping:fitset}, add a third cloud residual of $0.06$ (seven pixels in all, mean no
+  longer exactly 0 - use the mean of the squares anyway, as an approximation). Recompute the target's score with the fit on
+  all pixels. Does adding cloud to the fit raise or lower the target's score?
+\item\label{ex:shipping:6} An analyst picks both ``Indradhanu'' and ``Indradhanu V2'' in one \texttt{anomaly\_scoring} action
+  on a default band filter. What happens, and what should they do instead?
+\end{checkyourself}
+\endgroup
+
+\nextchapter{ch:scoringgains}

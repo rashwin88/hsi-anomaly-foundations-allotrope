@@ -1,0 +1,1009 @@
+\chapter{Training data and the training loop: gradients, AdamW, warmup and cosine schedules}\label{ch:trainloop}
+\begingroup\emergencystretch=3em % long unbreakable source tags; local to this chapter
+
+\begin{onething}
+Training repeats one small move millions of times: take a batch of patches, compute the loss
+of \cref{ch:losses}, compute its gradient with respect to every parameter, and let the
+optimiser (here Adam) step each parameter a little against its gradient, with a step size
+that a schedule (here cosine annealing) shrinks over the run. Everything else in the loop,
+from shards to checkpoints, exists to keep that move fed, honest and resumable.
+\end{onething}
+
+\Cref{ch:losses} ended with a number, the loss, and its derivative with respect to the
+reconstruction. Two gaps remain between that and a trained model. First, the network has about
+5.5 million parameters \tagM{research/model_break_down/05_hyperspectral_segformer_mae.md}, not
+one reconstruction; you need the derivative with respect to each of them and a rule for what
+to do with it. Second, the loss is computed on one batch of patches, and the satellite archive
+holds millions; you need a pipeline that turns scenes into a steady stream of batches, and a
+loop that consumes it. This chapter builds both: the mathematics of the update rule first
+(\cref{sec:trainloop:gd,sec:trainloop:momentum,sec:trainloop:adam,sec:trainloop:decay,sec:trainloop:schedule,sec:trainloop:clip,sec:trainloop:precision}),
+then the data (\cref{sec:trainloop:data}), then the loop that ties them together
+(\cref{sec:trainloop:loop}).
+
+The obvious approach, ``try a change to each parameter and keep it if the loss went down'',
+fails on arithmetic alone: one trial per parameter is 5.5 million forward passes for a single
+improvement. The gradient gives you the best local direction for all 5.5 million parameters at
+the cost of about one extra pass.
+
+\begin{analogy}
+Training is walking down a fog-bound hillside to the valley floor. You cannot see the valley;
+you can feel the slope under your feet (the gradient). Plain gradient descent takes a step
+straight downhill each time. Momentum is a heavy ball that keeps rolling through small bumps.
+Adam is a walker who shortens their stride on ground that has been steep and jagged and
+lengthens it on ground that has been gentle and consistent. Warmup is taking small steps while
+your eyes adjust to the fog; cosine annealing is slowing down as you near the bottom so you
+stop in the valley instead of striding across it.
+\end{analogy}
+
+\section{Vocabulary: parameter, gradient, batch, step, epoch}\label{sec:trainloop:vocab}
+
+\begin{definition}[Gradient]\index{gradient}
+For a loss $L$ that depends on parameters $\vect{w} = (w_1, \dots, w_P)$, the \emph{gradient}
+is the vector of partial derivatives,
+\[
+\nabla L = \nabla_{\vect{w}} L = \left(\frac{\partial L}{\partial w_1}, \dots, \frac{\partial L}{\partial w_P}\right).
+\]
+Entry $j$ says how fast the loss changes when $w_j$ alone is nudged up. The gradient points in
+the direction of steepest increase, so $-\nabla L$ points steepest downhill.
+\end{definition}
+
+\begin{definition}[Batch, step, epoch]\index{batch}\index{step}\index{epoch}
+A \emph{batch} (or \emph{mini-batch}) is the group of patches processed together in one forward
+pass; its size $B$ is \code{batch_size}. A \emph{step} (or \emph{iteration}) is one update of
+the parameters. In most textbooks an \emph{epoch} is one full pass over the training set; in
+this project an epoch is a fixed \emph{sample budget} instead (\cref{sec:trainloop:epoch}),
+the interval at which validation, the learning-rate schedule, the SAM ramp and checkpointing
+advance.
+\end{definition}
+
+The loss over a batch is the mean of the per-patch losses, and the gradient of a mean is the
+mean of the gradients (differentiation is linear). So the batch gradient is an
+\emph{estimate} of the gradient you would get from the whole training set: noisy, but cheap.
+Training with such estimates is \emph{stochastic gradient descent}\index{stochastic gradient
+descent}. A larger batch gives a less noisy estimate; it does not give a different
+expected direction.
+
+\paragraph{Backpropagation, in one paragraph.} \Cref{ch:losses} computed $\partial L/\partial\xhat$.
+The reconstruction $\xhat$ is the output of the decoder, which is a function of its weights and
+of the encoder's output, and so on back to the compressor. The chain rule
+(\cref{sec:losses:chain}) carries the derivative backwards layer by layer: each layer receives
+$\partial L/\partial(\text{its output})$, and computes from it $\partial L/\partial(\text{its
+weights})$ and $\partial L/\partial(\text{its input})$, which it passes on. PyTorch does this
+automatically when you call \code{loss.backward()}; it stores each parameter's derivative in the
+parameter's \code{.grad} field, \emph{adding} to whatever is already there. That adding is
+why the loop calls \code{optimizer.zero_grad()} every step, and it is what gradient
+accumulation exploits (\cref{sec:trainloop:accum}).
+
+\section{Gradient descent, by hand}\label{sec:trainloop:gd}
+
+\begin{definition}[Gradient descent]\index{gradient descent}\index{learning rate}
+With \emph{learning rate} (step size) $\eta > 0$, each step replaces every parameter by
+\begin{equation}\label{eq:trainloop:gd}
+\vect{w}_{t+1} = \vect{w}_t - \eta\,\nabla L(\vect{w}_t).
+\end{equation}
+\end{definition}
+
+To see the rule work, use a toy loss with one parameter whose answer you know: $L(w) = (w -
+3)^2$, smallest at $w = 3$. Its derivative, by the chain rule, is $L'(w) = 2(w - 3)$.
+
+\begin{worked}[label={we:trainloop:gd}]{Three steps of gradient descent}
+Do this on paper. Start at $w_0 = 0$ (loss $(0 - 3)^2 = 9$), with $\eta = 0.1$.
+
+\textbf{Step 1.}
+\begin{align*}
+g_0 &= 2(0 - 3) = -6\\
+w_1 &= 0 - 0.1 \times (-6) = 0 + 0.6 = 0.6\\
+L(w_1) &= (0.6 - 3)^2 = (-2.4)^2 = 5.76
+\end{align*}
+\textbf{Step 2.}
+\begin{align*}
+g_1 &= 2(0.6 - 3) = 2 \times (-2.4) = -4.8\\
+w_2 &= 0.6 - 0.1 \times (-4.8) = 0.6 + 0.48 = 1.08\\
+L(w_2) &= (1.08 - 3)^2 = (-1.92)^2 = 3.6864
+\end{align*}
+\textbf{Step 3.}
+\begin{align*}
+g_2 &= 2(1.08 - 3) = 2 \times (-1.92) = -3.84\\
+w_3 &= 1.08 - 0.1 \times (-3.84) = 1.08 + 0.384 = 1.464\\
+L(w_3) &= (1.464 - 3)^2 = (-1.536)^2 = 2.359296
+\end{align*}
+The loss falls $9 \to 5.76 \to 3.69 \to 2.36$. The negative gradient pointed right (towards 3)
+every time, and the steps shrink as the slope flattens.
+\end{worked}
+
+\paragraph{Why the steps shrink, and when they explode.} Substitute the derivative into
+\cref{eq:trainloop:gd} and subtract 3 from both sides:
+\begin{align*}
+w_{t+1} &= w_t - 2\eta(w_t - 3)
+  && \text{(the update with $L' = 2(w - 3)$)}\\
+w_{t+1} - 3 &= (w_t - 3) - 2\eta(w_t - 3)
+  && \text{(subtract 3 from both sides)}\\
+w_{t+1} - 3 &= (1 - 2\eta)(w_t - 3).
+  && \text{(factor out $w_t - 3$)}
+\end{align*}
+The distance to the answer is multiplied by $1 - 2\eta$ every step. With $\eta = 0.1$ the factor
+is $0.8$: $-3 \to -2.4 \to -1.92 \to -1.536$, exactly the distances above. The method converges
+when $\abs{1 - 2\eta} < 1$, that is $0 < \eta < 1$. With $\eta = 1.1$ the factor is $-1.2$: each
+step overshoots to the other side and lands further away, $w = 6.6, -1.32, 8.184$, and the
+loss grows $12.96, 18.66, 26.87$ \tagC. A learning rate too large does not merely slow
+training; it makes it diverge. Real networks have millions of such directions with different
+curvatures, and the learning rate must suit the steepest of them.
+
+\section{Momentum}\label{sec:trainloop:momentum}
+
+Plain gradient descent forgets everything at every step. On a long, gently sloping valley it
+crawls; on a narrow one it zig-zags across. \emph{Momentum}\index{momentum}
+\citep{polyak1964some} keeps a running velocity:
+\begin{equation}\label{eq:trainloop:momentum}
+\vect{v}_{t} = \beta\,\vect{v}_{t-1} + \nabla L(\vect{w}_t), \qquad
+\vect{w}_{t+1} = \vect{w}_t - \eta\,\vect{v}_t, \qquad \vect{v}_{-1} = \vect{0},
+\end{equation}
+with $\beta$ typically 0.9. (This is PyTorch's \code{SGD(momentum=0.9)} form.) Gradients that
+keep pointing the same way add up; gradients that alternate cancel.
+
+\begin{worked}[label={we:trainloop:momentum}]{Three steps with momentum}
+Same toy, $w_0 = 0$, $\eta = 0.1$, $\beta = 0.9$.
+
+\textbf{Step 1.} $g = 2(0 - 3) = -6$. $v = 0.9 \times 0 + (-6) = -6$. $w = 0 - 0.1 \times (-6) = 0.6$.
+
+\textbf{Step 2.} $g = 2(0.6 - 3) = -4.8$.
+\begin{align*}
+v &= 0.9 \times (-6) + (-4.8) = -5.4 - 4.8 = -10.2\\
+w &= 0.6 - 0.1 \times (-10.2) = 0.6 + 1.02 = 1.62
+\end{align*}
+\textbf{Step 3.} $g = 2(1.62 - 3) = -2.76$.
+\begin{align*}
+v &= 0.9 \times (-10.2) + (-2.76) = -9.18 - 2.76 = -11.94\\
+w &= 1.62 - 0.1 \times (-11.94) = 1.62 + 1.194 = 2.814
+\end{align*}
+After three steps $w = 2.814$ (loss $0.0346$), against plain descent's $1.464$ (loss $2.36$).
+PyTorch's \code{SGD} with momentum gives $2.814$ \tagC. The velocity is still large, so step 4
+will overshoot past 3; on this toy, momentum oscillates around the answer before settling.
+\end{worked}
+
+\section{Adam}\label{sec:trainloop:adam}
+
+\subsection{The problem Adam solves}
+
+Different parameters see gradients of wildly different sizes. A bias in the final layer may
+see gradients of order 1; a weight deep in the encoder, of order $10^{-4}$. One learning rate
+cannot suit both: large enough for the second makes the first diverge. Adam \citep{kingma2015adam}
+gives every parameter its own effective step size, by dividing its gradient by a running
+estimate of the gradient's typical magnitude.
+
+\subsection{Exponential moving averages}
+
+\begin{definition}[Exponential moving average]\index{exponential moving average}
+An \emph{exponential moving average} (EMA) of a sequence $g_1, g_2, \dots$ with decay $\beta$ is
+\[
+m_t = \beta\,m_{t-1} + (1 - \beta)\,g_t, \qquad m_0 = 0.
+\]
+\end{definition}
+Unroll it to see what it averages:
+\begin{align*}
+m_1 &= (1-\beta)g_1\\
+m_2 &= \beta(1-\beta)g_1 + (1-\beta)g_2\\
+m_t &= (1-\beta)\sum_{k=1}^{t}\beta^{t-k}g_k .
+\end{align*}
+Each older gradient's weight shrinks by a factor $\beta$ per step: with $\beta = 0.9$ a gradient
+ten steps old has weight $0.9^{10} = 0.35$ of the newest; with $\beta = 0.999$ the memory is
+about a thousand steps long.
+
+\subsection{The algorithm}
+
+\begin{definition}[Adam]\index{Adam}
+For each parameter $w$ separately, with gradient $g_t$ at step $t = 1, 2, \dots$, decays
+$\beta_1, \beta_2$, learning rate $\eta$ and a small $\epsilon$:
+\begin{align}
+m_t &= \beta_1 m_{t-1} + (1 - \beta_1)\,g_t && \text{(EMA of the gradient: first moment)}\label{eq:trainloop:m}\\
+v_t &= \beta_2 v_{t-1} + (1 - \beta_2)\,g_t^2 && \text{(EMA of the squared gradient: second moment)}\label{eq:trainloop:v}\\
+\hat{m}_t &= \frac{m_t}{1 - \beta_1^t}, \qquad \hat{v}_t = \frac{v_t}{1 - \beta_2^t} && \text{(bias correction)}\label{eq:trainloop:bias}\\
+w_t &= w_{t-1} - \eta\,\frac{\hat{m}_t}{\sqrt{\hat{v}_t} + \epsilon}. && \text{(the step)}\label{eq:trainloop:adamstep}
+\end{align}
+PyTorch's defaults, which this project uses unchanged, are $\beta_1 = 0.9$, $\beta_2 = 0.999$,
+$\epsilon = 10^{-8}$ and weight decay 0.
+\end{definition}
+
+$\hat{m}_t$ estimates the mean gradient; $\sqrt{\hat{v}_t}$ estimates its root-mean-square size.
+Their ratio is near $\pm 1$ when the gradient is consistent and near 0 when it flips sign from
+step to step. So each parameter moves about $\eta$ per step when its gradient is steady, whatever
+the gradient's scale, and less when it is noisy.
+
+\subsection{Why bias correction}
+
+Both EMAs start at 0, so early on they are too small. Suppose the gradient's distribution does
+not change, with mean $\E[g]$. Take expectations of the unrolled form:
+\begin{align*}
+\E[m_t] &= (1 - \beta_1)\sum_{k=1}^{t}\beta_1^{t-k}\,\E[g]
+  && \text{(expectation is linear)}\\
+&= (1 - \beta_1)\,\E[g]\,(1 + \beta_1 + \dots + \beta_1^{t-1})
+  && \text{(write out the powers)}\\
+&= (1 - \beta_1)\,\E[g]\,\frac{1 - \beta_1^t}{1 - \beta_1}
+  && \text{(sum of a geometric series)}\\
+&= (1 - \beta_1^t)\,\E[g].
+  && \text{(cancel $1 - \beta_1$)}
+\end{align*}
+The EMA is short by the factor $1 - \beta_1^t$; dividing by it, as in \cref{eq:trainloop:bias},
+removes the bias. The same argument with $g^2$ gives the factor $1 - \beta_2^t$ for $v_t$.
+
+\begin{worked}[label={we:trainloop:bias}]{The bias-correction factors for t = 1, 2, 3}
+With $\beta_1 = 0.9$:
+\begin{align*}
+t = 1:&\quad 1 - 0.9 = 0.1\\
+t = 2:&\quad 1 - 0.9^2 = 1 - 0.81 = 0.19\\
+t = 3:&\quad 1 - 0.9^3 = 1 - 0.729 = 0.271
+\end{align*}
+With $\beta_2 = 0.999$:
+\begin{align*}
+t = 1:&\quad 1 - 0.999 = 0.001\\
+t = 2:&\quad 1 - 0.999^2 = 1 - 0.998001 = 0.001999\\
+t = 3:&\quad 1 - 0.999^3 = 1 - 0.997003 = 0.002997
+\end{align*}
+So at $t = 1$ the raw $m_1$ is divided by 0.1 (multiplied by 10) and the raw $v_1$ by 0.001
+(multiplied by 1000). Without correction, the first step would divide a gradient estimate that
+is 10 times too small by a size estimate that is $\sqrt{1000} = 31.6$ times too small, and the
+step would be about 3 times too large. The second-moment correction matters for much longer:
+$1 - 0.999^{t}$ is still only $0.095$ at $t = 100$ and $0.632$ at $t = 1000$ \tagC.
+\end{worked}
+
+\begin{worked}[label={we:trainloop:adam}]{Three steps of Adam on the toy loss}
+Toy $L(w) = (w - 3)^2$, $w_0 = 0$, $\eta = 0.1$, default $\beta$s; ignore $\epsilon$ (it is
+$10^{-8}$).
+
+\textbf{Step $t = 1$.} $g_1 = 2(0 - 3) = -6$.
+\begin{align*}
+m_1 &= 0.9 \times 0 + 0.1 \times (-6) = -0.6\\
+v_1 &= 0.999 \times 0 + 0.001 \times 36 = 0.036\\
+\hat{m}_1 &= -0.6 / 0.1 = -6\\
+\hat{v}_1 &= 0.036 / 0.001 = 36, \qquad \sqrt{36} = 6\\
+w_1 &= 0 - 0.1 \times (-6)/6 = 0 + 0.1 = 0.1
+\end{align*}
+\textbf{Step $t = 2$.} $g_2 = 2(0.1 - 3) = -5.8$, $g_2^2 = 33.64$.
+\begin{align*}
+m_2 &= 0.9 \times (-0.6) + 0.1 \times (-5.8) = -0.54 - 0.58 = -1.12\\
+v_2 &= 0.999 \times 0.036 + 0.001 \times 33.64 = 0.035964 + 0.03364 = 0.069604\\
+\hat{m}_2 &= -1.12 / 0.19 = -5.894737\\
+\hat{v}_2 &= 0.069604 / 0.001999 = 34.81941, \qquad \sqrt{34.81941} = 5.900797\\
+w_2 &= 0.1 - 0.1 \times (-5.894737)/5.900797 = 0.1 + 0.099897 = 0.199897
+\end{align*}
+\textbf{Step $t = 3$.} $g_3 = 2(0.199897 - 3) = -5.600205$, $g_3^2 = 31.36230$.
+\begin{align*}
+m_3 &= 0.9 \times (-1.12) + 0.1 \times (-5.600205) = -1.008 - 0.560021 = -1.568021\\
+v_3 &= 0.999 \times 0.069604 + 0.001 \times 31.36230 = 0.069534 + 0.031362 = 0.100897\\
+\hat{m}_3 &= -1.568021 / 0.271 = -5.786054\\
+\hat{v}_3 &= 0.100897 / 0.002997 = 33.66589, \qquad \sqrt{33.66589} = 5.802231\\
+w_3 &= 0.199897 - 0.1 \times (-5.786054)/5.802231 = 0.199897 + 0.099721 = 0.299618
+\end{align*}
+\code{torch.optim.Adam(lr=0.1)} on the same toy gives $w = 0.100000, 0.199897, 0.299618$ \tagC
+(\file{research/textbook/tools/compute_24-trainloop_output.txt}).
+
+Notice the steps: $0.1000, 0.0999, 0.0997$. Each is almost exactly $\eta$, although the
+gradient was $-6$. Plain descent with the same $\eta$ took a first step of $0.6$.
+\end{worked}
+
+The first Adam step is $\eta\,\hat{m}_1/\sqrt{\hat{v}_1} = \eta\,g_1/\abs{g_1} = \pm\eta$ for
+every parameter, whatever the size of its gradient: for $g_1 = 10^{-4}$, $1$ or $10^4$ the step is
+$0.1$ \tagC. That is Adam's strength (no parameter is starved) and the reason it needs care at
+the start: on step 1, every one of the 5.5 million parameters moves by the full learning rate,
+in a direction estimated from a single batch. \Cref{sec:trainloop:warmup} returns to this.
+
+\begin{sourcenote}[: the optimiser actually used]
+\file{app/abstract_classes/foundation_trainer.py}, lines 68--70:
+\code{self.optimizer = torch.optim.Adam(self.model.parameters(), lr=config.learning_rate)}. Plain
+Adam with PyTorch's defaults: $\beta_1 = 0.9$, $\beta_2 = 0.999$, $\epsilon = 10^{-8}$,
+\code{weight_decay=0}. The fine-tuning trainer builds the same optimiser over the trainable
+parameters only (\file{app/foundation_models/trainers/finetune_trainer.py}, line 254). There is
+no AdamW anywhere in \file{app/}, \file{scripts/} or \file{research/} (a grep for
+\code{AdamW} finds nothing), and no weight decay. The course (IW28) says so and is right.
+\end{sourcenote}
+
+\section{Weight decay, L2 regularisation and AdamW}\label{sec:trainloop:decay}
+
+The project does not use weight decay, but the chapter title promises AdamW, and the
+distinction is one of the most common confusions in practice, so it is worth deriving.
+
+\begin{definition}[Weight decay]\index{weight decay}
+\emph{Weight decay} with coefficient $\lambda_w$ shrinks every weight towards zero a little at
+each step: $w \leftarrow w - \eta\lambda_w w$. It discourages large weights, a form of
+\emph{regularisation}\index{regularisation} (a preference for simpler models that is not part of
+fitting the data).
+\end{definition}
+
+\paragraph{With plain gradient descent, weight decay equals an L2 penalty.} Add $\frac{\lambda_w}{2}\norm{\vect{w}}^2$
+to the loss. Its gradient is $\lambda_w\vect{w}$, so the update becomes
+\[
+\vect{w} \leftarrow \vect{w} - \eta\big(\nabla L + \lambda_w\vect{w}\big)
+= \vect{w} - \eta\nabla L - \eta\lambda_w\vect{w},
+\]
+gradient descent followed by weight decay. The two ideas are the same thing here.
+
+\paragraph{With Adam they are not.} If you add $\lambda_w\vect{w}$ to the gradient (``L2 in
+Adam''), the decay term enters $m_t$ and $v_t$ and is then divided by $\sqrt{\hat{v}_t}$ like
+everything else. A parameter whose gradients have been large gets a large $\sqrt{\hat{v}_t}$, and
+therefore \emph{less} decay; a parameter with small gradients gets \emph{more}. AdamW
+\citep{loshchilov2019decoupled} \emph{decouples} the decay: it applies Adam to the loss gradient
+alone and subtracts $\eta\lambda_w w$ separately,
+\begin{equation}\label{eq:trainloop:adamw}
+w_t = w_{t-1} - \eta\left(\frac{\hat{m}_t}{\sqrt{\hat{v}_t} + \epsilon} + \lambda_w\,w_{t-1}\right).
+\end{equation}
+
+\begin{worked}[label={we:trainloop:adamw}]{The same decay, two different shrinks}\index{AdamW}
+Two weights, both $w = 1.0$, with $\lambda_w = 0.01$, $\eta = 10^{-3}$. Weight A has had large
+gradients, $\sqrt{\hat{v}} = 10$; weight B small ones, $\sqrt{\hat{v}} = 0.01$. Look only at the
+decay part of one step (take the loss gradient to be zero at this moment, and treat the
+decay term as passing straight through the normaliser, the steady-state picture).
+
+\textbf{L2 in Adam:} the decay $\lambda_w w = 0.01$ is divided by $\sqrt{\hat{v}}$.
+\begin{align*}
+\text{A: } & 10^{-3} \times 0.01 / 10 = 10^{-6}\\
+\text{B: } & 10^{-3} \times 0.01 / 0.01 = 10^{-3}
+\end{align*}
+\textbf{AdamW:} the decay is not normalised.
+\begin{align*}
+\text{A: } & 10^{-3} \times 0.01 \times 1.0 = 10^{-5}\\
+\text{B: } & 10^{-3} \times 0.01 \times 1.0 = 10^{-5}
+\end{align*}
+Under L2-in-Adam, B shrinks a thousand times faster than A, for no reason connected to the
+regularisation you asked for. Under AdamW both shrink equally, as the coefficient $\lambda_w$
+intends.
+\end{worked}
+
+\section{Learning-rate schedules}\label{sec:trainloop:schedule}
+
+A fixed learning rate is a compromise: large steps cover ground fast but cannot settle into a
+narrow minimum; small steps settle but crawl. A \emph{schedule}\index{learning-rate schedule}
+changes $\eta$ over the run. Two shapes matter here.
+
+\subsection{Linear warmup}\label{sec:trainloop:warmup}
+
+\begin{definition}[Linear warmup]\index{warmup}
+Over the first $W$ epochs (or steps), raise the learning rate linearly from a small $\eta_{\min}$
+to the target $\eta_{\max}$:
+\[
+\eta(t) = \eta_{\min} + (\eta_{\max} - \eta_{\min})\,\frac{t}{W}, \qquad 0 \le t \le W.
+\]
+\end{definition}
+With $W = 5$, $\eta_{\min} = 10^{-6}$ and $\eta_{\max} = 10^{-3}$ the five warmup epochs would use
+$10^{-6}$, $2.008 \times 10^{-4}$, $4.006 \times 10^{-4}$, $6.004 \times 10^{-4}$ and $8.002
+\times 10^{-4}$, reaching $10^{-3}$ at $t = 5$. (Row $t = 1$: $10^{-6} + 0.000999 \times 1/5 =
+0.000001 + 0.0001998 = 0.0002008$.)
+
+Why warm up? \Cref{we:trainloop:adam} showed that Adam's first steps move every parameter by
+about $\eta$, steered by moment estimates built from one or two batches, on a network whose
+parameters are random. Large, poorly aimed early steps can push the network into a bad region
+it never recovers from. Warmup keeps those steps small until the moment estimates have seen
+enough batches to be trustworthy. \citet{goyal2017accurate} made warmup standard for large-batch
+training.
+
+\begin{sourcenote}[: \texttt{warmup\_epochs} is documented, defaulted, set in every config, and never read]
+\file{app/models/training/training_config.py}, lines 418--422, defines
+\begin{lstlisting}
+warmup_epochs: int = Field(default=5, ge=0,
+    description="Linear warmup from min_lr to learning_rate")
+\end{lstlisting}
+All 22 training configurations in \file{configs/} set it (both Indradhanu configurations to 5),
+the fine-tuning configurations set it to 0 or 1 and the SpectralEarth pretraining configurations to
+0. A search of every Python file in the repository,
+\begin{lstlisting}[language=bash]
+grep -rn -i "warmup" --include="*.py" .
+\end{lstlisting}
+returns three lines, all in \file{training_config.py}: the field (418), its description (421)
+and a docstring example (505). \code{_build_scheduler}
+(\file{app/abstract_classes/foundation_trainer.py}, lines 517--553) builds \code{cosine},
+\code{step} or \code{plateau} and consults none of it. Checked 2026-10-29; the teaching skill's
+note is still true. Every run in this repository, including the v0.2.0 run, started at the full
+learning rate on step 1.
+
+The course (IW28) links this to the v0.2.0 history: ``v0.2.0 epoch 2 hits 0.035 (lr=1e-3 was too
+aggressive; later epochs regress to \textasciitilde 0.04)''
+\tagM{research/model_break_down/05_hyperspectral_segformer_mae.md}. An unusually good early
+epoch followed by a regression that never fully recovers is consistent with early
+instability, the thing warmup exists to prevent; it is not proof. The lesson the repository
+states as policy: verify a config field against the source before assuming it does anything.
+\end{sourcenote}
+
+\subsection{Cosine annealing}
+
+\begin{definition}[Cosine annealing]\index{cosine annealing}
+Over $T$ epochs, from $\eta_{\max}$ down to $\eta_{\min}$:
+\begin{equation}\label{eq:trainloop:cosine}
+\eta(t) = \eta_{\min} + \frac{1}{2}\,(\eta_{\max} - \eta_{\min})\left(1 + \cos\frac{\pi t}{T}\right), \qquad 0 \le t \le T.
+\end{equation}
+\end{definition}
+This is the schedule of \citet{loshchilov2017sgdr} without restarts, and the PyTorch class
+\code{CosineAnnealingLR} implements it. Check the endpoints: at $t = 0$, $\cos 0 = 1$ and the
+bracket is 2, so $\eta = \eta_{\min} + (\eta_{\max} - \eta_{\min}) = \eta_{\max}$. At $t = T$,
+$\cos\pi = -1$, the bracket is 0, and $\eta = \eta_{\min}$.
+
+\paragraph{The shape.} Differentiate with respect to $t$ (chain rule: the derivative of
+$\cos(\pi t/T)$ is $-\sin(\pi t/T)\cdot\pi/T$):
+\[
+\frac{d\eta}{dt} = -\frac{\pi}{2T}\,(\eta_{\max} - \eta_{\min})\,\sin\frac{\pi t}{T}.
+\]
+The slope is zero at $t = 0$ and $t = T$ (where $\sin$ is 0) and steepest at $t = T/2$. So the
+learning rate stays high and nearly flat at the start, falls fastest in the middle, and
+flattens out near the floor at the end.
+
+\begin{worked}[label={we:trainloop:cosine}]{The v0.2.0 schedule at five epochs}
+v0.2.0 uses $\eta_{\max} = 10^{-3}$, $\eta_{\min} = 10^{-6}$ and $T = 200$
+\tagM{configs/hyperspectral_segformer_exp_2.json}. So $\frac12(\eta_{\max} - \eta_{\min}) =
+\frac12 \times 0.000999 = 0.0004995$.
+\begin{center}
+\begin{tabular}{rrrrl}
+\toprule
+$t$ & $\pi t/200$ & $\cos$ & $1 + \cos$ & $\eta(t)$\\
+\midrule
+0 & 0 & 1.000000 & 2.000000 & $10^{-6} + 0.0004995 \times 2 = 1.000 \times 10^{-3}$\\
+50 & $\pi/4$ & 0.707107 & 1.707107 & $10^{-6} + 0.0004995 \times 1.707107 = 8.537 \times 10^{-4}$\\
+100 & $\pi/2$ & 0.000000 & 1.000000 & $10^{-6} + 0.0004995 \times 1 = 5.005 \times 10^{-4}$\\
+150 & $3\pi/4$ & $-0.707107$ & 0.292893 & $10^{-6} + 0.0004995 \times 0.292893 = 1.473 \times 10^{-4}$\\
+200 & $\pi$ & $-1.000000$ & 0.000000 & $10^{-6} + 0 = 1.000 \times 10^{-6}$\\
+\bottomrule
+\end{tabular}
+\end{center}
+Row $t = 100$ in full: $0.0004995 \times 1 = 0.0004995$; $0.000001 + 0.0004995 = 0.0005005$.
+PyTorch's \code{CosineAnnealingLR}, stepped as the trainer steps it, gives the same five values
+to the digits shown \tagC.
+\end{worked}
+
+\paragraph{When the schedule steps.} The trainer calls \code{self.scheduler.step()} once, at the
+end of each epoch, after validation (\file{app/abstract_classes/foundation_trainer.py}, lines
+237--243). So epoch index $e$ trains at $\eta(e)$: index 0 at $10^{-3}$, the last index, 199, at
+$\eta(199) = 1.06 \times 10^{-6}$ \tagC, and $\eta(200) = 10^{-6}$ is reached only after training
+ends. The log line is written \emph{after} the step, so the ``lr'' it prints for logged epoch
+$k$ (index $k - 1$) is $\eta(k)$, the rate the \emph{next} epoch will use.
+
+\begin{sourcenote}[: the example log line's learning rate]
+The course (IW28) shows a log line ``Epoch 101/200 \ldots{} lr: 4.94e-04''. Logged epoch 101
+prints $\eta(101)$: $\cos(101\pi/200) = -0.015707$, so $\eta = 10^{-6} + 0.0004995 \times
+0.984293 = 10^{-6} + 0.00049165 = 4.93 \times 10^{-4}$ (PyTorch: $4.9265 \times
+10^{-4}$ \tagC). The course's 4.94e-4 is an illustrative line, off in the third digit.
+\end{sourcenote}
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}
+\begin{axis}[width=0.92\linewidth, height=6cm, xmin=0, xmax=200, ymin=0, ymax=1.05,
+  xlabel={epoch index $t$}, ylabel={learning rate ($\times 10^{-3}$)}, grid=major,
+  grid style={gray!20}, xtick={0,25,50,75,100,125,150,175,200}, legend pos=north east,
+  legend style={font=\small}]
+\addplot[loss, very thick, domain=0:200, samples=201] {0.001 + 0.4995*(1 + cos(180*x/200))};
+\addlegendentry{v0.2.0: $10^{-3} \rightarrow 10^{-6}$, $T = 200$}
+\addplot[spat, very thick, dashed, domain=0:200, samples=201] {0.001 + 0.2495*(1 + cos(180*x/200))};
+\addlegendentry{SpectralEarth F001: $5\times 10^{-4} \rightarrow 10^{-6}$, $T = 200$}
+\addplot[only marks, mark=*, mark size=1.8pt, loss, forget plot] coordinates
+  {(0,1.0) (50,0.8537) (100,0.5005) (150,0.1473) (200,0.001)};
+\addplot[maskgrey, thick, domain=0:5, samples=2] {0.001 + (0.999)*x/5};
+\addlegendentry{a 5-epoch linear warmup (never implemented)}
+\end{axis}
+\end{tikzpicture}
+\caption[The learning-rate schedules of v0.2.0 and F001]{The learning-rate schedules of two real configurations, drawn to scale from
+\cref{eq:trainloop:cosine}: v0.2.0 (\texttt{configs/hyperspectral\_segformer\_exp\_2.json}) and the
+SpectralEarth final pretraining F001
+(\texttt{research/experiments/indradhanu-se-pretrain/F001-final-pretrain/config.json}). Dots are
+the worked values of \cref{we:trainloop:cosine}. The grey ramp at the left is what
+\texttt{warmup\_epochs = 5} describes and what no code implements.}
+\label{fig:trainloop:cosine}
+\end{figure}
+
+\begin{drift}
+Learning-rate settings as of 2026-10-29: v0.2.0, $10^{-3}$ over 200 epochs; v0.1.0, $10^{-4}$
+over 500; SpectralEarth pretraining F001, $5 \times 10^{-4}$ over 200
+\tagM{research/experiments/indradhanu-se-pretrain/F001-final-pretrain/config.json}; fine-tuning
+runs between $3 \times 10^{-5}$ and $10^{-3}$ over 3 to 20 epochs (FTH3, the run shipped as
+Indradhanu V2 v2.1.0, used $3 \times 10^{-5}$ over 6 epochs
+\tagM{research/experiments/indradhanu-finetune/FTH3-heavy-joint-more2/config.json}). All of them
+use \code{min_lr} $= 10^{-6}$ and the cosine schedule.
+\end{drift}
+
+\paragraph{A resume bug, told as a lesson.} When a run is resumed, the scheduler must continue
+from where it stopped. The original resume code rebuilt the scheduler with
+\code{last_epoch=k}, but \code{CosineAnnealingLR} computes each rate recursively from the
+optimiser's current rate, so the rebuild took one extra step: a run killed after epoch 2
+continued at $10^{-6}$ and then $1.47 \times 10^{-4}$ instead of $1.47 \times 10^{-4}$ and then
+$10^{-6}$ (measured 2026-10-14, \file{app/abstract_classes/foundation_trainer.py}, lines
+580--584). The fix saves and restores the scheduler's own state. A schedule is part of the
+model's history, and resuming it is as delicate as resuming the weights.
+
+\section{Gradient clipping}\label{sec:trainloop:clip}
+
+\begin{definition}[Gradient clipping by norm]\index{gradient clipping}
+If the gradient's length (L2 norm over all parameters) exceeds a threshold $c$, scale the whole
+gradient down to length $c$; otherwise leave it:
+\[
+\vect{g} \leftarrow \vect{g}\cdot\min\!\left(1, \frac{c}{\norm{\vect{g}}}\right).
+\]
+\end{definition}
+Clipping by norm keeps the gradient's direction and bounds only the step's size, a guard
+against a single bad batch (a glitch, a NaN-adjacent value) throwing the parameters far away
+\citep{pascanu2013difficulty}.
+
+\begin{worked}[label={we:trainloop:clip}]{Clipping a 3-vector}
+$\vect{g} = (3, 4, 12)$, threshold $c = 1$.
+\begin{align*}
+\norm{\vect{g}}^2 &= 3^2 + 4^2 + 12^2 = 9 + 16 + 144 = 169\\
+\norm{\vect{g}} &= \sqrt{169} = 13\\
+\min(1, 1/13) &= 1/13 = 0.076923\\
+\vect{g}_{\text{clipped}} &= (3/13,\ 4/13,\ 12/13) = (0.230769,\ 0.307692,\ 0.923077)
+\end{align*}
+Check the length: $0.230769^2 + 0.307692^2 + 0.923077^2 = 0.053254 + 0.094675 + 0.852071 =
+1.000000$. The direction is unchanged: the ratios $3 : 4 : 12$ survive. PyTorch's
+\code{clip_grad_norm_} returns $(0.230769, 0.307692, 0.923077)$ \tagC{} (it divides by
+$\norm{\vect{g}} + 10^{-6}$, which changes the seventh digit).
+\end{worked}
+
+\begin{sourcenote}[: no clipping]
+A grep for \code{clip_grad} across \file{app/}, \file{scripts/} and \file{research/} finds
+nothing: no trainer in this repository clips gradients. The loss's own guards
+(\cref{sec:losses:atan2}) and the 40\% patch filter are the only protections against a wild
+batch. The course (IW28) says ``no gradient clipping''; correct.
+\end{sourcenote}
+
+\section{Mixed precision}\label{sec:trainloop:precision}
+
+A floating-point number stores a sign, an exponent (the range) and a mantissa (the
+precision). Three formats matter:
+\begin{center}
+\begin{tabular}{lrrll}
+\toprule
+format & exponent bits & mantissa bits & relative spacing & range\\
+\midrule
+float32 & 8 & 23 & $2^{-23} \approx 1.2 \times 10^{-7}$ & $\sim 10^{\pm 38}$\\
+bfloat16 & 8 & 7 & $2^{-7} \approx 0.0078$ & $\sim 10^{\pm 38}$\\
+float16 & 5 & 10 & $2^{-10} \approx 0.00098$ & $\sim 6.5\times 10^{4}$ max\\
+\bottomrule
+\end{tabular}
+\end{center}
+\emph{Mixed precision}\index{mixed precision}\index{bfloat16} runs the expensive matrix
+multiplications in a 16-bit format (half the memory, much faster on modern GPUs) and keeps
+precision-critical parts in float32 \citep{micikevicius2018mixed}. bfloat16 keeps float32's
+exponent, so it has the same range and never underflows where float32 would not; float16 needs
+\emph{loss scaling} to keep small gradients from flushing to zero, bfloat16 does not.
+
+\begin{worked}[label={we:trainloop:bf16}]{Why the loss stays in float32}
+A reflectance near 0.2 lies in $[0.125, 0.25) = [2^{-3}, 2^{-2})$, where bfloat16's spacing is
+$2^{-3} \times 2^{-7} = 2^{-10} = 0.000977$. So
+\begin{align*}
+0.2000 &\to 0.2001953 \text{ in bfloat16}\\
+0.2003 &\to 0.2001953\\
+0.2005 &\to 0.2001953
+\end{align*}
+(PyTorch's conversions \tagC). A reconstruction error of $0.0003$ or $0.0005$, the size a good
+model's L1 is made of (\cref{ch:losses}), vanishes completely. In float32 the three values stay
+distinct.
+\end{worked}
+
+The SpectralEarth and fine-tuning trainers wrap only the model's forward pass in bfloat16
+autocast and convert its output back before the loss:
+\begin{lstlisting}
+bf16 = self.config.model_config_.amp_bf16 and self.device.type == "cuda"
+with torch.autocast("cuda", dtype=torch.bfloat16, enabled=bf16):
+    out = model(pixels, wl, band_valid, keep_mask, out_wl)
+return out.float()          # the loss - small differences of reflectance - in full precision
+\end{lstlisting}
+(\file{app/foundation_models/trainers/spectral_stem_mae_trainer.py}, lines 269--275). Every
+SpectralEarth configuration except the laptop smoke tests, and every fine-tuning configuration,
+sets \code{amp_bf16: true}.\newline
+\tagM{research/experiments/indradhanu-se-pretrain/F001-final-pretrain/config.json}\newline
+The configuration field's description says it roughly halves the cross-attention stem's activation
+memory. Be precise about what the cast buys. The prediction is still computed by bfloat16 arithmetic
+inside the network, so it carries bfloat16-sized rounding in the network's own (normalised)
+units; what \code{out.float()} guarantees is that the truth $\vect{x}$ is never rounded and that
+the subtraction, the absolute values, the angle and the averaging over millions of entries are
+done in float32. There is no gradient scaler (\code{GradScaler}) anywhere, which is correct for
+bfloat16. The original v0.2.0 trainer (\file{app/foundation_models/trainers/hyperspectral_segformer_mae_trainer.py})
+has no autocast: it trained entirely in float32.
+
+\section{Gradient accumulation}\label{sec:trainloop:accum}
+
+When the batch you want does not fit in GPU memory, process $K$ smaller batches and step once:
+\begin{lstlisting}
+scaled_loss = loss / accum_steps          # divide so the sum of K gradients is their mean
+scaled_loss.backward()                    # .grad += d(scaled_loss)/dw
+if accum_count % accum_steps == 0:
+    self.optimizer.step()
+    self.optimizer.zero_grad()
+\end{lstlisting}
+(\file{app/foundation_models/trainers/hyperspectral_segformer_mae_trainer.py}, lines 100--148.)
+Because \code{backward()} adds into \code{.grad}, after $K$ calls the field holds
+$\sum_{k=1}^{K}\nabla(L_k/K) = \frac{1}{K}\sum_k \nabla L_k$, the mean of the $K$ batch
+gradients. If each batch has $B$ patches and $L_k$ is the mean over them, this is
+\[
+\frac{1}{K}\sum_{k=1}^{K}\frac{1}{B}\sum_{i \in \text{batch }k}\nabla\ell_i = \frac{1}{KB}\sum_{\text{all }KB}\nabla\ell_i,
+\]
+exactly the gradient of one batch of $KB$ patches. Without the division by $K$ the gradient
+would be $K$ times larger; with Adam that barely matters (it divides by the gradient's size), but
+with plain descent it would multiply the learning rate by $K$. If the loader runs out mid-group,
+the leftover gradients are applied (``the flush'', lines 143--146), not discarded.
+
+Two cautions. The equality needs equal batch sizes; after the 40\% filter, batches carry
+different numbers of surviving patches, so the accumulated gradient weights each batch equally
+rather than each patch. And accumulation does not reproduce a large batch's BatchNorm
+statistics, which are still computed per small batch (\cref{ch:finetune}).
+
+\begin{drift}
+v0.2.0 set \code{gradient_accumulation_steps: 1}, so the override returns straight to the base
+loop. The SpectralEarth pretraining F001 uses \code{batch_size} 8 and accumulation 4, an
+effective batch of $8 \times 4 = 32$ and at most $30{,}000/32 = 937.5$, so 938, optimiser steps
+per epoch \tagM{research/experiments/indradhanu-se-pretrain/F001-final-pretrain/config.json}.
+\end{drift}
+
+\section{The training data}\label{sec:trainloop:data}
+
+\coursefig[0.95\linewidth]{iw-27-data}{The training-data pipeline, one job per stage. A raw scene
+becomes a 165-band vendable; PatchPlanGenerator decides where to cut 128 $\times$ 128 patches
+(stride 64 in training, so neighbours overlap by half, the last snapping to the scene edge);
+the patcher cuts them; they are packed into .tar shards on S3 and streamed by the DataLoader as
+batches.}{fig:trainloop:data}
+
+\subsection{Deciding where to cut}
+
+\code{PatchPlanGenerator} (\file{app/utils/patch_generation/generate_patch_plan.py}) returns
+coordinates only; no pixels are touched. Given the cube's height and width, a patch size and a
+\emph{stride}\index{stride} (how far to move between patches), it lists every top-left corner.
+The training convention is stride $=$ size$/2$, so 128-pixel patches step by 64 and neighbours
+overlap by half: every interior pixel appears in several patches, sometimes centred, sometimes
+near an edge, which evens out the poorer reconstruction near patch borders.
+
+When the next step would run off the edge, the last patch is snapped back to end flush with
+the boundary (lines 66--79):
+\begin{lstlisting}
+if row + request.height > cube_height:
+    row_coords.append(cube_height - request.height)   # last patch ends exactly at the edge
+    break
+\end{lstlisting}
+
+\begin{worked}[label={we:trainloop:plan}]{The row coordinates of a 300-pixel scene}
+Height 300, size 128, stride 64. Walk the loop.
+\begin{align*}
+\text{row } 0:&\quad 0 + 128 = 128 \le 300, \text{ keep } 0\\
+\text{row } 64:&\quad 64 + 128 = 192 \le 300, \text{ keep } 64\\
+\text{row } 128:&\quad 128 + 128 = 256 \le 300, \text{ keep } 128\\
+\text{row } 192:&\quad 192 + 128 = 320 > 300, \text{ snap to } 300 - 128 = 172, \text{ stop}
+\end{align*}
+Rows $[0, 64, 128, 172]$: four, and the last gap is $172 - 128 = 44$, not 64. The patch count is
+not $\lceil 300/64 \rceil = 5$; the module's docstring warns about exactly this. The real
+generator returns $[0, 64, 128, 172]$ \tagC.
+\end{worked}
+
+\begin{sourcenote}[: a duplicated last patch]
+Run the same loop on a height of 256: rows 0, 64, 128 are kept ($128 + 128 = 256 \le 256$); at
+row 192, $192 + 128 = 320 > 256$, so it snaps to $256 - 128 = 128$, a coordinate it already
+has. The real generator returns rows $[0, 64, 128, 128]$, and for a dimension of exactly 128 it
+returns $[0, 0]$ \tagC{} (\file{research/textbook/tools/compute_24-trainloop_output.txt}). The
+duplicate appears whenever $(\text{extent} - \text{size})$ is a multiple of the stride, because
+the loop continues while \code{row < cube_height} rather than stopping once a patch has
+reached the edge. The patcher (\file{app/utils/patch_generation/hyperspectral_patcher.py},
+line 96) iterates the plan without removing duplicates, so such a scene emits the same patch
+twice under the same key. That is consistent with the ``duplicate file name in tar file''
+webdataset warning that the hyperspectral trainer suppresses
+(\file{app/foundation_models/trainers/hyperspectral_segformer_mae_trainer.py}, line 21, whose
+comment attributes it to resampled shards); whether the shards actually contain such
+duplicates was not checked here. The effect on training is a slight over-weighting of edge
+patches; at inference, an overlapping patch predicted twice is harmless if overlaps are
+averaged.
+\end{sourcenote}
+
+\subsection{Doing the cutting, and the shard contract}
+
+For each coordinate the patcher emits one dictionary, written as named members of a tar file:
+\begin{lstlisting}
+{"__key__":           f"{scene_id}#row_coord:{r}#col_coord:{c}",
+ "meta.json":         {... "patch_height": 128, "patch_stride": 64, "band_count": 165 ...},
+ "pixels.npy":        cube[:, r:r+h, c:c+w].astype(np.float32),      # (165, 128, 128)
+ "validity_cube.npy": validity[:, r:r+h, c:c+w].astype(np.int8),     # (165, 128, 128) 0/1
+ "wavelengths.npy":   wavelengths}                                   # (165,)
+\end{lstlisting}
+The key names are a contract: the trainer reads \code{batch["pixels.npy"]} and
+\code{batch["validity_cube.npy"]} literally. The mask is int8 because it only ever holds 0 or 1,
+a quarter of float32's size.
+
+\begin{definition}[Shard]\index{shard}
+A \emph{shard} is a \texttt{.tar} archive packing many patches, read sequentially. Millions of
+tiny files would each cost a network request; a few hundred large shards stream efficiently.
+This is the \emph{webdataset} convention, which is why the keys look like file names.
+\end{definition}
+
+The S3 location is a template,
+\begin{lstlisting}[language={}]
+patches/{provider}/{split}/{stage}/w{size}_h{size}_s{stride}/
+\end{lstlisting}
+filled for Indradhanu as \code{patches/hyperspectral/train/final/w128_h128_s64/} in bucket
+\code{allotrope-raw-data-india} \tagM{configs/hyperspectral_segformer_exp_2.json}. The provider is
+``hyperspectral'', not ``prisma'' or ``enmap'': PRISMA and EnMAP patches share the same
+shards, interleaved, because on the 165-band common grid (\cref{ch:sensors}) they are
+indistinguishable at the tensor level. The schema's default template points at Landsat thermal
+data, and the source says so (\file{app/models/training/training_config.py}, line 296):
+\begin{lstlisting}
+# Important to set this properly The default is landsat which is dangerous.
+\end{lstlisting}
+
+\paragraph{Hot storage.} Shards are copied once to the training machine's local disk and kept
+(\code{hot_storage}: 500 training and 100 test shards for v0.2.0, \code{skip_sync_if_exists:
+true}). There is no rotation in the base trainer: those 500 shards are the training set for the
+whole run, and variety across epochs comes from \code{shardshuffle} (30 in v0.2.0), which
+reorders shards and samples within a buffer.
+
+\subsection{What an epoch means here}\label{sec:trainloop:epoch}
+
+The corpus is too large to pass over even once in reasonable time, so an epoch is a sample
+budget:
+\begin{lstlisting}[language={}]
+"train_samples_per_epoch": { "128": 40000 },
+"test_samples_per_epoch":  { "128":  5000 }
+\end{lstlisting}
+``Consume 40,000 training patches of size 128, then 5,000 validation patches, and call that an
+epoch.'' The dictionary is keyed by patch size because the thermal models train on several sizes
+at once; Indradhanu uses only 128. Only patches that survive the 40\% filter
+(\cref{sec:losses:forty}) count:
+\begin{lstlisting}
+for batch in loader:
+    if valid_samples >= sample_cap:      # 40,000
+        break
+    loss, num_kept = self.compute_loss(batch, self.model)
+    if num_kept == 0:
+        continue                         # whole batch filtered out: no step, no budget used
+    ...
+    valid_samples += num_kept
+\end{lstlisting}
+With $B = 128$ and no filtering, $40{,}000/128 = 312.5$, so the loop runs 313 batches and stops
+at $313 \times 128 = 40{,}064$ samples \tagC: the cap is checked before each batch, so the last
+batch overshoots by up to $B - 1$. Over 200 epochs that is about $40{,}000 \times 200 =
+8{,}000{,}000$ patch presentations \tagC, drawn from the same 500 cached shards.
+
+\paragraph{Feeding it is an I/O problem.} One patch is $165 \times 128 \times 128$ float32 values,
+\begin{align*}
+165 \times 128 &= 21{,}120\\
+21{,}120 \times 128 &= 2{,}703{,}360 \text{ values}\\
+2{,}703{,}360 \times 4 \text{ bytes} &= 10{,}813{,}440 \text{ bytes} \approx 10.8 \text{ MB},
+\end{align*}
+and a batch of 128 is $1{,}384{,}120{,}320$ bytes, about 1.4 GB, before any activation \tagC.
+That is why v0.2.0 ran 40 loader workers (\code{num_workers}). If the data pipeline stalls, an
+expensive GPU sits idle.
+
+\subsection{Randomness and augmentation}
+
+The v0.2.0 trainer applies no geometric augmentation: no flips, rotations or crops (a search of
+the trainers for \code{flip} and \code{rot90} finds none). The variety each epoch comes from
+three random sources: the shard and sample order (\code{shardshuffle}); the token mask, redrawn
+for every batch so that a different 65\% of each patch's valid tokens is hidden each time it
+is seen (\cref{ch:masking}); and, in validation, the random half-split of
+\cref{ch:losses}.
+
+The later trainers add two augmentations, each taught where it belongs:
+\begin{itemize}
+\item \textbf{Band-list augmentation} (SpectralEarth pretraining and fine-tuning;
+\code{sample_band_subset} in \file{app/foundation_models/trainers/spectral_stem_mae_trainer.py},
+lines 75--92). With probability \code{band_augment_prob} (0.8 in F001) a batch's input is a
+random subset of its bands, in one of three shapes: thinning (keep 50--95\%), one to three gaps of
+20--150 nm, or the bands nearest an even grid of 6--15 nm spacing, never fewer than 40 bands; the
+stated wavelengths are jittered by up to $\pm$\code{band_jitter_nm} (3 nm in F001), and the loss
+still covers every band. It teaches a wavelength-aware stem to cope with sensors it was not
+trained on (\cref{ch:crossstem,ch:pretrain}).
+\item \textbf{Implant augmentation} (fine-tuning run FT05): synthetic objects implanted in the
+input, the clean scene as the target (\cref{ch:ftruns}).
+\end{itemize}
+The SpectralEarth shards also change the data contract: \code{pixels.npy} is int16, reflectance
+$\times 10{,}000$, with $-32768$ marking a dead voxel, and validity is per band rather than per
+pixel (\cref{ch:pretrain}).
+
+\section{The loop}\label{sec:trainloop:loop}
+
+\subsection{From the command line to the epoch loop}
+
+\begin{lstlisting}[language=bash]
+python scripts/train_foundation_model.py configs/hyperspectral_segformer_exp_2.json
+\end{lstlisting}
+The script validates the JSON into a pydantic \code{TrainingConfig} (a typo fails at once, not
+forty minutes in), looks up the trainer class by model name in
+\file{app/foundation_models/trainers/trainer_factory.py}, and calls \code{trainer.train()}.
+
+\code{FoundationTrainer} (\file{app/abstract_classes/foundation_trainer.py}) owns everything
+generic: device, optimiser, scheduler, data loaders, hot storage, the epoch loop, checkpoints and
+logging. A model's trainer implements three methods, \code{build_model}, \code{compute_loss}
+(returns the loss and the number of surviving samples) and \code{validation_step}; Indradhanu's
+also overrides \code{_run_epoch} (to record the epoch index for the SAM ramp and log the loss
+components) and \code{_run_train_pass} (to add gradient accumulation).
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}[node distance=5mm and 8mm, font=\small,
+  box/.style={draw, rounded corners=2pt, align=center, minimum height=8mm, text width=37mm, fill=white},
+  dec/.style={draw, diamond, aspect=2.4, align=center, inner sep=1pt, fill=boxwarn, font=\scriptsize},
+  arr/.style={-{Stealth[length=2mm]}, thick}]
+\node[box, fill=gray!8] (cfg) {config $\rightarrow$ trainer\\ build model, \textbf{Adam}, \textbf{cosine}};
+\node[box, below=of cfg] (train) {\texttt{model.train()}};
+\node[dec, below=of train] (cap) {surviving samples\\ $\ge$ 40,000?};
+\node[box, below=of cap, fill=spec!10] (batch) {next batch \shape{(B,165,128,128)}\\ drop patches $<$ 40\% valid};
+\node[box, below=of batch, fill=spat!8] (fwd) {random token mask;\\ forward pass $\rightarrow \xhat$};
+\node[box, below=of fwd, fill=loss!12] (loss) {$L = L_1 + \lambda(t)\SAM$\\ on hidden, valid, eroded pixels};
+\node[box, below=of loss, fill=attn!10] (bwd) {\texttt{zero\_grad}; \texttt{backward};\\ \texttt{optimizer.step()}};
+\node[box, right=22mm of cap] (val) {\texttt{model.eval()}, no grad:\\ two-pass validation\\ to 5,000 samples};
+\node[box, below=of val] (sched) {\texttt{scheduler.step()}\\ $\eta(t) \rightarrow \eta(t+1)$};
+\node[box, below=of sched] (log) {log $L$, $L_1$, $\SAM$, $\lambda$, lr};
+\node[box, below=of log] (ckpt) {checkpoint every $n$ epochs;\\ keep top $k$ by val loss};
+\node[dec, below=of ckpt] (more) {more epochs?};
+\node[box, below=of more, fill=gray!8] (done) {done};
+\draw[arr] (cfg) -- (train);
+\draw[arr] (train) -- (cap);
+\draw[arr] (cap) -- node[right, font=\scriptsize]{no} (batch);
+\draw[arr] (batch) -- (fwd);
+\draw[arr] (fwd) -- (loss);
+\draw[arr] (loss) -- (bwd);
+\draw[arr] (bwd.west) -- ++(-6mm,0) |- node[pos=0.25, left, font=\scriptsize, align=right]{next\\ step} (cap.west);
+\draw[arr] (cap) -- node[above, font=\scriptsize]{yes} (val);
+\draw[arr] (val) -- (sched);
+\draw[arr] (sched) -- (log);
+\draw[arr] (log) -- (ckpt);
+\draw[arr] (ckpt) -- (more);
+\draw[arr] (more) -- node[right, font=\scriptsize]{no} (done);
+\coordinate (rx) at ($(val.east)+(6mm,0)$);
+\draw[arr] (more.east) -- (more.east -| rx) -- node[pos=0.5, right, font=\scriptsize, align=left]{next epoch,\\ $t \leftarrow t+1$} (train.east -| rx) -- (train.east);
+\end{tikzpicture}
+\caption{The training loop of \texttt{FoundationTrainer} with Indradhanu's loss, as the source runs
+it. The left column is one training step, repeated until the epoch's sample budget is spent;
+the right column runs once per epoch: validation, the scheduler step, logging and the periodic
+checkpoint. The SAM weight $\lambda(t)$ and the learning rate $\eta(t)$ both change only at the
+epoch boundary.}
+\label{fig:trainloop:flow}
+\end{figure}
+
+\coursefig[0.9\linewidth]{iw-28-loop}{The course's drawing of one epoch: a training pass with
+random masking and gradient accumulation, a validation pass, a scheduler step, logging, and a
+periodic checkpoint. The dashed frame repeats once per epoch.}{fig:trainloop:courseloop}
+
+\subsection{What one epoch does}
+
+\begin{lstlisting}
+def _run_epoch(self, epoch, train_loaders, test_loaders):
+    self.model.train()
+    for size in patch_sizes:                                  # Indradhanu: only 128
+        size_loss, size_samples = self._run_train_pass(train_loaders[size], cap)
+    avg_train_loss = epoch_train_loss / max(epoch_train_samples, 1)
+    self.model.eval()
+    for size in patch_sizes:
+        val_losses[size] = self._run_val_pass(test_loaders[size], cap)   # under torch.no_grad()
+    avg_val_loss = sum(val_losses.values()) / len(val_losses)
+    self.scheduler.step()
+    ...log...
+    if (epoch + 1) % ckpt.save_every_n_epochs == 0:
+        self._save_checkpoint(epoch + 1, avg_train_loss, val_losses)
+        self._cleanup_checkpoints()
+\end{lstlisting}
+Five phases: train, validate, step the scheduler, log, maybe checkpoint
+(\file{app/abstract_classes/foundation_trainer.py}, lines 202--274).
+
+\paragraph{\texttt{model.train()} and \texttt{model.eval()}} do not train or evaluate anything.
+They flip a flag that changes two kinds of layer. Dropout zeroes random activations in train
+mode and does nothing in eval mode; BatchNorm uses the current batch's statistics and updates
+its running averages in train mode, and uses the stored averages in eval mode. Indradhanu has
+both (\code{drop_rate} 0.4 and a BatchNorm in the compressor), so forgetting \code{eval()} before
+validation would make validation noisy and slightly optimistic without any error. Do not
+confuse \code{model.train()} (a mode flag on the network) with \code{trainer.train()} (the
+method that runs the whole loop).
+
+\paragraph{The training step} (lines 276--307) is the move of the opening box:
+\code{optimizer.zero_grad()}, \code{compute_loss}, \code{loss.backward()},
+\code{optimizer.step()}.
+
+\subsection{Sample-weighted averaging}
+
+\code{compute_loss} returns a per-sample mean, so the pass multiplies it back by the number of
+surviving samples before summing:
+\begin{lstlisting}
+total_loss += loss.item() * num_kept
+valid_samples += num_kept
+...
+return total_loss / max(valid_samples, 1)        # max(.., 1): an all-filtered epoch gives 0, not a crash
+\end{lstlisting}
+
+\begin{worked}[label={we:trainloop:weighted}]{Why the averaging is weighted}
+Two batches: in the first only 3 patches survived the filter, with mean loss 0.05; in the
+second all 128 survived, with mean loss 0.03.
+
+\textbf{Weighted} (what the code does):
+\begin{align*}
+0.05 \times 3 &= 0.15\\
+0.03 \times 128 &= 3.84\\
+(0.15 + 3.84)/(3 + 128) &= 3.99/131 = 0.030458
+\end{align*}
+\textbf{Unweighted} (averaging the two batch means): $(0.05 + 0.03)/2 = 0.04$.
+
+The unweighted answer lets 3 patches count as much as 128. The code carries a comment
+explaining the multiplication, because it is the kind of line a reader might ``simplify'' away.
+\end{worked}
+
+\subsection{Checkpoints and resuming}
+
+Each checkpoint stores the model's parameters and buffers, the optimiser's state (Adam's $m$ and
+$v$ for every parameter, needed to resume cleanly), the scheduler's state, the epoch, the
+training and per-size validation losses, and the whole configuration. Files are named
+\texttt{\{model\_name\}\_v\{version\}\_epoch\{epoch\}.pt}, which is why the shipped v0.2.0 file is
+\code{hyperspectral_segformer_mae_v0.2.0_epoch200.pt}; \code{keep_top_k} (20 in v0.2.0) prunes
+all but the best by validation loss.
+
+\begin{center}
+\begin{tabular}{p{2.2cm}p{5.6cm}p{4.6cm}}
+\toprule
+\code{resume_mode} & restores & use it when\\
+\midrule
+\code{"resume"} & weights, optimiser state, epoch counter, scheduler state & a run crashed or was stopped\\
+\code{"finetune"} & weights only; fresh optimiser, scheduler, epoch 0 & adapting a trained model to new data\\
+\bottomrule
+\end{tabular}
+\end{center}
+Resuming a 200-epoch cosine run at epoch 150 with a fresh scheduler would restart the learning
+rate at $10^{-3}$ and undo the decay; \code{"resume"} exists to prevent that. The SpectralEarth
+trainer adds \code{last.pt} and \code{best.pt}, mirrored to S3, automatic resumption, and early
+stopping on the validation score (\cref{ch:pretrain}).
+
+\begin{sourcenote}[: which number ranks the checkpoints]
+\code{keep_top_k} and \code{best.pt} rank epochs by validation loss. In the base Indradhanu trainer
+that loss uses the ramped SAM weight (\cref{ch:losses}), so epochs inside the ramp are on a
+different scale from later ones. The SpectralEarth trainer found this the hard way (an
+early-stop rule that would have fired whatever the model did) and now scores validation at the
+full weight from the first epoch; \cref{ch:pretrain} tells that story.
+\end{sourcenote}
+
+\subsection{Reading a log line}
+
+\begin{lstlisting}[language={}]
+Epoch 101/200 | train_loss: 0.041203 | val_loss: [128px: 0.043490] | avg_val: 0.043490 | lr: 4.93e-04
+  L1: 0.009812 | SAM: 0.062776 rad (3.60 deg) | lambda: 0.500
+\end{lstlisting}
+(An illustrative line in the format of lines 245--256 of the base trainer and 65--68 of
+Indradhanu's, with the learning rate corrected as in the source check above.)
+\code{train_loss} and \code{val_loss} are the combined $L_1 + \lambda\SAM$; \code{lr} is the rate
+the next epoch will use; the second line gives the components. Watch the second line, for the
+reasons in \cref{ch:losses}.
+
+\begin{keypoint}
+The loop is one move repeated: batch, loss, gradient, Adam step; the epoch boundary is where the
+learning rate, the SAM weight, validation and checkpoints change, and an epoch here is a
+sample budget, not a pass over the data.
+\end{keypoint}
+
+\begin{confusions}
+\confusion{Does model.train() do the training?}{No. It sets a mode flag on the network (dropout
+on, BatchNorm in batch-statistics mode). \code{trainer.train()}, a different method on a
+different object, runs the loop.}
+\confusion{Is an epoch one pass over the training data?}{Not here. It is a budget of 40,000
+surviving training patches and 5,000 validation patches (v0.2.0), drawn from 500 cached shards.
+Coverage is statistical, not exhaustive.}
+\confusion{Does warmup\_epochs = 5 mean the run warmed up?}{No. The field is never read; every
+run started at the full learning rate (\cref{sec:trainloop:warmup}).}
+\confusion{Is Adam with weight decay the same as AdamW?}{No. Adding an L2 term to the gradient
+sends the decay through Adam's normaliser, so weights with large gradients decay less; AdamW
+subtracts the decay separately (\cref{we:trainloop:adamw}). This project uses neither: weight
+decay is 0.}
+\confusion{Why is the learning rate in the log not the one the epoch trained at?}{The scheduler
+steps before the log line is written, so the printed rate is the next epoch's.}
+\confusion{Can I change the learning rate mid-run?}{Edit the config and resume with
+\code{"finetune"}, but you lose the optimiser's moments and the scheduler's position. Consider
+whether that is what you want.}
+\confusion{Why is the validation loss averaged over patch sizes?}{Because the thermal models train
+on several sizes. Indradhanu has one, so the average is over one value.}
+\end{confusions}
+
+\begin{checkyourself}
+\item\label{ex:trainloop:1} By hand: run three steps of gradient descent on $L(w) = (w - 3)^2$
+from $w_0 = 0$ with $\eta = 0.25$. What factor multiplies the distance to 3 at each step? For
+which $\eta$ does one step land exactly on 3?
+\item\label{ex:trainloop:2} By hand: a parameter's gradient is the constant $g = 2$ at every
+step. Compute Adam's $m_t$, $v_t$, $\hat{m}_t$, $\hat{v}_t$ for $t = 1, 2$ with the default
+$\beta$s, and the size of the step with $\eta = 10^{-3}$. What would the step have been at $t =
+1$ without bias correction?
+\item\label{ex:trainloop:3} By hand: compute the v0.2.0 learning rate at epoch indices 25 and
+175 ($\cos(\pi/8) = 0.923880$). Which of the two epochs is the rate changing faster in, and why?
+\item\label{ex:trainloop:4} Clip $\vect{g} = (1, 2, 2)$ to norm 1.5, and then to norm 5. Then
+explain in two sentences why the repository's training would or would not be changed by adding
+gradient clipping at norm 1.0, given what Adam does to a gradient's scale.
+\item\label{ex:trainloop:5} List the row and column patch coordinates that
+\code{PatchPlanGenerator} produces for a 400-row, 300-column scene with size 128 and stride 64,
+and the number of patches. Then give a height for which it emits a duplicate row.
+\item\label{ex:trainloop:6} Explain why a reconstruction error of 0.0004 at reflectance 0.2
+cannot be measured in bfloat16, and what the SpectralEarth trainer does about it.
+\end{checkyourself}
+
+\nextchapter{ch:pretrain}
+\par\endgroup

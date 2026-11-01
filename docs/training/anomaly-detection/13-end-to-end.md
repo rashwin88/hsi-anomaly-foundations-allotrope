@@ -132,9 +132,11 @@ evidence used to identify a material.
 
 ## Step 8 - Export
 
-Now georeferencing appears. `app/georef/` re-opens the original `.he5`, reads the per-pixel
-latitude and longitude arrays PRISMA stores as swath data, and fits an affine transform
-(part 5).
+Now georeferencing appears. `app/georef/` re-opens the original `.he5` and builds the map grid
+(part 5). Since 2026-10-31 it reads the product's own UTM grid from the file's root attributes
+(`Epsg_Code` and the corner pixels' eastings and northings, `prisma_utm_grid`); only if those are
+missing does it fall back to what this step used to describe - an EPSG:4326 box around the per-pixel
+latitude and longitude arrays, which on Set-1 was a median 2.4 pixels off. Part 28 works it through.
 
 Out comes a zip: a GeoTIFF, a Shapefile with one point per flagged pixel carrying its matched
 materials, a CSV summary, and a manifest.

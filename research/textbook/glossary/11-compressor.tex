@@ -1,0 +1,17 @@
+\glossentry{Spectral compressor}{Indradhanu's first learned module: a 1x1 convolution from 165 bands to D = 32 channels followed by BatchNorm, applied at every pixel.}
+\glossentry{Spectral decompressor}{The 1x1 convolution from 32 channels back to 165 bands at the end of Indradhanu, with no normalisation and no activation.}
+\glossentry{Compressed channels (D)}{The width of the spectral bottleneck; 24 in v0.1.0 and 32 from v0.2.0.}
+\glossentry{Batch normalisation}{A layer that standardises each channel with the mean and variance computed over the batch and all pixels, then applies a learned scale and shift.}
+\glossentry{Scale and shift (gamma, beta)}{BatchNorm's two learned parameters per channel, applied after standardising.}
+\glossentry{Biased variance}{A variance that divides the sum of squared deviations by the number of values M; BatchNorm normalises with it.}
+\glossentry{Unbiased variance}{A variance that divides by M minus 1; PyTorch feeds it to BatchNorm's running variance.}
+\glossentry{Running statistics}{BatchNorm's exponential moving averages of batch mean and variance, kept as buffers and used in evaluation mode.}
+\glossentry{Momentum (BatchNorm)}{The weight m given to the newest batch statistic when updating the running statistics; 0.1 by default.}
+\glossentry{Training mode}{The mode in which BatchNorm normalises with the current batch's statistics and updates its running statistics.}
+\glossentry{Evaluation mode}{The mode in which BatchNorm normalises with its stored running statistics, so each output depends only on its own input.}
+\glossentry{Linear bottleneck}{A pair of linear maps through a narrow width; every output lies in a subspace whose dimension is at most that width.}
+\glossentry{Rank (of a matrix)}{The number of linearly independent columns of a matrix; the dimension of the set of vectors it can produce.}
+\glossentry{Null space}{The set of input directions a matrix sends to zero; changes along them are invisible after the matrix.}
+\glossentry{Affine subspace}{A subspace shifted by a fixed vector; Indradhanu's reconstructed spectra lie in a 32-dimensional one.}
+\glossentry{Minimum Noise Fraction (MNF)}{A classical linear projection to few bands chosen by eigen-decomposition to maximise signal-to-noise ratio.}
+\glossentry{Mixdown}{The analogy for compression: each output channel is a learned blend of every input band.}

@@ -1,0 +1,823 @@
+\chapter{Reconstruct, then subtract: why a pixel must never help reconstruct itself}\label{ch:recon}
+
+\begin{onething}
+A reconstruction model predicts each pixel's spectrum and the size of its mistake is the anomaly score;
+for that mistake to mean anything, every pixel must be predicted while it is hidden from the model,
+because a model that can see a pixel will copy it.
+\end{onething}
+
+Part~II of this book found anomalies with statistics: you modelled the background as a Gaussian cloud
+and asked how far each pixel sat from its centre (\cref{ch:rx,ch:localrx}). That works, but it compresses
+everything the background can look like into one mean vector and one covariance matrix. A field next to
+a river next to a road is not one Gaussian cloud. This chapter starts Part~III, which replaces the
+Gaussian with a neural network that has learned, from tens of thousands of ordinary scenes, what terrain
+looks like. The detection principle changes from ``how far from the mean'' to ``how badly could the
+model redraw it''.
+
+The principle has one trap, and the trap is total: done naively, the model learns to copy and finds
+nothing. Most of this chapter is about that trap and the technique that closes it, masking. By the end
+you will be able to say, with a formula, why a pixel that helps reconstruct itself hides its own
+anomaly, and by how much.
+
+%======================================================================
+\section{The problem: no labels, and a background too varied for one Gaussian}\label{sec:recon:problem}
+
+Recall from \cref{ch:problem} that nobody gives you labelled anomalies. You do not have a pile of
+spectra marked ``anomaly'' to train a classifier on, because anomalies are, by definition, the things
+nobody expected. What you do have is an enormous amount of \emph{ordinary} imagery: every scene ever
+captured is mostly fields, forest, water, roads, soil and rooftops.
+
+So the question becomes: can you use ordinary imagery, and only ordinary imagery, to build a detector
+for the extraordinary? The answer this chapter develops is yes, in three moves.
+
+\begin{enumerate}
+\item Train a model to \emph{redraw} ordinary images.
+\item At detection time, ask it to redraw the scene you care about.
+\item Wherever the redrawing disagrees badly with what the satellite recorded, flag the pixel.
+\end{enumerate}
+
+The obvious fix for ``the background is too varied for one Gaussian'' would be many Gaussians, one per
+land-cover type. That needs you to know the land-cover types and to draw their boundaries, which is
+another labelling problem. A reconstruction model learns the variety for itself, without labels,
+because the only thing it is ever asked to do is reproduce what it was shown.
+
+\begin{analogy}
+A countryside painter has spent twenty years painting the same valley: hedgerows, wheat, a river, a
+church. You cover part of a photograph of the valley with a card and ask the painter to paint what
+is under the card. Where the card covers wheat, the painter paints wheat, and the painting matches the
+photograph. Where the card covers a crashed aeroplane, the painter, who has never seen it, paints
+wheat, and the painting is badly wrong. The size of the painter's mistake tells you where something
+unusual lies, and the painter needed no list of ``unusual things'' to do it.
+
+The analogy has one condition you must not drop: \emph{the painter must not see what is under the
+card}. A painter allowed to look at the aeroplane will paint the aeroplane, the painting will match,
+and you will learn nothing. This whole chapter is about enforcing that condition. The same idea is
+the \emph{cloze test} of language teaching: ``The cat sat on the \underline{\hspace{1.5em}}''. You
+fill the blank from context; if the word were visible, the exercise would measure nothing; and if the
+hidden word was ``helicopter'', your confident ``mat'' is wrong in exactly the place where the text was
+surprising.
+\end{analogy}
+
+%======================================================================
+\section{An autoencoder is a function from a cube to a cube}\label{sec:recon:function}
+
+\subsection{Tensors and the cube}
+
+A \emph{tensor}\index{tensor} is a rectangular block of numbers with any number of axes (a single
+number has none, a list has one, a grid has two). \Cref{ch:shapes} treats tensors properly; for now
+you need one fact. A hyperspectral patch is a tensor with three axes,
+\begin{equation}
+\vect{x} \in \R^{C\times H\times W},
+\end{equation}
+read as ``$C$ layers, each $H$ rows by $W$ columns''. Here $C=165$ is the number of spectral bands on
+the common grid (\cref{ch:sensors}) and $H=W=128$ is the patch size used in training. One number
+$x_{c,i,j}$ is the reflectance in band $c$ at row $i$, column $j$. The whole spectrum of one pixel is
+the column
+\begin{equation}
+\vect{x}_{:,i,j} = \bigl(x_{1,i,j},\ x_{2,i,j},\ \dots,\ x_{C,i,j}\bigr)\T \in \R^{C},
+\end{equation}
+where the colon means ``every value along this axis''.
+
+\subsection{The model as a function}
+
+\begin{definition}[Reconstruction model]\label{def:recon:model}
+A \emph{reconstruction model}\index{reconstruction model} is a function
+\begin{equation}\label{eq:recon:f}
+f_{\theta}\colon \R^{C\times H\times W} \to \R^{C\times H\times W},\qquad
+\xhat = f_{\theta}(\vect{x}),
+\end{equation}
+whose output has exactly the same shape as its input. The vector $\theta$ collects the model's
+\emph{parameters}\index{parameter}: the numbers inside the model that training adjusts. The output
+$\xhat$ (``x hat'') is the model's \emph{reconstruction}\index{reconstruction} of $\vect{x}$.
+\end{definition}
+
+The hat is standard mathematical notation for ``our estimate of''. Whenever you see \code{x_hat} in the
+code, it is the model's output.
+
+An \emph{autoencoder}\index{autoencoder} is a reconstruction model built in two halves: an
+\emph{encoder}\index{encoder} that turns the input into an internal summary, and a
+\emph{decoder}\index{decoder} that rebuilds the input from that summary. The internal summary is
+usually smaller than the input in some sense, and is called the \emph{bottleneck}\index{bottleneck}.
+You will meet a precise version of ``smaller'' in \cref{sec:recon:bottleneck} and again in
+\cref{ch:compressor}.
+
+The shape requirement in \cref{eq:recon:f} is not decoration. You are going to subtract $\xhat$ from
+$\vect{x}$, and you can only subtract two tensors of the same shape. Every reconstruction model in
+this repository starts at \shape{(B, 165, 128, 128)} and ends at \shape{(B, 165, 128, 128)}, where $B$
+is the number of patches processed together (\cref{ch:shapes}).
+
+\subsection{The residual and the score}
+
+\begin{definition}[Residual]\label{def:recon:residual}
+The \emph{residual}\index{residual} is the difference between what was recorded and what was
+predicted,
+\begin{equation}\label{eq:recon:residual}
+\vect{r} = \vect{x} - \xhat \in \R^{C\times H\times W},
+\qquad r_{c,i,j} = x_{c,i,j} - \hat{x}_{c,i,j}.
+\end{equation}
+\end{definition}
+
+The residual is itself a cube: one number per band per pixel. To get one number per pixel you need a
+rule that turns a residual spectrum $\vect{r}_{:,i,j}$ into a single \emph{anomaly score}%
+\index{anomaly score}. The simplest such rule is the mean absolute residual across bands,
+\begin{equation}\label{eq:recon:l1score}
+s(i,j) = \frac{1}{C}\sum_{c=1}^{C} \abs{r_{c,i,j}}.
+\end{equation}
+The product uses better rules: a spectral-angle term (\cref{ch:losses}) and, since October 2026, a
+Mahalanobis distance computed on the residual (\cref{ch:residualmaha}). Every one of them has the
+same shape, ``turn the residual spectrum into a number'', and every one of them is zero when the
+residual is zero. Keep that last fact in mind; it is the root of the trap in
+\cref{sec:recon:identity}.
+
+\begin{worked}[label={we:recon:score}]{A three-band residual and its score}
+Take one pixel with $C=3$ bands. The satellite recorded and the model predicted
+\[
+\vect{x}_{:,i,j} = (0.30,\ 0.25,\ 0.40)\T,\qquad
+\xhat_{:,i,j} = (0.28,\ 0.27,\ 0.31)\T .
+\]
+Work it on paper. First the residual, one band at a time:
+\begin{align*}
+r_1 &= 0.30 - 0.28 = 0.02,\\
+r_2 &= 0.25 - 0.27 = -0.02,\\
+r_3 &= 0.40 - 0.31 = 0.09.
+\end{align*}
+Next take absolute values: $\abs{r_1}=0.02$, $\abs{r_2}=0.02$, $\abs{r_3}=0.09$. Add them:
+\begin{align*}
+0.02 + 0.02 &= 0.04,\\
+0.04 + 0.09 &= 0.13.
+\end{align*}
+Divide by $C=3$:
+\[
+s = \frac{0.13}{3} = 0.0433.
+\]
+Band~3 contributes most of the score. If band~3 is where a material has an absorption feature that
+the surrounding terrain lacks, this is exactly the kind of disagreement you want to see.
+\end{worked}
+
+\subsection{Training: choosing the parameters}
+
+Training\index{training} means choosing $\theta$ so that $\xhat$ is close to $\vect{x}$ on ordinary
+data. ``Close'' is measured by a \emph{loss}\index{loss}: a single number that is small when the
+reconstruction is good. The reconstruction losses in this repository are averages of per-value
+errors, for example the \emph{L1 loss}\index{loss!L1}
+\begin{equation}\label{eq:recon:l1loss}
+\mathcal{L}(\theta) = \frac{1}{CHW}\sum_{c,i,j} \abs{x_{c,i,j} - f_{\theta}(\vect{x})_{c,i,j}},
+\end{equation}
+averaged again over every training patch. Training repeatedly nudges $\theta$ in the direction that
+lowers $\mathcal{L}$; \cref{ch:trainloop} shows how. For this chapter you only need: \emph{training
+finds parameters with a small loss}. If some choice of $\theta$ gives a loss of exactly zero, a
+successful training run will head towards it.
+
+%======================================================================
+\section{The trap: the identity is the perfect answer to the wrong question}\label{sec:recon:identity}
+
+\subsection{The naive plan}
+
+Here is the plan a beginner builds. Show the model a patch, ask it to output the same patch, and
+train it to minimise \cref{eq:recon:l1loss}. Then score pixels by \cref{eq:recon:l1score}.
+
+Consider one particular function, the \emph{identity}\index{identity function}
+\begin{equation}
+\mathrm{id}(\vect{x}) = \vect{x}.
+\end{equation}
+It copies its input to its output and does nothing else. Put it into the loss:
+\begin{align*}
+\mathcal{L}(\mathrm{id})
+&= \frac{1}{CHW}\sum_{c,i,j} \abs{x_{c,i,j} - \mathrm{id}(\vect{x})_{c,i,j}}
+  && \text{substitute $f=\mathrm{id}$}\\
+&= \frac{1}{CHW}\sum_{c,i,j} \abs{x_{c,i,j} - x_{c,i,j}}
+  && \text{the identity returns its input}\\
+&= \frac{1}{CHW}\sum_{c,i,j} 0 = 0.
+  && \text{every term vanishes}
+\end{align*}
+A loss built from absolute values can never be negative, because every term $\abs{\cdot}$ is at least
+zero. So $\mathcal{L}\ge 0$ for every model, and the identity reaches the floor. \textbf{The identity is
+a global minimiser of the naive training objective.} Nothing in the objective prefers ``understand the
+terrain'' over ``copy the pixels''; both give zero loss on training data, and copying is far easier to
+learn.
+
+Now look at what the identity does to detection. On \emph{any} input, ordinary or anomalous,
+\begin{equation}
+\vect{r} = \vect{x} - \mathrm{id}(\vect{x}) = \vect{0}
+\quad\Longrightarrow\quad s(i,j)=0 \ \text{for every pixel}.
+\end{equation}
+The score map is uniformly zero. The detector reports no anomalies and no error. That is what makes
+the failure dangerous: it is silent. There is no crash and no warning, only an empty result that looks
+like a clean scene.
+
+\begin{keypoint}
+Copying is not a subtle failure of a reconstruction model; it is the optimal solution to ``reproduce
+your input''. Any model that can copy will drift towards copying, because copying is easier than
+understanding.
+\end{keypoint}
+
+\subsection{Partial copying is partial blindness}\label{sec:recon:partial}
+
+Real models rarely become the exact identity. A more realistic failure is a model that lets each
+pixel contribute \emph{some} weight to its own reconstruction. You can measure the damage exactly.
+
+Suppose the model reconstructs pixel value $x$ as a blend of the pixel itself and a prediction $c$
+made from its neighbours (its \emph{context}\index{context}):
+\begin{equation}\label{eq:recon:blend}
+\hat{x} = w\,x + (1-w)\,c,\qquad 0\le w\le 1.
+\end{equation}
+The number $w$ is the self-weight: how much the pixel helps reconstruct itself. Compute the residual
+step by step.
+\begin{align}
+r &= x - \hat{x}
+  && \text{definition of the residual}\notag\\
+  &= x - w\,x - (1-w)\,c
+  && \text{substitute \cref{eq:recon:blend}}\notag\\
+  &= (1-w)\,x - (1-w)\,c
+  && \text{collect the $x$ terms: } x - wx = (1-w)x\notag\\
+  &= (1-w)\,(x - c).
+  && \text{take out the common factor $(1-w)$}\label{eq:recon:shrink}
+\end{align}
+Read \cref{eq:recon:shrink} carefully. The quantity $x-c$ is the honest surprise: how far the pixel is
+from what its surroundings predict. The model reports only a fraction $(1-w)$ of it.
+\begin{itemize}
+\item $w=0$: the pixel takes no part in its own reconstruction and the full surprise $x-c$ survives.
+\item $w=1$: the pixel is copied, $(1-w)=0$, and every residual is zero, anomalies included.
+\item In between, every anomaly is shrunk by the same factor $(1-w)$.
+\end{itemize}
+Since the anomaly score is built from the residual, a self-weight of $w$ costs you a fraction $w$ of
+every anomaly's evidence. A pixel must never help reconstruct itself, and \cref{eq:recon:shrink} is the
+reason in one line.
+
+%======================================================================
+\section{A one-dimensional example you can do by hand}\label{sec:recon:oned}
+
+Everything so far fits into six numbers. Take a one-dimensional ``image'' of six pixels with one band
+each:
+\begin{equation}\label{eq:recon:signal}
+\vect{x} = (x_1,\dots,x_6) = (1.0,\ 1.1,\ 1.2,\ 5.0,\ 1.4,\ 1.5).
+\end{equation}
+The background rises gently by $0.1$ per pixel. Pixel~4 is an anomaly: it should be about $1.3$ and
+it reads $5.0$.
+
+\subsection{Three predictors}
+
+Compare three ways of predicting each pixel.
+\begin{enumerate}
+\item \textbf{Copy.} $\hat{x}_k = x_k$. This is the identity.
+\item \textbf{Leave-one-out neighbour average.} Hide pixel $k$ and predict it from the two pixels
+  either side, $\hat{x}_k = \tfrac{1}{2}(x_{k-1}+x_{k+1})$. At the two ends there is only one
+  neighbour, so $\hat{x}_1 = x_2$ and $\hat{x}_6 = x_5$. This predictor never sees the pixel it predicts:
+  $w=0$ in \cref{eq:recon:blend}.
+\item \textbf{Self-including average.} Average the pixel with its two neighbours,
+  $\hat{x}_k = \tfrac{1}{3}(x_{k-1}+x_k+x_{k+1})$. The pixel helps reconstruct itself with
+  $w=\tfrac13$.
+\end{enumerate}
+
+\begin{worked}[label={we:recon:loo}]{Leave-one-out prediction of six pixels}
+Do every line on paper. Predictions first:
+\begin{align*}
+\hat{x}_1 &= x_2 = 1.1,\\
+\hat{x}_2 &= \tfrac12(x_1 + x_3) = \tfrac12(1.0 + 1.2) = \tfrac12(2.2) = 1.1,\\
+\hat{x}_3 &= \tfrac12(x_2 + x_4) = \tfrac12(1.1 + 5.0) = \tfrac12(6.1) = 3.05,\\
+\hat{x}_4 &= \tfrac12(x_3 + x_5) = \tfrac12(1.2 + 1.4) = \tfrac12(2.6) = 1.3,\\
+\hat{x}_5 &= \tfrac12(x_4 + x_6) = \tfrac12(5.0 + 1.5) = \tfrac12(6.5) = 3.25,\\
+\hat{x}_6 &= x_5 = 1.4.
+\end{align*}
+Residuals $r_k = x_k - \hat{x}_k$:
+\begin{align*}
+r_1 &= 1.0 - 1.1 = -0.1, & r_4 &= 5.0 - 1.3 = 3.7,\\
+r_2 &= 1.1 - 1.1 = 0.0,  & r_5 &= 1.4 - 3.25 = -1.85,\\
+r_3 &= 1.2 - 3.05 = -1.85, & r_6 &= 1.5 - 1.4 = 0.1.
+\end{align*}
+Scores $\abs{r_k}$: $0.1,\ 0.0,\ 1.85,\ 3.7,\ 1.85,\ 0.1$.
+
+The largest score, $3.7$, is at pixel~4, the anomaly. Its prediction, $1.3$, is exactly what the gentle
+background said should be there.
+\end{worked}
+
+Two things in \cref{we:recon:loo} deserve a second look.
+
+First, pixels~3 and~5 also score high ($1.85$). They are ordinary, but their predictions used pixel~4
+as a neighbour, and pixel~4's value $5.0$ dragged their predictions upwards. An anomaly contaminates
+the reconstruction of its neighbours and leaves a \emph{halo}\index{halo} of moderate scores around
+itself. The real model shows the same effect around bright objects, and \cref{ch:residualmaha}
+deals with it by excluding a ring of pixels around the one being scored.
+
+Second, the copy predictor gives $r_k = 0$ for all six pixels: you can check that without arithmetic.
+
+\begin{worked}[label={we:recon:self}]{The self-including average hides a third of the anomaly}
+Now let pixel~4 help predict itself:
+\begin{align*}
+\hat{x}_4 &= \tfrac13(x_3 + x_4 + x_5)\\
+ &= \tfrac13(1.2 + 5.0 + 1.4)\\
+ &= \tfrac13(7.6)\\
+ &= 2.5333.
+\end{align*}
+The residual is
+\[
+r_4 = 5.0 - 2.5333 = 2.4667.
+\]
+Check it against \cref{eq:recon:shrink}. The self-weight is $w=\tfrac13$, and the honest context
+prediction is the average of the two neighbours, $c = 1.3$ from \cref{we:recon:loo}. So
+\begin{align*}
+(1-w)(x_4 - c) &= \tfrac23\,(5.0 - 1.3)\\
+&= \tfrac23\,(3.7)\\
+&= 2.4667.
+\end{align*}
+The two routes agree. Letting the pixel see itself cost a third of the anomaly's score: $3.7$ became
+$2.4667$.
+\end{worked}
+
+\begin{figure}[htbp]\centering
+\begin{tikzpicture}
+\begin{axis}[width=0.92\linewidth,height=6.2cm,
+  xlabel={pixel $k$},ylabel={value},xmin=0.5,xmax=6.5,ymin=-2.3,ymax=5.5,
+  xtick={1,...,6},legend style={font=\small,at={(0.02,0.98)},anchor=north west},
+  grid=major,grid style={gray!20}]
+\addplot[spec,very thick,mark=*] coordinates {(1,1.0)(2,1.1)(3,1.2)(4,5.0)(5,1.4)(6,1.5)};
+\addlegendentry{recorded $x_k$}
+\addplot[spat,thick,dashed,mark=square*] coordinates {(1,1.1)(2,1.1)(3,3.05)(4,1.3)(5,3.25)(6,1.4)};
+\addlegendentry{leave-one-out $\hat{x}_k$}
+\addplot[ybar,bar width=10pt,fill=loss!70,draw=loss,area legend] coordinates {(1,-0.1)(2,0.0)(3,-1.85)(4,3.7)(5,-1.85)(6,0.1)};
+\addlegendentry{residual $r_k$}
+\draw[gray] (axis cs:0.5,0) -- (axis cs:6.5,0);
+\end{axis}
+\end{tikzpicture}
+\caption{The six-pixel signal of \cref{eq:recon:signal}, its leave-one-out predictions and the
+residuals, drawn to scale. The anomaly at pixel~4 gets the largest residual; its two neighbours get a
+halo of residual because their predictions used pixel~4.}
+\label{fig:recon:oned}
+\end{figure}
+
+\subsection{Leave-one-out with two passes}\label{sec:recon:twopass1d}
+
+There is a neat way to get the leave-one-out predictions for every pixel using only two runs of a
+predictor. In pass~1, hide the odd pixels $\{1,3,5\}$ and predict them from the visible even pixels.
+In pass~2, hide the even pixels $\{2,4,6\}$ and predict them from the visible odd pixels. Because
+every neighbour of an odd pixel is even, and every neighbour of an even pixel is odd, each prediction
+in \cref{we:recon:loo} uses only visible pixels in the pass where its own pixel is hidden. Keep from
+each pass only the predictions at the pixels it hid. Every pixel then has a prediction made without
+seeing itself, after exactly two passes. Hold on to this idea: \cref{sec:recon:inference} uses it on
+the real model.
+
+%======================================================================
+\section{The bottleneck makes copying hard, not impossible}\label{sec:recon:bottleneck}
+
+The first line of defence that people reach for is the bottleneck: if the internal summary is too
+small to hold the input, the model cannot copy it. That is partly true, and you should understand
+exactly how far it goes.
+
+\subsection{Counting the values in a convolutional autoencoder}
+
+The repository's oldest models (codenames Pratibimba, Antardhana and Tirohita; see
+\cref{tab:recon:roster}) are convolutional autoencoders for one-band thermal patches. Their encoder
+is built in \file{app/foundation_models/components/spatial_encoder.py} as
+\begin{lstlisting}
+SpatialEncoder(in_channels=1, base_channels=32, num_stages=3)
+\end{lstlisting}
+It halves the height and width three times and doubles the number of channels each time:
+\[
+\shape{(B, 1, 128, 128)} \to \shape{(B, 32, 64, 64)} \to \shape{(B, 64, 32, 32)}
+\to \shape{(B, 128, 16, 16)}.
+\]
+Count the values in one patch before and after:
+\begin{align*}
+\text{input} &= 1 \times 128 \times 128 = 16{,}384,\\
+\text{bottleneck} &= 128 \times 16 \times 16 = 128 \times 256 = 32{,}768.
+\end{align*}
+The bottleneck holds \emph{twice} as many numbers as the input. Counted in values, nothing is
+compressed at all. So whatever stops this network from copying, it is not a shortage of storage.
+
+What does constrain it is that the same parameters serve every patch the network ever sees: 165{,}024
+of them in the encoder\tagC{} (\cref{ch:shapes} derives that number by hand), against millions of training
+pixels. The network cannot afford a separate trick for each patch, so it is pushed towards
+transformations that work for terrain in general. That is a pressure, not a guarantee. A network with
+enough capacity and a convolution path that carries pixels straight through can still learn to copy,
+partially, and \cref{eq:recon:shrink} tells you what partial copying costs.
+
+\subsection{Why not a bigger model?}
+
+It is tempting to think a bigger model would reconstruct better and therefore detect better. The first
+half is true and the second is false. A model with more capacity reconstructs \emph{everything}
+better, anomalies included. Lower error everywhere means smaller residuals at the anomalies and less
+contrast between anomaly and background. Capacity in a reconstruction detector is deliberately limited;
+the decision to grow Indradhanu into the three-times-wider ``Heavy'' variant (\cref{ch:heavy}) had to
+be justified by measured detection scores, not by lower reconstruction loss.
+
+%======================================================================
+\section{L2 teaches the model to reconstruct anomalies; L1 does not}\label{sec:recon:l1l2}
+
+The roster of models moved from the squared-error (L2) loss to the absolute-error (L1) loss. The
+reason is a small piece of mathematics that you can do with three numbers, and it sharpens what
+``the model should fail on anomalies'' means.
+
+\subsection{The best constant guess under each loss}
+
+Suppose the model, from context, must make one guess $\hat{x}$ for a hidden pixel, and across the
+training data the true values behind that context are $x^{(1)},\dots,x^{(n)}$. Which guess minimises
+the average loss?
+
+\paragraph{Under L2.} The average squared error is
+\[
+J_2(\hat{x}) = \frac1n\sum_{k=1}^{n}\bigl(x^{(k)} - \hat{x}\bigr)^2.
+\]
+Differentiate with respect to $\hat{x}$. The derivative of $(a-\hat{x})^2$ with respect to $\hat{x}$
+is $-2(a-\hat{x})$ (chain rule: the outer square gives $2(a-\hat{x})$, the inner $a-\hat{x}$ has
+derivative $-1$). So
+\begin{align*}
+\frac{dJ_2}{d\hat{x}} &= \frac1n\sum_{k=1}^{n} -2\bigl(x^{(k)}-\hat{x}\bigr)
+  && \text{differentiate term by term}\\
+&= -\frac2n\Bigl(\sum_{k} x^{(k)} - n\hat{x}\Bigr).
+  && \text{$\hat{x}$ appears $n$ times in the sum}
+\end{align*}
+Set the derivative to zero and solve:
+\begin{align*}
+\sum_{k} x^{(k)} - n\hat{x} &= 0
+  && \text{the factor $-2/n$ is not zero}\\
+\hat{x} &= \frac1n\sum_{k} x^{(k)}.
+  && \text{divide both sides by $n$}
+\end{align*}
+The L2-optimal guess is the \emph{mean}\index{mean} of the values.
+
+\paragraph{Under L1.} The average absolute error is
+$J_1(\hat{x}) = \frac1n\sum_k \abs{x^{(k)}-\hat{x}}$. Its slope with respect to $\hat{x}$ is $-1$ for
+every value above $\hat{x}$ and $+1$ for every value below it, so the slope is
+(number below) $-$ (number above). It is zero when as many values lie above $\hat{x}$ as below. The
+L1-optimal guess is the \emph{median}\index{median}.
+
+\begin{worked}[label={we:recon:meanmedian}]{Mean versus median when one value is an anomaly}
+Three training pixels share the same context. Two are ordinary and one is an anomaly:
+$x^{(1)}=1.0$, $x^{(2)}=1.2$, $x^{(3)}=5.0$.
+
+The mean:
+\begin{align*}
+1.0 + 1.2 + 5.0 &= 7.2,\\
+7.2 / 3 &= 2.4.
+\end{align*}
+The median, after sorting $1.0,\ 1.2,\ 5.0$, is the middle value $1.2$.
+
+Compare the average L1 loss of the two guesses. For $\hat{x}=1.2$:
+\begin{align*}
+\abs{1.0-1.2} + \abs{1.2-1.2} + \abs{5.0-1.2} &= 0.2 + 0 + 3.8 = 4.0,\\
+4.0/3 &= 1.333.
+\end{align*}
+For $\hat{x}=2.4$:
+\begin{align*}
+\abs{1.0-2.4} + \abs{1.2-2.4} + \abs{5.0-2.4} &= 1.4 + 1.2 + 2.6 = 5.2,\\
+5.2/3 &= 1.733.
+\end{align*}
+Under L1 the median wins. Now the average L2 loss. For $\hat{x}=1.2$:
+\begin{align*}
+0.2^2 + 0^2 + 3.8^2 &= 0.04 + 0 + 14.44 = 14.48,\\
+14.48/3 &= 4.827.
+\end{align*}
+For $\hat{x}=2.4$:
+\begin{align*}
+1.4^2 + 1.2^2 + 2.6^2 &= 1.96 + 1.44 + 6.76 = 10.16,\\
+10.16/3 &= 3.387.
+\end{align*}
+Under L2 the mean wins, and the mean, $2.4$, has been dragged halfway towards the anomaly.
+\end{worked}
+
+The lesson of \cref{we:recon:meanmedian}: a model trained with L2 is rewarded for moving its
+predictions towards rare extreme values, so it partly learns to reconstruct the very things you want
+it to fail on. A model trained with L1 settles on the typical value and leaves the extreme ones badly
+reconstructed.
+
+\subsection{The same story in the gradients}
+
+Training moves $\hat{x}$ by an amount proportional to the derivative of the loss. For one pixel with
+residual $r = x - \hat{x}$:
+\begin{align*}
+\frac{d}{d\hat{x}}(x-\hat{x})^2 &= -2r, &&\text{L2: proportional to the error}\\
+\frac{d}{d\hat{x}}\abs{x-\hat{x}} &= -\sign(r), &&\text{L1: size 1 whatever the error}
+\end{align*}
+(for $r\ne 0$). Take an ordinary pixel with $r=0.1$ and an anomalous one with $r=3.8$. Under L2 the
+pull is $2\times0.1=0.2$ against $2\times3.8=7.6$: the anomaly pulls $38$ times harder. Under L1 both
+pull with size~1. L2 spends its effort on the worst-fitting pixels, which are the anomalies; L1 spends
+it evenly. Every later model in the roster uses L1. \Cref{ch:losses} develops the L1 loss and its
+spectral-angle partner fully.
+
+%======================================================================
+\section{Masking: make the answer absent}\label{sec:recon:masking}
+
+The bottleneck makes copying hard. Masking makes it impossible, because it removes the thing to be
+copied.
+
+\subsection{The masked objective}
+
+Choose a \emph{mask}\index{mask} $\vect{m}$: an array of zeros and ones with one entry per position,
+where $m=1$ means ``visible'' and $m=0$ means ``hidden''. Feed the model only the visible part, and
+grade it only on the hidden part:
+\begin{equation}\label{eq:recon:masked}
+\mathcal{L}_{\text{mask}}(\theta) =
+\frac{\displaystyle\sum_{p} (1-m_p)\,\bigl\lvert x_p - f_\theta(\vect{x}\odot\vect{m})_p\bigr\rvert}
+     {\displaystyle\sum_{p}(1-m_p)} .
+\end{equation}
+Here $p$ runs over positions, $\odot$ means multiply entry by entry (so $\vect{x}\odot\vect{m}$ zeroes
+the hidden entries), and the factor $(1-m_p)$ is $1$ at hidden positions and $0$ at visible ones, so
+only hidden positions count. The denominator counts the hidden positions, which turns the sum into an
+average.
+
+Try the identity again on this objective. At a hidden position $p$ the identity outputs
+$(\vect{x}\odot\vect{m})_p = x_p\cdot 0 = 0$, so its error there is $\abs{x_p - 0} = \abs{x_p}$. Its
+loss is the average of $\abs{x_p}$ over hidden positions, which is not zero for any real image. Copying
+no longer wins. The model only scores well by predicting $x_p$ from the visible positions, which is
+exactly the context prediction $c$ of \cref{eq:recon:blend} with $w=0$.
+
+\begin{keypoint}
+Masking changes the question from ``reproduce what you see'' to ``predict what you cannot see'', and
+the identity has no answer to the second question.
+\end{keypoint}
+
+\subsection{What the model learns to predict}
+
+\Cref{sec:recon:l1l2} showed that the best single guess under L1 is the median of the values that
+occur behind a given context, and under L2 the mean. A masked model trained on ordinary terrain
+therefore learns to output, at each hidden position, the \emph{typical} value given the visible
+surroundings. At an ordinary pixel that typical value is close to the truth and the residual is small.
+At an anomaly it is the background that ``ought'' to be there, and the residual is the honest surprise
+$x-c$ of \cref{eq:recon:shrink}, at full size because $w=0$.
+
+\subsection{Hide blocks, not single pixels}
+
+What exactly gets hidden matters. Hide a single pixel and its eight immediate neighbours almost give it
+away: on smooth terrain the average of the neighbours is nearly exact. Look back at
+\cref{we:recon:loo}: on the ramp $1.0,1.1,1.2$ the neighbour average predicts pixel~2 perfectly with
+no understanding of anything. A model trained that way learns interpolation and nothing more.
+
+Indradhanu hides \emph{tokens}\index{token} instead: square blocks of $4\times4$ pixels (\cref{ch:patchembed}
+builds them). A hidden pixel in the middle of a hidden block has its nearest visible pixel up to two
+pixels away, and the model must reason from further out: what this field's texture is like, which way
+the river bends. That is the understanding you want it to acquire.
+
+\subsection{The masked autoencoder in five steps}
+
+The technique is called a \emph{masked autoencoder}\index{masked autoencoder}, MAE
+\citep{he2022masked}. It is the ``mae'' in the model name \code{hyperspectral_segformer_mae}. One
+training step:
+\begin{enumerate}
+\item Cut the patch into tokens ($4\times4$ blocks).
+\item Choose a random subset of tokens to hide; in Indradhanu's training configuration about 65\%\tagM{configs/hyperspectral_segformer_exp_2.json}.
+\item Delete the hidden tokens, so the network processes only the survivors.
+\item Ask the network for the whole patch, hidden parts included.
+\item Grade it only at the hidden positions, as in \cref{eq:recon:masked}.
+\end{enumerate}
+Step~5 is what makes the exam honest: the model is marked only on things it could not see.
+
+\begin{drift}
+Mask ratio: \code{"mask_ratio": 0.65} in \file{configs/hyperspectral_segformer_exp_2.json} (the v0.2.0
+training config, batch size 128, 200 epochs), while the code default in
+\file{app/models/training/training_config.py} is 0.5. Checked 2026-10-29.
+\end{drift}
+
+\Cref{fig:recon:mae} shows the difference between the naive and the masked scheme on one small grid.
+
+\coursefig[\linewidth]{iw-06-masked-recon}{Why the model must not see what it predicts. (a) Asked to
+reproduce what it can see, a model learns to copy; the residual is zero everywhere and nothing is
+detected. (b) A masked autoencoder hides about 65\% of the tokens (dashed) and is graded only on them;
+it must predict from context, so at the hidden anomaly (amber) it paints ordinary background and leaves
+a large error. (Course figure IW~6.1.)}{fig:recon:mae}
+
+\subsection{Deleting is stronger than zeroing}
+
+There are two ways to hide a token. You can set its values to zero and leave it in place, or you can
+delete it from the list of tokens the network processes. The older convolutional masked models zero;
+the SegFormer models (Chakshu, Indradhanu) delete. A zeroed token still occupies a slot and still
+takes part in every computation that follows; a deleted token does not exist for the encoder, costs no
+computation, and leaks nothing. This choice forces a design decision on how tokens are made: if two
+neighbouring tokens shared pixels, deleting one would leave some of its pixels alive inside the other.
+\Cref{ch:patchembed} shows how stage~1 of the encoder is built so that no pixel belongs to two tokens,
+and \cref{ch:masking} covers the deletion and restoration machinery in full.
+
+\subsection{Three channels for the convolutional masked models}
+
+The convolutional masked models solve a problem that zeroing creates. A zero in the pixel channel is
+ambiguous: it might be off-swath (the sensor never looked), cloud-masked (the ground is hidden), or a
+deliberately hidden target. The first two want no prediction; the third wants one. So
+\file{app/foundation_models/components/normalized_masked_spatial_auto_encoder.py} feeds three channels:
+\begin{center}
+\begin{tabular}{ccl}
+\toprule
+validity & input mask & meaning\\
+\midrule
+1 & 1 & valid and visible: use it\\
+1 & 0 & valid but hidden: \textbf{predict this}\\
+0 & 0 & invalid: ignore, no prediction expected\\
+0 & 1 & cannot occur\\
+\bottomrule
+\end{tabular}
+\end{center}
+Channel~0 is the pixel value (zero where hidden or invalid), channel~1 is the validity mask, and
+channel~2 is the input mask. Comparing the two masks tells the network which zeros are holes in the data
+and which are questions. The SegFormer models carry the same distinction through token-level masks
+instead (\cref{ch:masking}).
+
+%======================================================================
+\section{Inference: every pixel predicted while hidden}\label{sec:recon:inference}
+
+Training only needs \emph{some} hidden positions per step: over thousands of patches, every kind of
+position gets hidden eventually. Inference is stricter. You need a score at \emph{every} pixel of one
+particular scene, and each must come from a prediction made while that pixel was hidden. One pass
+cannot do it: hide half and you score half.
+
+The answer is the two-pass idea of \cref{sec:recon:twopass1d}, in two dimensions. Choose a token
+mask $\vect{m}^{(1)}$ for pass~1 and its complement $\vect{m}^{(2)} = 1 - \vect{m}^{(1)}$ for pass~2.
+Let $\vect{p}^{(1)} = 1-\vect{m}^{(1)}$ mark the pixels hidden in pass~1 and $\vect{p}^{(2)} =
+1-\vect{m}^{(2)}$ the pixels hidden in pass~2. Run the model twice and combine:
+\begin{equation}\label{eq:recon:combine}
+\xhat = \xhat^{(1)}\odot\vect{p}^{(1)} + \xhat^{(2)}\odot\vect{p}^{(2)}.
+\end{equation}
+This is a \emph{selection}, not an average. To see it, compute the two masks' sum and product at any
+pixel:
+\begin{align*}
+p^{(1)} + p^{(2)} &= (1-m^{(1)}) + (1-m^{(2)})
+  && \text{definitions}\\
+&= (1-m^{(1)}) + m^{(1)} = 1,
+  && \text{since } 1-m^{(2)} = m^{(1)}\\
+p^{(1)}\,p^{(2)} &= (1-m^{(1)})\,m^{(1)} = 0.
+  && \text{one factor is always 0 for a 0/1 value}
+\end{align*}
+So at each pixel exactly one of $p^{(1)},p^{(2)}$ is $1$ and the other is $0$, and \cref{eq:recon:combine}
+picks $\hat{x}^{(1)}$ or $\hat{x}^{(2)}$ whole. The line in the source is
+\begin{lstlisting}
+reconstruction = x_hat_1 * pass1_pixels + x_hat_2 * pass2_pixels
+\end{lstlisting}
+in method \code{infer} of \file{app/foundation_models/inferencers/segformer_mae_inferencer.py}
+(line~228 on 2026-10-29\tagM{app/foundation_models/inferencers/segformer_mae_inferencer.py}).
+
+\begin{worked}[label={we:recon:checker}]{Tracing a checkerboard through two passes}
+Take a $4\times4$ corner of the token grid with a checkerboard mask. $1$ means visible and $0$ means
+hidden; position $(i,j)$ is row $i$, column $j$, counted from $0$.
+\[
+\vect{m}^{(1)} = \begin{pmatrix}1&0&1&0\\0&1&0&1\\1&0&1&0\\0&1&0&1\end{pmatrix},\qquad
+\vect{m}^{(2)} = \begin{pmatrix}0&1&0&1\\1&0&1&0\\0&1&0&1\\1&0&1&0\end{pmatrix}.
+\]
+Position $(0,0)$: $m^{(1)}=1$ (visible in pass~1), $m^{(2)}=0$ (hidden in pass~2). So
+$p^{(1)} = 0$, $p^{(2)} = 1$, and the final value comes from pass~2.
+
+Position $(0,1)$: $m^{(1)}=0$, so $p^{(1)}=1$ and the value comes from pass~1.
+
+Position $(1,1)$: $m^{(1)}=1$, $m^{(2)}=0$, so pass~2.
+
+Position $(2,3)$: $m^{(1)}=0$, $m^{(2)}=1$, so pass~1.
+
+A pattern appears: the value comes from pass~1 exactly when $i+j$ is odd. Every position is hidden in
+exactly one pass.
+\end{worked}
+
+\begin{sourcenote}[: inference masking and a comment that disagrees with training]
+Two details in the inference path differ from training and are recorded in the known-issues register.
+(1) \code{InferenceConfig.masking_strategy} defaults to \code{"checkerboard"}
+(\file{app/models/training/inference_config.py}, line~96), a deterministic token-level checkerboard,
+while training and validation hide a random subset. A \code{"random"} option with a complementary
+second pass exists. (2) In \file{app/foundation_models/inferencers/segformer_mae_inferencer.py},
+\code{MIN_VALID_FRACTION = 0.1} (line~284) sits under a comment saying it ``matches training: patches
+with < 40\% valid pixels were discarded''. Training uses \code{MIN_VALID_PIXEL_FRACTION = 0.4}
+(\file{app/foundation_models/trainers/hyperspectral_segformer_mae_trainer.py}, line~34). The source
+wins: the comment is wrong about the number.
+\end{sourcenote}
+
+%======================================================================
+\section{Where the rule is enforced, and the whole model on one page}\label{sec:recon:indradhanu}
+
+The rule ``a pixel never helps reconstruct itself'' is enforced in three separate places in
+Indradhanu. Learn all three; \cref{eq:recon:shrink} says what happens if any one leaks.
+
+\begin{center}
+\begin{tabular}{lll}
+\toprule
+where & mechanism & chapter\\
+\midrule
+encoder input & hidden tokens are deleted from the sequence & \cref{ch:masking}\\
+inference & two complementary passes, \cref{eq:recon:combine} & \cref{ch:inference}\\
+the grade & the loss counts only hidden positions, \cref{eq:recon:masked} & \cref{ch:losses}\\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Indradhanu is a \emph{SegFormer}\index{SegFormer} \citep{xie2021segformer}: a hierarchical vision
+transformer that looks at the patch at four scales ($\tfrac14$, $\tfrac18$, $\tfrac1{16}$ and
+$\tfrac1{32}$ of the input size) and a light decoder that fuses the four back into a full-resolution
+picture. Transformers use \emph{attention}, which lets any token consult any other
+(\cref{ch:attention}); that matters when a whole region is hidden and the nearest evidence is far away.
+The hyperspectral version adds exactly two things to its thermal sibling Chakshu: a learned spectral
+compressor that squeezes 165 bands into 32 and expands them back (\cref{ch:compressor}), and a
+spectral-angle term in the loss (\cref{ch:losses}). \Cref{fig:recon:pipeline} transcribes its
+\code{forward} method from \file{app/foundation_models/components/hyperspectral_seg_former_mae.py}.
+
+\begin{figure}[htbp]\centering
+\begin{tikzpicture}[node distance=4.5mm,
+  box/.style={draw,rounded corners=2pt,minimum width=5.4cm,minimum height=6.5mm,font=\small,align=center},
+  lab/.style={font=\footnotesize\ttfamily,anchor=west}]
+\node[box,fill=spec!12] (in) {input cube $\vect{x}$};
+\node[box,below=of in] (mask) {zero invalid pixels: \texttt{x * mask}};
+\node[box,below=of mask,fill=spec!12] (norm) {\texttt{PixelNormalize} (per-band z-score)};
+\node[box,below=of norm,fill=spec!25] (comp) {\texttt{SpectralCompressor} $165\to32$};
+\node[box,below=of comp,fill=spat!15] (enc) {\texttt{SegFormerEncoder}, 4 stages, MAE deletion};
+\node[box,below=of enc,fill=spat!15] (dec) {\texttt{SegFormerDecoder}, fuse + pixel shuffle};
+\node[box,below=of dec,fill=spec!25] (decomp) {\texttt{SpectralDecompressor} $32\to165$};
+\node[box,below=of decomp,fill=spec!12] (denorm) {\texttt{PixelDenormalize}};
+\node[box,below=of denorm,fill=loss!15] (out) {reconstruction $\xhat$};
+\foreach \a/\b in {in/mask,mask/norm,norm/comp,comp/enc,enc/dec,dec/decomp,decomp/denorm,denorm/out}
+  \draw[-{Stealth}] (\a) -- (\b);
+\node[lab] at ($(in.east)+(2mm,0)$) {(B, 165, 128, 128)};
+\node[lab] at ($(comp.east)+(2mm,0)$) {(B, 32, 128, 128)};
+\node[lab] at ($(enc.east)+(2mm,0)$) {F1..F4, four scales};
+\node[lab] at ($(dec.east)+(2mm,0)$) {(B, 32, 128, 128)};
+\node[lab] at ($(decomp.east)+(2mm,0)$) {(B, 165, 128, 128)};
+\node[lab] at ($(out.east)+(2mm,0)$) {(B, 165, 128, 128)};
+\node[font=\footnotesize,anchor=east] at ($(norm.west)+(-2mm,0)$) {ch.~\ref{ch:bandpipeline}};
+\node[font=\footnotesize,anchor=east] at ($(comp.west)+(-2mm,0)$) {ch.~\ref{ch:compressor}};
+\node[font=\footnotesize,anchor=east] at ($(enc.west)+(-2mm,0)$) {ch.~\ref{ch:patchembed}--\ref{ch:encoder}};
+\node[font=\footnotesize,anchor=east] at ($(dec.west)+(-2mm,0)$) {ch.~\ref{ch:decoder}};
+\end{tikzpicture}
+\caption[The Indradhanu forward pass]{The Indradhanu forward pass, transcribed from \texttt{HyperspectralSegFormerMAE.forward}. It
+starts and ends at the same shape, so the reconstruction can be subtracted from the input. The rest of
+Part~III zooms into one box at a time.}
+\label{fig:recon:pipeline}
+\end{figure}
+
+\begin{table}[htbp]\centering\small
+\caption{The reconstruction-model roster. The backend selects models by codename, not by class name;
+the first three share one class and differ only in training (from course part AD10,
+slugs checked against \texttt{FoundationModelName} in \texttt{app/models/training/training\_config.py}).}
+\label{tab:recon:roster}
+\begin{tabular}{lll}
+\toprule
+codename & slug & notes\\
+\midrule
+Pratibimba & \texttt{spatial\_autoencoder} & the convolutional baseline\\
+Antardhana & \texttt{spatial\_masked\_autoencoder} & masked, L2 loss\\
+Tirohita & \texttt{spatial\_masked\_autoencoder\_l1} & masked, L1 loss\\
+Asanskrita & \texttt{spatial\_masked\_autoencoder\_l1\_unnormalized} & works in raw Celsius\\
+Drashta & \texttt{normalized\_masked\_autoencoder} & Asanskrita plus normalisation\\
+Chakshu & \texttt{segformer\_mae} & transformer, thermal\\
+Indradhanu & \texttt{hyperspectral\_segformer\_mae} & transformer, 165 bands\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{drift}
+Shipped figures quoted by the anomaly-detection course (AD10): Chakshu, 406{,}500 parameters,
+validation loss 0.2565 at epoch 495\tagM{docs/training/anomaly-detection/10-reconstruction-models.md};
+Indradhanu v0.2.0, ``5{,}507{,}354 parameters'', validation loss 0.0435 at epoch
+200\tagM{research/model_break_down/05_hyperspectral_segformer_mae.md}. The current product model is Indradhanu~V2 (\cref{ch:shipping}).
+\end{drift}
+
+\begin{sourcenote}[: 5,507,354 is not the parameter count]
+Building \code{HyperspectralSegFormerMAE(compressed_channels=32)} and summing
+\code{p.numel()} over \code{parameters()} gives \textbf{5{,}506{,}629}\tagC, which is also the
+\code{torchinfo} total in \file{research/model_break_down/05_hyperspectral_segformer_mae.md}. Summing over
+\code{state_dict()} instead gives 5{,}507{,}354\tagC. The difference, $725$, is the non-trainable
+\emph{buffers}: the normalisation mean and standard deviation ($2\times165\times2=660$, once each in
+\code{PixelNormalize} and \code{PixelDenormalize}), the compressor BatchNorm's running mean and
+variance ($2\times32=64$) and its batch counter ($1$): $660+64+1=725$. \Cref{ch:compressor} explains
+the BatchNorm buffers. Checked 2026-10-29 with torch~2.5.1 by \file{tools/compute_recon.py} (output saved in
+\file{tools/compute_recon_output.txt}).
+\end{sourcenote}
+
+A last remark about what a healthy reconstruction looks like. Indradhanu's reconstructions are
+somewhat blurry. That is expected: they are predictions made with most of the evidence removed. A
+crisp, perfect reconstruction would be the warning sign, because it would mean the model had found a
+way to copy.
+
+%======================================================================
+\begin{confusions}
+\confusion{Is a masked autoencoder a different thing from an autoencoder?}{It is an autoencoder with
+one extra rule: part of the input is removed before the encoder and the grade is taken only there. The
+bottleneck alone makes copying hard; the mask makes it impossible.}
+\confusion{The bottleneck has more values than the input. Is it compression at all?}{Not in value
+count: the convolutional autoencoder's bottleneck holds 32{,}768 values for a 16{,}384-value input.
+The constraint is that one set of parameters must serve every patch, which pushes the network towards
+reusable structure. That is a pressure, not a guarantee against copying.}
+\confusion{Does the model know which pixels were hidden?}{It knows that something is missing at those
+positions: after the deleted tokens are put back, their slots hold zeros, and the convolutional models
+carry an explicit input-mask channel. It does not know what was there, which is the point.}
+\confusion{If the reconstruction is blurry, is the model broken?}{No. A prediction made with about
+two thirds of the evidence removed is expected to be smooth. A perfectly sharp reconstruction would
+suggest leakage.}
+\confusion{Why not train the model to output an anomaly map directly?}{That needs labelled anomalies,
+which do not exist in useful numbers (\cref{ch:problem}). Reconstruction needs only ordinary imagery.}
+\confusion{Is the two-pass combination an average of two reconstructions?}{No. The two pixel masks are
+complements, so at each pixel one weight is 1 and the other 0: it selects the pass in which the pixel
+was hidden.}
+\end{confusions}
+
+\begin{checkyourself}
+\item\label{ex:recon:1} Explain in two sentences why a model trained to reproduce its visible input can
+never detect an anomaly, and why that failure is dangerous rather than merely unhelpful.
+\item\label{ex:recon:2} A model reconstructs each pixel as $\hat{x} = 0.25\,x + 0.75\,c$, where $c$ is
+a prediction from the neighbours. For a pixel with $x = 0.80$ and $c = 0.20$, compute the residual
+directly, then again with \cref{eq:recon:shrink}. What fraction of the honest surprise is reported?
+\item\label{ex:recon:3} Repeat \cref{we:recon:loo} for the signal $\vect{x} = (2.0,\ 2.0,\ 2.0,\ 2.0,\
+0.4,\ 2.0)$ with the leave-one-out neighbour average. Which pixel scores highest, and which pixels form
+the halo?
+\item\label{ex:recon:4} Four training values share a context: $0.9$, $1.0$, $1.1$ and $6.0$. Find the
+guess that minimises the average L2 loss and the guess that minimises the average L1 loss (any value
+between the two middle values minimises L1; give the midpoint). Which one is pulled towards the
+anomaly, and by how much compared with the other?
+\item\label{ex:recon:5} In the $4\times4$ checkerboard of \cref{we:recon:checker}, which pass supplies
+the final value at positions $(3,0)$ and $(3,3)$? Then show, using the masks' sum and product, that
+\cref{eq:recon:combine} cannot mix the two passes at any pixel.
+\item\label{ex:recon:6} Name the three places Indradhanu enforces ``never see yourself'', and say for
+each what would leak if it were removed.
+\end{checkyourself}
+
+\nextchapter{ch:shapes}

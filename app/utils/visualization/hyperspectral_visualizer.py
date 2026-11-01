@@ -267,6 +267,9 @@ def _find_family_boundary(
 
 def _guess_sensor(wavelengths: Sequence[float], n_bands: int) -> str:
     """Best-effort sensor name from band count and wavelength range."""
+    # Tanager (426) and AVIRIS-NG (425) are both ~5 nm over 376-2500 nm; band count cannot tell them apart.
+    if n_bands >= 300:
+        return f"{n_bands}-band 5 nm HSI"
     if n_bands >= 220:
         return "EnMAP"
     wl_max = max(wavelengths) if wavelengths else 0

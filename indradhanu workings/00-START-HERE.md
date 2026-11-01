@@ -91,7 +91,7 @@ Every part has the same skeleton:
 | 29 | [29-inference.md](29-inference.md) | Running it on a real scene |
 | 30 | [30-scoring-and-the-product.md](30-scoring-and-the-product.md) | Turning errors into an answer |
 
-**Sequel - the next Indradhanu: a smarter spectral bottleneck, then pretraining, scoring, fine-tuning and shipping (31-69)**
+**Sequel - the next Indradhanu: a smarter spectral bottleneck, then pretraining, scoring, fine-tuning and shipping (31-71)**
 
 Written 2026-10-14, after the decision to pretrain the next Indradhanu on SpectralEarth with a
 cross-attention spectral bottleneck. Parts 31 to 39 were written as a **design studied before
@@ -141,6 +141,8 @@ Assumes all of parts 01 to 30; leans on 08, 10, 12, 13 and 17 to 21.
 | 67 | [67-the-progressive-decoder-ft09.md](67-the-progressive-decoder-ft09.md) | **FT09, a candidate:** x2 upsampling stages with a full-resolution skip (hidden pixels zeroed, proved by test), warm-started from FT04 and trained decoder-first then joint; contrast up on all four scenes and pAUC +0.0060 [+0.0002, +0.0118], the first resolved gain since cloud exclusion - with a 4-object loss at the top 0.1% and a mechanism criterion judged after the fact (**FT09c, 2026-10-23: the gain did not hold; not adopted**) |
 | 68 | [68-indradhanu-heavy-pretraining.md](68-indradhanu-heavy-pretraining.md) | **Indradhanu Heavy (F002-heavy):** capacity was the untested question, so a model with 3x FT04's encoder widths (named "4x wide"; 33.9 M parameters, counted by hand) was pretrained 80 epochs on an H100 capacity block - the shard-vs-worker crash and the stale log line, a curve with no overfitting, and pretrained detection broader but worse at the top 0.1% on hazy set4; the user made it the base model |
 | 69 | [69-heavy-vs-a-control-and-the-haze.md](69-heavy-vs-a-control-and-the-haze.md) | **The fair test:** Heavy fine-tuned beside a same-recipe control (FTB1 / FTB2 from F001) at three neighbouring checkpoints; its thin-cloud output called 75% of set4 cloud (haze, 209 of 230 targets switched off), fixed by thick-cloud-only exclusion; Heavy beats the control by ~+0.023 pAUC and FT04 by +0.015 to +0.020, all resolved, while reconstructing worse - release candidate FTH3 epoch 5, pAUC 0.189 vs 0.170 |
+| 70 | [70-heavy-in-the-product.md](70-heavy-in-the-product.md) | **Heavy shipped (2026-10-29) as Indradhanu V2 `v2.1.0`:** thick cloud only (`thin_cloud_is_cloud=False`, `cloud_rule` in `stats.json`), product parity to four decimals (mean pAUC 0.1892; 449 vs FT04's 418 of 909 objects in the top 1%), the worker raised from 2 to 16 threads (Heavy 1819 s -> 454 s per PRISMA scene, about 92% parallel by Amdahl's law), and the FT08 leak found by the textbook writers - half of each block predicted by a pass that saw it - fixed 2026-10-31: pAUC 0.1638, verdict unchanged |
+| 71 | [71-the-namer-on-the-v2-stem.md](71-the-namer-on-the-v2-stem.md) | **A second consumer of V2's stem (2026-10-31; N001 stopped at epoch 1, N001b training, no final results):** the spectral namer copies V2's 17,825-parameter reduced stem (counted by hand), its post-stem BatchNorm (BatchNorm2d -> BatchNorm1d, same tensors) and its normalisation curve, runs them on 1 x 1 images, trains the stem at 0.3x the learning rate - and part 51's BatchNorm trap in a new form (nine kinds of batch per step in training, one blended running average at evaluation: pixels 0.30, rings 0.33, library 0.37), fixed before N001 by freezing the norm at V2's running statistics (its scale and shift still train); and level 1 by matching (N001's linear `to_manmade` head sat at chance; it is still built but untrained), which added one parameter, `l1_bias`: 347,685 |
 
 Parts 34 to 39's numbers were first produced by a study prototype and then re-checked against
 the real modules (5,345 compressor and 6,401 decoder parameters at `d = D = 32`; 13,162 gate
@@ -224,7 +226,9 @@ at about 21%, bench-v2.1's easy-tier foreignness (1.60x), and training overlap f
 like-for-like v0.2.0 + exclusion run (0.165 against 0.170) has been made. **Values that will drift:** the
 manifest figures (`v2.0.0`, epoch 10, 5,886,451 parameters, val 0.05578), the parity numbers (set1 0.2460,
 set4 0.2106 / 0.2199, 11.83% excluded, 185 / 186 bands read), and everything Phase 2 would change - the
-defaults, `band_filter_apply`'s grid default, and the "one action cannot run both models" limit.
+defaults, `band_filter_apply`'s grid default, and the "one action cannot run both models" limit. (The last two
+changed on 2026-10-31 for the AIGC submission: native bands are the band-filter default and v0.2.0 is
+resampled inside scoring; a dated note at the top of part 61 says so, and part 70 has another.)
 Authoritative: `docs/lld/spectral-stem.md` ("Serving"), `docs/04-models.md` (Inference),
 `docs/09-known-issues.md` ("Spectral-stem models - open gaps"), `final design/ROADMAP.md` (OB-14).
 
@@ -285,16 +289,40 @@ per stage-1 block) and FT04-size's 79,616 per stage-1 block were checked by buil
 part 64's +0.0074 (part 69); and FTH1's epoch-8 pAUC with FTB1's masks is 0.182 in the README and 0.183 in
 `eval_report.md` (part 69). The F002 README's "Decision" paragraph and the fine-tuning log's first
 2026-10-29 entry say Heavy was not ahead of the control; both predate the detection results. **Values that
-will drift:** everything about the release candidate - it is not shipped, and shipping needs the
-thick-cloud rule in `segment_full_scene` (the product still uses cloud or thin cloud), a manifest /
-resolver path for the progressive-decoder architecture, and a worker CPU-cost check, any of which may
-change the numbers; every pAUC, caught and bootstrap figure in both parts (four scenes, object bootstrap
+will drift:** everything about the release candidate - when the parts were written it was not shipped
+(it shipped the same day, part 70; part 69's status line was corrected on 2026-10-31); every pAUC, caught and bootstrap figure in both parts (four scenes, object bootstrap
 only, 1000 draws); the per-epoch SAM / IoU tables; the block-1 timeline and the GPU log; the H100 block-2
 plans; and the cumulative table in part 69. The `h100_chain.sh` fix quoted in part 68 was uncommitted
 when the part was written. How long the stale-log stop cost is not recorded. Authoritative:
 `research/experiments/indradhanu-se-pretrain/F002-heavy/README.md`, the `FTH1-heavy-joint`,
 `FTH2-heavy-joint-more` and `FTH3-heavy-joint-more2` READMEs and `bootstrap.txt` files under
 `research/experiments/indradhanu-finetune/`, and that folder's README log.
+
+**Part 70 (written 2026-10-31).** Heavy in the product: the thick-cloud rule (resolver
+`thin_cloud_is_cloud=False`, the `cloud_rule` stats key), the parity table, the comparison page's object
+counts (https://claude.ai/artifact/2dZFbGN6HhMBCx3kkZ8pQ4: 418 and 449 of 909 in the top 1%), the
+2 -> 16 thread change and its timings, and the FT08 evaluation leak with its fix and re-run; part 65 now
+carries a note pointing here. The Amdahl's-law share (92%) is fitted to one measurement, not measured. The
+LLD's 35.3 M parameters for the fine-tuned Heavy were checked by building the model on CPU: 33,884,194 + a
+1,431,120 segmentation head = 35,315,314.
+**Values that will drift:** the version string `v2.1.0`, the parity pAUCs, the CPU timings (one scene, one
+host, 24 cores), `WORKER_THREADS`' default of 16, and FT08's re-run numbers. Authoritative: the FTH3
+README's "Shipped" section, `docs/lld/spectral-stem.md` ("Serving"), `docs/09-known-issues.md`, and the
+last section of `research/experiments/indradhanu-finetune/FT07-gated/README.md`. A dated note (2026-10-31,
+evening) at the top of part 70 records the native-band default.
+
+**Part 71 (written 2026-10-31).** The spectral namer as a consumer of V2's stem: what
+`SpectralNamer.from_spectral_stem` copies, the stem's 17,825 parameters by hand (and 14,721 at `D = 32`,
+part 40's figure), the 0.3x stem learning rate, and the post-stem BatchNorm's running-mean blend - found by
+reading the first version of the code, never measured, and fixed in the `namer2` bundle N001 runs (the norm
+stays in eval mode, at V2's statistics). The namer's design and training are taught in the anomaly-detection
+course, parts 26 to 27, and its use in the AIGC submission in part 28. The proposal's "~1-3 M parameters" is
+0.35 M in the code (347,685; 347,684 before `l1_bias` was added for level 1 by matching on 2026-10-31,
+when N001's linear level-1 head sat at chance and N001b replaced it). **Values that will drift:**
+everything - N001b had reported epoch 1 only when the part was written; `stem_lr_scale` 0.3, the class
+list, the `level1` setting and the init checkpoint are run settings. Authoritative: the code
+(`app/spectral_match/namer/`), `docs/proposals/spectral-namer.md` ("As built"; its design body
+still describes the linear head), `research/experiments/spectral-namer/N001/README.md` and `N001b/README.md`.
 
 ## Figures
 

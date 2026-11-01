@@ -65,7 +65,7 @@ class ActionTypeMeta(BaseModel):
     """Full descriptive payload for an action type."""
 
     type: str = Field(..., description="Stable type identifier, e.g. `band_filter_apply`")
-    label: str = Field(..., description="Human-readable name, e.g. `Apply spectral band filter`")
+    label: str = Field(..., description="Human-readable name, a few words, e.g. `Band filter`")
     short_description: str = Field(
         ...,
         description="One sentence — used in the picker and Action list rows.",
@@ -100,3 +100,12 @@ class ActionTypeMeta(BaseModel):
             "ActionTemplate rows with `is_system=True`."
         ),
     )
+
+
+class PlainActionError(ValueError):
+    """A run failure the user can act on, worded for them.
+
+    The worker stores its message as the action's failure_reason without the usual
+    "<ExceptionClass>: " prefix (allotrope_worker/action_run.py), so the card's first line is
+    the plain sentence. Its first line says what to do; any detail goes on the lines after.
+    """

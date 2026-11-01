@@ -1,0 +1,55 @@
+{
+  "_description": "N001: the spectral namer's first run (docs/proposals/spectral-namer.md), H100 capacity block 2 (cr-0dccba00b34dc29e1, 2026-10-31). Stem + post-stem norm + normalisation curve from the released Indradhanu V2 (FTH3 epoch 5: Heavy fine-tuned on these three sensors); planted samples from the fine-tune shard sets of all three sensors; v1 classes, 20% of each man-made class's spectra held out; no open-set class (N002).",
+  "run_dir": "/opt/dlami/nvme/runs/N001",
+  "init_from": "/opt/dlami/nvme/models/FTH3_ep5.pt",
+  "library_root": "/opt/allotrope/data/family_library",
+  "holdout_class": null,
+  "model": {
+    "hidden": 256,
+    "embed": 128
+  },
+  "sources": [
+    {
+      "name": "enmap",
+      "train_dir": "/opt/dlami/nvme/ft/enmap/train",
+      "test_dir": "/opt/dlami/nvme/ft/enmap/test",
+      "band_list_path": "/opt/dlami/nvme/ft/band_lists/enmap_224.json"
+    },
+    {
+      "name": "prisma",
+      "train_dir": "/opt/dlami/nvme/ft/prisma/train",
+      "test_dir": "/opt/dlami/nvme/ft/prisma/test"
+    },
+    {
+      "name": "aviris_ng",
+      "train_dir": "/opt/dlami/nvme/ft/aviris_ng/train",
+      "test_dir": "/opt/dlami/nvme/ft/aviris_ng/test",
+      "band_list_path": "/opt/dlami/nvme/ft/band_lists/aviris_ng_372.json"
+    }
+  ],
+  "tiles_per_batch": 16,
+  "pixels_per_tile": 512,
+  "loader_workers": 4,
+  "kinds": [
+    0.5,
+    0.25,
+    0.25
+  ],
+  "a_min": 0.05,
+  "gain": 0.1,
+  "fill_weight": 0.5,
+  "lr": 0.0003,
+  "stem_lr_scale": 0.3,
+  "weight_decay": 0.01,
+  "warmup_steps": 500,
+  "epochs": 40,
+  "steps_per_epoch": 500,
+  "eval_fills": [
+    0.1,
+    0.25,
+    0.5,
+    1.0
+  ],
+  "eval_batches": 40,
+  "ace_baseline_dir": "/opt/allotrope/research/experiments/spectral-namer"
+}

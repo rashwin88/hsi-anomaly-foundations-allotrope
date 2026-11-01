@@ -1,0 +1,507 @@
+\chapter{The problem: finding what does not belong}\label{ch:problem}
+
+\begin{onething}
+We never teach the computer what an anomaly looks like. We teach it what \emph{normal} looks like
+in a scene, give every pixel a number that says how badly it fits that normal, and hand the
+highest-scoring pixels to a person.
+\end{onething}
+
+This chapter has no heavy mathematics. Its job is to fix the question that the rest of the book
+answers, to show with arithmetic why the obvious answer fails, and to set up the notation that
+every later chapter uses. Read it slowly anyway: almost every design decision in the forty
+chapters that follow is a consequence of the three facts in \cref{sec:problem:classifier}.
+
+\section{The situation}\label{sec:problem:situation}
+
+A satellite flies over a patch of ground and records an image. Somebody at a mining ministry, an
+environmental agency or an insurance company wants to know one thing:
+\emph{is there anything unusual down there?}
+
+Unusual might mean an illegal mine, a leaking pipeline, a chemical dumped in a field, an
+unusually hot piece of machinery, a vehicle parked where no vehicle should be, or a mineral
+outcrop that could be worth money. The software this book describes is called
+\textbf{Allotrope}\index{Allotrope}. It is a web application: a user uploads a satellite file,
+runs a chain of processing steps on it, picks a cut-off on a map of scores, and downloads a
+bundle naming the most unusual places with their coordinates. \Cref{ch:product} describes the
+product; this chapter is about the question it answers.
+
+Before any mathematics, three words.
+
+\begin{definition}[Pixel]\index{pixel}
+A \textbf{pixel} is one cell of the grid an image is made of. In a satellite image a pixel
+stands for a patch of ground; for the sensors in this book that patch is about 30 metres on a
+side (\cref{ch:light}). We name a pixel by its row $i$ and column $j$, both counted from $0$.
+\end{definition}
+
+\begin{definition}[Scene]\index{scene}
+A \textbf{scene} is one complete satellite acquisition: one patch of the Earth, at one moment,
+as one file (or folder of files).
+\end{definition}
+
+\begin{definition}[Anomaly]\index{anomaly}
+An \textbf{anomaly} is a pixel (or a small group of pixels) that is unlike the rest of its
+scene. The word says nothing about \emph{what} the pixel is. In this codebase ``anomaly'',
+``outlier'' and ``novelty'' are used interchangeably; the code says ``anomaly'' throughout.
+\end{definition}
+
+\section{Why a classifier will not work}\label{sec:problem:classifier}
+
+If you have met machine learning before, your instinct is a \textbf{classifier}%
+\index{classifier}: a program that takes a pixel and answers with one of a fixed list of
+labels. You would collect thousands of pictures of illegal mines, label them ``illegal mine'',
+\emph{train} the classifier on them (adjust its internal numbers until its answers on the
+labelled examples are right), and run it on new imagery.
+
+That approach is standard, and here it fails for three separate reasons. Each one alone would
+sink it, and each closes a different escape route, so it is worth keeping all three.
+
+\subsection{Reason 1: there are no labels}
+
+A \textbf{label}\index{label} is the correct answer attached to a training example. To label a
+satellite pixel ``illegal mine'' somebody has to know what is on the ground under it, which in
+practice means somebody visited the spot. Nobody has done that for thousands of anomalies across
+every terrain and season. The number of labelled anomalies available is, for practical purposes,
+zero. A classifier with no labelled examples has nothing to learn from.
+
+\subsection{Reason 2: you do not know what you are looking for}
+
+A classifier can only answer with labels it was given in advance. Train it on ``illegal mine''
+and ``oil spill'' and it will find illegal mines and oil spills. The valuable find is usually
+the one nobody anticipated: a chemical nobody had seen before, a structure nobody expected. A
+classifier is blind to unnamed classes \emph{by construction}, and the unnamed classes are the
+point of surveying.
+
+\subsection{Reason 3: the interesting thing is vanishingly rare}
+
+Anomalies are a tiny fraction of the pixels. That rarity breaks the ordinary way of measuring
+whether a classifier works.
+
+\begin{definition}[Accuracy]\index{accuracy}
+The \textbf{accuracy} of a yes/no rule over $N$ pixels is the fraction of pixels it answers
+correctly:
+\begin{equation}\label{eq:problem:accuracy}
+\text{accuracy} = \frac{\text{number of correct answers}}{N}.
+\end{equation}
+\end{definition}
+
+\begin{worked}[label={we:problem:accuracy}]{The ``always normal'' rule}
+A scene has $N = 20{,}000{,}000$ pixels, of which $40$ are anomalous. Consider the rule that
+ignores its input and answers ``normal'' for every pixel. Work out its accuracy on paper before
+reading on.
+
+The rule is right on every normal pixel and wrong on every anomalous one. Count the normal
+pixels:
+\begin{align*}
+\text{normal pixels} &= 20{,}000{,}000 - 40\\
+                     &= 19{,}999{,}960.
+\end{align*}
+Every one of those is a correct answer, so put that count into \cref{eq:problem:accuracy}:
+\begin{align*}
+\text{accuracy} &= \frac{19{,}999{,}960}{20{,}000{,}000}\\
+                &= 0.999998\\
+                &= 99.9998\%.
+\end{align*}
+The rule finds nothing and scores $99.9998\%$. The fraction of anomalous pixels, often called
+the \textbf{base rate}\index{base rate}, is
+\begin{align*}
+\frac{40}{20{,}000{,}000} &= \frac{4}{2{,}000{,}000}\\
+                          &= 0.000002 = 2\times 10^{-6}.
+\end{align*}
+Whenever the base rate is this small, accuracy is close to $1$ for every rule that says
+``normal'' almost all the time, useful or not.
+\end{worked}
+
+A classifier trained on such data learns the same lesson as the ``always normal'' rule, because
+that rule is nearly always right. Accuracy is therefore useless here; \cref{ch:measures} builds
+the measures used instead.
+
+\begin{keypoint}
+No labels, an open-ended target and extreme rarity together rule out supervised
+classification; any one of them alone would be enough.
+\end{keypoint}
+
+\section{The reframe: model normality, score the residue}\label{sec:problem:reframe}
+
+Stop asking ``is this pixel a mine?'', which needs labels. Ask instead:
+\begin{center}
+\emph{Given everything else in this scene, how surprising is this pixel?}
+\end{center}
+That question needs no labels at all. It needs only a description of what normal looks like
+here, and every scene carries its own definition of normal in its own pixels. It also catches
+things nobody anticipated, because ``unlike everything else here'' does not require knowing what
+the thing is. The sentence to remember from this chapter is:
+
+\begin{center}
+\textbf{We never model anomalies. We model normality, and call the residue anomaly.}
+\end{center}
+
+Everything in the rest of this book is machinery for two jobs: building a model of normality,
+and measuring the residue.
+
+\begin{definition}[Anomaly score and score map]\index{anomaly score}\index{score map}
+An \textbf{anomaly score} is a function $s$ that gives each pixel $(i,j)$ of a scene a number
+$s(i,j) \ge 0$, where larger means ``fits the model of normal worse''. Laid out on the pixel
+grid, the scores form a \textbf{score map}: one number per pixel, the same height and width as
+the image.
+\end{definition}
+
+The score map is the product's central output. It is not a yes/no answer and it is not a list of
+objects. A person looks at it, chooses a cut-off, and decides what the highest-scoring pixels
+are. The system's output is \textbf{a shortlist for an analyst, not a verdict}.
+
+\begin{analogy}
+A proofreader working in a language they know well has no list of the typos in this book. What
+they have is a deep sense of what correct words look like. At ``the cat sat on the mta'' their
+eye snags: they did not recognise a known error, they \emph{failed to recognise a normal word}.
+That snag is the anomaly score. The proofreader can tell you \emph{where} something is off without
+being able to say what the author meant, and in the same way the system can say \emph{where}
+without saying \emph{what}. You give up naming the thing in exchange for not needing to be told
+what to look for. The analogy stops working at one point: a proofreader corrects the typo, while
+the system never proposes what the pixel ``should'' have been as a finding, only how far it is
+from what it expected.
+\end{analogy}
+
+\section{Two ways to model normality}\label{sec:problem:families}
+
+This codebase has exactly two families of method. Both ship in the product, and a user can run
+both on the same scene and compare.
+
+\subsection{Family 1: classical detectors, fitted to each scene}
+
+A \textbf{classical detector}\index{classical detector} computes statistics of the scene in
+front of it: the average pixel, and how much pixels typically vary. It then measures how far each
+pixel is from that average, in units of the typical variation. Nothing is trained in advance and
+nothing is stored between scenes; the statistics are computed fresh from each scene's own pixels.
+
+The simplest version of this idea uses one number per pixel, which is what a thermal sensor
+gives (\cref{ch:light}). Write $x$ for a pixel's value, $\mu$ (``mu'') for the average over the
+scene, and $\sigma$ (``sigma'') for the typical spread. The distance from the average in units of
+spread is
+\begin{equation}\label{eq:problem:z}
+z = \frac{x - \mu}{\sigma},
+\end{equation}
+and a score can be its size, $s = \abs{z}$. Read \cref{eq:problem:z} in words: subtract the
+average to get ``how far above or below average'', then divide by the spread to measure that
+distance in standard units.
+
+\begin{definition}[Mean and standard deviation]\index{mean}\index{standard deviation}
+For $n$ numbers $x_1, \dots, x_n$, the \textbf{mean} and the \textbf{standard deviation} are
+\[ \mu = \frac{1}{n}\sum_{k=1}^{n} x_k, \qquad \sigma = \sqrt{\frac{1}{n}\sum_{k=1}^{n} (x_k - \mu)^2}. \]
+For the mean, add the numbers up and divide by how many there are. For the standard deviation,
+take each number's distance from the mean, square it so negatives do not cancel positives, average the squares, and take the square
+root to return to the original units.
+\end{definition}
+
+\begin{worked}[label={we:problem:zscore}]{A one-band scene with one hot pixel}
+A tiny thermal scene has five pixels with surface temperatures, in degrees Celsius,
+\[ 20,\ 21,\ 19,\ 20,\ 30. \]
+Do each line on paper. First the mean:
+\begin{align*}
+\text{sum} &= 20 + 21 + 19 + 20 + 30 = 110,\\
+\mu &= 110 / 5 = 22.
+\end{align*}
+Next each difference from the mean, and its square:
+\begin{align*}
+20 - 22 &= -2, & (-2)^2 &= 4,\\
+21 - 22 &= -1, & (-1)^2 &= 1,\\
+19 - 22 &= -3, & (-3)^2 &= 9,\\
+20 - 22 &= -2, & (-2)^2 &= 4,\\
+30 - 22 &= 8,  & 8^2 &= 64.
+\end{align*}
+Average the squares, then take the square root:
+\begin{align*}
+\text{sum of squares} &= 4 + 1 + 9 + 4 + 64 = 82,\\
+\sigma^2 &= 82/5 = 16.4,\\
+\sigma &= \sqrt{16.4} \approx 4.050.
+\end{align*}
+Now the score of each pixel, $s = \abs{x-\mu}/\sigma$:
+\begin{align*}
+s(20) &= 2/4.050 \approx 0.49, & s(21) &= 1/4.050 \approx 0.25, & s(19) &= 3/4.050 \approx 0.74,\\
+s(30) &= 8/4.050 \approx 1.98.
+\end{align*}
+The hot pixel scores about four times higher than any other. Notice also that the hot pixel
+pulled the mean up from $20$ to $22$ and inflated the spread; a detector that computes its
+statistics from the very pixels it scores lets an anomaly partly hide itself. \Cref{ch:rx} and
+\cref{ch:localrx} return to this.
+\end{worked}
+
+The classical method in this book is called \textbf{RX}\index{RX detector}
+\citep{reed1990adaptive}. It is \cref{eq:problem:z} for many numbers per pixel at once, using a
+distance (the Mahalanobis distance, \cref{ch:rx}) that accounts for the fact that some directions
+in the data vary more than others. The version shipped for hyperspectral data is
+\textbf{MNF-RX}\index{MNF-RX}, which first transforms the data into a smaller, better-behaved
+space \citep{green1988transformation}.
+
+\begin{drift}
+\emph{History, dated 2026-05-11.} Plain RX on the 165-band hyperspectral data was deliberately
+dropped on that date: with that many bands the covariance matrix it inverts is nearly singular
+and the distances blew up to around $10^{11}$. MNF-RX replaced it. Do not reintroduce plain RX on
+hyperspectral data; it has been tried. (Source: the project instructions \file{CLAUDE.md} and the
+Indradhanu course, part 1.) \Cref{ch:rx,ch:localrx} explain why the inversion fails.
+\end{drift}
+
+\subsection{Family 2: foundation models, trained once to redraw imagery}
+
+The second family uses a \textbf{neural network}\index{neural network}: a function built from
+many simple layers whose behaviour is set by a large list of adjustable numbers called
+\textbf{parameters}\index{parameter} (\cref{ch:shapes} defines layers precisely). The network is
+\textbf{trained}, once and offline, on tens of thousands of ordinary satellite images, to do a
+task that needs no labels: hide part of an image and redraw the hidden part from its
+surroundings. Training produces a file of learned parameters (``weights''); running the model on
+a new scene loads that file.
+
+In this repository such a network is called a \textbf{foundation model}\index{foundation model}.
+Careful with that phrase: in the wider industry it usually means an enormous language model with
+hundreds of billions of parameters. Here it means something much smaller and more specific, a
+network trained to reconstruct imagery whose reconstruction error is used as the anomaly score.
+The hyperspectral model in this book, \textbf{Indradhanu}\index{Indradhanu} (Sanskrit for
+``rainbow''), had $5{,}507{,}354$\tagM{indradhanu workings/05-where-it-lives.md} parameters in the
+version the courses describe; \cref{ch:params} counts them by hand. Its thermal sibling is
+\textbf{Chakshu}\index{Chakshu} (``the eye'').
+
+The rule that turns a reconstruction into a score is ``reconstruct, then subtract''
+(\cref{fig:problem:pipeline}). Where the model redraws the scene well, the difference between
+what was observed and what was redrawn is small. Where the model, trained only on ordinary
+ground, meets something it has never seen, it paints ordinary background there instead, and the
+difference is large.
+
+\coursefig[\linewidth]{iw-01-pipeline}{Reconstruct, then subtract. Blocks of the observed cube
+are hidden and the model, trained only on ordinary scenes, redraws them from their surroundings.
+Subtracting the reconstruction from the observation, band by band, gives a per-pixel error map;
+where the redrawing is most wrong (amber) is where something unusual is. The amber square stands
+for an object the model has never seen. (Course figure, Indradhanu part 1.)}{fig:problem:pipeline}
+
+\begin{worked}[label={we:problem:residual}]{A reconstruction residual on three numbers}
+A pixel is described by three numbers (three ``bands'', \cref{ch:light}): observed
+$\vect{x} = (0.10,\ 0.20,\ 0.30)$. The model's redrawing of it is
+$\xhat = (0.11,\ 0.18,\ 0.30)$. These values are illustrative\tagA. One simple score is the mean
+absolute difference over the three numbers. Do each step.
+
+Subtract band by band:
+\begin{align*}
+0.10 - 0.11 &= -0.01,\\
+0.20 - 0.18 &= 0.02,\\
+0.30 - 0.30 &= 0.00.
+\end{align*}
+Take absolute values (drop the signs, because over- and under-shooting are equally bad):
+\[ 0.01,\quad 0.02,\quad 0.00. \]
+Add them and divide by $3$:
+\begin{align*}
+0.01 + 0.02 + 0.00 &= 0.03,\\
+s &= 0.03/3 = 0.01.
+\end{align*}
+If a second pixel had the same observation but the model redrew it as $(0.10,\ 0.10,\ 0.10)$,
+the differences would be $0.00$, $0.10$, $0.20$, their sum $0.30$, and the score
+$0.30/3 = 0.10$: ten times larger. That pixel is the one the model could not explain.
+\Cref{ch:recon} explains why a pixel must never be allowed to help reconstruct itself, and
+\cref{ch:losses,ch:residualmaha} replace this simple average with better scores.
+\end{worked}
+
+\begin{table}[htbp]\centering
+\caption{The two families of anomaly model in this codebase.}\label{tab:problem:families}
+\begin{tabular}{@{}lll@{}}\toprule
+ & Classical detectors & Foundation models\\\midrule
+Model of normal & scene mean and spread & a trained network \\
+Trained? & no, fitted per scene & yes, once, offline \\
+Stored file of weights & none & a checkpoint (\texttt{.pt}) \\
+Score & distance from the mean & reconstruction error \\
+Examples here & MNF-RX & Indradhanu, Chakshu \\\bottomrule
+\end{tabular}
+\end{table}
+
+\section{From a score map to a shortlist: thresholds are percentiles}\label{sec:problem:threshold}
+
+A score map ranks pixels; someone still has to decide where to cut. The obvious rule is an
+absolute one: ``flag every pixel scoring above $0.05$''. It fails, and the reason is worth seeing
+with numbers.
+
+\begin{worked}[label={we:problem:fixedcut}]{Why a fixed cut-off fails}
+Two scenes are scored by the same model. The numbers are illustrative\tagA, of the size the
+Indradhanu course quotes.
+\begin{itemize}
+\item Scene A, a calm desert: typical score $0.002$, highest score $0.04$.
+\item Scene B, a hazy coastal city: typical score $0.08$.
+\end{itemize}
+Apply the rule ``flag if $s > 0.05$''. In scene A the highest score is $0.04$ and $0.04 < 0.05$,
+so nothing is flagged, including the real anomaly. In scene B the typical pixel already scores
+$0.08 > 0.05$, so most of the image is flagged. The typical score differs between the scenes by a
+factor of
+\[ 0.08 / 0.002 = 40, \]
+so no single number can serve both.
+\end{worked}
+
+The cure is to make the cut relative to the scene in front of you.
+
+\begin{definition}[Percentile threshold]\index{percentile}\index{threshold}
+Sort a scene's $N$ valid scores from largest to smallest. The \textbf{top-$q$ threshold}, for a
+fraction $q$ such as $0.001$ (``the top $0.1\%$''), keeps the $k$ highest-scoring pixels, where
+$k$ is $qN$ rounded to a whole number. Equivalently, the cut-off value is the
+$(1-q)$ \textbf{percentile} of the scores: the value below which a fraction $1-q$ of them lie.
+\end{definition}
+
+\begin{worked}[label={we:problem:percentile}]{A top-20\% cut on ten scores}
+Ten pixels have scores
+\[ 0.3,\ 0.1,\ 0.9,\ 0.2,\ 0.4,\ 0.2,\ 0.7,\ 0.1,\ 0.3,\ 0.2. \]
+Keep the top $q = 0.2$. Do it on paper.
+
+How many pixels to keep:
+\[ k = q N = 0.2 \times 10 = 2. \]
+Sort the scores from largest to smallest:
+\[ 0.9,\ 0.7,\ 0.4,\ 0.3,\ 0.3,\ 0.2,\ 0.2,\ 0.2,\ 0.1,\ 0.1. \]
+Keep the first two: the pixels scoring $0.9$ and $0.7$. Any cut-off strictly between $0.4$ and
+$0.7$ gives the same set. If every score in the scene were multiplied by $10$, the sorted order
+would not change and the same two pixels would be kept; that indifference to the overall scale is
+exactly what a fixed cut-off lacked.
+
+For a real scene of $1{,}210 \times 1{,}219$ pixels, all valid, the top $0.1\%$ is
+\begin{align*}
+N &= 1{,}210 \times 1{,}219 = 1{,}474{,}990,\\
+k &= 0.001 \times 1{,}474{,}990 = 1{,}474.99 \approx 1{,}475 \text{ pixels.}
+\end{align*}
+\end{worked}
+
+In the product a person makes this choice by dragging a slider over the score map, in a separate
+step that deliberately pauses for them (\cref{ch:product}). Separating ``score'' from ``cut'' also
+means one expensive scoring run can be tried at five different thresholds.
+
+\begin{keypoint}
+Thresholds in this system are relative to the scene (percentiles), never absolute numbers.
+\end{keypoint}
+
+\section{Why satellites make this harder}\label{sec:problem:satellites}
+
+Two complications follow you through the whole book.
+
+\subsection{Scale}
+
+{\sloppy A single scene from the PRISMA satellite (\cref{ch:sensors}) is about $1{,}210$ by $1{,}219$
+pixels with $239$ measurements per pixel. Both figures are quoted in module docstrings, the
+first in the PRISMA reflectance transformer in \file{app/utils/data_transformations/}
+\allowbreak\tagM{prs_l2d_dn_to_surface_reflectance_transformer.py} and the second in the PRISMA
+dataset builder in \file{app/utils/dataset_builder/} \allowbreak\tagM{prisma_dataset_builder.py}.
+Count the numbers:\par}
+\begin{align*}
+1{,}210 \times 1{,}219 &= 1{,}474{,}990 \text{ pixels},\\
+1{,}474{,}990 \times 239 &= 352{,}522{,}610 \text{ numbers}.
+\end{align*}
+Stored as 4-byte floating-point values that is
+\[ 352{,}522{,}610 \times 4 = 1{,}410{,}090{,}440 \text{ bytes} \approx 1.41\ \text{GB} \]
+for one copy of one scene, which is why the code worries about how many copies exist at once.
+
+\subsection{Not every pixel is real}
+
+Sensors have dead detectors. Clouds block the ground. A satellite sweeps a strip, so a
+rectangular file has ragged, empty edges where the strip did not reach. A large fraction of any
+scene is data you must actively ignore.
+
+\begin{definition}[Validity mask]\index{validity mask}
+A \textbf{validity mask} is a companion array of the same grid as the image holding $1$ where
+the pixel is a genuine measurement and $0$ where it is not.
+\end{definition}
+
+Forgetting the mask is the single most common source of false detections in this codebase.
+Invalid pixels typically hold $0$ or a special ``fill'' value, and a detector looking for unusual
+values finds a large block of identical extreme values and ranks it top.
+
+\begin{worked}[label={we:problem:unmasked}]{An unmasked zero becomes the top anomaly}
+Take the five temperatures of \cref{we:problem:zscore} and add a sixth pixel that is off the
+edge of the swath, stored as $0$. If the detector forgets the mask, the scene is
+\[ 20,\ 21,\ 19,\ 20,\ 30,\ 0. \]
+Mean:
+\begin{align*}
+\text{sum} &= 20 + 21 + 19 + 20 + 30 + 0 = 110,\\
+\mu &= 110/6 \approx 18.33.
+\end{align*}
+Squared differences from $18.33$:
+\begin{align*}
+(20 - 18.33)^2 &= 1.67^2 \approx 2.79,\\
+(21 - 18.33)^2 &= 2.67^2 \approx 7.13,\\
+(19 - 18.33)^2 &= 0.67^2 \approx 0.45,\\
+(20 - 18.33)^2 &= 1.67^2 \approx 2.79,\\
+(30 - 18.33)^2 &= 11.67^2 \approx 136.19,\\
+(0 - 18.33)^2 &= (-18.33)^2 \approx 335.99.
+\end{align*}
+Sum, average, root:
+\begin{align*}
+2.79 + 7.13 + 0.45 + 2.79 + 136.19 + 335.99 &= 485.34,\\
+\sigma^2 &= 485.34/6 \approx 80.89,\\
+\sigma &\approx 8.99.
+\end{align*}
+Scores of the two extreme pixels:
+\begin{align*}
+s(30) &= 11.67/8.99 \approx 1.30,\\
+s(0) &= 18.33/8.99 \approx 2.04.
+\end{align*}
+The fake zero now outranks the genuinely hot pixel, and its presence has halved the hot pixel's
+score (from $1.98$ to $1.30$). With the mask applied, the zero is excluded from both the
+statistics and the ranking, and \cref{we:problem:zscore} is recovered.
+\end{worked}
+
+The validity mask appears in \cref{ch:light} as a ``validity cube'', becomes binary per pixel in
+\cref{ch:bandpipeline}, and decides which tokens a network may see in \cref{ch:masking}.
+
+\section{Notation for the rest of the book}\label{sec:problem:notation}
+
+The symbols below are fixed from here on. Later chapters add to the list but do not change it.
+
+\begin{table}[htbp]\centering
+\caption{Notation used throughout the book.}\label{tab:problem:notation}
+\begin{tabular}{@{}lp{0.68\linewidth}@{}}\toprule
+Symbol & Meaning \\\midrule
+$C$, $H$, $W$ & number of bands, rows (height) and columns (width) of an image\\
+$c$ & a band index, $0 \le c \le C-1$\\
+$(i,j)$ & a pixel at row $i$, column $j$, both counted from $0$\\
+$\mat{X}$ & a whole image (``cube''), an array of shape \shape{(C, H, W)}\\
+$x_c(i,j)$ & the value of band $c$ at pixel $(i,j)$\\
+$\vect{x}$, $\vect{x}_{ij}$ & one pixel's $C$ values as a column vector (its spectrum, \cref{ch:light})\\
+$\xhat$ & a model's reconstruction of $\vect{x}$\\
+$v(i,j)$ & validity: $1$ for a real measurement, $0$ otherwise\\
+$s(i,j)$ & anomaly score of pixel $(i,j)$, larger means more unusual\\
+$\mu$, $\sigma$ & a mean and a standard deviation; $\muv$, $\Cov$ their many-band versions\\
+$\lambda$ & wavelength, in nanometres (\cref{ch:light})\\\bottomrule
+\end{tabular}
+\end{table}
+
+Indices start at $0$, as they do in Python, because the book quotes Python code constantly. A
+cube with $C = 165$ bands has bands $0$ to $164$.
+
+\begin{confusions}
+\confusion{So the model is trained to detect anomalies?}{No. A foundation model is trained to
+redraw ordinary imagery; it has no concept of an anomaly. Detection happens afterwards, by
+subtracting. A classical detector is not trained at all.}
+\confusion{Does it need examples of anomalies to work?}{No, and that is the point. Neither family
+is ever shown an anomaly on purpose. Labelled anomalies are used only to \emph{measure} a
+detector afterwards (\cref{ch:measures}), never to build one.}
+\confusion{Is a high score a guarantee of something interesting?}{No. A high score means ``the
+model could not explain this''. Sensor glitches, cloud edges and unusual-but-boring terrain also
+score high. Turning a high score into a finding is the job of later steps and of a person.}
+\confusion{Anomaly detection is outlier detection, then?}{Related, but where the comparison is made
+matters. A pixel can hold a perfectly ordinary temperature for the scene as a whole and still be
+anomalous because everything right around it is 20 degrees colder. Several detectors score a pixel
+against its neighbours rather than the whole scene (\cref{ch:localrx}).}
+\confusion{Why not pick one good absolute threshold by experiment?}{Because score magnitudes
+change with the scene by an order of magnitude or more (\cref{we:problem:fixedcut}). A cut that
+works on one scene flags nothing or everything on another. Percentiles do not care about the
+overall scale.}
+\confusion{Does ``foundation model'' here mean a large language model?}{No. Here it means a small
+network (a few million parameters) trained to reconstruct imagery, whose reconstruction error is
+the score.}
+\end{confusions}
+
+\begin{checkyourself}
+\item\label{ex:problem:1} Give the three reasons a supervised classifier is the wrong tool here,
+one sentence each, and say which escape route each one closes.
+\item\label{ex:problem:2} A scene has $1{,}000{,}000$ pixels and $10$ are anomalous. Compute, step
+by step, the accuracy of the rule ``always answer normal'' and the base rate.
+\item\label{ex:problem:3} A one-band scene has the four values $10$, $12$, $14$, $20$. Compute the
+mean, the standard deviation (dividing by $n$), and the score $\abs{x-\mu}/\sigma$ of the pixel
+reading $20$. Show every line.
+\item\label{ex:problem:4} A scene has $2{,}000{,}000$ valid pixels. How many pixels does a top
+$0.05\%$ cut keep? If every score is doubled, does the kept set change? Why?
+\item\label{ex:problem:5} A three-band pixel is observed as
+$(0.05,\ 0.25,\ 0.40)$; the model reconstructs it as $(0.07,\ 0.22,\ 0.40)$. Compute the mean absolute difference. Then explain in two
+sentences why a pixel stored as $0$ because it lies off the swath must be masked out before any
+such score is ranked.
+\end{checkyourself}
+
+\nextchapter{ch:light}

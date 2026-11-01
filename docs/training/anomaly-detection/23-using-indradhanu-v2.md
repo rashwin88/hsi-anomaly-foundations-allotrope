@@ -1,11 +1,30 @@
 # Part 23 - Using Indradhanu V2 in an action chain
 
-> **The one thing this part teaches:** to score a scene with Indradhanu V2 you change two settings -
-> the band filter keeps the sensor's native bands (`use_common_wavelength_grid: false`) and the scoring
-> action picks "Indradhanu V2" - and in return you get a score map with cloud already set to 0, plus
-> the cloud mask and class map it used; get the band filter wrong and the action fails with an error
-> that names the setting, and that is also why one scoring action cannot run V2 and the old Indradhanu
-> together.
+> **The one thing this part teaches:** Indradhanu V2 reads the sensor's native bands, so its band
+> filter must keep them (`use_common_wavelength_grid: false` - the default since 2026-10-31) and the
+> scoring action must pick "Indradhanu V2"; in return you get a score map with cloud already set to 0,
+> plus the cloud mask and class map it used. Give V2 a 165-band filter and the action fails with an
+> error that names the setting. (Until 2026-10-31 the band filter had to be changed by hand, and one
+> scoring action could not run V2 and the old Indradhanu together; both limits are gone - see the second
+> update note.)
+
+> **Update 2026-10-31.** Since 2026-10-29 the codename Indradhanu V2 serves Indradhanu Heavy (FTH3 epoch 5,
+> `v2.1.0`), with FT04 (`v2.0.0`) kept as the manifest's first alternative. Two things in this part changed:
+> "cloud" now means **thick cloud only** (resolver `thin_cloud_is_cloud=False`; `stats.json` records
+> `cloud_rule: "thick"`), because Heavy's thin-cloud output fires on haze; and the CPU cost is measured -
+> one PRISMA scene takes 454 s with Heavy on the worker's 16 threads (1819 s on the old 2 threads). The
+> chain settings below are unchanged. The Indradhanu course, part 70, teaches all of it.
+
+> **Update 2026-10-31 (evening): native bands are the default.** Every hyperspectral band-filter
+> default in `band_filter_apply.py` now says `"use_common_wavelength_grid": False` ("native bands
+> (2026-10-31): V2 reads them; 165-grid models resample at scoring"), because no UI control could set
+> it and the AIGC submission needed V2 from the UI (`docs/proposals/aigc-evaluation-submission.md`,
+> C3). And `anomaly_scoring` now resamples a native cube to the 165-band grid for the old Indradhanu
+> (`_to_common_grid` in `_anomaly_scoring_run.py`, "the same resampler band_filter_apply uses"). So:
+> change 1 below is now the default, the "needs the 165-band grid" error is gone, and one action *can*
+> run both Indradhanus on a native band filter. Steps 1-4 are updated in place; part 28 has the
+> details, including a trap - the pydantic field default is still `True`, so an API call that omits
+> the field still gets the 165 grid.
 
 ## Where we are
 
@@ -42,7 +61,8 @@ V2 is opt-in. Nothing you already run changes:
 
 - Every hyperspectral default in `anomaly_scoring.py` (`_DEFAULT_PRISMA`, `_DEFAULT_ENMAP`,
   `_DEFAULT_AVIRIS_NG`) still says `"model_codenames": ["Indradhanu"]` - the shipped v0.2.0.
-- Every band-filter default still says `"use_common_wavelength_grid": True`.
+- ~~Every band-filter default still says `"use_common_wavelength_grid": True`.~~ Since 2026-10-31
+  every hyperspectral band-filter default says `False` (native bands); see the update note.
 
 What V2 brings, from `docs/04-models.md` and `final design/ROADMAP.md` (OB-14):
 
@@ -64,7 +84,7 @@ bands and better reconstruction in one model, not a detection win.
 Scene ──► Project
             │
             ▼
-   band_filter_apply           use_common_wavelength_grid: false     <- change 1
+   band_filter_apply           use_common_wavelength_grid: false     <- change 1 (the default since 2026-10-31)
             │                  (everything else: the sensor's defaults)
             ▼
    anomaly_scoring             model_codenames: ["Indradhanu V2"]    <- change 2
@@ -89,18 +109,21 @@ it loads "the **native onboarding vendable** (NOT band_filter_apply's ...)".
 
 ## Step 3 - the error you get otherwise
 
-Forget change 1 and keep the default band filter. The action is accepted (the api cannot see the upstream
-band filter's settings when you submit), the worker starts, and before it loads the model it runs
-`_check_band_grid`. The action fails with:
+Give V2 a band filter that resampled to the 165-band grid - before 2026-10-31 that was the default; now
+you get it by setting `use_common_wavelength_grid: true`, or through an API call that leaves the field
+out. The action is accepted (the api cannot see the upstream band filter's settings when you submit),
+the worker starts, and before it loads the model it runs `_check_band_grid`. The action fails with:
 
 ```
 model 'Indradhanu V2' reads native bands: run band_filter_apply with use_common_wavelength_grid=false
 (this one resampled to the 165-band grid)
 ```
 
-The reverse mistake - picking the old "Indradhanu" on a native band filter - fails the same way with
-"needs the 165-band grid: run band_filter_apply with use_common_wavelength_grid=true (this one kept
-native bands)". Before 2026-10-19 nothing checked this at all.
+The reverse - the old "Indradhanu" on a native band filter - used to fail the same way with "needs the
+165-band grid: run band_filter_apply with use_common_wavelength_grid=true (this one kept native bands)".
+**Since 2026-10-31 it runs:** that check was removed and a comment now says common165 on native bands
+"is not an error"; the worker resamples the cube to the grid for that model only (`_to_common_grid`).
+Before 2026-10-19 nothing checked any of this at all.
 
 How does the worker know which grid it was given? It compares the vendable's wavelengths with the grid:
 
@@ -112,11 +135,15 @@ So it is not a band count. A native list that happened to have exactly 165 bands
 460, 470, ... 2450 nm and would count as native. Classical detectors (MNF-RX, part 8) skip the check and
 run on either grid; so do thermal scenes.
 
-## Step 4 - why one action cannot run both
+## Step 4 - running both (changed 2026-10-31)
 
 `anomaly_scoring` takes one upstream band filter (`input_band_filter_output_id`), and every model in
-`model_codenames` reads that one output. V2 needs native, v0.2.0 needs the grid, so whichever does not
-match fails the action. To compare them on one scene, build two branches in the same Project:
+`model_codenames` reads that one output. **Today:** on a native band filter, put both codenames in one
+action - V2 reads the native cube, v0.2.0 gets it resampled to the grid inside scoring. On a 165-grid
+band filter, V2 is refused.
+
+**Before 2026-10-31** V2 needed native and v0.2.0 needed the grid, so whichever did not match failed
+the action, and comparing them took two branches in the same Project:
 
 ```
                        ┌─► band_filter_apply (grid: true)  ─► anomaly_scoring ["Indradhanu"]
@@ -124,9 +151,14 @@ Scene ──► Project ─────┤
                        └─► band_filter_apply (grid: false) ─► anomaly_scoring ["Indradhanu V2"]
 ```
 
-A classical detector can ride along in either branch. One consequence to know: `anomaly_detection_prep`
-reads a single scoring output (`input_anomaly_scoring_output_id`), so today you cannot weight V2 and
-v0.2.0 into one composite score.
+A classical detector can ride along in either branch. One consequence of the old limit: because
+`anomaly_detection_prep` reads a single scoring output (`input_anomaly_scoring_output_id`), you could not
+weight V2 and v0.2.0 into one composite score. With both in one action on a native filter, you can.
+
+Is v0.2.0 on a resampled native cube the same as v0.2.0 on a 165-grid band filter? The resampler is the
+same function (`resample_to_common_grid`); whether every upstream step (exclusions, nearest-valid fill)
+lands identically has not been measured anywhere this course could find. Treat old and new v0.2.0 maps
+as close, not identical, until someone checks.
 
 ## Step 5 - what comes out, and how to read it
 
@@ -180,20 +212,20 @@ The viewer does not show any of this yet: the masks and the three keys are on di
   picks the VNIR bands by wavelength (`app/utils/spectral_indices/scene_indices.py`), so a native-band
   chain gets the right brightness too.
 
-Also unmeasured: how long V2 takes on the stack's CPU worker - more bands than 165, plus a segmentation
-pass.
+Also unmeasured when this part was written: how long V2 takes on the stack's CPU worker - more bands than
+165, plus a segmentation pass. (Measured since: see the update note at the top.)
 
 ## Common confusions
 
 **"Indradhanu V2 is the new default."**
-No. The defaults still pick "Indradhanu" (v0.2.0) on a 165-band filter. Making V2 the default is a later
-phase.
+Half true since 2026-10-31. The *band filter* defaults to V2's native bands; the *scoring codename*
+default is still "Indradhanu" (v0.2.0), though the dialog makes you pick models.
 
 **"The error means the model is broken."**
 It means the band filter is on the wrong grid. The message names the setting to change.
 
 **"I can pick both models in one action and compare them."**
-Not on one band filter. Build two branches (Step 4).
+Since 2026-10-31, yes - on a native band filter. On a 165-grid band filter V2 is refused (Step 4).
 
 **"`mask_cloud.tif` is the same as the keep mask."**
 No. The keep mask comes from `scene_segmentation`'s thresholds and decides which pixels the statistics
@@ -207,33 +239,39 @@ It never used the band filter's output; it reads the native onboarding cube.
 
 ## Check yourself
 
-1. You have a PRISMA Project with a default band filter and an `anomaly_scoring` action with
-   `model_codenames: ["Indradhanu V2", "MNF-RX"]`. What happens, and which single setting fixes it?
+1. You have a PRISMA Project with a band filter created with `use_common_wavelength_grid: true` and an
+   `anomaly_scoring` action with `model_codenames: ["Indradhanu V2", "MNF-RX"]`. What happens, and which
+   single setting fixes it? What happens with today's default band filter?
 2. Where on disk is V2's cloud mask for that action, exactly?
 3. A scene is 800 x 900 pixels; 20,000 are invalid; V2 calls 35,800 valid pixels cloud. Compute
    `excluded_percent` by hand.
-4. A band filter kept PRISMA's native bands and, after exclusions, exactly 165 remain. Does a v0.2.0
-   scoring action accept it? Why?
+4. A band filter kept PRISMA's native bands and, after exclusions, exactly 165 remain. Does the worker
+   treat it as the grid or as native, and what does it then do for v0.2.0?
 5. Why is a vessel on a lake still findable with V2, and what would a cloud-shadowed vessel's score be?
-6. You want V2's and v0.2.0's maps side by side on one scene. Sketch the actions.
+6. You want V2's and v0.2.0's maps side by side on one scene. Sketch the actions today, and as they had
+   to be before 2026-10-31.
 
 <details>
 <summary>Answers</summary>
 
-1. The action fails: V2 reads native bands and the default band filter resampled to the 165-band grid,
-   so `_check_band_grid` raises "reads native bands: run band_filter_apply with
+1. The action fails: V2 reads native bands and this band filter resampled to the 165-band grid, so
+   `_check_band_grid` raises "reads native bands: run band_filter_apply with
    use_common_wavelength_grid=false". Set `use_common_wavelength_grid: false` on the band filter (MNF-RX
-   takes either grid).
+   takes either grid). With today's default band filter (native) both models run.
 2. `models/indradhanu_v2/mask_cloud.tif` under that scoring action's output folder.
 3. `800 x 900 = 720,000` total; `720,000 - 20,000 = 700,000` valid; `100 x 35,800 / 700,000 =
    3,580,000 / 700,000 = 5.114` (5.11428... to three places).
-4. No. The check compares the wavelengths with the grid (`np.allclose`), not only the count; native
-   PRISMA wavelengths are not 460, 470, ... 2450, so it counts as native and v0.2.0 refuses it.
+4. As native. The check compares the wavelengths with the grid (`np.allclose`), not only the count;
+   native PRISMA wavelengths are not 460, 470, ... 2450. Before 2026-10-31 v0.2.0 refused it; now the
+   worker resamples it to the grid for v0.2.0 (`_to_common_grid` makes the same comparison and only
+   resamples when the wavelengths are not already the grid).
 5. Only cloud is zeroed; water is kept (part 21), so a vessel on a lake is scored normally. Shadow is not
    excluded either, so a shadowed vessel is scored normally too - its score is whatever residual
    Mahalanobis gives it, not 0.
-6. Two band filters on the same Scene, one with `use_common_wavelength_grid: true` and one with `false`;
-   an `anomaly_scoring` on each, picking "Indradhanu" and "Indradhanu V2" respectively.
+6. Today: one default (native) band filter and one `anomaly_scoring` with
+   `["Indradhanu", "Indradhanu V2"]`. Before 2026-10-31: two band filters on the same Scene, one with
+   `use_common_wavelength_grid: true` and one with `false`; an `anomaly_scoring` on each, picking
+   "Indradhanu" and "Indradhanu V2" respectively.
 
 </details>
 

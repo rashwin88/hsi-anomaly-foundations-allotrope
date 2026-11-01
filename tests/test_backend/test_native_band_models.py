@@ -9,7 +9,7 @@ import json
 import numpy as np
 import pytest
 
-from allotrope.action_types._anomaly_scoring_run import _check_band_grid
+from allotrope.action_types._anomaly_scoring_run import _check_band_grid, _to_common_grid
 from allotrope.foundation_models.resolver import _from_manifest, _model_config_from_manifest
 from app.models.dataset.vendables import DEFAULT_COMMON_WAVELENGTH_GRID
 
@@ -63,7 +63,17 @@ def test_band_grid_accepts_its_own_grid(band_grid, wavelengths):
     _check_band_grid("m", band_grid, wavelengths)
 
 
-@pytest.mark.parametrize("band_grid,wavelengths", [("native", GRID), ("common165", NATIVE)])
-def test_band_grid_refuses_the_other_grid(band_grid, wavelengths):
+def test_native_model_refuses_the_165_grid():
     with pytest.raises(ValueError, match="use_common_wavelength_grid"):
-        _check_band_grid("m", band_grid, wavelengths)
+        _check_band_grid("m", "native", GRID)
+
+
+def test_165_grid_model_resamples_native_bands():
+    """Band filters default to native bands (2026-10-31): a common165 model must still run on them."""
+    _check_band_grid("m", "common165", NATIVE)
+    cube = np.broadcast_to((NATIVE / 1e4).astype(np.float32)[:, None, None], (230, 2, 3)).copy()
+    out, wl = _to_common_grid(cube, np.ones_like(cube, dtype=np.int8), NATIVE)
+    assert out.shape == (len(GRID), 2, 3) and np.array_equal(wl, GRID)
+    assert np.allclose(out[:, 0, 0], GRID / 1e4, atol=1e-5)          # a linear spectrum stays linear
+    same, wl2 = _to_common_grid(out, np.ones_like(out, dtype=np.int8), GRID)
+    assert same is out and wl2 is GRID

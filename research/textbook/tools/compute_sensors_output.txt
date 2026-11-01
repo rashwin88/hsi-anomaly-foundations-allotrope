@@ -1,0 +1,28 @@
+full ladder: 200 460.0 2450.0
+arange without half step: 199
+window (    0,  450): by formula  0, by source mask  0
+window (  912,  978): by formula  6, by source mask  6
+window ( 1131, 1152): by formula  2, by source mask  2
+window ( 1350, 1450): by formula 11, by source mask 11
+window ( 1800, 1950): by formula 16, by source mask 16
+removed 35  remaining 165  len(DEFAULT_COMMON_WAVELENGTH_GRID) = 165
+segment idx   0.. 45   460.. 910 nm  46 bands
+segment idx  46.. 61   980..1130 nm  16 bands
+segment idx  62.. 80  1160..1340 nm  19 bands
+segment idx  81..114  1460..1790 nm  34 bands
+segment idx 115..164  1960..2450 nm  50 bands
+index 0 -> 460.0 nm
+index 43 -> 890.0 nm
+index 45 -> 910.0 nm
+index 46 -> 980.0 nm
+index 48 -> 1000.0 nm
+index 61 -> 1130.0 nm
+index 62 -> 1160.0 nm
+index 80 -> 1340.0 nm
+index 81 -> 1460.0 nm
+index 114 -> 1790.0 nm
+index 115 -> 1960.0 nm
+index 164 -> 2450.0 nm
+SpectralBandFilter DEFAULT_EXCLUSION_RANGES: [(0, 450), (912, 978), (1131, 1152), (1328, 1492), (1784, 1967)]
+BSQ offset 10  BIL offset 10  BIP offset 8
+PRISMA bytes 1410090440  values 352522610

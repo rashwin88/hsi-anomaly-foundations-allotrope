@@ -1,0 +1,19 @@
+\glossentry{Indradhanu Heavy}{The 33.9 M-parameter re-pretrained Indradhanu (F002-heavy): encoder widths 96, 192, 480, 768, spectral latent 64, progressive decoder; base model since 2026-10-29.}
+\glossentry{Capacity}{How much a model can represent; for fixed depth it grows with width.}
+\glossentry{Width}{The number of channels a layer carries.}
+\glossentry{Width-squared scaling}{Because most weights sit in C x C matrices, multiplying width by k multiplies parameters by about k squared (8.86 for k = 3 at stage 1).}
+\glossentry{Capacity block}{A GPU instance rented for a fixed, pre-booked time window that runs whether or not a job is running.}
+\glossentry{Shard}{A tar file holding many training patches, read sequentially by webdataset.}
+\glossentry{Loader worker}{A separate process that reads and decodes data while the GPU trains; each needs at least one shard.}
+\glossentry{Shard rotation}{Training on a block of shards for a few epochs, then moving to a fresh block (Heavy: 200 shards every 5 epochs).}
+\glossentry{Cosine schedule}{A learning rate that falls along half a cosine wave from its start value to a floor.}
+\glossentry{Overfitting}{Learning the training examples rather than the pattern: training loss falls while validation loss rises.}
+\glossentry{Confounding}{Two possible causes mixed into one comparison, so the result cannot be attributed to either.}
+\glossentry{Control run}{A run identical to the experiment except for the thing under test (FTB1: F001 with Heavy's fine-tuning recipe).}
+\glossentry{Neighbouring checkpoints}{Consecutive epochs' weights; a gain counts only if it holds at all three compared.}
+\glossentry{Plateau}{A stretch of training in which further epochs no longer change the measured result beyond noise.}
+\glossentry{Thin-cloud channel}{The segmentation head's third output; it fires on haze, which made it delete targets under set4's haze.}
+\glossentry{Thick-cloud rule}{Excluding only pixels whose thick-cloud probability exceeds 0.5 (cloud\_rule thick; thin\_cloud=False in the product).}
+\glossentry{Release candidate}{A checkpoint judged ready for product work; for Heavy, FTH3 epoch 5 (pAUC 0.189), shipped as Indradhanu V2 v2.1.0.}
+\glossentry{Product parity}{Checking that the product's code path reproduces the evaluator's scores on the same scenes.}
+\glossentry{Trained-wavelength record}{The buffer trained\_wl: every wavelength a spectral-stem model has trained on, starting as the 202-wavelength pretraining curve and growing during fine-tuning (733 entries in v2.1.0); trained\_band\_mask drops bands more than 15 nm from all of them.}

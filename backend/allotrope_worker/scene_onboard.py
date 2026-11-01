@@ -13,6 +13,8 @@ Flow per job:
            prisma   → first .he5 file
            landsat9 → first .tif file
            enmap    → first directory containing METADATA.XML
+           tanager  → the surface-reflectance .h5, else an ENVI .hdr
+           generic_hsi → the largest GeoTIFF / ENVI .hdr / HDF5-NetCDF file
     3. Filename-derived sensor_scene_id → pre-flight duplicate check
        (UNIQUE(sensor_type, sensor_scene_id) is the real backstop).
     4. Mint scene_id, plan final raw_path = scenes/<scene_id>/raw/.
@@ -48,6 +50,11 @@ from app.utils.dataset_builder.enmap_dataset_builder import EnmapDatasetBuilder
 from app.utils.dataset_builder.hotsat_dataset_builder import HotSatDatasetBuilder
 from app.utils.dataset_builder.landsat_dataset_builder import LandsatDataBuilder
 from app.utils.dataset_builder.prisma_dataset_builder import PrismaDatasetBuilder
+from app.utils.dataset_builder.tanager_dataset_builder import TanagerDatasetBuilder
+from app.utils.dataset_builder.generic_hsi_dataset_builder import GenericHsiDatasetBuilder
+from app.utils.files.generic_hsi_helper import ACCEPTED_SUFFIXES as _GENERIC_HSI_SUFFIXES
+from app.utils.files.generic_hsi_helper import pick_generic_file, read_generic_hsi_metadata
+from app.utils.files.tanager_helper import grid_epsg, pick_tanager_file, read_tanager_metadata
 from app.utils.stac.stac_utils.file_name_parsers import FileNameParser
 
 from allotrope.config import settings
@@ -63,7 +70,12 @@ _SENSOR_FILE_HINTS = {
     "enmap": (".tif", ".tiff", ".xml"),
     "aviris_ng": (".bin", ".hdr"),
     "hotsat1": (".tif", ".tiff", ".json"),
+    "tanager": (".h5", ".he5", ".hdf5", ".hdr"),
+    "generic_hsi": _GENERIC_HSI_SUFFIXES,
 }
+
+# Sensors whose onboarding vendable gets a splib07 cache and the HSI visualizations.
+_HYPERSPECTRAL = ("prisma", "enmap", "aviris_ng", "tanager", "generic_hsi")
 
 # --- Source path resolution ------------------------------------------
 
@@ -100,12 +112,17 @@ def _validate_for_sensor(sensor_type: str, files: list[Path]) -> None:
 # --- Filename-only sensor_scene_id (for the duplicate pre-check) -----
 
 
-def _filename_for_id(sensor_type: str, files: list[Path]) -> str:
+def _filename_for_id(sensor_type: str, files: list[Path], root: Path | None = None) -> str:
     """Pick the file/folder name the StacCreator/builder will identify on.
 
     Used for the pre-flight duplicate check before we move files. The
     DatasetBuilder will compute this same id internally during onboarding;
     we read it from `stac_item.id` afterwards and assert they match.
+
+    `root` is where the relative `files` live. Only Tanager needs it: its
+    file is named ortho_sr.h5, so the id comes from the strip_id attribute
+    (ENVI: the file name or header description), and an ENVI header only
+    counts when its data file exists on disk.
     """
     if sensor_type == "prisma":
         for p in files:
@@ -138,6 +155,14 @@ def _filename_for_id(sensor_type: str, files: list[Path]) -> str:
                     base = name[: -len(suffix)]
                     if base:
                         return base
+    elif sensor_type == "tanager":
+        picked = pick_tanager_file([(root or Path()) / p for p in files])
+        if picked is not None:
+            return read_tanager_metadata(picked).scene_id
+    elif sensor_type == "generic_hsi":
+        picked = pick_generic_file([(root or Path()) / p for p in files])
+        if picked is not None:
+            return read_generic_hsi_metadata(picked, root=root).scene_id
     raise ValueError(
         f"could not derive filename id for sensor_type={sensor_type!r}"
     )
@@ -159,6 +184,10 @@ def _build(sensor_type: str, source_path: Path):
         return AvirisNGDatasetBuilder(file_source_configuration=cfg)
     if sensor_type == "hotsat1":
         return HotSatDatasetBuilder(file_source_configuration=cfg)
+    if sensor_type == "tanager":
+        return TanagerDatasetBuilder(file_source_configuration=cfg)
+    if sensor_type == "generic_hsi":
+        return GenericHsiDatasetBuilder(file_source_configuration=cfg)
     raise ValueError(f"unknown sensor_type {sensor_type!r}")
 
 
@@ -216,6 +245,10 @@ def _cloud_cover_pct(sensor_type: str, builder) -> float | None:
         v = getattr(metadata, "cloud_cover_pct", None)
         return float(v) if v is not None else None
 
+    if sensor_type == "tanager":
+        # Planet's beta cloud mask over data pixels; the file has no scene-level figure.
+        return builder.cloud_cover_pct()
+
     return None
 
 
@@ -246,6 +279,12 @@ def _native_projection(sensor_type: str, builder) -> str | None:
         if proj is not None and proj.epsg:
             return f"EPSG:{int(proj.epsg)}"
         return None
+    if sensor_type == "tanager":
+        # ENVI without a north-up EPSG map info has no grid; export then refuses (GeorefUnavailable).
+        return f"EPSG:{grid_epsg(metadata.grid)}" if metadata.grid is not None else None
+    if sensor_type == "generic_hsi":
+        # None without a CRS with an EPSG code; the pre-flight report says why.
+        return f"EPSG:{metadata.epsg}" if metadata.epsg else None
     # Landsat9 / EnMAP: rasterio has crs on the underlying dataset, but
     # accessing it via the helper is sensor-specific. Skip for v1 — we
     # have bbox in WGS84 which is what the api/UI need.
@@ -279,7 +318,7 @@ def handle_scene_onboard(session: Session, job: Job) -> tuple[str, uuid.UUID]:
 
     # 2. Pre-flight duplicate check on the filename-derived id -----------
     rel_files = [p.relative_to(staging_root) for p in files]
-    candidate_id = _filename_for_id(sensor_type, rel_files)
+    candidate_id = _filename_for_id(sensor_type, rel_files, root=staging_root)
     existing = session.scalars(
         select(Scene.id)
         .where(Scene.sensor_type == sensor_type)
@@ -327,6 +366,10 @@ def handle_scene_onboard(session: Session, job: Job) -> tuple[str, uuid.UUID]:
     band_count = _band_count_from_builder(sensor_type, builder)
     cloud_pct = _cloud_cover_pct(sensor_type, builder)
     native_projection = _native_projection(sensor_type, builder)
+    preflight = getattr(builder, "preflight", None)
+    if preflight is not None:
+        # Returned by the job too, so the Ingest panel shows it without a second request.
+        job.payload = {**payload, "preflight": preflight}
 
     # 6. Vend cube + persist + render visualizations --------------------
     # vend_dataset() runs the full normalisation pipeline (DN→reflectance,
@@ -363,7 +406,7 @@ def handle_scene_onboard(session: Session, job: Job) -> tuple[str, uuid.UUID]:
         # is an optional downstream feature, and the action surfaces a
         # clear error if the cache is missing at submit time.
         splib_diag: dict = {"status": "skipped:non_hyperspectral"}
-        if sensor_type in ("prisma", "enmap", "aviris_ng"):
+        if sensor_type in _HYPERSPECTRAL:
             try:
                 from app.spectral_match import build_cache_for_vendable
                 from allotrope.action_types.spectral_library_match import (
@@ -444,6 +487,8 @@ def handle_scene_onboard(session: Session, job: Job) -> tuple[str, uuid.UUID]:
             "stac_properties": dict(props),
             "onboarded_at": datetime.now(timezone.utc).isoformat(),
             "splib_cache": splib_diag,
+            # generic_hsi: what the reader decided about the file (docs/lld/generic-hsi.md).
+            **({"preflight": preflight} if preflight is not None else {}),
         },
         raw_path=final_raw_rel,
         vendable_path=vendable_rel,

@@ -1,0 +1,1161 @@
+/* Allotrope — Tufte visual layer.
+ *
+ * Imported once, after index.css (main.tsx). index.css keeps the layout; this file only
+ * restyles it: paper and ink, hairline rules instead of boxes, serif type, quiet buttons,
+ * colour reserved for meaning (status, man-made / natural, selection).
+ * The house rules are in docs/07-frontend.md "Visual style".
+ *
+ * How it overrides: the legacy tokens of index.css (--bg, --fg, --fg-dim, --accent, ...) are
+ * re-pointed at the Tufte tokens below, which restyles most rules with no selector at all.
+ * The rest are same-selector overrides that win by coming later. The smv-* rules (spectral
+ * match viewer) are owned elsewhere and are deliberately not touched here.
+ */
+
+/* === ET Book (MIT, github.com/edwardtufte/et-book), self-hosted for the air-gapped VM === */
+
+@font-face {
+  font-family: "ET Book";
+  src: url("./assets/fonts/et-book-roman-line-figures.woff") format("woff");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+  unicode-range: U+0000-2038, U+203B-FFFF;   /* its U+2039/203A (single guillemets) draw "ffi" */
+}
+@font-face {
+  font-family: "ET Book";
+  src: url("./assets/fonts/et-book-display-italic-old-style-figures.woff") format("woff");
+  font-weight: 400;
+  font-style: italic;
+  font-display: swap;
+  unicode-range: U+0000-2038, U+203B-FFFF;   /* its U+2039/203A (single guillemets) draw "ffi" */
+}
+@font-face {
+  font-family: "ET Book";
+  src: url("./assets/fonts/et-book-semi-bold-old-style-figures.woff") format("woff");
+  font-weight: 500 600;
+  font-style: normal;
+  font-display: swap;
+  unicode-range: U+0000-2038, U+203B-FFFF;   /* its U+2039/203A (single guillemets) draw "ffi" */
+}
+@font-face {
+  font-family: "ET Book";
+  src: url("./assets/fonts/et-book-bold-line-figures.woff") format("woff");
+  font-weight: 700 900;
+  font-style: normal;
+  font-display: swap;
+  unicode-range: U+0000-2038, U+203B-FFFF;   /* its U+2039/203A (single guillemets) draw "ffi" */
+}
+
+/* === Tokens ============================================================================= */
+
+:root {
+  --paper: #fffff8;
+  --ink: #111;
+  --ink-2: #555;
+  --ink-3: #999;
+  --rule: #ddd;
+  --accent-manmade: #c0392b;
+  --accent-natural: #2e7d6b;
+  --accent-select: #d4a017;
+  --font-text: "ET Book", "Source Serif 4", Georgia, serif;
+  --font-ui: "ET Book", Georgia, serif;   /* tabular-nums for numbers */
+
+  /* Derived (not part of the shared token set). */
+  --wash: rgba(17, 17, 17, 0.04);         /* hover / selected row tint     */
+  --status-ok: var(--accent-natural);
+  --status-fail: var(--accent-manmade);
+  --status-run: #9a7612;                  /* --accent-select, legible as text */
+  --status-idle: var(--ink-3);
+
+  /* Legacy tokens of index.css, re-pointed. */
+  --bg: var(--paper);
+  --bg-elev: var(--paper);
+  --bg-subtle: var(--paper);
+  --row-stripe: transparent;
+  --row-hover: var(--wash);
+  --fg: var(--ink);
+  --fg-dim: var(--ink-2);
+  --accent: var(--ink);
+  --accent-strong: var(--ink);
+  --accent-bright: var(--ink);
+  --accent-warm: var(--accent-select);
+  --pill-bg: transparent;
+  --pill-fg: var(--ink-2);
+  --error: var(--accent-manmade);
+  --error-bg: transparent;
+  --ok: var(--accent-natural);
+  --warn: var(--status-run);
+  --font-sans: var(--font-ui);
+  --font-mono: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  --radius-sm: 0;
+  --radius-md: 0;
+  --radius-lg: 0;
+  --shadow-elev-1: none;
+  --shadow-elev-2: none;
+  --shadow-elev-3: none;
+  --tone-destructive: var(--accent-manmade);
+  --tone-destructive-fg: var(--paper);
+  --tone-success: var(--accent-natural);
+  --tone-success-fg: var(--paper);
+  --tone-success-bg: transparent;
+  --tone-success-border: var(--accent-natural);
+  --fs-xs: 0.78rem;
+  --fs-sm: 0.88rem;
+  --fs-base: 1rem;
+  --fs-md: 1.08rem;
+  --fs-lg: 1.25rem;
+  --fs-xl: 1.5rem;
+
+  /* Used across index.css with hard-coded light fallbacks but never defined, which also
+     left those rules light in dark mode. Defining them fixes both. */
+  --surface-1: var(--paper);
+  --surface-2: var(--paper);
+  --bg-card: var(--paper);
+  --border-subtle: var(--rule);
+  --text-default: var(--ink);
+  --text-muted: var(--ink-2);
+  --accent-soft: var(--wash);
+}
+
+/* Dark: the same paper-and-ink scheme inverted. Must beat both :root above and
+   index.css's [data-theme="dark"] block, hence the doubled selector. */
+:root[data-theme="dark"] {
+  --paper: #151513;
+  --ink: #e9e7df;
+  --ink-2: #a8a59b;
+  --ink-3: #6f6c64;
+  --rule: #34332f;
+  --accent-manmade: #e0705f;
+  --accent-natural: #5cb39b;
+  --accent-select: #e0b43a;
+  --wash: rgba(233, 231, 223, 0.06);
+  --status-run: #e0b43a;
+}
+
+/* === Base =============================================================================== */
+
+body {
+  font-family: var(--font-text);
+  font-size: 16px;
+  line-height: 1.5;
+  background: var(--paper);
+  color: var(--ink);
+  font-feature-settings: normal;
+  font-variant-numeric: lining-nums;
+}
+button, input, select, textarea {
+  font-family: inherit;
+}
+table, dd, .mono, .num, time {
+  font-variant-numeric: tabular-nums lining-nums;
+}
+a {
+  color: inherit;
+  text-decoration-color: var(--ink-3);
+  text-underline-offset: 2px;
+}
+code, pre, kbd {
+  font-size: 0.86em;
+}
+
+/* One focus ring everywhere: visible, never decorative. */
+:where(a, button, input, select, textarea, summary, [tabindex], [role="tab"]):focus-visible {
+  outline: 2px solid var(--accent-select);
+  outline-offset: 2px;
+}
+
+/* Labels: small caps in --ink-2 instead of coloured blocks or shouting uppercase. */
+.workspace__card-title,
+.action-card__io-title,
+.action-card__flow-title,
+.action-output-viewer h4,
+.action-output-viewer__chart-title,
+.viewer-metric__label,
+.topbar__project-label,
+.sidebar__section-label,
+.models-card__metrics dt,
+.panel__heading,
+.data-table thead th,
+.jobs-table th,
+.jobs__kpi-label,
+.action-output-viewer__class-table th,
+.anomaly-viewer__stats th,
+.metrics-card h4 {
+  text-transform: none;
+  font-variant-caps: all-small-caps;
+  letter-spacing: 0.06em;
+  font-weight: 400;
+  color: var(--ink-2);
+  font-size: 0.95rem;
+}
+.action-output-viewer__chart-sub,
+.action-card__flow-sub {
+  font-variant-caps: normal;
+  letter-spacing: 0;
+  font-style: italic;
+  opacity: 1;
+  color: var(--ink-2);
+  font-size: 0.85rem;
+}
+
+/* Titles: hierarchy by size and weight, not by boxes. */
+.scenes__title,
+.page__title,
+.workspace__title {
+  font-weight: 400;
+  font-size: 2rem;
+  letter-spacing: 0;
+  line-height: 1.15;
+}
+.action-card__title,
+.viewer-pane__title {
+  font-weight: 400;
+  font-size: 1.5rem;
+  letter-spacing: 0;
+}
+.scenes__subtitle,
+.page__subtitle,
+.workspace__description,
+.action-card__description {
+  font-style: italic;
+  color: var(--ink-2);
+  max-width: 68ch;
+}
+.action-card__description {
+  font-style: normal;
+  color: var(--ink);
+  font-size: 1.02rem;
+}
+.mono,
+.action-card__slug,
+.actions-list__type,
+.workspace__id {
+  color: var(--ink-2);
+}
+
+/* === Remove chrome: shadows, gradients, card boxes ======================================== */
+
+.panel,
+.login__card,
+.workspace__card,
+.data-table-wrap,
+.jobs-table-wrap,
+.models-card,
+.scene-card,
+.action-type-card,
+.metrics-card,
+.jobs__kpi-card,
+.templates-panel,
+.templates-panel__row,
+.inventory__stat,
+.band-carousel,
+.model-detail__rail,
+.model-detail__rail section,
+.model-detail__legend,
+.anomaly-extras__model-list,
+.anomaly-extras__model-row,
+.anomaly-extras__advanced,
+.scenes__empty,
+.inventory__unavailable,
+.result-export,
+.metrics-section,
+.note-list__item,
+.viz-list__item,
+.onboarding-row {
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+.panel {
+  padding: 0;
+  border-top: 1px solid var(--rule);
+  padding-top: 0.9rem;
+}
+.panel__heading {
+  border-bottom: 0;
+  padding-bottom: 0;
+  margin-bottom: 0.6rem;
+}
+
+/* Headers that were tinted gradient boxes become plain type over a hairline. */
+.workspace__header,
+.model-detail__hero {
+  background: none;
+  border: 0;
+  border-bottom: 1px solid var(--rule);
+  border-radius: 0;
+  padding: 0 0 1rem;
+}
+
+.models-card:hover,
+.action-type-card:hover {
+  transform: none;
+  box-shadow: none;
+}
+.models-card__ribbon {
+  transform: none;
+  background: none;
+  box-shadow: none;
+  color: var(--ink-3);
+  top: 0.9rem;
+  right: 3rem;
+  padding: 0;
+  font-weight: 400;
+  text-transform: none;
+  font-variant-caps: all-small-caps;
+  letter-spacing: 0.08em;
+  font-size: 0.85rem;
+}
+.login__strip { display: none; }
+.gpu-status__dot,
+.annot-dot.is-on,
+.jobs__poll-dot { box-shadow: none; }
+
+/* === Shell: sidebar + top bar (top bar restyled by CSS only) ============================= */
+
+.sidebar {
+  background: var(--paper);
+  border-right: 1px solid var(--rule);
+}
+.sidebar__brand { border-bottom: 0; }
+.brand__name {
+  font-size: 1.35rem;
+  font-weight: 400;
+  letter-spacing: 0.01em;
+}
+.brand__version,
+.brand__badge {
+  font-family: var(--font-ui);
+  background: none;
+  color: var(--ink-3);
+  padding: 0;
+  font-size: 0.85rem;
+  font-weight: 400;
+}
+.sidebar__item {
+  color: var(--ink-2);
+  font-size: 1rem;
+  font-weight: 400;
+  border-radius: 0;
+}
+.sidebar__item:hover {
+  background: transparent;
+  color: var(--ink);
+}
+.sidebar__item--active {
+  background: transparent;
+  color: var(--ink);
+  font-weight: 600;
+}
+.sidebar__item--active::before {
+  width: 1px;
+  background: var(--ink);
+}
+.sidebar__icon { opacity: 0.55; }
+.sidebar__item--active .sidebar__icon { opacity: 0.9; }
+.sidebar__collapse-btn,
+.workspace__rail-collapse {
+  border: 0;
+  background: transparent;
+  color: var(--ink-3);
+  border-radius: 0;
+}
+.sidebar__collapse-btn:hover,
+.workspace__rail-collapse:hover {
+  background: transparent;
+  color: var(--ink);
+}
+
+.topbar {
+  background: var(--paper);
+  border-bottom: 1px solid var(--rule);
+}
+.gpu-status {
+  border: 0;
+  border-radius: 0;
+  padding: 0;
+  font-family: var(--font-ui);
+  font-size: 0.85rem;
+  letter-spacing: 0;
+}
+.sparkline,
+.sparkline__label {
+  font-family: var(--font-ui);
+}
+.sparkline__label {
+  font-weight: 400;
+  font-variant-caps: all-small-caps;
+  font-size: 0.85rem;
+  letter-spacing: 0.06em;
+}
+.sparkline__svg {
+  stroke: var(--ink-2);
+  stroke-width: 1;
+}
+.sparkline__value { font-weight: 400; }
+.usermenu__avatar {
+  background: transparent;
+  color: var(--ink);
+  border: 1px solid var(--rule);
+  font-weight: 400;
+}
+.usermenu__dropdown,
+[data-theme="dark"] .usermenu__dropdown {
+  background: var(--paper);
+  border: 1px solid var(--ink-3);
+  border-radius: 0;
+  box-shadow: none;
+}
+.theme-toggle {
+  border-radius: 0;
+  background: transparent;
+}
+
+/* === Buttons: quiet. Primary = ink outline + weight; secondary = hairline; text = underline */
+
+.btn-tone,
+.login__submit,
+.form__submit,
+.scenes__ingest,
+.adp-viewer__apply,
+.anomaly-viewer__open-btn,
+.pagination__btn,
+.jobs__page-btn,
+.workspace__export,
+.dialog__actions button,
+.ingest__actions button,
+.ingest__cancel {
+  border-radius: 0;
+  box-shadow: none;
+  filter: none;
+  font-family: var(--font-ui);
+  font-size: 0.98rem;
+  transition: background 100ms ease, color 100ms ease;
+}
+.btn-tone--primary,
+.login__submit,
+.form__submit,
+.scenes__ingest,
+.adp-viewer__apply,
+.anomaly-viewer__open-btn {
+  background: transparent;
+  color: var(--ink);
+  border: 1px solid var(--ink);
+  font-weight: 600;
+}
+.btn-tone--primary:hover:not(:disabled),
+.login__submit:hover:not(:disabled),
+.form__submit:hover:not(:disabled),
+.scenes__ingest:hover:not(:disabled),
+.adp-viewer__apply:hover:not(:disabled),
+.anomaly-viewer__open-btn:hover {
+  background: var(--ink);
+  color: var(--paper);
+  filter: none;
+}
+.btn-tone--success {
+  background: transparent;
+  color: var(--accent-natural);
+  border: 1px solid var(--accent-natural);
+}
+.btn-tone--success:hover:not(:disabled) {
+  background: var(--accent-natural);
+  color: var(--paper);
+  filter: none;
+}
+.btn-tone--destructive {
+  background: transparent;
+  color: var(--accent-manmade);
+  border: 1px solid var(--accent-manmade);
+}
+.btn-tone--destructive:hover:not(:disabled) {
+  background: var(--accent-manmade);
+  color: var(--paper);
+}
+.btn-tone--ghost,
+.pagination__btn,
+.jobs__page-btn,
+.workspace__export {
+  background: transparent;
+  color: var(--ink);
+  border: 1px solid var(--rule);
+}
+.btn-tone--ghost:hover:not(:disabled),
+.pagination__btn:hover:not(:disabled),
+.jobs__page-btn:hover:not([disabled]) {
+  background: transparent;
+  border-color: var(--ink-2);
+}
+.anomaly-viewer__shortcut {
+  background: transparent;
+  color: inherit;
+  opacity: 0.6;
+}
+.adp-viewer__seg button[data-active="true"] {
+  background: var(--ink);
+  color: var(--paper);
+}
+
+/* Links that were coloured CTAs: ink with an underline. */
+.workspace__scene-link,
+.models-card__cta,
+.scene-detail__cta,
+.action-summary__back,
+.model-detail__back,
+.scene-detail__back {
+  color: var(--ink);
+  font-weight: 400;
+  text-decoration: underline;
+  text-decoration-color: var(--ink-3);
+  text-underline-offset: 2px;
+  background: none;
+  border-radius: 0;
+}
+
+/* === Inputs: hairline box, ink on focus =================================================== */
+
+.login__field input,
+.form__field input[type="text"],
+.form__field input[type="email"],
+.form__field input[type="password"],
+.form__field select,
+.form__textarea,
+.form__select,
+.scene-picker__search,
+.band-carousel__search,
+.anomaly-extras__knob input[type="number"],
+.anomaly-extras__knob select,
+.adp-viewer__slider-numeric-input {
+  background: transparent;
+  border: 1px solid var(--rule);
+  border-radius: 0;
+  color: var(--ink);
+  font-family: var(--font-ui);
+  font-size: 1rem;
+  box-shadow: none;
+}
+.login__field input:focus,
+.form__field input:focus,
+.form__field select:focus,
+.scene-picker__search:focus,
+.band-carousel__search:focus,
+.adp-viewer__slider-numeric-input:focus {
+  border-color: var(--ink);
+  box-shadow: none;
+}
+input[type="range"],
+input[type="checkbox"],
+input[type="radio"] {
+  accent-color: var(--ink-2);
+}
+
+/* === Pills become words: status / sensor / tags as small caps in a meaning colour ========= */
+
+.status-pill,
+.sensor-pill,
+.pill,
+.pill--sensor,
+.actions-list__status,
+.action-card__status,
+.jobs-status,
+.actions-list__committed-pip,
+.models-card__norm,
+.templates-panel__badge--system,
+.templates-panel__badge--user,
+.workspace__scene-pill,
+.workspace__count,
+.inventory__tag,
+.onboarding-drawer__badge,
+.segv__tag,
+.jobs-row__type {
+  background: transparent !important;
+  border: 0 !important;
+  border-radius: 0;
+  padding: 0;
+  box-shadow: none;
+  color: var(--ink-2);
+  font-weight: 400;
+  text-transform: none;
+  font-variant-caps: all-small-caps;
+  letter-spacing: 0.05em;
+  font-size: 0.95rem;
+}
+.workspace__scene-pill {
+  color: var(--ink-2) !important;
+  font-variant-caps: normal;
+  letter-spacing: 0;
+  text-decoration: underline;
+  text-decoration-color: var(--rule);
+}
+.workspace__count { font-variant-caps: normal; font-size: 0.9rem; color: var(--ink-3); }
+
+.status-pill--complete,
+.actions-list__status[data-status="complete"],
+.action-card__status[data-tone="complete"],
+.jobs-status[data-status="complete"],
+.actions-list__committed-pip { color: var(--status-ok); }
+.status-pill--running,
+.actions-list__status[data-status="running"],
+.action-card__status[data-tone="running"],
+.jobs-status[data-status="running"],
+.actions-list__status[data-status="needs_threshold"] { color: var(--status-run); }
+.status-pill--failed,
+.actions-list__status[data-status="failed"],
+.action-card__status[data-tone="failed"],
+.jobs-status[data-status="failed"],
+.segv__tag { color: var(--status-fail); }
+.status-pill--cancelled,
+.actions-list__status[data-status="cancelled"],
+.action-card__status[data-tone="cancelled"],
+.jobs-status[data-status="cancelled"],
+.actions-list__status[data-status="queued"],
+.jobs-status[data-status="queued"] { color: var(--status-idle); }
+.models-card__norm { color: var(--ink-3); }
+.models-card__norm[data-baked="false"] { color: var(--status-run); }
+.action-card__status { font-size: 1.05rem; }
+
+/* Filter chips (sensor filter, jobs filter, ranges) become a row of words; the active one
+   is ink with an underline. */
+.scenes__filter,
+.scene-picker__filter,
+.jobs__chip,
+.metrics-range__btn,
+.band-filter__btn,
+.seg-extras__class-chip {
+  background: transparent !important;
+  border: 0 !important;
+  border-radius: 0;
+  color: var(--ink-2) !important;
+  padding: 0.15rem 0.3rem;
+  font-size: 1rem;
+  font-weight: 400;
+  box-shadow: none;
+}
+.scenes__filter:hover,
+.scene-picker__filter:hover,
+.jobs__chip:hover,
+.metrics-range__btn:hover { color: var(--ink) !important; }
+.scenes__filter.is-active,
+.scene-picker__filter[data-active="true"],
+.jobs__chip[data-active="true"],
+.metrics-range__btn[data-active="true"],
+.seg-extras__class-chip[data-on="true"] {
+  color: var(--ink) !important;
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 4px;
+}
+.metrics-range {
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+}
+
+/* === Tables: no stripes, hairlines, numbers tabular ======================================= */
+
+.data-table thead th,
+.jobs-table th,
+.jobs-table--polished thead th,
+.jobs-table--polished thead tr {
+  background: transparent;
+  border-bottom: 1px solid var(--ink-3);
+}
+.data-table tbody td,
+.jobs-table td,
+.action-output-viewer__class-table th,
+.action-output-viewer__class-table td {
+  border-bottom: 1px solid var(--rule);
+}
+.data-table tbody tr:nth-child(even) td { background: transparent; }
+.data-table tbody tr:hover td,
+.jobs-table tbody tr:hover,
+.jobs-row[data-expandable="true"]:hover { background: var(--wash); }
+.data-table__primary { font-weight: 400; }
+.data-table th.num,
+.data-table td.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums lining-nums;
+}
+.data-table td.nowrap { white-space: nowrap; }
+.data-table__thumb img {
+  border-radius: 0;
+  border: 0;
+}
+.data-table__thumb-placeholder { border-radius: 0; }
+.action-output-viewer__class-row--total td {
+  background: transparent;
+  border-top: 1px solid var(--ink-3);
+  font-weight: 600;
+}
+.jobs-row[data-status="running"],
+.jobs-row[data-status="failed"],
+.onboarding-row[data-status="running"] {
+  background: none;
+}
+.jobs-row[data-status="failed"] td:first-child { box-shadow: inset 2px 0 var(--status-fail); }
+.jobs-row[data-status="running"] td:first-child { box-shadow: inset 2px 0 var(--status-run); }
+
+/* KPI tiles: a number and a word, no tile. */
+.jobs__kpi-card { padding: 0 0 0 0.75rem; border-left: 1px solid var(--rule); }
+.jobs__kpi-card::before { display: none; }
+
+/* === Dialogs, drawers, toasts: paper with one hairline ==================================== */
+
+.dialog-backdrop,
+.anomaly-viewer__modal-backdrop,
+.viz-modal__scrim,
+.onboarding-drawer__scrim {
+  background: rgba(17, 17, 17, 0.32);
+}
+.dialog,
+[data-theme="dark"] .dialog,
+.anomaly-viewer__modal,
+.viz-modal__body,
+.onboarding-drawer__panel,
+.toast,
+[data-theme="dark"] .toast,
+.note-editor__menu {
+  background: var(--paper);
+  border: 1px solid var(--ink-3);
+  border-radius: 0;
+  box-shadow: none;
+}
+.toast { border-left-width: 2px; }
+.dialog,
+.dialog.panel {
+  padding: 1.2rem 1.5rem 1.4rem;
+  border-top: 1px solid var(--ink-3);
+}
+.dialog__actions { align-items: center; }
+.dialog__actions .form__submit { margin-top: 0; }
+.dialog__header,
+.anomaly-viewer__modal-header,
+.onboarding-drawer__header {
+  background: transparent;
+  border-bottom: 1px solid var(--rule);
+}
+.anomaly-viewer__modal-close,
+.onboarding-drawer__close,
+.dialog__close {
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  color: var(--ink-2);
+}
+.onboarding-drawer__tab {
+  background: var(--paper);
+  border: 1px solid var(--rule);
+  border-right: 0;
+  border-radius: 0;
+  box-shadow: none;
+  color: var(--ink-2);
+  font-weight: 400;
+  text-transform: none;
+  font-variant-caps: all-small-caps;
+  letter-spacing: 0.08em;
+  font-size: 0.95rem;
+}
+
+/* New Action dialog type picker (dialog TSX is owned elsewhere — CSS only). */
+.action-type-card {
+  border-top: 1px solid var(--rule);
+  padding: 0.7rem 0.25rem;
+}
+.action-type-card:hover { background: var(--wash); }
+.action-type-card[aria-pressed="true"],
+.action-type-card[data-selected="true"] {
+  box-shadow: inset 2px 0 var(--accent-select);
+}
+
+/* === Errors: words in the failure colour, one hairline ==================================== */
+
+.login__error,
+.page__error,
+.action-card__failure,
+.error-boundary {
+  background: transparent;
+  border: 0;
+  border-left: 2px solid var(--status-fail);
+  border-radius: 0;
+  color: var(--ink);
+  padding: 0.3rem 0 0.3rem 0.8rem;
+}
+.action-card__failure-title,
+.actions-list__failure,
+.error-boundary { color: var(--status-fail); }
+.action-card__failure pre { color: var(--ink); }
+
+/* === Login ================================================================================ */
+
+.login { background: var(--paper); }
+.login__card { max-width: 340px; overflow: visible; }
+.login__brand { padding: 0 0 1.4rem; }
+.login__brand .brand__name { font-size: 2.2rem; }
+.login__form { padding: 0; gap: 1.1rem; }
+.login__label {
+  font-variant-caps: all-small-caps;
+  letter-spacing: 0.06em;
+  color: var(--ink-2);
+  font-size: 1rem;
+  font-weight: 400;
+}
+.login__submit { margin-top: 0.4rem; padding: 0.6rem; }
+.login__version {
+  margin: 2.2rem 0 0;
+  font-size: 0.85rem;
+  color: var(--ink-3);
+}
+
+/* === Workspace: rail of quiet sections, actions as a hairline-separated list ============== */
+
+.workspace__tabs { border-bottom: 1px solid var(--rule); }
+.workspace__tab {
+  border-radius: 0;
+  color: var(--ink-2);
+  font-size: 1.05rem;
+  font-weight: 400;
+}
+.workspace__tab:hover {
+  background: transparent;
+  color: var(--ink);
+}
+.workspace__tab[data-active="true"] {
+  color: var(--ink);
+  border-bottom: 1px solid var(--ink);
+  font-weight: 400;
+}
+.workspace__body { gap: 2.5rem; }
+.workspace__rail { gap: 1.6rem; }
+.workspace__card { padding: 0; }
+.workspace__rail .workspace__card + .workspace__card {
+  border-top: 1px solid var(--rule);
+  padding-top: 1.2rem;
+}
+.workspace__scene-thumb {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.actions-list { gap: 0; }
+.actions-list__row {
+  border: 0;
+  border-top: 1px solid var(--rule);
+  border-left: 0;
+  padding: 0.55rem 0.4rem;
+  font-size: 0.95rem;
+}
+.actions-list__row:hover { border-color: var(--rule); background: var(--wash); }
+.actions-list__row[data-status] { border-left: 0; }
+.actions-list__row[data-selected="true"] {
+  background: var(--wash);
+  border-color: var(--rule);
+  box-shadow: inset 2px 0 var(--accent-select);
+}
+.actions-list__type {
+  font-family: var(--font-ui);
+  font-weight: 600;
+  font-size: 1rem;
+  color: var(--ink);
+}
+.actions-list__meta { color: var(--ink-3); font-size: 0.88rem; }
+.actions-list__failure { font-family: var(--font-ui); font-size: 0.85rem; }
+.actions-list__delete {
+  background: transparent;
+  border: 0;
+  color: var(--ink-3);
+}
+
+.action-card { border-bottom: 1px solid var(--rule); }
+.action-card__slug { font-size: 0.8rem; letter-spacing: 0; }
+.action-card__config summary,
+.action-card__io summary { color: var(--ink-2); font-weight: 400; }
+.action-card__config-body {
+  background: transparent;
+  border: 0;
+  border-left: 1px solid var(--rule);
+  border-radius: 0;
+}
+.action-card__timestamps { color: var(--ink-2); }
+.action-card__timestamps strong {
+  font-weight: 400;
+  font-variant-caps: all-small-caps;
+  letter-spacing: 0.05em;
+}
+
+/* Recipe DAG (React Flow): no dotted canvas, no tinted wash; hairline frame for the pan/zoom
+   viewport, quiet controls. Node styling lives in ModelFlowNode.tsx. */
+.action-flow-chart,
+.model-detail__canvas {
+  background: var(--paper);
+  border: 1px solid var(--rule);
+  border-radius: 0;
+}
+.action-flow-chart .react-flow__edge-text,
+.model-detail__canvas .react-flow__edge-text {
+  fill: var(--ink-2);
+  font-family: var(--font-ui);
+  font-weight: 400;
+  font-size: 11px;
+}
+.action-flow-chart .react-flow__edge-textbg,
+.model-detail__canvas .react-flow__edge-textbg {
+  fill: var(--paper);
+  stroke: none;
+}
+body .react-flow__controls { box-shadow: none; }
+body .react-flow__controls-button {
+  background: var(--paper);
+  border-bottom: 1px solid var(--rule);
+  fill: var(--ink-2);
+}
+body .react-flow__controls-button:hover { background: var(--wash); }
+body .react-flow__handle { opacity: 0; }
+/* Marching-ants edges are motion without data; a still hairline says the same. Edges that
+   are dashed on purpose set it inline, which still wins. */
+body .react-flow__edge.animated path {
+  animation: none;
+  stroke-dasharray: none;
+}
+body .react-flow__edge-path { stroke: var(--ink-3); }
+
+/* === Output viewers ======================================================================= */
+
+.viz-panel,
+.action-output-viewer__media {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+.viz-panel__caption {
+  background: transparent;
+  border-bottom: 0;
+  padding: 0 0 0.3rem;
+  font-weight: 400;
+  color: var(--ink-2);
+  font-style: italic;
+}
+/* Raster stages: paper behind the image instead of a black slab; nodata inside the raster
+   still draws as the image's own black. */
+.viz-panel__body,
+.anomaly-viewer__panel-canvas {
+  background: var(--paper);
+  outline: 1px solid var(--rule);
+  outline-offset: -1px;
+}
+.viewer-metric__value,
+.anomaly-extras__knob-val {
+  font-family: var(--font-ui);
+  font-size: 1.15rem;
+  font-variant-numeric: tabular-nums lining-nums;
+}
+.viewer-metric--accent .viewer-metric__value { color: var(--ink); }
+
+.anomaly-viewer__tab,
+.anomaly-viewer__tool-btn {
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid transparent;
+  border-radius: 0;
+}
+.anomaly-viewer__tab[data-active="true"],
+.anomaly-viewer__tool-btn[data-active="true"] {
+  background: transparent;
+  border-bottom-color: var(--ink);
+  color: var(--ink);
+}
+.anomaly-viewer__panel {
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+}
+.anomaly-viewer__panel-title {
+  font-weight: 400;
+  font-style: italic;
+  color: var(--ink-2);
+}
+.anomaly-viewer__thumb-btn,
+.anomaly-viewer__thumb-btn:hover,
+.anomaly-viewer__thumb-btn:focus-visible {
+  border-radius: 0;
+  box-shadow: none;
+}
+.anomaly-viewer__norm-banner {
+  background: transparent;
+  border: 0;
+  border-left: 2px solid var(--status-run);
+  border-radius: 0;
+}
+.anomaly-extras__model-row[data-picked="true"] {
+  background: var(--wash);
+  box-shadow: inset 2px 0 var(--accent-select);
+}
+.anomaly-extras__advanced-toggle {
+  background: transparent;
+  border: 0;
+  color: var(--ink-2);
+}
+.adp-viewer__panel figcaption {
+  background: transparent;
+  color: var(--ink-2);
+  font-style: italic;
+}
+.ingest__upload-bar { background: var(--rule); border-radius: 0; }
+.ingest__upload-bar-fill { background: var(--ink); border-radius: 0; }
+
+/* Charts (uPlot). Axis, tick and label colours are set in the TSX; this sets the type. */
+body .uplot,
+body .uplot .u-title,
+body .uplot .u-legend {
+  font-family: var(--font-ui);
+}
+.diagnostic-chart-legend {
+  color: var(--ink-2);
+  font-size: 0.9rem;
+}
+.diagnostic-chart-legend__swatch {
+  height: 2px;
+  width: 16px;
+  border-width: 0;
+  border-radius: 0;
+}
+.action-output-viewer__chart { border-top: 1px solid var(--rule); }
+.metric-chart {
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+}
+
+/* Models catalogue: an index of names, not a wall of cards. */
+.models-grid { gap: 2rem 2.5rem; }
+.models-card {
+  padding: 0.9rem 0 0;
+  border-top: 1px solid var(--rule);
+}
+.models-card__rank { color: var(--ink-3); font-weight: 400; top: 0.9rem; right: 0; }
+.models-card__codename-name { font-weight: 400; font-size: 1.7rem; }
+.models-card__codename-script { color: var(--ink-3); font-weight: 400; }
+.models-card__meaning { color: var(--ink-2); font-size: 0.95rem; }
+.models-card__metrics { border-top: 0; padding-top: 0.2rem; }
+.models-card__metrics dd { font-weight: 400; font-size: 1.1rem; }
+.model-detail__codename-script { color: var(--ink-3); }
+
+/* Scene picker (New project dialog). */
+.scene-picker__list {
+  background: transparent;
+  border: 0;
+  border-top: 1px solid var(--rule);
+  border-radius: 0;
+}
+.scene-card { border-bottom: 1px solid var(--rule); }
+.scene-card:hover { background: var(--wash); }
+.scene-card[data-selected="true"] {
+  background: var(--wash);
+  border-color: var(--rule);
+  box-shadow: inset 2px 0 var(--accent-select);
+}
+.scene-card__check { background: transparent; color: var(--ink); }
+
+/* Notes, templates, metrics: small caps tags, hairline rows. */
+.note-chip {
+  background: transparent !important;
+  border: 0;
+  border-radius: 0;
+  padding: 0;
+  color: var(--ink-2) !important;
+  text-decoration: underline;
+  text-decoration-color: var(--rule);
+}
+.templates-panel__row { border-top: 1px solid var(--rule); padding: 0.6rem 0; }
+.templates-panel__row-config pre,
+.action-output-viewer__hint code,
+.adp-viewer__committed-note code,
+.anomaly-viewer__norm-banner code {
+  background: transparent;
+  border: 0;
+  padding: 0;
+}
+.metrics-card { border-top: 1px solid var(--rule); padding: 0.6rem 0; }
+
+/* Toolbars and small affordances: no boxes, no lozenges. */
+.model-detail__viz-toolbar {
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--rule);
+  border-radius: 0;
+  padding: 0.3rem 0;
+}
+.annot-panel__attach-btn,
+.band-filter__btn,
+.annot-row__toggle {
+  border-radius: 0;
+  color: var(--ink);
+  font-weight: 400;
+  font-size: 0.95rem;
+}
+.ingest__sensor { border-radius: 0; background: transparent; }
+
+/* Band browser cards. */
+.band-card { border-radius: 0; box-shadow: none; }
+.band-card.is-active { box-shadow: inset 0 -2px var(--accent-select); }
+
+/* === Phone width (≈400 px): the shell stacks, wide tables scroll inside their own box ===== */
+
+@media (max-width: 640px) {
+  .app-shell { flex-direction: column; }
+  .sidebar,
+  .sidebar[data-collapsed="true"] {
+    width: auto;
+    border-right: 0;
+    border-bottom: 1px solid var(--rule);
+  }
+  .sidebar__brand { padding: 0.8rem 1rem 0.2rem; }
+  .sidebar__collapse-btn { display: none; }
+  .sidebar__nav {
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 0 0.2rem;
+    padding: 0.2rem 0.6rem 0.6rem;
+  }
+  .sidebar__item { padding: 0.3rem 0.5rem; gap: 0.35rem; }
+  .sidebar__item--active::before { display: none; }
+  .sidebar__item--active { text-decoration: underline; text-underline-offset: 4px; }
+  .sidebar__divider { display: none; }
+  .sidebar__section-label { align-self: center; padding: 0 0.4rem; }
+  .sidebar[data-collapsed="true"] .sidebar__label,
+  .sidebar[data-collapsed="true"] .brand__name { display: inline; }
+  .topbar { flex-wrap: wrap; padding: 0.5rem 1rem; gap: 0.5rem; }
+  .topbar__metrics { flex-wrap: wrap; gap: 0.5rem; }
+  .content__body,
+  .page { padding: 1rem; }
+  .scenes__header,
+  .page__header,
+  .workspace__header { flex-direction: column; align-items: stretch; }
+  .scenes__title,
+  .page__title,
+  .workspace__title { font-size: 1.6rem; overflow-wrap: anywhere; }
+  .data-table-wrap,
+  .jobs-table-wrap,
+  .action-output-viewer__class-block { overflow-x: auto; }
+  .workspace__tabs { overflow-x: auto; }
+  .workspace__body,
+  .workspace__body[data-rail-collapsed="true"] { grid-template-columns: minmax(0, 1fr); }
+  .workspace__rail, .workspace__card { min-width: 0; }
+  .models-grid { grid-template-columns: minmax(0, 1fr); }
+  .action-card__io { grid-template-columns: minmax(0, 1fr); }
+  .action-card__timestamps .mono { overflow-wrap: anywhere; }
+  .workspace__scene-pill,
+  .workspace__id { overflow-wrap: anywhere; word-break: break-all; white-space: normal; max-width: 100%; }
+}
+
+/* Part A (class-driven flow) follow-ups: one height for a dialog's Cancel and Submit. */
+.dialog__actions .ingest__cancel,
+.dialog__actions .form__submit {
+  box-sizing: border-box;
+  height: 2.4rem;
+  padding: 0 1.1rem;
+  line-height: 1;
+  margin-top: 0;
+}
+.metric-chart__markers li::before { color: var(--accent-select); }

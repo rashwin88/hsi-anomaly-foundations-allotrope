@@ -18,6 +18,7 @@ import {
 } from "../components/HostMetricsProvider";
 import { MetricLineChart } from "../components/MetricLineChart";
 import { Sparkline } from "../components/Sparkline";
+import { gpuDeviceLine, gpuSourceLine, modelsOnLine } from "../components/gpuText";
 
 type RangeKey = "1m" | "10m" | "1h" | "all";
 const RANGE_SECONDS: Record<RangeKey, number | null> = {
@@ -151,17 +152,12 @@ export function MonitoringPage() {
                 </button>
               ))}
             </div>
-            <span className="small metric-chart__legend">
-              Dashed vertical lines mark job starts — colored by job type.
-            </span>
           </div>
         </header>
         <div className="metrics-chart-stack">
           <MetricLineChart
             title="CPU utilisation"
             unit="%"
-            color="#2563eb"
-            fillColor="rgba(37, 99, 235, 0.10)"
             timestamps={tsBig}
             values={cpuBig}
             markers={markers}
@@ -171,8 +167,6 @@ export function MonitoringPage() {
           <MetricLineChart
             title="RAM usage"
             unit="%"
-            color="#0d9488"
-            fillColor="rgba(13, 148, 136, 0.10)"
             timestamps={tsBig}
             values={ramBig}
             markers={markers}
@@ -183,8 +177,6 @@ export function MonitoringPage() {
             <MetricLineChart
               title={`GPU · ${host.gpu.devices[0]?.name ?? "device 0"}`}
               unit="%"
-              color="#1f5f3d"
-              fillColor="rgba(31, 95, 61, 0.10)"
               timestamps={tsBig}
               values={gpuBig}
               markers={markers}
@@ -253,18 +245,22 @@ export function MonitoringPage() {
             {host?.gpu.available && host.gpu.devices.length > 0 ? (
               <>
                 <Sparkline label="GPU" values={gpuH} current={gpuH.at(-1) ?? 0} />
-                <p className="mono">
-                  {host.gpu.devices[0].name} · util{" "}
-                  {host.gpu.devices[0].utilization_percent.toFixed(0)}% · mem{" "}
-                  {host.gpu.devices[0].memory_used_mb.toFixed(0)} /{" "}
-                  {host.gpu.devices[0].memory_total_mb.toFixed(0)} MiB ·{" "}
-                  {host.gpu.devices[0].temperature_c.toFixed(0)}°C
+                {host.gpu.devices.map((d, i) => (
+                  <p key={i} style={{ fontVariantNumeric: "tabular-nums", color: "var(--ink)" }}>
+                    {gpuDeviceLine(d)}
+                  </p>
+                ))}
+                <p className="small" style={{ color: "var(--ink-2)" }}>
+                  {[gpuSourceLine(host.gpu), modelsOnLine(host.gpu)].filter(Boolean).join(" · ")}
                 </p>
               </>
             ) : (
-              <p className="small">
-                {host?.gpu.note ?? "GPU not available — worker runs on CPU."}
-              </p>
+              <>
+                <p className="small">
+                  {host?.gpu.note ?? "GPU not available — worker runs on CPU."}
+                </p>
+                {host && modelsOnLine(host.gpu) && <p className="small">{modelsOnLine(host.gpu)}</p>}
+              </>
             )}
           </div>
         </div>

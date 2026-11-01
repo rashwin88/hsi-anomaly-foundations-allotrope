@@ -21,6 +21,7 @@ import { ApiError } from "../api/client";
 import { deleteScene, getScene, parseSceneInUse } from "../api/scenes";
 import { AnnotationsPanel } from "../components/AnnotationsPanel";
 import { NewProjectDialog } from "../components/NewProjectDialog";
+import { PreflightReport } from "../components/PreflightReport";
 import {
   SceneVizCenter,
   SceneVizRail,
@@ -35,6 +36,8 @@ const SENSOR_LABELS: Record<string, string> = {
   enmap: "EnMAP",
   aviris_ng: "AVIRIS-NG",
   hotsat1: "HotSAT-1",
+  tanager: "Tanager",
+  generic_hsi: "Other hyperspectral",
 };
 
 function formatDate(iso: string | null): string {
@@ -134,7 +137,11 @@ function SceneDetailLayout({ scene }: { scene: Scene }) {
   const isHyperspectral =
     scene.sensor_type === "prisma" ||
     scene.sensor_type === "enmap" ||
-    scene.sensor_type === "aviris_ng";
+    scene.sensor_type === "aviris_ng" ||
+    scene.sensor_type === "tanager" ||
+    scene.sensor_type === "generic_hsi";
+  // generic_hsi only: the reader's pre-flight report (docs/lld/generic-hsi.md).
+  const preflight = (scene.metadata?.preflight ?? null) as Record<string, unknown> | null;
   const ctrl = useSceneViz(scene.id, isHyperspectral);
   const [newProjectOpen, setNewProjectOpen] = useState(false);
 
@@ -241,6 +248,12 @@ function SceneDetailLayout({ scene }: { scene: Scene }) {
             ["Valid pixels", formatPercent(scene.valid_pixel_pct)],
           ]}
         />
+        {preflight && (
+          <section className="panel viz-panel scene-detail__meta">
+            <h3 className="panel__heading">Pre-flight report</h3>
+            <PreflightReport report={preflight} />
+          </section>
+        )}
         <MetaPanel
           heading="Storage"
           rows={[

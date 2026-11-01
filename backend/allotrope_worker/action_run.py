@@ -32,6 +32,7 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from allotrope import action_types as action_types_registry
+from allotrope.action_types._meta import PlainActionError
 from allotrope.config import settings
 from allotrope.models import Action, ActionOutput, Job, Project, Scene
 
@@ -241,7 +242,9 @@ def handle_action_run(
         # but doesn't know about the Action row.
         action.status = "failed"
         action.completed_at = datetime.now(timezone.utc)
-        action.failure_reason = f"{e.__class__.__name__}: {e}"[:1000]
+        # A PlainActionError is already worded for the user: no class-name prefix.
+        plain = isinstance(e, PlainActionError)
+        action.failure_reason = (str(e) if plain else f"{e.__class__.__name__}: {e}")[:1000]
         session.commit()
         logger.exception("action failed action=%s", action.id)
         raise

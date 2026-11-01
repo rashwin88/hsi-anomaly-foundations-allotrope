@@ -29,9 +29,10 @@ export function ModelFlowGroup({ data }: NodeProps) {
       style={{
         width: d.width,
         height: d.height,
-        background: tone.bg,
-        border: `1.5px dashed ${tone.border}`,
-        borderRadius: 14,
+        // Tufte: a dashed hairline is enough to say "these belong together".
+        background: "transparent",
+        border: "1px dashed var(--rule)",
+        borderRadius: 0,
         padding: "26px 14px 14px",
         position: "relative",
         pointerEvents: "none",
@@ -42,17 +43,16 @@ export function ModelFlowGroup({ data }: NodeProps) {
           position: "absolute",
           top: 8,
           left: 14,
-          fontSize: 10.5,
-          fontWeight: 700,
-          letterSpacing: "0.12em",
+          fontSize: 13,
+          letterSpacing: "0.08em",
           color: tone.label,
-          textTransform: "uppercase",
-          fontFamily: "ui-sans-serif, system-ui, sans-serif",
+          fontVariantCaps: "all-small-caps",
+          fontFamily: "var(--font-ui)",
         }}
       >
         {d.title}
         {d.subtitle && (
-          <span style={{ marginLeft: 8, fontWeight: 400, color: "#94a3b8", letterSpacing: "0.04em", textTransform: "none" }}>
+          <span style={{ marginLeft: 8, fontStyle: "italic", color: "var(--ink-3)", letterSpacing: 0, fontVariantCaps: "normal" }}>
             {d.subtitle}
           </span>
         )}

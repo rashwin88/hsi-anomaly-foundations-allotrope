@@ -1,0 +1,643 @@
+\chapter{The sorting bug that rewrote the scoreboard}\label{ch:sortbug}
+\begingroup\sloppy % long provenance tags need loose lines rather than overfull ones
+
+\begin{onething}
+\code{np.interp} assumes that its sample wavelengths go up and never checks; PRISMA lists its bands going
+down. For the implant benchmark's whole early life (2026-10-17 to 18) the evaluator therefore turned every
+PRISMA cube it resampled into copies of one or two bands, and flattened every transplanted signature - and the
+result everyone believed, ``pretraining is the big step'', was the bug. It was found only when one model was
+read two ways on the same real scenes and the two readings were compared.
+\end{onething}
+
+This chapter opens the last part of the book, in which the experiments of the project are told as lessons.
+Each lesson has the same shape: what was believed, what was tried, what was measured, what it showed, and
+the mathematics behind it. The first lesson is the most uncomfortable one, because it is about a result that
+looked right, matched what everyone expected, and was wrong for a reason that fits on one line of code.
+
+\section{What was believed}\label{sec:sortbug:believed}
+
+You met the implant benchmark in \cref{ch:benchmarks}: real held-out scenes, called \emph{hosts}, into which
+synthetic objects are written with the size, contrast and spectral oddness of the 909 real labelled PRISMA
+objects. It was built because the real PRISMA bench (four scenes, 909 objects) could not separate the models:
+under residual Mahalanobis (\cref{ch:residualmaha}) every fine-tuned model tied the shipped v0.2.0.
+
+On 2026-10-17 the first version of the implant benchmark, bench-v1 (3,336 objects on 18 hosts\tagM{research/experiments/implant-bench/README.md}),
+seemed to give the answer the real bench could not. \Cref{fig:sortbug:stages} shows what it said. On the
+easy tier the pAUC (the area under the ROC curve up to 1\% false alarms, divided by 0.01; \cref{ch:measures})
+went from 0.257 for the shipped v0.2.0 to 0.342 for F001, the model pretrained on SpectralEarth, and then
+crept up to 0.371 through the fine-tuning runs\tagM{research/experiments/indradhanu-finetune/README.md}. The
+real bench wandered between 0.148 and 0.159 in no order. The reading written down that day was:
+\emph{the largest step is pretraining}.
+
+\coursefig[\linewidth]{iw-56-stages}{pAUC by training stage, as read on 2026-10-17: the implanted bench
+(amber, easy and medium tiers) rises from v0.2.0 to FT02c, the real bench (grey) wanders with no order. The
+v0.2.0 points are the bug this chapter dissects.}{fig:sortbug:stages}
+
+The second version, bench-v2, built later the same day to fix bench-v1's biases, agreed: v0.2.0 caught 22.1\%
+of objects at the top 1\% of scores, F001 29.2\%, FT02c 32.8\%\tagM{research/experiments/implant-bench/README.md}.
+Two benchmarks, built differently, telling the same story. And yet one fact did not fit. On the real bench
+v0.2.0 tied FT03 (pAUC 0.159 against 0.158), while on bench-v2 it was ten points behind (22.1\% against 32.3\%).
+\Cref{ch:benchmarks} left two explanations open: ``a reading artefact'' and ``training overlap''. On 2026-10-18
+the reading artefact was confirmed, found to be a two-line bug, and fixed (commit \texttt{b94dbfd}).
+
+\begin{analogy}
+A bus timetable is printed with the last bus of the day at the top and the first at the bottom. A passenger
+who assumes the usual order checks one thing first: ``is it later than the bottom row?'' The bottom row is the
+05:00 bus, so at 09:00, at noon and at 18:00 the answer is always yes - and she is told, every time, ``you
+have missed the last bus''. No single answer looks absurd. Only asking at several different times, and getting
+the same answer each time, gives it away. Keep this passenger in mind: in \cref{sec:sortbug:contract} you will
+see \code{np.interp} behave exactly like her.
+\end{analogy}
+
+\section{Linear interpolation, derived}\label{sec:sortbug:interp}
+
+\index{interpolation!linear}
+A sensor measures reflectance at a list of wavelengths, its \emph{bands}. To compare sensors, or to move a
+spectrum from one sensor's bands to another's, you need values at wavelengths that were not measured.
+\emph{Linear interpolation} estimates the value between two neighbouring measurements by the straight line
+through them.
+
+\begin{definition}[Linear interpolation]
+Given two samples $(x_0, y_0)$ and $(x_1, y_1)$ with $x_0 < x_1$, the linearly interpolated value at a query
+point $x$ with $x_0 \le x \le x_1$ is the height at $x$ of the straight line through the two samples.
+\end{definition}
+
+Derive the formula. A straight line has a constant slope, so the slope from $(x_0, y_0)$ to $(x, y)$ must equal
+the slope from $(x_0, y_0)$ to $(x_1, y_1)$:
+\begin{align}
+\frac{y - y_0}{x - x_0} &= \frac{y_1 - y_0}{x_1 - x_0}.
+\intertext{Multiply both sides by $(x - x_0)$ to isolate $y - y_0$:}
+y - y_0 &= \frac{x - x_0}{x_1 - x_0}\,(y_1 - y_0).
+\intertext{Name the fraction $t$, the \emph{fraction of the way} from $x_0$ to $x_1$, and add $y_0$ to both sides:}
+y &= y_0 + t\,(y_1 - y_0), \qquad t = \frac{x - x_0}{x_1 - x_0}. \label{eq:sortbug:lerp}
+\intertext{Expand the bracket and collect $y_0$ to see $y$ as a weighted average of the two samples:}
+y &= (1 - t)\,y_0 + t\,y_1. \label{eq:sortbug:lerpweights}
+\end{align}
+Since $0 \le t \le 1$ inside the interval, the two weights $1-t$ and $t$ are non-negative and add to 1. Outside
+the sampled range a rule is needed; the usual one, and NumPy's default, is to hold the end value: below the
+smallest sample return its value, above the largest return its value.
+
+\begin{worked}[label={we:sortbug:lerp}]{Interpolating the repo's own test spectrum}
+The repository's test (\code{tests/test_evaluation/test_implant.py}, \code{test_descending_band_lists}) uses
+samples at 500, 600 and 700\,nm with values 1, 2 and 4. Do these on paper.
+
+At 550\,nm the neighbours are $(500, 1)$ and $(600, 2)$:
+\begin{align*}
+t &= \frac{550 - 500}{600 - 500} = \frac{50}{100} = 0.5\\
+y &= 1 + 0.5 \times (2 - 1)\\
+  &= 1 + 0.5\\
+  &= 1.5
+\end{align*}
+At 650\,nm the neighbours are $(600, 2)$ and $(700, 4)$:
+\begin{align*}
+t &= \frac{650 - 600}{700 - 600} = \frac{50}{100} = 0.5\\
+y &= 2 + 0.5 \times (4 - 2)\\
+  &= 2 + 1.0\\
+  &= 3.0
+\end{align*}
+At 450\,nm, below the smallest sample, the end value is held: $y = 1$. At 750\,nm, above the largest: $y = 4$.
+\end{worked}
+
+\section{The contract of \texttt{np.interp}}\label{sec:sortbug:contract}
+
+\index{np.interp}\index{contract (of a function)}
+NumPy's \code{np.interp(x, xp, fp)} takes the query points \code{x}, the sample positions \code{xp} (here
+wavelengths) and the sample values \code{fp} (here reflectances). Every function has a \emph{contract}: what it
+promises to return, provided its inputs satisfy stated conditions. The conditions are called
+\emph{preconditions}. If a precondition is violated, the contract promises nothing.
+
+\begin{definition}[Precondition of \texttt{np.interp}]
+The sample positions \code{xp} must be increasing. In the words of NumPy's own docstring (section
+``Warnings'', version 2.5.2): ``The x-coordinate sequence is expected to be increasing, but this is not
+explicitly enforced. However, if the sequence \code{xp} is non-increasing, interpolation results are
+meaningless.''
+\end{definition}
+
+Read that carefully. Not an error. Not a warning at run time. \emph{Meaningless} numbers, returned quietly.
+Behaviour on decreasing or unsorted \code{xp} is \emph{undefined by contract}: a future NumPy may return
+different garbage, and no particular garbage can be relied on. What follows is what NumPy 2.5.2 on the dev
+laptop actually returned - an observation, not a promise.
+
+\begin{worked}[label={we:sortbug:descending}]{The same three samples, listed the other way round}
+Give \code{np.interp} the identical samples in descending order: \code{xp = (700, 600, 500)},
+\code{fp = (4, 2, 1)}. Same physics, same pairs. The values below were produced by
+\file{research/textbook/tools/compute_sortbug.py} on NumPy 2.5.2\tagC.
+
+\begin{center}
+\begin{tabular}{rcc}
+\toprule
+query (nm) & correct (\cref{we:sortbug:lerp}) & \texttt{np.interp}, descending \code{xp} \\
+\midrule
+450 & 1 (held) & 4 \\
+500 & 1 & 4 \\
+550 & 1.5 & \textbf{1} \\
+600 & 2 & \textbf{1} \\
+650 & 3.0 & \textbf{1} \\
+700 & 4 & \textbf{1} \\
+750 & 4 (held) & 1 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Every query above 500\,nm got 1, and every query at or below 500\,nm got 4. Only two values ever come out.
+\end{worked}
+
+Why only two? The observed table is consistent with an implementation that, for each query $x$, asks two
+questions before doing any interpolation, in this order:
+\begin{enumerate}
+\item Is $x$ beyond the \emph{last} listed sample, $x > \mathtt{xp}[-1]$? If so, return the last listed value
+  $\mathtt{fp}[-1]$.
+\item Otherwise, is $x$ before the \emph{first} listed sample, $x < \mathtt{xp}[0]$? If so, return the first
+  listed value $\mathtt{fp}[0]$.
+\item Otherwise, search for the interval that contains $x$ (assuming ascending order) and interpolate.
+\end{enumerate}
+On an ascending list these checks are the ``hold the end value'' rule. On a descending list they are the
+passenger reading the timetable from the bottom.
+
+\begin{keypoint}
+On a strictly descending list, under the check order above, step 3 is never reached: every query is answered
+by one of the two edge checks, so the output is a step function with only two values.
+\end{keypoint}
+
+Prove the key point in two lines. Let the list be descending, so its last entry is its smallest and its first
+is its largest: $\mathtt{xp}[-1] < \mathtt{xp}[0]$. Take any query $x$.
+\begin{itemize}
+\item If $x > \mathtt{xp}[-1]$, check 1 fires and returns $\mathtt{fp}[-1]$.
+\item If not, then $x \le \mathtt{xp}[-1]$. Chain the inequality with $\mathtt{xp}[-1] < \mathtt{xp}[0]$ to
+  get $x < \mathtt{xp}[0]$, so check 2 fires and returns $\mathtt{fp}[0]$.
+\end{itemize}
+Every $x$ falls in one of the two cases, so step 3 never runs. With $\mathtt{xp} = (700, 600, 500)$: every
+$x > 500$ gets $\mathtt{fp}[-1] = 1$ and every $x \le 500$ gets $\mathtt{fp}[0] = 4$ - exactly the table.
+The proof also covers a list made of several descending runs, as long as its last entry is smaller than its
+first; you will need that for the PRISMA hosts in \cref{sec:sortbug:prisma}.
+
+\coursefig[\linewidth]{ad-22-interp-order}{The same three samples (500, 600, 700\,nm; values 1, 2, 4). (a) Listed
+ascending, \texttt{np.interp} draws the line: 1.5 at 550\,nm and 3.0 at 650\,nm. (b) Listed descending, it
+returns the last listed value, 1, for every wavelength above 500\,nm: the spectrum goes flat.}{fig:sortbug:interp}
+
+\section{Resampling a cube is a matrix}\label{sec:sortbug:matrix}
+
+\index{resampling!as a matrix}
+The evaluator's \code{resample} in \code{app/evaluation/datasets.py} moves a whole cube of shape
+\shape{(C, H, W)} (C bands, H rows, W columns) onto a fixed grid of G wavelengths. It does not call
+\code{np.interp} once per pixel. It builds one \emph{weight matrix} $\mat{M}$ of shape \shape{(G, C)} and
+multiplies every pixel's spectrum by it. Why is that allowed?
+
+\paragraph{Interpolation is linear in the values.}
+Fix the sample positions and the query point. Equation \eqref{eq:sortbug:lerpweights} says the output is
+$(1-t)\,y_0 + t\,y_1$ - a weighted sum of the sample values, with weights that depend only on positions. So if
+you interpolate two value lists $\vect{f}$ and $\vect{g}$ and add the results, you get the same as interpolating
+$\vect{f} + \vect{g}$; and scaling the values by a number scales the output by that number. A map with those
+two properties is \emph{linear}, and every linear map from $C$ numbers to $G$ numbers is a $G \times C$ matrix.
+
+\paragraph{Finding the matrix column by column.}
+Write a pixel's spectrum as a sum of \emph{unit vectors}: $\vect{e}_b$ is the list with 1 in position $b$ and 0
+elsewhere, so a spectrum $\vect{y} = (y_1, \ldots, y_C)$ equals $\sum_b y_b\,\vect{e}_b$. By linearity,
+\begin{align}
+\operatorname{interp}(\vect{y}) &= \operatorname{interp}\Big(\sum_b y_b\,\vect{e}_b\Big)
+  = \sum_b y_b\,\operatorname{interp}(\vect{e}_b).
+\intertext{The right-hand side is a matrix-vector product whose $b$-th column is $\operatorname{interp}(\vect{e}_b)$:}
+\operatorname{interp}(\vect{y}) &= \mat{M}\vect{y}, \qquad \mat{M}_{:,b} = \operatorname{interp}(\text{grid};\ \mathtt{wl},\ \vect{e}_b).
+\end{align}
+That is the code, line for line:
+
+\begin{lstlisting}
+# app/evaluation/datasets.py, before b94dbfd
+# M: (G, C); column i is the interpolation of unit vector e_i
+M = np.stack([np.interp(grid, wl, np.eye(len(wl))[i]) for i in range(len(wl))], 1)
+return np.einsum("gb,bhw->ghw", M, cube, optimize=True)   # (C, H, W) -> (G, H, W)
+\end{lstlisting}
+
+\code{np.eye(len(wl))[i]} is $\vect{e}_i$; \code{np.stack(..., 1)} puts the results side by side as columns;
+\code{einsum("gb,bhw->ghw")} multiplies every pixel's $C$-vector by $\mat{M}$.
+
+\begin{worked}[label={we:sortbug:row}]{One row of the resample matrix, right and wrong}
+Three scene bands listed 700, 600, 500\,nm (descending, as PRISMA lists them); one grid wavelength, 550\,nm.
+The pixel reads $(4, 2, 1)$ in that listed order.
+
+The correct row puts weight on the two bands that bracket 550\,nm. From \cref{we:sortbug:lerp}, $t = 0.5$ of
+the way from 500 to 600, so 600\,nm gets $t = 0.5$ and 500\,nm gets $1 - t = 0.5$:
+\begin{center}
+\begin{tabular}{lccc}
+\toprule
+band as listed & 700 & 600 & 500 \\
+\midrule
+correct row for 550\,nm & 0.0 & 0.5 & 0.5 \\
+unsorted row for 550\,nm & 0.0 & 0.0 & 1.0 \\
+pixel value & 4 & 2 & 1 \\
+\bottomrule
+\end{tabular}
+\end{center}
+Where does the unsorted row come from? Column $b$ is $\operatorname{interp}(550;\ (700,600,500),\ \vect{e}_b)$.
+By the key point of \cref{sec:sortbug:contract}, $550 > 500$ (the last listed), so each call returns the last
+entry of $\vect{e}_b$: 0 for $b = 700$, 0 for $b = 600$, 1 for $b = 500$.
+
+Apply each row to the pixel:
+\begin{align*}
+\text{correct:}\quad & 0 \times 4 + 0.5 \times 2 + 0.5 \times 1\\
+ &= 0 + 1.0 + 0.5\\
+ &= 1.5\\
+\text{unsorted:}\quad & 0 \times 4 + 0 \times 2 + 1 \times 1\\
+ &= 1
+\end{align*}
+\end{worked}
+
+\paragraph{The fix: sort the pairs, keep them together.}
+\index{argsort}
+The fix sorts the wavelengths and builds the columns on the sorted list, then writes each column back to the
+position of the band it belongs to:
+
+\begin{lstlisting}
+# app/evaluation/datasets.py, since b94dbfd
+order = np.argsort(wl)                # (C,) band positions in ascending order
+M = np.zeros((len(grid), len(wl)))    # (G, C)
+M[:, order] = np.stack([np.interp(grid, wl[order], np.eye(len(wl))[i])
+                        for i in range(len(wl))], 1)
+\end{lstlisting}
+
+\code{np.argsort(wl)} returns the \emph{permutation} that sorts \code{wl}: the list of positions such that
+\code{wl[order]} is ascending. Sorting does not change the data. Each wavelength keeps its own value; only the
+order in which the pairs are listed changes. A function sampled at a set of points is the same function however
+you list the points - the bug was never in the data, only in a precondition left unmet.
+
+\begin{worked}[label={we:sortbug:fix}]{The sorted resample, by hand}
+Bands listed $\mathtt{wl} = (700, 600, 500)$; grid $(550, 650)$; pixel $(4, 2, 1)$ in listed order.
+\begin{enumerate}
+\item Sort. The smallest wavelength, 500, sits at position 2; then 600 at position 1; then 700 at position 0. So
+  $\mathtt{order} = (2, 1, 0)$ and $\mathtt{wl[order]} = (500, 600, 700)$, ascending.
+\item Build columns on the sorted list. Sorted column 0 (500\,nm): weight $0.5$ at 550, $0$ at 650. Sorted
+  column 1 (600\,nm): $0.5$ at 550, $0.5$ at 650. Sorted column 2 (700\,nm): $0$ at 550, $0.5$ at 650.
+\item Write back: sorted column $i$ goes to original column $\mathtt{order}[i]$. Sorted 0 $\to$ original 2,
+  sorted 1 $\to$ original 1, sorted 2 $\to$ original 0:
+  \[
+  \mat{M} = \begin{pmatrix} 0 & 0.5 & 0.5 \\ 0.5 & 0.5 & 0 \end{pmatrix}
+  \quad\text{(columns: 700, 600, 500 nm).}
+  \]
+\item Multiply. Row 1: $0 \times 4 + 0.5 \times 2 + 0.5 \times 1 = 0 + 1 + 0.5 = 1.5$. Row 2:
+  $0.5 \times 4 + 0.5 \times 2 + 0 \times 1 = 2 + 1 + 0 = 3.0$.
+\end{enumerate}
+The old code gives $\mat{M} = \begin{psmallmatrix} 0 & 0 & 1 \\ 0 & 0 & 1\end{psmallmatrix}$ and the
+output $(1, 1)$. Both matrices were confirmed by \file{research/textbook/tools/compute_sortbug.py}\tagC.
+\end{worked}
+
+\section{What it did to real PRISMA band lists}\label{sec:sortbug:prisma}
+
+PRISMA has two detectors, a visible and near-infrared (VNIR) one and a short-wave infrared (SWIR) one, and its
+files list the bands of each detector from long to short wavelength. Two real lists met the bug.
+
+\paragraph{The bench objects' list.} The 185 bands on which the real PRISMA bench objects were measured
+(\file{C:/es/implant/real_v2.json}, field \texttt{wavelengths\_nm}) start at 2477.05\,nm and end at
+453.39\,nm\tagM{C:/es/implant/real_v2.json}. The 165-band common grid of \cref{ch:sensors} runs from 460 to
+2450\,nm in 10\,nm steps. Every grid wavelength is longer than 453.39\,nm, the last band listed. By the key
+point, every row of the old $\mat{M}$ has a single 1, in column 184 - the 453\,nm band. Running the old line
+on the real list confirms it: only column 184 is ever used\tagC.
+
+\begin{keypoint}
+The fixed-grid model was handed 165 copies of the same blue image: no spectrum to reconstruct, only one band's
+spatial texture.
+\end{keypoint}
+
+\paragraph{The implant hosts' lists.} A PRISMA host's \file{wavelengths.npy} (for example
+\file{C:/es/implant/bench-v2.1/prisma/PRS_L2D_STD_20230311055340/}) holds 234 bands in two descending runs: the
+VNIR detector from 977.37 down to 406.99\,nm, then the SWIR detector from 2497.12 down to
+943.36\,nm\tagM{C:/es/implant/bench-v2.1/prisma/PRS_L2D_STD_20230311055340/wavelengths.npy}. The list is not
+descending overall, but its last entry (943.36) is smaller than its first (977.37), which is all the proof in
+\cref{sec:sortbug:contract} needs:
+\begin{align*}
+\text{grid wavelength} > 943.36\,\text{nm} &\;\to\; \text{the 943\,nm band (last listed)},\\
+\text{grid wavelength} \le 943.36\,\text{nm} &\;\to\; \text{the 977\,nm band (first listed)}.
+\end{align*}
+Count them on the common grid. The grid skips the water-vapour window from 912 to 978\,nm
+(\code{build_common_wavelength_grid} in \code{app/models/dataset/vendables.py}), so its wavelengths at or below
+943.36\,nm are 460, 470, \ldots, 910:
+\[
+\frac{910 - 460}{10} + 1 = \frac{450}{10} + 1 = 45 + 1 = 46 \text{ grid bands.}
+\]
+So 46 grid bands became copies of the 977\,nm image and the other $165 - 46 = 119$ copies of the 943\,nm image
+(the script agrees: 46, and only columns 0 and 233 are used\tagC). Every grid band was one of two near-infrared
+pictures.
+
+\begin{sourcenote}[: which models the reading bug touched]
+Only fixed-grid models go through \code{resample}: the shipped v0.2.0 reads the 165-band grid. The
+wavelength-reading models (F001 and every FT run) read the host's own bands directly and never touched it. And
+only descending lists trip it: the EnMAP and AVIRIS-NG hosts were read correctly. The real PRISMA bench was also
+safe: for fixed-grid models the evaluator reloads its scenes through the product's \code{band_filter_apply},
+whose resampler (\code{app/utils/data_transformations/spectral_resampler.py}, line 70) begins
+\texttt{\# Sort source wavelengths ascending}. The product always sorted; the evaluator re-implemented a faster
+resample and left the sort out.
+\end{sourcenote}
+
+\section{What it did to the signature implants}\label{sec:sortbug:signature}
+
+\index{implant!signature}
+A \emph{signature} implant (\cref{ch:benchmarks}) takes a real object's difference spectrum $\vect{d} =
+\vect{o} - \vect{r}$ - the object's mean spectrum minus the mean of a ring of pixels around it - measured on
+the 185 bench bands, and carries it to the host's bands by interpolation. Before \texttt{b94dbfd} that was a bare
+\code{np.interp(wl, rw, d)}, in the builder's \code{place_and_implant} and in \code{implant_tile} alike, with
+\code{rw} the descending bench list. Same mechanism, same damage.
+
+\begin{worked}[label={we:sortbug:signature}]{A signature flattened}
+A difference spectrum listed descending: $+0.06$ at 700\,nm, $+0.03$ at 600\,nm, $-0.02$ at 500\,nm. The host
+has bands at 520, 580 and 650\,nm. Do it on paper.
+
+Correct, by \eqref{eq:sortbug:lerp}:
+\begin{align*}
+520\,\text{nm}:\quad t &= \tfrac{520 - 500}{600 - 500} = 0.2, & y &= -0.02 + 0.2 \times (0.03 - (-0.02))\\
+ & & &= -0.02 + 0.01 = -0.01\\
+580\,\text{nm}:\quad t &= \tfrac{580 - 500}{600 - 500} = 0.8, & y &= -0.02 + 0.8 \times 0.05\\
+ & & &= -0.02 + 0.04 = 0.02\\
+650\,\text{nm}:\quad t &= \tfrac{650 - 600}{700 - 600} = 0.5, & y &= 0.03 + 0.5 \times (0.06 - 0.03)\\
+ & & &= 0.03 + 0.015 = 0.045
+\end{align*}
+Unsorted: all three host bands are above 500\,nm (the last listed), so each gets the last listed value,
+$-0.02$. The real shape - dark in the blue, bright towards the red - arrives as a flat step $(-0.02, -0.02,
+-0.02)$. Both results match the script\tagC.
+\end{worked}
+
+For the real bench list, every host band longer than 453.39\,nm received $\vect{d}$ at 453\,nm, one number;
+the few host bands at or below 453\,nm received $\vect{d}$ at 2477\,nm. bench-v2's later steps
+(\code{match_foreignness} and the strength solve of \cref{ch:benchmarks}) then rescaled that step, so the
+garbled implants still hit their target contrast and foreignness - but not the shape of any real object.
+
+\begin{keypoint}
+The signature bug hit every signature implant in bench-v1 and bench-v2, for every model, and half of the
+implants FT05 trained on (\cref{ch:ftruns}).
+\end{keypoint}
+
+The fix is a three-line function:
+\begin{lstlisting}
+# app/evaluation/implant.py
+def interp_spectrum(wl, src_wl, values):
+    src_wl, values = np.asarray(src_wl, float), np.asarray(values, float)
+    order = np.argsort(src_wl)                     # ascending, pairs kept together
+    return np.interp(wl, src_wl[order], values[order])
+\end{lstlisting}
+
+\section{How it hid in plain sight}\label{sec:sortbug:hid}
+
+Five things kept the bug invisible for two days. Each is a habit worth breaking.
+\begin{enumerate}
+\item \textbf{No error.} \code{np.interp} returned numbers of the right shape and range. Nothing crashed,
+  nothing was NaN. A copy of a real band is a perfectly plausible-looking image.
+\item \textbf{A warning that sounded like an excuse.} The resample's docstring said implant hosts are read
+  ``close to, not identical with'' the product. A difference was expected, so a difference was not alarming.
+\item \textbf{A story that fitted.} On bench-v1 the models lined up in training order with v0.2.0 at the bottom,
+  and ``pretraining helps'' is what everyone expected. The Indradhanu course even noted that the model and the
+  band reading changed together between v0.2.0 and F001 - and read the step as the model's.
+\item \textbf{A cross-check that was run and misread.} The implant-bench README now says: ``An earlier note here
+  that the two readings were identical was a misread.'' The saved check said 15.8\% against 44.2\%.
+\item \textbf{The tests used the wrong orderings.} Every test of the new resample used ascending lists, where
+  sorted and unsorted code agree, until \code{test_descending_band_lists} was added with the fix. It feeds the
+  same cube with the wavelengths reversed (\code{up[::-1]}) and asserts the result equals the ascending one,
+  and that \code{interp_spectrum} returns 1.5 and 3.0 at 550 and 650\,nm from a descending list.
+\end{enumerate}
+
+\section{The cross-check that found it}\label{sec:sortbug:crosscheck}
+
+\index{cross-check}
+For a fixed-grid model the real PRISMA bench can be read two ways: through the product's
+\code{band_filter_apply} path (what the evaluator does for PRISMA bench scenes), or through the generic
+\code{resample} (what implant hosts get). If the evaluator is right, the two must agree on the same scenes. A
+one-off script, \file{C:/es/eval/resample_check.py}, swapped the reader and scored v0.2.0
+(\cref{tab:sortbug:crosscheck}).
+
+\begin{table}[htbp]
+\centering
+\caption{v0.2.0 on the real PRISMA bench (909 objects), residual Mahalanobis, read three ways.}
+\label{tab:sortbug:crosscheck}
+\small
+\begin{tabular}{lccccc}
+\toprule
+reading path & caught top 1\% & top 0.1\% & pAUC to 1\% & ROC-AUC & TPR at 0.1\% \\
+\midrule
+product path & 44.2\% & 14.1\% & 0.159 & 0.854 & 0.058 \\
+generic resample, before fix & 15.8\% & 5.6\% & 0.094 & 0.752 & 0.023 \\
+generic resample, after fix & 44.2\% & 14.1\% & 0.159 & 0.854 & 0.058 \\
+\bottomrule
+\end{tabular}
+
+\smallskip
+{\footnotesize Sources: \tagM{C:/es/eval/resample_check/report.md}; \tagM{research/experiments/implant-bench/README.md} (Corrections, 2026-10-18).}
+\end{table}
+
+After the fix the two paths give the same five numbers. In objects, count what the bug had cost v0.2.0.
+
+\begin{worked}[label={we:sortbug:objects}]{Objects the bug hid}
+At the top 1\%:
+\begin{align*}
+0.442 - 0.158 &= 0.284\\
+0.284 \times 909 &= 258.2 \approx 258 \text{ objects}
+\end{align*}
+At the top 0.1\%:
+\begin{align*}
+0.141 - 0.056 &= 0.085\\
+0.085 \times 909 &= 77.3 \approx 77 \text{ objects}
+\end{align*}
+(Script check: 258.156 and 77.265\tagC.)
+\end{worked}
+
+\begin{keypoint}
+When a benchmark has its own data path, run one model through both paths on data where both exist, and treat any
+gap as a bug until it is explained.
+\end{keypoint}
+
+\section{The scoreboard, read correctly: bench-v2.1}\label{sec:sortbug:board}
+
+bench-v2 was rebuilt with the fix as \emph{bench-v2.1} (\texttt{--version 2 --psf-sigma 1.4 --foreign-tol 1.2
+--seed 0}): 18 hosts, 2,817 objects (signature 985, material 927, host
+905)\tagM{research/experiments/implant-bench/README.md}. The foreignness tolerance was also tightened from 1.5 to
+1.2, the candidate fix for bench-v2's marginal acceptance miss. \Cref{tab:sortbug:v21} is the board.
+
+\begin{table}[htbp]
+\centering
+\caption{bench-v2.1, residual Mahalanobis. ``Caught'' is the share of the 2,817 objects with a pixel within
+one step of a top-scoring pixel (\cref{ch:measures}).}
+\label{tab:sortbug:v21}
+\small\setlength{\tabcolsep}{3.5pt}
+\begin{tabular}{lcccccc}
+\toprule
+model & top 1\% & top 0.1\% & pAUC to 1\% & TPR at 0.1\% & EnMAP hosts & PRISMA hosts \\
+\midrule
+\textit{chance} & 10.5\% & 1.1\% & & & & \\
+v0.2.0 (read correctly) & \textbf{35.5\%} & 12.6\% & 0.168 & 0.082 & 21.6\% & \textbf{42.2\%} \\
+F001 ep109 & 33.1\% & 11.7\% & 0.157 & 0.078 & 20.5\% & 37.7\% \\
+FT02c ep10 & 35.1\% & 12.8\% & 0.169 & 0.086 & 20.7\% & 40.3\% \\
+FT03 ep10 & 34.9\% & 12.7\% & 0.168 & 0.086 & 20.6\% & 40.1\% \\
+FT04 ep10 & 35.1\% & 12.7\% & 0.169 & 0.083 & 20.3\% & 40.4\% \\
+FT05 ep5 & 35.4\% & 12.8\% & 0.170 & 0.085 & 20.8\% & 40.7\% \\
+PCA-RX (no model) & 33.2\% & 9.8\% & 0.154 & 0.069 & 19.8\% & 37.7\% \\
+\bottomrule
+\end{tabular}
+
+\smallskip
+{\footnotesize Sources: \tagM{research/experiments/implant-bench/README.md} (bench-v2.1); FT04's row
+\tagM{research/experiments/indradhanu-finetune/FT04-final-joint/README.md} and \tagM{C:/es/eval/ft04/report.md}.}
+\end{table}
+
+\begin{drift}
+\Cref{tab:sortbug:v21} and \cref{fig:sortbug:bars} are the 2026-10-18 board (FT04 added 2026-10-19). Later runs
+(FT06 to FT09, Indradhanu Heavy; \cref{ch:uncertainty,ch:decoderwork,ch:heavy}) are scored on the same bench and
+are not shown here. Any rebuild of the bench moves every row.
+\end{drift}
+
+Read it against the old boards (\cref{fig:sortbug:bars}). v0.2.0 caught 19.0\% on bench-v1, 22.1\% on bench-v2,
+35.5\% on bench-v2.1. FT03 caught 26.9\%, 32.3\%, 34.9\%\tagM{research/experiments/implant-bench/README.md}.
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}
+\begin{axis}[
+  ybar, bar width=12pt, width=0.92\linewidth, height=6.5cm,
+  ymin=0, ymax=42, ylabel={caught at top 1\% (\%)},
+  symbolic x coords={bench-v1,bench-v2,bench-v2.1}, xtick=data,
+  enlarge x limits=0.22, legend style={at={(0.5,1.03)},anchor=south,legend columns=4,font=\small},
+  nodes near coords, nodes near coords style={font=\tiny, rotate=90, anchor=west},
+  every axis plot/.append style={draw=black!60}]
+\addplot[fill=loss!70] coordinates {(bench-v1,19.0) (bench-v2,22.1) (bench-v2.1,35.5)};
+\addplot[fill=spec!60] coordinates {(bench-v1,25.2) (bench-v2,29.2) (bench-v2.1,33.1)};
+\addplot[fill=spat!50] coordinates {(bench-v1,26.9) (bench-v2,32.3) (bench-v2.1,34.9)};
+\addplot[fill=maskgrey!60] coordinates {(bench-v1,30.2) (bench-v2,30.2) (bench-v2.1,33.2)};
+\legend{v0.2.0 (fixed grid), F001, FT03, PCA-RX}
+\end{axis}
+\end{tikzpicture}
+\caption{Objects caught at the top 1\% on the three implant benches, drawn to scale. The wavelength-reading models
+(F001, FT03) and PCA-RX move a few points with each rebuild; v0.2.0, whose reading was the only one fixed, jumps
+13.4 points from bench-v2 to bench-v2.1. Its bench-v1 and bench-v2 bars measured a broken resample.}
+\label{fig:sortbug:bars}
+\end{figure}
+
+\begin{worked}[label={we:sortbug:split}]{How much of v0.2.0's jump is the fix?}
+v0.2.0 moved
+\[
+35.5 - 22.1 = 13.4 \text{ points}
+\]
+from bench-v2 to bench-v2.1. FT03, which never went through the broken resample, moved
+\[
+34.9 - 32.3 = 2.6 \text{ points}
+\]
+with the rebuild alone (correct signatures, tighter tolerance). If the rebuild gave v0.2.0 the same 2.6 points,
+the fix accounts for
+\[
+13.4 - 2.6 = 10.8 \text{ points}.
+\]
+This split is rough: the rebuild changed the bench for every model, but not by exactly the same amount.
+\end{worked}
+
+\paragraph{How big is noise? A rough ruler.}
+\index{standard error!binomial}
+Is v0.2.0's 35.5\% really ahead of FT03's 34.9\%? Treat each object as a coin that a model catches with some
+probability $p$. Write $X_i = 1$ if object $i$ is caught and 0 if not; this is a \emph{Bernoulli} variable.
+Derive its mean and variance:
+\begin{align}
+\E[X_i] &= 1 \cdot p + 0 \cdot (1-p) = p, \notag\\
+\E[X_i^2] &= 1^2 \cdot p + 0^2 \cdot (1-p) = p, \notag\\
+\operatorname{Var}[X_i] &= \E[X_i^2] - (\E[X_i])^2 = p - p^2 = p(1-p). \notag
+\intertext{The share caught is the average $\bar X = \frac{1}{n}\sum_i X_i$. For independent objects the variance
+of a sum is the sum of variances, and dividing by $n$ divides the variance by $n^2$:}
+\operatorname{Var}[\bar X] &= \frac{1}{n^2} \cdot n\,p(1-p) = \frac{p(1-p)}{n}, \qquad
+\operatorname{SE} = \sqrt{\frac{p(1-p)}{n}}. \label{eq:sortbug:se}
+\end{align}
+
+\begin{worked}[label={we:sortbug:se}]{Is 35.5\% against 34.9\% a difference?}
+With $p = 0.35$ and $n = 2{,}817$:
+\begin{align*}
+p(1-p) &= 0.35 \times 0.65 = 0.2275\\
+0.2275 / 2{,}817 &= 0.0000808\\
+\sqrt{0.0000808} &= 0.0090 \quad\text{(about 0.9 points)}\\
+\text{gap} &= 35.5 - 34.9 = 0.6 \text{ points} = 0.6 / 0.9 = 0.7 \text{ standard errors}
+\end{align*}
+Under one standard error: a tie. (Script: $\operatorname{SE} = 0.00899$, gap 0.67\,SE\tagC.)
+\end{worked}
+
+Two models scored on the \emph{same} objects are correlated, so the honest uncertainty of their difference is
+smaller than this single-model ruler suggests. \Cref{ch:bootstrap} builds the proper paired object bootstrap; use
+\eqref{eq:sortbug:se} only as a first, cautious check.
+
+Three more readings of \cref{tab:sortbug:v21}:
+\begin{itemize}
+\item \textbf{Every model stays above PCA-RX at the top 0.1\%} (11.7--12.8\% against 9.8\%), as on the real
+  bench - the ordering test of \cref{ch:benchmarks} still passes. At the top 1\% F001 and PCA-RX tie (33.1\%
+  against 33.2\%).
+\item \textbf{EnMAP hosts sit near 21\% for every model and for PCA-RX.} Unexplained on bench-v1, v2 and v2.1.
+\item \textbf{The easy tier is too foreign.} Per-tier foreignness on PRISMA hosts is 1.05$\times$ / 1.15$\times$ /
+  1.60$\times$ real (subtle / medium / easy); halo 0.92--1.06$\times$\tagM{research/experiments/implant-bench/README.md}.
+  The easy tier is outside the 25\% acceptance limit.
+\end{itemize}
+
+\begin{worked}[label={we:sortbug:selection}]{The selection effect behind the easy tier}
+This is an illustration, not bench data\tagA. Four easy targets want foreignness 0.001, 0.002, 0.004 and 0.008.
+With the tolerance at 1.2, suppose the realised object can only get within 1.2$\times$ of the two higher targets, so
+the two lower spots are skipped. The median of four numbers is the mean of the middle two:
+\begin{align*}
+\text{targets:}\quad & 0.001,\ 0.002,\ 0.004,\ 0.008 \qquad \text{median} = (0.002 + 0.004)/2 = 0.003\\
+\text{survivors:}\quad & 0.004,\ 0.008 \qquad \text{median} = (0.004 + 0.008)/2 = 0.006
+\end{align*}
+Nothing was implanted wrongly; the population that remains is not the one aimed at.
+\end{worked}
+
+\begin{keypoint}
+Read correctly, v0.2.0 ties or beats every new model on bench-v2.1, as it ties them on the real bench: the
+``pretraining is the big step'' result (v0.2.0 19--22\% to F001 25--29\%) was the reading bug.
+\end{keypoint}
+
+\section{Lessons for trusting a benchmark}\label{sec:sortbug:lessons}
+
+\Cref{ch:benchmarks}'s ordering test asked: does the benchmark reproduce something the real labels already told
+you? It was applied to PCA-RX, and passed. It was not applied to v0.2.0 - and v0.2.0 failed it on both bench-v1
+and bench-v2 (a tie on real objects, far behind on implants). That failure was the bug announcing itself. So,
+before you trust a benchmark's ranking of models:
+\begin{enumerate}
+\item \textbf{Check every model's position against the real labels, not only the baseline's.} One model that
+  the real bench and the benchmark disagree about is a flag on the benchmark's data path.
+\item \textbf{Cross-check any re-implemented data path against the product's}, on data where both exist
+  (\cref{sec:sortbug:crosscheck}).
+\item \textbf{Test with real input orderings.} PRISMA's descending list is a property of real files; a test
+  written with \code{[500, 600, 700]} cannot see it.
+\item \textbf{Know your preconditions.} If a library function's contract says ``meaningless'' for some input,
+  either enforce the precondition (sort) or assert it (\code{np.all(np.diff(xp) > 0)}).
+\item \textbf{Give a result you hoped for the scrutiny you would give one you feared.}
+\end{enumerate}
+
+The same descending list surfaced once more, in the product: when Indradhanu V2 began reading native PRISMA bands
+(\cref{ch:shipping}), \code{scene_segmentation}'s brightness - ``the mean of band 0 up to the VNIR edge'' - turned
+out to assume ascending order. On native PRISMA, band 0 is the far SWIR. That fix is part of the next two
+chapters' story.
+
+\begin{confusions}
+\confusion{The bug made every model's implant numbers wrong.}{Two different effects. The \emph{reading} bug hit
+fixed-grid models (v0.2.0) on PRISMA hosts only. The \emph{signature} bug garbled half (bench-v1) or a third
+(bench-v2) of the implants for every model alike. The wavelength-reading models' rows moved with the rebuild, not
+with the reading fix.}
+\confusion{The real bench was wrong too.}{No. For fixed-grid models the evaluator reloads PRISMA bench scenes through
+the product's \texttt{band\_filter\_apply}, which always sorted. v0.2.0's real-bench 0.159 never changed.}
+\confusion{Sorting the wavelengths reorders the data.}{It reorders the pairs. Band 453\,nm keeps its own values; it
+is only listed first instead of last. The function being sampled is unchanged.}
+\confusion{NumPy guarantees the two-value step on descending input.}{It guarantees nothing: the contract calls the
+result meaningless. The step is what NumPy 2.5.2 returned on the dev laptop, consistent with the check order of
+\cref{sec:sortbug:contract}. Do not rely on it, and do not write a test that expects it.}
+\confusion{bench-v2.1 says v0.2.0 is the best model.}{It says v0.2.0 ties the best models: 0.6 points ahead of FT03
+is under one standard error. No new model measurably beats it on detection.}
+\confusion{bench-v2.1 failed acceptance, so it cannot be used.}{The easy tier's foreignness misses the 25\% limit,
+by a known selection effect. The ordering test still holds. Use it as a ranking with that caveat stated, and keep
+the real bench as the judge.}
+\end{confusions}
+
+\begin{checkyourself}
+\item\label{ex:sortbug:1} By hand: samples at 800, 700, 600\,nm with values 0.30, 0.20, 0.10. What is the correct
+  value at 650\,nm, and what does \texttt{np.interp} return (NumPy 2.5.2, the check order of
+  \cref{sec:sortbug:contract}) if the samples are listed 800, 700, 600? What does it return at 590\,nm?
+\item\label{ex:sortbug:2} Bands listed 700, 600, 500\,nm. Write the correct resample row for a grid wavelength of
+  620\,nm, then the row the old unsorted code built, and apply both to a pixel reading $(0.40, 0.30, 0.10)$.
+\item\label{ex:sortbug:3} Bands listed $\mathtt{wl} = (600, 800, 700)$ (unsorted, not descending). Give
+  $\mathtt{np.argsort(wl)}$, the sorted list, and the matrix $\mat{M}$ of the fixed \code{resample} for the
+  grid $(650, 750)$. Apply it to the pixel $(1, 3, 2)$ in listed order.
+\item\label{ex:sortbug:4} Through the old generic resample v0.2.0 caught 15.8\% of the 909 real objects at the top
+  1\%, through the product path 44.2\%. If bench-v2.1's FT02c (35.1\%) and F001 (33.1\%) are compared with
+  $p = 0.34$ over 2,817 objects, how many standard errors apart are they? Is that difference larger or smaller
+  than the bug's effect on v0.2.0's real-bench catch, in standard errors of the real bench ($p = 0.30$, $n = 909$)?
+\item\label{ex:sortbug:5} The repo's resample tests passed for weeks with the bug in place. Explain why, and write
+  the one-line assertion you would add inside \code{resample} to make the old code fail loudly instead.
+\end{checkyourself}
+\endgroup
+
+\nextchapter{ch:ftruns}

@@ -1,0 +1,210 @@
+\chapter{How to read this book}\label{ch:howtoread}
+
+\section*{What this book is}
+
+This book turns two training courses into one mathematical textbook. The first course,
+\emph{Finding anomalies in satellite imagery} (\file{docs/training/anomaly-detection/}, 34 parts),
+teaches the domain, the classical detectors and the evaluation. The second,
+\emph{Indradhanu, from zero} (\texttt{indradhanu workings/}, 71 parts), teaches the hyperspectral
+foundation model the product uses to find anomalies, and the long history of experiments that
+shaped it. Where the two courses covered the same ground, this book merges them into one chapter.
+
+The courses already explain every idea in words and with small numbers. This book keeps that
+and adds the mathematics underneath: each formula is derived one operation at a time, each rule
+is checked on a tiny example the first time it is used, and each result is followed by a worked
+example small enough to do on paper.
+
+It is study material. It is subordinate to two things:
+\begin{itemize}
+  \item \textbf{The source code.} When this book and the code disagree, the code is right.
+    Wherever a writer found a course and the code disagreeing, the chapter says so in a red
+    \emph{Source check} box and follows the code.
+  \item \textbf{The reference documentation}, \file{docs/01-orientation.md} through
+    \file{docs/10-code-style.md}, and the low-level designs in \file{docs/lld/}.
+\end{itemize}
+The mathematics of naming a material from its spectrum (spectral library matching) has its own
+companion volume in \file{research/math/spectral-matching/}; this book only points to it.
+
+\section*{Who it is for}
+
+You need school algebra: you can expand $(a+b)^2$, solve $2x + 3 = 11$, and read a sum written
+with $\sum$. Everything else - vectors, matrices, eigenvalues, probability densities, derivatives
+of functions of many variables, the parts of a neural network - is introduced from the beginning,
+in the chapter that first needs it. If you learn slowly and carefully, the book is written for you.
+
+\section*{How every chapter is built}
+
+Every chapter has the same skeleton, so that you always know where you are.
+\begin{enumerate}
+  \item A green box, \textbf{The one thing this chapter teaches}, in one or two sentences.
+  \item The motivation: what problem exists, and why the obvious fix fails.
+  \item The mechanism, in numbered sections, with definitions before use, derivations one step
+    per line, and purple \textbf{Worked example} boxes with every arithmetic step written out.
+  \item \textbf{Common confusions}: the mistakes people actually make, as questions and answers.
+  \item \textbf{Check yourself}: about five exercises, at least one by hand. Full solutions are in
+    \cref{app:answers}.
+\end{enumerate}
+Other boxes you will meet:
+\begin{itemize}
+  \item a red \textbf{Source check} box, where a claim was checked against the code, or where a course
+    and the code disagree;
+  \item an \textbf{Analogy} box, one per chapter, tied to something outside software;
+  \item an amber key-point box, the one sentence to remember from a section;
+  \item a grey \textbf{Values that will drift} box, around numbers read from configurations,
+    checkpoints and runs, with the date they were true.
+\end{itemize}
+
+\paragraph{Where the numbers come from.} A number about the project carries a small grey tag:
+\tagM{file} means \emph{measured}, and names the file it was read from; \tagC{} means
+\emph{computed} for this book, by hand in the text or by a script in \file{research/textbook/tools/};
+\tagA{} means \emph{assumed} for illustration, with the assumption stated. Plain arithmetic inside a
+worked example is not tagged.
+
+\section*{Do the arithmetic}
+
+The worked examples are deliberately tiny - three bands, a $2\times 2$ matrix, six tokens - so that
+you can do them in a minute with a pencil. Reading them is not the same as doing them. Cover the
+right-hand side of each line, compute it, then uncover it.
+
+\section*{The parts, and what depends on what}
+
+The book has ten parts. Part I is the domain: light, sensors and the data structure the product
+hands to every algorithm. Part II is classical statistics: the linear algebra of covariance and
+whitening, and the detectors built on it. Part III builds the Indradhanu network piece by piece,
+with tensor shapes at every step and every parameter counted by hand; on the way it tours the five
+convolutional autoencoders that came before it (\cref{ch:convae}), and it ends with Chakshu, the same machine
+for one thermal band (\cref{ch:chakshu}). Part IV replaces Indradhanu's
+spectral front end. Part V trains it. Part VI turns its output into an answer a user sees. Part VII
+measures how good that answer is. Part VIII tells the history of the experiments as lessons, because
+most of what the team knows was learned from runs that failed. Part IX covers what was built on 2026-10-31: the
+spectral namer, a second model on the Indradhanu stem, and the first evaluation submission. Part X answers a question
+the team kept being asked: why not use HyperSL, a published spectral foundation model with open weights? It shows what
+HyperSL is and does well, then measures it on each of the product's jobs: library matching, anomaly detection, unmixing
+and cloud masking.
+
+\Cref{fig:howtoread:map} shows which chapters you need before which. A solid arrow means ``read
+this first''. Read the book in order if you can; the map is for when you want to reach a chapter
+sooner and need to know the shortest path to it.
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}[
+  ch/.style={draw, rounded corners=2pt, minimum width=7mm, minimum height=5.5mm,
+             font=\scriptsize\bfseries, inner sep=1pt},
+  p1/.style={ch, fill=gray!12},
+  p2/.style={ch, fill=loss!15},
+  p3/.style={ch, fill=spat!12},
+  p4/.style={ch, fill=spec!15},
+  p5/.style={ch, fill=attn!12},
+  p6/.style={ch, fill=loss!25},
+  p7/.style={ch, fill=spec!25},
+  p8/.style={ch, fill=gray!25},
+  ar/.style={-{Stealth[length=1.6mm]}, gray!70!black, line width=0.5pt},
+  lab/.style={font=\scriptsize\itshape, anchor=west, text=gray!40!black},
+  x=9mm, y=8.5mm]
+  % Part I
+  \node[lab] at (-0.6,0.6) {I. Domain and data};
+  \foreach \s/\x in {problem/0,light/1,sensors/2,product/3,bandpipeline/4} \node[p1] (\s) at (\x,0) {\ref{ch:\s}};
+  \foreach \a/\b in {problem/light,light/sensors,sensors/product,product/bandpipeline} \draw[ar] (\a) -- (\b);
+  % Part II
+  \node[lab] at (5.4,0.6) {II. Statistical detection};
+  \foreach \s/\x in {linalg/6,rx/7,localrx/8} \node[p2] (\s) at (\x,0) {\ref{ch:\s}};
+  \draw[ar] (linalg) -- (rx); \draw[ar] (rx) -- (localrx);
+  \draw[ar] (bandpipeline) -- (linalg);
+  % Part III
+  \node[lab] at (-0.6,-1.4) {III. Reconstruction, the Indradhanu architecture and Chakshu};
+  \foreach \s/\x in {recon/0,shapes/1,convae/2,compressor/3,patchembed/4,attention/5,esa/6,block/7,encoder/8,masking/9,decoder/10,params/11,chakshu/12}
+    \node[p3] (\s) at (\x,-2) {\ref{ch:\s}};
+  \foreach \a/\b in {recon/shapes,shapes/convae,convae/compressor,compressor/patchembed,patchembed/attention,attention/esa,esa/block,block/encoder,encoder/masking,masking/decoder,decoder/params,params/chakshu}
+    \draw[ar] (\a) -- (\b);
+  \draw[ar] (bandpipeline) to[out=-120,in=60] (recon);
+  \draw[ar] (linalg) to[out=-120,in=60] (shapes);
+  % Part IV
+  \node[lab] at (-0.6,-3.4) {IV. Spectral stem};
+  \foreach \s/\x in {ceiling/0,crossstem/1,specdecoder/2} \node[p4] (\s) at (\x,-4) {\ref{ch:\s}};
+  \draw[ar] (ceiling) -- (crossstem); \draw[ar] (crossstem) -- (specdecoder);
+  \draw[ar] (params) to[out=-150,in=30] (ceiling);
+  % Part V
+  \node[lab] at (3.4,-3.4) {V. Training};
+  \foreach \s/\x in {losses/4,trainloop/5,pretrain/6,seghead/7,finetune/8} \node[p5] (\s) at (\x,-4) {\ref{ch:\s}};
+  \foreach \a/\b in {losses/trainloop,trainloop/pretrain,pretrain/seghead,seghead/finetune} \draw[ar] (\a) -- (\b);
+  \draw[ar] (decoder) to[out=-120,in=60] (losses);
+  \draw[ar] (specdecoder) to[out=-30,in=-150] (pretrain);
+  % Part VI
+  \node[lab] at (-0.6,-5.4) {VI. From model to answer};
+  \foreach \s/\x in {inference/0,residualmaha/1,material/2} \node[p6] (\s) at (\x,-6) {\ref{ch:\s}};
+  \draw[ar] (inference) -- (residualmaha); \draw[ar] (residualmaha) -- (material);
+  \draw[ar] (trainloop) to[out=-150,in=30] (inference);
+  \draw[ar] (localrx) to[out=-100,in=80] ([xshift=2mm]residualmaha.north);
+  % Part VII
+  \node[lab] at (3.4,-5.4) {VII. Evaluation};
+  \foreach \s/\x in {measures/4,benchmarks/5,runeval/6,bootstrap/7} \node[p7] (\s) at (\x,-6) {\ref{ch:\s}};
+  \foreach \a/\b in {measures/benchmarks,benchmarks/runeval,runeval/bootstrap} \draw[ar] (\a) -- (\b);
+  \draw[ar] (residualmaha) to[out=-30,in=-150] (measures);
+  % Part VIII
+  \node[lab] at (-0.6,-7.4) {VIII. The experiments, told as lessons};
+  \foreach \s/\x in {sortbug/0,ftruns/1,shipping/2,scoringgains/3,uncertainty/4,decoderwork/5,heavy/6}
+    \node[p8] (\s) at (\x,-8) {\ref{ch:\s}};
+  \foreach \a/\b in {sortbug/ftruns,ftruns/shipping,shipping/scoringgains,scoringgains/uncertainty,uncertainty/decoderwork,decoderwork/heavy}
+    \draw[ar] (\a) -- (\b);
+  \draw[ar] (bootstrap) to[out=-120,in=30] (sortbug);
+  \draw[ar] (finetune) to[out=-60,in=60] (9,-6.5) to[out=-120,in=30] (ftruns);
+  % Part IX
+  \node[lab] at (7.5,-8.65) {IX. Naming and delivering};
+  \node[p6] (namer) at (8,-8) {\ref{ch:namer}}; \node[p6] (submission) at (9,-8) {\ref{ch:submission}};
+  \draw[ar] (namer) -- (submission);
+  \draw[ar] (heavy) -- (namer);
+  \draw[ar] (material) to[out=-15,in=175] (6.4,-6.75) to[out=-5,in=110] (namer);
+  % Part X
+  \node[lab] at (5.55,-10) {X. Why not HyperSL};
+  \foreach \s/\x in {hslwhat/0,hslnorm/1,hsldetect/2,hslunmix/3,hslcloud/4,hslverdict/5}
+    \node[p7] (\s) at (\x,-10) {\ref{ch:\s}};
+  \foreach \a/\b in {hslwhat/hslnorm,hslnorm/hsldetect,hsldetect/hslunmix,hslunmix/hslcloud,hslcloud/hslverdict}
+    \draw[ar] (\a) -- (\b);
+  \draw[ar] (namer.south) to[out=-100,in=60] (hslwhat.north);
+\end{tikzpicture}
+\caption{The chapter dependency map. Each box is a chapter number; an arrow means ``read this
+first''. Inside a part, read in order. The long arrows show the few places where a later part
+leans on a specific earlier chapter: the linear algebra of \cref{ch:linalg} under the tensor
+arithmetic of \cref{ch:shapes}, the local detectors of \cref{ch:localrx} under the residual
+Mahalanobis score of \cref{ch:residualmaha}, and the fine-tuning machinery of \cref{ch:finetune}
+under the experiment chapters. Part X leans on the namer (\cref{ch:namer}) and, through it, on the reconstruction,
+masking, spectral-stem and evaluation chapters.}
+\label{fig:howtoread:map}
+\end{figure}
+
+\section*{Five reading paths}
+
+\begin{description}[style=nextline,leftmargin=1.2em,font=\normalfont\bfseries]
+  \item[The whole book (recommended).] Chapters \ref{ch:problem} to \ref{ch:submission} in order. A fortnight of
+    steady study.
+  \item[Detection only.] Chapters \ref{ch:problem}--\ref{ch:localrx}, then \ref{ch:recon}, \ref{ch:residualmaha},
+    \ref{ch:measures}--\ref{ch:bootstrap}. You learn the statistics of detection and how detections are measured,
+    without the network.
+  \item[The network only.] Chapters \ref{ch:problem}--\ref{ch:bandpipeline} for the data, \ref{ch:linalg} for the
+    linear algebra, then \ref{ch:recon}--\ref{ch:finetune}.
+  \item[Why not an outside foundation model.] Chapters \ref{ch:problem}--\ref{ch:bandpipeline}, \ref{ch:recon},
+    \ref{ch:masking}, \ref{ch:specdecoder}, \ref{ch:residualmaha}, \ref{ch:material}, \ref{ch:measures} and
+    \ref{ch:bootstrap}, then \ref{ch:hslwhat}--\ref{ch:hslverdict}. The case against HyperSL rests on why a pixel must
+    not help rebuild itself, why statistics must be fixed by wavelength, and how detections are measured.
+  \item[The thermal models.] Chapters \ref{ch:problem}--\ref{ch:bandpipeline}, then \ref{ch:recon}--\ref{ch:chakshu}:
+    every architecture chapter, because Chakshu reuses them all; \ref{ch:convae} and \ref{ch:chakshu} are the thermal
+    ones.
+\end{description}
+
+\section*{Numbers that will drift}
+
+Architecture and mathematics age slowly. Run results do not: every pAUC, every validation loss,
+every count of objects caught belongs to a run, a benchmark build and a date. Those numbers sit in
+grey \emph{Values that will drift} boxes. The course indexes
+(\file{docs/training/anomaly-detection/README.md} and \texttt{indradhanu workings/00-START-HERE.md})
+list, part by part, which numbers to re-verify; the experiment READMEs under
+\file{research/experiments/} are authoritative for every result.
+
+\section*{The index and the lists}
+
+After the table of contents come a \emph{List of worked examples} - use it to find an example to
+redo when a later chapter assumes a calculation - and a list of figures. At the back are the full
+solutions to every exercise (\cref{app:answers}), a glossary of every technical term with the
+chapter that defines it (\cref{app:glossary}), the bibliography of the papers the courses cite, and
+an index.

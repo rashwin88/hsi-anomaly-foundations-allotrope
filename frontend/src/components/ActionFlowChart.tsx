@@ -2,7 +2,7 @@
 // card. One per action type; visual language reused from the Models
 // page (`modelStage` nodes, stage-kind colour palette).
 
-import { Background, Controls, ReactFlow } from "@xyflow/react";
+import { Controls, ReactFlow } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 
 import { ACTION_FLOWS } from "../data/actionFlows";
@@ -44,10 +44,9 @@ export function ActionFlowChart({
         elementsSelectable={false}
         proOptions={{ hideAttribution: true }}
         defaultEdgeOptions={{
-          style: { stroke: "#94a3b8", strokeWidth: 1.4 },
+          style: { stroke: "var(--ink-3)", strokeWidth: 1 },
         }}
       >
-        <Background gap={16} size={1} color="#cbd5e1" />
         <Controls
           showInteractive={false}
           position="bottom-right"

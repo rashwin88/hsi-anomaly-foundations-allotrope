@@ -1,0 +1,20 @@
+\glossentry{Codename}{The name an analyst picks for a model in anomaly\_scoring, such as Indradhanu or Indradhanu V2; the worker routes by it.}
+\glossentry{Codename routing}{Turning a codename into a model through a dictionary built from the catalog; a repeated codename routes to the last manifest loaded.}
+\glossentry{Last-wins}{The rule that assigning to an existing dictionary key, or to an array element, overwrites the earlier value.}
+\glossentry{Lexicographic order}{Sorting strings by comparing character codes from the left; a (97) before h (104) before s (115).}
+\glossentry{Manifest (current.json)}{The JSON file next to a model checkpoint that the api reads instead of the checkpoint; for spectral-stem models it embeds the full model configuration.}
+\glossentry{Lazy-import rule}{The repository rule that action-type modules import torch and app code only inside run(), so the api never loads them.}
+\glossentry{Parameter}{A number in a model that training changes by gradient descent.}
+\glossentry{Buffer}{A number stored with a model that gradients do not train, such as BatchNorm's running statistics or a normalisation curve.}
+\glossentry{Native bands}{The wavelengths a sensor actually measured, as opposed to a resampled common grid.}
+\glossentry{Band-grid check}{The worker's test that the upstream band filter produced the grid a model needs: the 165-band common grid for v0.2.0, native bands for V2.}
+\glossentry{np.allclose}{NumPy's test that two arrays agree within atol + rtol times the size of each value (defaults 1e-8 and 1e-5).}
+\glossentry{read\_bands}{The inferencer helper that keeps only bands within 15 nm of the trained-wavelength record and tells the model those wavelengths.}
+\glossentry{set\_wavelengths}{The call that tells a spectral-stem model which wavelengths its next input holds; forgetting it leaves the previous scene's wavelengths in place.}
+\glossentry{Tiled segmentation}{Running the segmentation head in overlapping 128 px windows at stride 64 and averaging the probabilities where windows overlap.}
+\glossentry{Class priority}{The order in which classes overwrite each other in the class map: cloud over snow over shadow over water over land.}
+\glossentry{Thick-cloud rule}{Since 2026-10-29, V2 excludes only the head's thick-cloud output, not thin cloud, because the Heavy model's thin-cloud output fires on haze.}
+\glossentry{Exclude after scoring}{Fitting the score's whitening on all valid pixels and then setting excluded pixels to 0, the order the benchmark measured.}
+\glossentry{excluded\_percent}{The share of valid pixels whose score was zeroed by the exclusion, as a percentage rounded to three places.}
+\glossentry{Parity run}{Running the shipped checkpoint through the product's own code path on benchmark scenes and comparing with the evaluator's numbers.}
+\glossentry{Opt-in model}{A model available to choose but not used by any default.}

@@ -1,0 +1,32 @@
+\glossentry{Probe}{A training run that fits only a small head on a frozen encoder, to measure what the encoder's features already contain.}
+\glossentry{Frozen encoder}{An encoder whose parameters and BatchNorm statistics are not updated during training.}
+\glossentry{Pass criterion (gate)}{A condition a run must meet, written in its README before launch and not moved afterwards.}
+\glossentry{best.pt}{The checkpoint a run keeps as its best, chosen by validation reconstruction (or segmentation) loss, not by detection.}
+\glossentry{Label ceiling}{The limit on a class's accuracy set by wrong labels: a class that stays flat while every other class improves.}
+\glossentry{Trained-wavelength record}{The list of wavelengths a spectral-stem model has trained on; bands farther than 15 nm from every entry are dropped at inference.}
+\glossentry{Finite difference}{An estimate of a derivative from neighbouring grid values, such as (f(i, j+1) - f(i, j-1))/2.}
+\glossentry{Gradient magnitude}{The length of the vector of an image's horizontal and vertical derivatives; large on edges.}
+\glossentry{Edge strength}{In the edge diagnosis, the largest absolute difference between a pixel's band mean and that of any valid four-neighbour.}
+\glossentry{Score-map correction}{Any post-processing applied to a finished anomaly score map, such as ranking each pixel within its edge-strength bin; none beat plain residual Mahalanobis.}
+\glossentry{Gradient-matching loss}{The edge term gradient\_l1: the L1 difference between the neighbour differences of the reconstruction and of the input, on hidden pixels.}
+\glossentry{Blind spot}{The arrangement at inference in which each pixel is reconstructed while its own token is hidden, so it cannot copy itself.}
+\glossentry{Pixel-shuffle bottleneck}{The decoder's step that turns one quarter-resolution feature vector into a 4 x 4 block of pixels, so sub-block detail must be carried in that one vector.}
+\glossentry{Teacher-student training}{Training a student model to match the output of a teacher that sees more; here the teacher would be an EMA of the student.}
+\glossentry{Exponential moving average (EMA)}{A running average updated as new = 0.999 old + 0.001 current; its gap to a fixed value halves in about 693 steps.}
+\glossentry{L2-SP}{A regulariser that adds alpha/2 times the squared distance of the weights from their pretrained values, pulling them back during fine-tuning.}
+\glossentry{Linear mixture}{A synthetic pixel made as a fraction of a target spectrum plus the rest of the background spectrum.}
+\glossentry{Cloud exclusion}{Setting the anomaly score to 0 on pixels the segmentation head calls cloud, after scoring.}
+\glossentry{Foreign fraction}{The share of an object's squared difference from its ring that lies outside the scene's main spectral directions.}
+\glossentry{Implant-denoising}{Training with synthetic anomalies in the input and the clean tile as the target, so the loss rewards reconstructing the background beneath an anomaly (FT05).}
+\glossentry{Near weight}{The factor (5 in FT05) applied to hidden pixels within 3 px of an implant in the loss mask; it changes shares of a weighted mean, not its size.}
+\glossentry{Weighted mean}{A sum of values times weights divided by the sum of the weights.}
+\glossentry{Binary dilation}{Growing a mask by adding the neighbours of every marked pixel; r passes of the cross turn one pixel into a diamond of 1 + 2r(r + 1) pixels.}
+\glossentry{Singular value decomposition}{The factorisation X = U S V-transpose; the columns of V are the eigenvectors of X-transpose X, with eigenvalues the squared singular values.}
+\glossentry{Pseudo-label}{A training label produced by a model (the teacher) rather than a person.}
+\glossentry{Confidence threshold}{The rule that a pseudo-label counts only where the teacher's probability is above 0.9 or below 0.1.}
+\glossentry{Water guard}{The rule that a confident water pseudo-label over a mean 800-900 nm reflectance above 0.15 becomes a known not-water.}
+\glossentry{Binary cross-entropy (BCE)}{The loss -(y ln p + (1 - y) ln(1 - p)) for a yes/no target y and predicted probability p.}
+\glossentry{Class weights}{Per-class factors in the weighted mean of class losses; [1, 1, 1, 3, 3] doubles the rare classes' share of the gradient.}
+\glossentry{Factorial design}{An experiment that varies two or more factors in every combination, so each factor's main effect can be read with the others fixed.}
+\glossentry{Scale invariance (of residual Mahalanobis)}{The property that shrinking every residual by the same factor leaves every score unchanged, because the fitted covariance shrinks by the square of that factor.}
+\glossentry{Release candidate}{The model proposed for shipping; here FT04 with cloud exclusion on its own masks.}

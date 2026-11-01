@@ -1,0 +1,24 @@
+\glossentry{Wavelength}{The distance between successive crests of a light wave, written lambda and measured in nanometres; different wavelengths are different colours, most of them invisible.}
+\glossentry{Nanometre}{One billionth of a metre (10 to the power -9 m); the unit of wavelength used throughout the codebase.}
+\glossentry{Near infrared (NIR)}{Wavelengths from about 700 to 1000 nm, immediately beyond red; vegetation reflects strongly here.}
+\glossentry{Shortwave infrared (SWIR)}{Wavelengths from about 1000 to 2500 nm, where water, clays and minerals have absorption features.}
+\glossentry{Irradiance}{Power of light arriving on a surface per square metre per nanometre.}
+\glossentry{Radiance}{Power of light leaving a surface in one direction, per square metre, per steradian and per nanometre; what a sensor measures.}
+\glossentry{Reflectance}{The fraction of arriving light that a surface returns at a given wavelength; unitless, usually between 0.02 and 0.30 for real ground.}
+\glossentry{Lambertian surface}{An idealised matt surface that looks equally bright from every direction, for which total exitance equals pi times radiance.}
+\glossentry{Band}{One measurement channel of a sensor, recording light in one narrow range of wavelengths; called a channel in deep-learning code.}
+\glossentry{Spectral response function (SRF)}{The curve describing how strongly a band responds at each wavelength; a band's value is a weighted average of the spectrum with these weights.}
+\glossentry{Centre wavelength}{The wavelength at which a band responds most strongly; stored per band as band\_cw\_order.}
+\glossentry{Full width at half maximum (FWHM)}{The width of a band's response curve measured where the response is half its peak; for a Gaussian, about 2.3548 times sigma.}
+\glossentry{Spectrum}{One pixel's values across all bands, read in wavelength order; treated as a vector in R to the C.}
+\glossentry{Vector}{An ordered list of real numbers, written as a column; a spectrum on the 165-band grid is a vector in R to the 165.}
+\glossentry{Red edge}{The sharp rise in vegetation reflectance between about 680 and 760 nm, caused by chlorophyll absorbing red and leaf structure scattering near-infrared light.}
+\glossentry{Array}{A block of numbers indexed by whole-number positions; its shape lists the size of each index.}
+\glossentry{Tensor}{In this book, a multi-index array of numbers.}
+\glossentry{Shape}{The list of sizes of an array's axes, such as (C, H, W).}
+\glossentry{Hyperspectral cube}{An array of shape (C, H, W) holding one reflectance image per band; equivalently, one spectrum per pixel.}
+\glossentry{Hyperspectral}{Recording hundreds of narrow bands per pixel; high spectral, not spatial, resolution.}
+\glossentry{Thermal sensor}{A sensor recording emitted heat in one thermal-infrared band, giving a cube with C = 1.}
+\glossentry{Digital number (DN)}{The integer a sensor stores, proportional to detected energy; must be converted to a physical quantity before comparison.}
+\glossentry{Validity cube}{A 0/1 array of the cube's shape marking which band values of which pixels are real measurements.}
+\glossentry{Batch}{A group of image patches processed together in one step of training or inference; its size is written B.}

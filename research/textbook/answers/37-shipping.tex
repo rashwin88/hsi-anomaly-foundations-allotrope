@@ -1,0 +1,57 @@
+\answersfor{ch:shipping}
+
+\begin{solution}{ex:shipping:1}
+Compare first characters: \texttt{a} is 97, \texttt{h} is 104. Since $97 < 104$, \texttt{a\_spectral\_stem} sorts first and
+\texttt{hyperspectral\_segformer\_mae} last. The dictionary keeps the last value written for ``indradhanu'', so it routes to
+v0.2.0. Directory names deciding routing is exactly why the codenames must differ: the same two models would route
+differently depending only on what a folder happened to be called.
+\end{solution}
+
+\begin{solution}{ex:shipping:2}
+\begin{itemize}
+\item 1400\,nm: $\abs{1400 - 1385} = 15$, $\abs{1460 - 1400} = 60$; minimum 15, and $15 \le 15$: kept.
+\item 1420\,nm: $\abs{1420 - 1385} = 35$, $\abs{1460 - 1420} = 40$; minimum 35 $> 15$: dropped.
+\item 1445\,nm: $\abs{1445 - 1385} = 60$, $\abs{1460 - 1445} = 15$; minimum 15: kept.
+\end{itemize}
+The rule keeps a 15\,nm fringe on each side of every recorded wavelength; a gap wider than 30\,nm in the record leaves
+bands in its middle unread.
+\end{solution}
+
+\begin{solution}{ex:shipping:3}
+Every band must pass \eqref{eq:shipping:allclose}; the tightest tolerance is at the smallest wavelength.
+\begin{align*}
+\text{at 460 nm:}\quad & 10^{-8} + 10^{-5} \times 460 = 0.0046\,\text{nm}\\
+\text{at 2450 nm:}\quad & 10^{-8} + 10^{-5} \times 2450 = 0.0245\,\text{nm}
+\end{align*}
+A shift of 0.003\,nm is below 0.0046 at 460\,nm and below every larger tolerance, so \texttt{np.allclose} is true: the list
+counts as the grid (and a native-band model would be refused). A shift of 0.03\,nm exceeds 0.0046 at 460\,nm (and even
+0.0245 at 2450\,nm), so \texttt{np.allclose} is false: the list counts as native.
+\end{solution}
+
+\begin{solution}{ex:shipping:4}
+\begin{align*}
+100 \times 4 / 26 &= 400 / 26 = 15.3846\ldots\\
+\text{rounded to 3 places} &= 15.385
+\end{align*}
+For $n = 200$: $n - T = 200 - 128 = 72$. The next multiple of 64 at or above 72 is 128, so the pad is $128 - 72 = 56$ (the
+code's $(-72) \bmod 64 = 56$). The padded side is $200 + 56 = 256$, and windows start at $0, 64, 128$ (the last start is
+$256 - 128 = 128$).
+\end{solution}
+
+\begin{solution}{ex:shipping:5}
+Seven residuals: four land at $\pm 0.02$ and three cloud at $\pm 0.06$ magnitude.
+\begin{align*}
+\text{squares:}\quad & 4 \times 0.0004 + 3 \times 0.0036 = 0.0016 + 0.0108 = 0.0124\\
+\text{variance:}\quad & 0.0124 / 7 = 0.001771\\
+\text{spread:}\quad & \sqrt{0.001771} = 0.0421\\
+\text{target:}\quad & 0.08 / 0.0421 = 1.90 \text{ spreads}
+\end{align*}
+More cloud in the fit widens the spread and lowers the target's score (from 2.09 to 1.90). Which pixels enter the fit
+changes every score, which is why the product must use the order the benchmark measured.
+\end{solution}
+
+\begin{solution}{ex:shipping:6}
+The action fails at run time. The default band filter resamples to the 165-band grid, so V2's grid check raises ``reads
+native bands: run band\_filter\_apply with use\_common\_wavelength\_grid=false''. Instead, run two scoring actions: v0.2.0
+on a default band filter, and V2 on a second band filter with \texttt{use\_common\_wavelength\_grid=false}.
+\end{solution}

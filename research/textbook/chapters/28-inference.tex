@@ -1,0 +1,801 @@
+\chapter{Inference on a whole scene}\label{ch:inference}
+
+\begin{onething}
+To score a real scene, the model runs twice on every tile, with two complementary masks, so that no pixel
+is ever predicted while the model can see it; and it runs over hundreds of overlapping tiles, whose
+predictions are summed and divided by a count, because a scene is far larger than the 128-pixel patch the
+model was trained on.
+\end{onething}
+
+Part~V trained a model. You now have a checkpoint: a file of numbers that, loaded into the architecture of
+Part~III, turns a masked $128\times128$ patch into a reconstruction. This chapter starts Part~VI, which turns
+that ability into an answer an analyst can use. The route has three stages, and this book gives each its
+own chapter:
+\begin{enumerate}
+\item \emph{Inference} (this chapter): run the model over a whole scene and obtain a full-size
+  reconstruction in which every pixel was predicted without being seen.
+\item \emph{Scoring} (\cref{ch:residualmaha}): turn the difference between the scene and its reconstruction
+  into one number per pixel.
+\item \emph{Deciding and naming} (\cref{ch:material}): a person picks a threshold, the flagged pixels are
+  matched against a library of materials, and the result leaves the system as a georeferenced bundle.
+\end{enumerate}
+At the end of this chapter you will also walk one real scene through the product's whole chain of actions,
+from upload to shortlist, so that you can see where each later chapter fits.
+
+\begin{sloppypar}
+Two source files hold the machinery: \file{app/foundation_models/inferencers/segformer_mae_inferencer.py}
+(324 lines), which the hyperspectral model inherits unchanged, and
+\file{app/foundation_models/inferencers/hyperspectral_segformer_mae_inferencer.py} (105 lines), which
+only overrides how the model is built and adds one scoring method. Read them beside this chapter.
+\end{sloppypar}
+
+%======================================================================
+\section{Two problems inference has that training does not}\label{sec:inference:problems}
+
+\paragraph{Problem 1: every pixel needs a prediction made while it was hidden.}
+Recall the rule of \cref{ch:recon}: a pixel must never help reconstruct itself, or the model copies it and
+the residual is zero exactly where you hoped to see an anomaly. Training enforces the rule by hiding a random
+fraction of the tokens and grading the model only there (\cref{ch:masking}). In training that is enough:
+over thousands of patches, every position is hidden many times. At inference you have one particular scene
+and need a prediction at \emph{every} pixel of it, each made while that pixel was hidden.
+
+The obvious fix fails in both directions. Run the model once with no mask and every pixel is visible, so
+the model copies it. Run it once with a random mask and only the hidden fraction of pixels gets an honest
+prediction; the rest have none.
+
+\paragraph{Problem 2: scenes are enormous.}
+The model was trained on $128\times128$ patches. A PRISMA scene is about $1210\times1219$
+pixels \tagM{docs/lld/frequency-destriper.md}. Again the obvious fixes fail:
+\begin{itemize}
+\item \emph{Shrink the scene to $128\times128$.} You would average about $9.5\times9.5$ pixels into one, and
+  a one-pixel target would vanish before the model ever saw it.
+\item \emph{Feed the whole scene in at once.} The encoder's four stages were trained at one scale; a
+  $1210\times1219$ input gives a token count at each stage about 90 times larger than anything seen in
+  training, and the memory grows with it.
+\item \emph{Cut the scene into non-overlapping tiles.} Every tile boundary becomes a seam: a pixel at the
+  edge of a tile is predicted from context on one side only, so its residual is systematically worse, and
+  the score map shows a grid.
+\end{itemize}
+
+The solutions are \emph{two-pass masking} for the first problem and an \emph{overlapping sliding window}
+for the second. Before either, the model has to be loaded.
+
+%======================================================================
+\section{Loading the model}\label{sec:inference:loading}
+
+The base class \code{FoundationInferencer} does three things in its constructor:
+\begin{lstlisting}
+self.model = self.build_model().to(self.device)   # 1. build the architecture, empty
+self._load_weights(config.checkpoint_path)        # 2. copy the checkpoint's numbers into it
+self.model.eval()                                 # 3. switch to inference behaviour
+\end{lstlisting}
+and \code{_load_weights} reads
+\begin{lstlisting}
+ckpt = torch.load(path, map_location=self.device, weights_only=False)
+self.model.load_state_dict(ckpt["model_state_dict"])
+\end{lstlisting}
+
+\paragraph{Why the order matters.}
+A \emph{checkpoint}\index{checkpoint} is a dictionary from parameter names (such as
+\code{encoder.stages.0.attn.q.weight}) to tensors. It holds numbers, not an architecture. PyTorch cannot
+rebuild the network from it; you must build the network first, with exactly the right sizes, and then copy
+the numbers into the slots. The copy, \code{load_state_dict}, is \emph{strict} by default: every name in the
+file must have a slot of exactly the same shape, and every slot must be filled. That includes the 165-long
+normalisation buffers of \cref{ch:bandpipeline} and the spectral compressor sized by $D$
+(\cref{ch:compressor}), which is why the resolver reads $D$ from the model's manifest. Build with $D=24$
+against a $D=32$ checkpoint and you get an immediate shape error, not a silently wrong score. That
+strictness is a feature.
+
+\code{model.eval()} switches off dropout (every unit is kept, \cref{ch:block}) and makes BatchNorm layers
+use their stored running statistics instead of the batch's own (\cref{ch:finetune}). Forgetting it gives
+reconstructions that change with the batch they happen to be computed in.
+
+%======================================================================
+\section{Two-pass masking}\label{sec:inference:twopass}
+
+\subsection{Tokens, keep masks and prediction masks}
+
+Recall three objects from \cref{ch:masking}. The first stage of the encoder cuts a $128\times128$ patch into
+non-overlapping $4\times4$ pixel blocks called \emph{tokens}\index{token}; there are
+\begin{align*}
+\frac{128}{4}\times\frac{128}{4} &= 32\times32\\
+&= 1024
+\end{align*}
+of them, numbered $n=0,\dots,N-1$ with $N=1024$, row by row. A \emph{keep mask}\index{keep mask} is a list of
+$N$ zeros and ones: $1$ means ``show this token to the encoder'', $0$ means ``remove it''. The
+\emph{prediction mask}\index{prediction mask} is its complement among valid tokens: $1$ means ``this token is
+hidden and its prediction will be used''. The \emph{token validity}\index{token validity} $v_n$ is $1$ if the
+token's pixels are valid data and $0$ if they are nodata (\cref{ch:masking}).
+
+\subsection{How many passes? The partition argument}\label{sec:inference:partition}
+
+You want each valid token to be hidden in \emph{at least one} pass, and you want to use, for each token,
+the prediction from a pass in which it was hidden. Suppose you run $K$ passes and pass $k$ hides the set of
+tokens $\mathcal{H}_k$. The cheapest arrangement makes the hidden sets a \emph{partition}\index{partition} of
+the tokens: they do not overlap, and together they cover everything,
+\begin{equation}
+\mathcal{H}_1\cup\mathcal{H}_2\cup\dots\cup\mathcal{H}_K=\{0,1,\dots,N-1\},
+\qquad \mathcal{H}_j\cap\mathcal{H}_k=\varnothing\ \text{for } j\neq k.
+\label{eq:inference:partition}
+\end{equation}
+Count the tokens on both sides. Because the sets do not overlap, the count of the union is the sum of the
+counts:
+\begin{align*}
+\abs{\mathcal{H}_1}+\abs{\mathcal{H}_2}+\dots+\abs{\mathcal{H}_K} &= N.
+\intertext{If every pass hides the same fraction $\rho$ (the \emph{mask ratio}\index{mask ratio}) of the
+tokens, each term is $\rho N$:}
+K\rho N &= N.
+\intertext{Divide both sides by $N$:}
+K\rho &= 1,
+\intertext{and so}
+K &= \frac{1}{\rho}.
+\end{align*}
+With $\rho=\tfrac12$ you need $K=2$ passes: hide half, then hide the other half. With $\rho=\tfrac13$ you
+would need $K=3$ passes, each showing the model two thirds of its context. The product uses $K=2$,
+$\rho=\tfrac12$, always: both of its masking strategies build one mask and its exact complement
+(\file{segformer_mae_inferencer.py}, lines 186--216).
+
+\begin{sourcenote}[: the inference mask ratio is not the training mask ratio]
+The module docstring says two-pass inference ``matches the training regime (50\% token masking)''
+(\file{app/foundation_models/inferencers/segformer_mae_inferencer.py}, line 15). The training-config
+default is indeed $0.5$ (\file{app/models/training/training_config.py}, line 81), but the hyperspectral
+configurations the courses follow set \code{mask_ratio} to $0.65$
+(\file{configs/hyperspectral_segformer_exp_2.json}, line 39, and Indradhanu Heavy's
+\file{research/experiments/indradhanu-finetune/FTH3-heavy-joint-more2/config.json}, line 41). So the
+shipped models were trained hiding $65\%$ \tagM{configs/hyperspectral_segformer_exp_2.json} of the tokens
+and are run at inference hiding $50\%$. A ratio of $0.65$ cannot be used in a two-pass partition at all:
+$1/0.65=1.54$ is not a whole number of passes. At inference the model therefore sees \emph{more} context
+($50\%$ visible) than in training ($35\%$ visible), which makes its task easier, not harder. The docstring
+is out of date; the code is what runs.
+\end{sourcenote}
+
+\subsection{The selection is a sum of two masked predictions}
+
+Write $\xhat^{(1)}$ and $\xhat^{(2)}$ for the two passes' reconstructions of a patch, both of shape
+\shape{(B, C, 128, 128)}. Let $M^{(1)}$ be a pixel mask that is $1$ on the pixels whose token was hidden in
+pass~1, and $M^{(2)}$ the same for pass~2. The code combines them as
+\begin{equation}
+\xhat = \xhat^{(1)}\odot M^{(1)} + \xhat^{(2)}\odot M^{(2)},
+\label{eq:inference:select}
+\end{equation}
+where $\odot$ is element-wise multiplication (the masks broadcast over the band axis). Because the two hidden
+sets partition the tokens, at every pixel exactly one of the masks is $1$:
+\begin{align*}
+\text{where } M^{(1)}=1,\ M^{(2)}=0:\quad \xhat &= \xhat^{(1)}\cdot1+\xhat^{(2)}\cdot0 = \xhat^{(1)},\\
+\text{where } M^{(1)}=0,\ M^{(2)}=1:\quad \xhat &= \xhat^{(1)}\cdot0+\xhat^{(2)}\cdot1 = \xhat^{(2)}.
+\end{align*}
+So \cref{eq:inference:select} is a \emph{selection}\index{two-pass masking}, not a blend: each pixel takes its value from the one pass
+that hid it. Finally the code multiplies by the validity mask, so nodata pixels come out as zero.
+
+\begin{worked}[label={we:inference:select}]{Selecting from two passes on four tokens}
+Take a $2\times2$ grid of tokens and one band. Pass~1 hides tokens $(0,0)$ and $(1,1)$; pass~2 hides
+$(0,1)$ and $(1,0)$. The two passes return these values (the true values do not matter here):
+\[
+\xhat^{(1)}=\begin{pmatrix}0.21 & 0.30\\ 0.28 & 0.19\end{pmatrix},\qquad
+\xhat^{(2)}=\begin{pmatrix}0.25 & 0.33\\ 0.26 & 0.22\end{pmatrix},\qquad
+M^{(1)}=\begin{pmatrix}1&0\\0&1\end{pmatrix},\qquad
+M^{(2)}=\begin{pmatrix}0&1\\1&0\end{pmatrix}.
+\]
+Do it on paper, one entry at a time:
+\begin{align*}
+\xhat_{0,0} &= 0.21\times1 + 0.25\times0 = 0.21 + 0 = 0.21,\\
+\xhat_{0,1} &= 0.30\times0 + 0.33\times1 = 0 + 0.33 = 0.33,\\
+\xhat_{1,0} &= 0.28\times0 + 0.26\times1 = 0 + 0.26 = 0.26,\\
+\xhat_{1,1} &= 0.19\times1 + 0.22\times0 = 0.19 + 0 = 0.19.
+\end{align*}
+The result $\begin{pmatrix}0.21&0.33\\0.26&0.19\end{pmatrix}$ uses pass~1 on the diagonal and pass~2 off it.
+The value $0.30$ that pass~1 produced at $(0,1)$ is thrown away: in pass~1 that token was visible, so its
+prediction may be a copy.
+\end{worked}
+
+\subsection{Strategy A: the checkerboard}\label{sec:inference:checker}
+\index{checkerboard mask}
+
+The default strategy builds the mask from a checkerboard, in the function \code{checkerboard_token_mask}
+of \file{app/foundation_models/components/token_masking.py}:
+\begin{lstlisting}
+rows = torch.arange(H_tokens) // cell_size          # (32,)
+cols = torch.arange(W_tokens) // cell_size          # (32,)
+grid = (rows[:, None] + cols[None, :]) % 2          # (32, 32): 1 = visible, 0 = hidden
+if invert:
+    grid = 1 - grid                                 # pass 2
+return grid.flatten().unsqueeze(0).float()          # (1, N) = (1, 1024)
+\end{lstlisting}
+
+\paragraph{Broadcasting.}\index{broadcasting} \code{rows[:, None]} has shape \shape{(4, 1)} on a $4\times4$ grid: a column.
+\code{cols[None, :]} has shape \shape{(1, 4)}: a row. Adding a column to a row \emph{broadcasts}: the column
+is copied across and the row is copied down until both are \shape{(4, 4)}, and then they are added entry by
+entry. The result is the addition table.
+
+\begin{worked}[label={we:inference:checker}]{The checkerboard on a $4\times4$ token grid}
+With \code{cell_size = 1}, build the table of $\text{row}+\text{col}$:
+\[
+\begin{array}{c|cccc}
+ & \text{col }0 & \text{col }1 & \text{col }2 & \text{col }3\\\hline
+\text{row }0 & 0+0=0 & 0+1=1 & 0+2=2 & 0+3=3\\
+\text{row }1 & 1+0=1 & 1+1=2 & 1+2=3 & 1+3=4\\
+\text{row }2 & 2+0=2 & 2+1=3 & 2+2=4 & 2+3=5\\
+\text{row }3 & 3+0=3 & 3+1=4 & 3+2=5 & 3+3=6
+\end{array}
+\]
+Take each entry modulo 2 (the remainder after dividing by 2: $0$ for even, $1$ for odd):
+\[
+\text{grid}=\begin{pmatrix}0&1&0&1\\1&0&1&0\\0&1&0&1\\1&0&1&0\end{pmatrix}.
+\]
+In this grid $1$ means \emph{visible}. So pass~1 hides the tokens where $\text{row}+\text{col}$ is
+\emph{even}, starting with the top-left token, and pass~2 (\code{invert=True}) hides the odd ones. With
+\code{cell_size = 2} the integer division first maps rows $0,1,2,3$ to $0,0,1,1$, and the same steps give
+$2\times2$ blocks of tokens.
+\end{worked}
+
+\coursefig[0.95\linewidth]{iw-29-two-pass}{Two-pass checkerboard inference (course figure 29.1). Each token's
+final value is taken from the pass that hid it, so the combined reconstruction is built entirely from
+predictions. See the source check below for which pass hides the top-left token.}{fig:inference:twopass}
+
+\begin{sourcenote}[: which pass hides the top-left token]
+The course figure and its caption draw pass~1 hiding the tokens where $\text{row}+\text{col}$ is odd. In the
+code, \code{checkerboard_token_mask} returns $1$ for visible and computes $(\text{row}+\text{col})\bmod2$, so
+with \code{invert=False} the even tokens are $0$, hidden
+(\file{app/foundation_models/components/token_masking.py}, lines 271--284; the comment there reads ``row+col
+is even $\to$ 0 (masked)''). The difference is only a relabelling of the two passes and changes no
+reconstruction, but if you debug the masks, expect token $(0,0)$ to be hidden in pass~1.
+\end{sourcenote}
+
+\subsection{Invalid tokens are always kept}
+
+The keep mask of each pass is built in \code{_checkerboard_keep_mask} as
+\begin{lstlisting}
+pred_mask = token_validity * (1.0 - checker)    # (B, N): hidden AND valid
+keep_mask = 1.0 - pred_mask                     # (B, N): everything else is shown
+\end{lstlisting}
+Multiplying by \code{token_validity} means a token becomes a prediction target only if it is \emph{both}
+valid and selected by the pattern. An invalid token is never removed: it stays in the sequence carrying
+the zero signal the model learned to treat as ``no data'', exactly as in training (\cref{ch:masking}).
+
+\begin{worked}[label={we:inference:keep}]{Keep mask for a row of four tokens with one invalid}
+Four tokens in one row, the third invalid: $v=(1,1,0,1)$. In pass~1 the checker row is $(0,1,0,1)$ (hide
+the first and third). Work entry by entry:
+\begin{align*}
+1-\text{checker} &= (1-0,\ 1-1,\ 1-0,\ 1-1) = (1,0,1,0),\\
+\text{pred} = v\odot(1-\text{checker}) &= (1\cdot1,\ 1\cdot0,\ 0\cdot1,\ 1\cdot0) = (1,0,0,0),\\
+\text{keep} = 1-\text{pred} &= (1-1,\ 1-0,\ 1-0,\ 1-0) = (0,1,1,1).
+\end{align*}
+Only the first token is removed. The third would have been hidden by the pattern, but it is invalid, so it
+is kept and nothing is predicted for it.
+\end{worked}
+
+\subsection{Strategy B: random halves}
+
+The alternative, \code{masking_strategy="random"}, draws a random half and uses its complement:
+\begin{lstlisting}
+rand_mask   = (torch.rand(1, N) > 0.5).float()   # (1, N): 1 = visible in pass 1
+pred_mask_1 = token_validity * (1.0 - rand_mask)
+pred_mask_2 = token_validity * rand_mask          # the exact complement
+\end{lstlisting}
+Why offer it? A checkerboard is regular. If the model is slightly weaker at token boundaries, and it is,
+that weakness lands at the same relative positions in every tile, and a faint grid is printed into the
+residual map that an analyst could mistake for structure on the ground. A random mask scatters the
+artefacts differently in every tile, and the heavy overlap of tiles (next section) averages them away. The
+default in \code{InferenceConfig} is \code{"checkerboard"}
+(\file{app/models/training/inference_config.py}, line 96), and the scoring action does not override it, so
+the product is deterministic: the same scene and checkpoint give the same score map every time.
+
+\subsection{Cells, blocks and a mismatch to know about}
+
+\begin{sloppypar}
+\code{checkerboard_cell_size} (default $1$, \file{inference_config.py}, line 77) sets the size of the
+checkerboard cells in tokens. The native-band inferencer used by Indradhanu~V2 is called
+\code{SpectralStemInferencer}. It overrides the method \code{_checkerboard_keep_mask} so that a checkpoint
+trained with block masking (\code{mask_block} $>1$, \cref{ch:decoderwork}) is hidden in blocks of the same
+size. The override is in
+\file{app/foundation_models/inferencers/spectral_stem_inferencer.py}, lines 68--77.
+\end{sloppypar}
+
+\begin{sourcenote}[: a block-masked checkpoint and the pixel selection]
+The override changes which tokens are \emph{hidden}, but \code{infer()} in the parent class builds the
+\emph{selection} masks $M^{(1)},M^{(2)}$ of \cref{eq:inference:select} from \code{checkerboard_cell_size},
+not from \code{mask_block} (\file{segformer_mae_inferencer.py}, lines 186--199). With \code{mask_block = 2}
+and the default cell size $1$ the two patterns disagree. The book's script
+\file{research/textbook/tools/compute_inference.py} reproduces both patterns on a $4\times4$ token grid: 8 of
+the 16 tokens are taken from a pass in which they were \emph{visible}. The shipped Indradhanu~V2 has
+\code{mask_block} $=1$ (the default, \file{app/models/training/training_config.py}, line 199; not set in the
+FTH3 config), so the product is unaffected. The block-masked run FT08
+(\file{research/experiments/indradhanu-finetune/FT08-gated-blocks/config.json}, line 107: \code{mask_block}
+$=2$) was evaluated through the same inferencer with the default cell size
+(\file{app/evaluation/models.py}, lines 70--77), so its measured result may include this leak. This was not
+verified by rerunning; treat it as an open question for \cref{ch:decoderwork}.
+\end{sourcenote}
+
+%======================================================================
+\section{The sliding window}\label{sec:inference:sliding}
+\index{sliding window}
+
+\subsection{Patch size, stride and overlap}
+
+\code{predict_full_scene} handles a whole scene. Three numbers define its tiling:
+\begin{itemize}
+\item the \emph{patch size}\index{patch size} $P$, the side of a square tile: $P=128$;
+\item the \emph{stride}\index{stride!sliding window} $S$, the distance between the starts of neighbouring
+  tiles: the resolver's default for both Indradhanu models is $S=32$
+  (\file{backend/allotrope/foundation_models/resolver.py}, lines 160 and 172);
+\item the \emph{overlap}\index{overlap} $P-S$, how many pixels two neighbouring tiles share:
+  $128-32=96$.
+\end{itemize}
+If the stride is not given, \code{InferenceConfig} falls back to $P/2=64$
+(\file{segformer_mae_inferencer.py}, line 257), which is also the stride used to cut training patches. The
+product passes 32: a quarter of the patch, giving heavy overlap. You run inference once per scene, so the
+extra compute buys a smoother map.
+
+\subsection{Counting tiles along one axis}\label{sec:inference:count}
+
+The tile starts are decided by \code{PatchPlanGenerator}
+(\file{app/utils/patch_generation/generate_patch_plan.py}). Along an axis of length $W$, it places tiles at
+$0, S, 2S, \dots$ while they fit, and then places one last tile flush against the far edge. Derive the
+count.
+
+A tile starting at $s$ covers pixels $s,\dots,s+P-1$. It fits if its last pixel is inside the axis:
+\begin{align*}
+s+P-1 &\le W-1.
+\intertext{Add $1$ to both sides:}
+s+P &\le W.
+\intertext{The starts are $s=kS$ for $k=0,1,2,\dots$; substitute:}
+kS+P &\le W.
+\intertext{Subtract $P$ and divide by $S>0$:}
+k &\le \frac{W-P}{S}.
+\end{align*}
+So the starts that fit are $k=0,1,\dots,\lfloor (W-P)/S\rfloor$, where $\lfloor\cdot\rfloor$ (\emph{floor})
+rounds down to a whole number. Counting $0$ as well, that is
+\begin{equation}
+K_{\text{fit}}=\left\lfloor\frac{W-P}{S}\right\rfloor+1
+\end{equation}
+tiles. If $(W-P)/S$ is not a whole number, the last fitting tile ends before the edge, leaving a strip
+uncovered, so one more tile is placed at $s=W-P$, ``snapped'' back so that it ends exactly at the edge. Then
+\begin{equation}
+K=\left\lfloor\frac{W-P}{S}\right\rfloor+2=\left\lceil\frac{W-P}{S}\right\rceil+1,
+\label{eq:inference:count}
+\end{equation}
+where $\lceil\cdot\rceil$ (\emph{ceiling}) rounds up. The two forms agree because, for a number that is not
+whole, rounding up gives one more than rounding down.
+
+\begin{worked}[label={we:inference:tiles1000}]{Tiles along one axis of a $1000$-pixel scene}
+Take $W=1000$, $P=128$, $S=32$. On paper:
+\begin{align*}
+W-P &= 1000-128 = 872,\\
+\frac{W-P}{S} &= \frac{872}{32} = 27.25,\\
+\left\lfloor 27.25\right\rfloor &= 27,\\
+K_{\text{fit}} &= 27+1 = 28 \quad\text{(starts } 0, 32, \dots, 27\times32=864\text{)}.
+\end{align*}
+The last fitting tile covers $864,\dots,864+127=991$. Pixels $992$ to $999$ are not yet covered, so a snapped
+tile starts at $1000-128=872$. In total
+\begin{align*}
+K &= 28+1 = 29 = \lceil 27.25\rceil+1 = 28+1.
+\end{align*}
+The scene has $29\times29=841$ tiles. The book's script, which calls the product's own
+\code{PatchPlanGenerator}, gives $29$ per axis and $841$ tiles \tagC.
+\end{worked}
+
+\begin{worked}[label={we:inference:tilesprisma}]{A real PRISMA frame, $1210\times1219$}
+A PRISMA L2D frame of $1210\times1219$ pixels \tagM{docs/lld/frequency-destriper.md}. Rows first:
+\begin{align*}
+\frac{1210-128}{32} &= \frac{1082}{32} = 33.8125,\\
+K_{\text{rows}} &= \lceil 33.8125\rceil+1 = 34+1 = 35.
+\end{align*}
+Columns:
+\begin{align*}
+\frac{1219-128}{32} &= \frac{1091}{32} = 34.09375,\\
+K_{\text{cols}} &= \lceil 34.09375\rceil+1 = 35+1 = 36.
+\end{align*}
+Tiles:
+\begin{align*}
+35\times36 &= 1260.
+\end{align*}
+The model takes \code{inference_batch_size} tiles at a time. The scoring action passes the resolver's
+default of $8$ (\file{resolver.py}, line 62), so the number of batches is
+\begin{align*}
+\left\lceil\frac{1260}{8}\right\rceil = \lceil 157.5\rceil = 158,
+\end{align*}
+and since every batch runs the network twice (two passes),
+\begin{align*}
+158\times2 = 316 \text{ forward passes.}
+\end{align*}
+The script confirms $35$, $36$, $1260$ tiles and $316$ forward passes \tagC.
+\end{worked}
+
+\begin{sourcenote}[: when $(W-P)/S$ is a whole number, the code adds a duplicate tile]
+\Cref{eq:inference:count} is what the generator's docstring intends, and it holds whenever $(W-P)/S$ is not
+a whole number. When it \emph{is} whole, the last fitting tile already ends at the edge, yet the loop in
+\file{generate_patch_plan.py} (lines 66--80) appends it, steps on by $S$, finds the next tile overhanging and
+appends the snapped start $W-P$, which is the same start again. For $W=1024$: $(1024-128)/32=28$, the formula
+gives $29$ tiles, and the code produces 30 starts of which 29 are distinct; for $W=128$ it produces the start
+$0$ twice \tagC. The duplicate tile wastes one tile's compute per row or column and counts that tile twice in
+the average below. With the deterministic checkerboard both copies are identical, so the reconstruction is
+unchanged; with random masking the last tile gets double weight. PRISMA frames are not multiples of 32
+plus 128, so the product rarely meets the case.
+\end{sourcenote}
+
+\coursefig[0.95\linewidth]{iw-29-sliding}{Sliding-window inference (course figure 29.2). $128\times128$ tiles
+start every 32 pixels, so a $1000\times1000$ scene needs $29\times29=841$ tiles; an interior pixel lies in
+$128/32=4$ tiles along each axis and so in $4\times4=16$ tiles in all.}{fig:inference:sliding}
+
+\subsection{How many tiles cover each pixel}\label{sec:inference:coverage}
+\index{coverage count}
+
+Along one axis, a pixel at position $x$ lies in every tile whose start $s$ satisfies $s\le x\le s+P-1$. Away
+from the edges the starts are $S$ apart, so the number of such starts is the length $P$ of the window
+divided by the gap $S$ between starts:
+\begin{align*}
+\frac{P}{S} &= \frac{128}{32} = 4.
+\end{align*}
+In two dimensions a pixel lies in a tile only if both its row and its column do, so the counts multiply:
+\begin{align*}
+4\times4 &= 16 \text{ tiles.}
+\end{align*}
+Sixteen separate reconstructions of every interior pixel, each made with the tile in a different position
+and so with different context visible around it. Near the edges the count drops: a pixel in the first 32
+columns is in only one tile along that axis. Near the far edge something less obvious happens: the snapped
+tile overlaps its neighbours by more than $P-S$, so a strip of pixels is covered \emph{five} times.
+\Cref{fig:inference:coverage} plots the count along one axis of the $1000$-pixel scene, from the script's
+output \tagC.
+
+\begin{figure}[htbp]\centering
+\begin{tikzpicture}
+\begin{axis}[width=0.95\linewidth,height=5.2cm,xmin=0,xmax=1000,ymin=0,ymax=6.4,
+  xlabel={column $x$ (pixels)},ylabel={tiles containing $x$},ytick={0,1,2,3,4,5},
+  xtick={0,96,200,400,600,800,872,1000},grid=major,grid style={gray!20}]
+\addplot[const plot,very thick,spat] coordinates {(0,1)(32,2)(64,3)(96,4)(872,5)(896,4)(928,3)(960,2)(992,1)(1000,1)};
+\node[font=\small,anchor=south] at (axis cs:480,4.05) {interior: $128/32=4$};
+\node[font=\small,anchor=south,loss] at (axis cs:884,5.05) {snapped tile: 5};
+\end{axis}
+\end{tikzpicture}
+\caption[Tiles covering each column of a 1000-pixel axis]{Number of tiles containing each column of a $1000$-pixel axis with $P=128$, $S=32$, computed with
+the product's \texttt{PatchPlanGenerator} (\texttt{research/textbook/tools/compute\_inference\_output.txt}).
+The two-dimensional count at a pixel is the product of its row count and its column count: 16 in the
+interior, 1 at a corner, 25 where the two snapped strips cross.}\label{fig:inference:coverage}
+\end{figure}
+
+%======================================================================
+\section{Accumulate, then average}\label{sec:inference:average}
+
+\subsection{Two scene-sized accumulators}
+
+Storing 841 or 1260 reconstructed tiles and averaging them at the end would need hundreds of copies of the
+scene. Instead, \code{predict_full_scene} keeps two running totals the size of the scene:
+\begin{lstlisting}
+recon_sum = torch.zeros(c, h, w)    # (C, H, W): sum of the predictions that reached each pixel
+count     = torch.zeros(1, h, w)    # (1, H, W): how many predictions reached each pixel
+...
+for j, idx in enumerate(valid_indices):
+    r, cs = batch_coords[idx]
+    patch_eroded = eroded_mask[:, r:r+ps, cs:cs+ps]          # (1, 128, 128), 0 or 1
+    recon_sum[:, r:r+ps, cs:cs+ps] += recon[j] * patch_eroded  # (C, 128, 128)
+    count    [:, r:r+ps, cs:cs+ps] += patch_eroded
+reconstruction = torch.where(count > 0, recon_sum / count, scene)   # (C, H, W)
+\end{lstlisting}
+In symbols, write $\xhat_t(p)$ for tile $t$'s prediction at pixel $p$ and $w_t(p)\in\{0,1\}$ for the eroded
+validity of $p$ (defined below; $0$ if $p$ is not in tile $t$). Then
+\begin{equation}
+\hat{x}(p)=
+\begin{cases}
+\dfrac{\sum_t w_t(p)\,\xhat_t(p)}{\sum_t w_t(p)} & \text{if } \sum_t w_t(p)>0,\\[2ex]
+x(p) & \text{if } \sum_t w_t(p)=0.
+\end{cases}
+\label{eq:inference:average}
+\end{equation}
+The top line is a \emph{weighted average}\index{weighted average}: the weights are $0$ or $1$, so it is the
+plain mean of the predictions that count.
+
+\subsection{Three details}
+
+\paragraph{The weights come from an eroded mask.}
+\emph{Erosion}\index{erosion} shrinks the valid region: a pixel survives only if every pixel in a
+$k\times k$ square around it is valid (\cref{ch:masking}). Inference uses $k=15$
+(\file{inference_config.py}, line 109), so any pixel within $\lfloor15/2\rfloor=7$ pixels of nodata gets
+weight $0$. Such pixels are predicted from context that is partly nodata, and their reconstructions are
+unreliable. With weight $0$ they add nothing to the sum \emph{and} nothing to the count: not a small
+amount, nothing at all.
+
+\paragraph{Dividing by the count makes the average right everywhere.}
+An interior pixel has count 16, a corner pixel count 1, a pixel in the snapped strip up to 25. Dividing by
+the actual count gives a true mean in every case with no special handling of edges.
+
+\paragraph{Where nothing arrived, the scene stands in for itself.}
+If no tile delivered a usable prediction (count $0$), the reconstruction is set to the input. The residual
+there is $x(p)-x(p)=0$, so the pixel scores zero and can never be flagged. Leaving zeros or NaN in such
+pixels would have produced huge or undefined residuals instead.
+
+\begin{worked}[label={we:inference:avg}]{Averaging three tiles, one of them eroded}
+A pixel $p$ in one band lies in three tiles. Their predictions and weights are
+\[
+\xhat_1(p)=0.24,\ w_1=1;\qquad \xhat_2(p)=0.28,\ w_2=1;\qquad \xhat_3(p)=0.90,\ w_3=0.
+\]
+(Tile~3 is the one in which $p$ sits within 7 pixels of a nodata hole, and its prediction is spoiled.) On
+paper:
+\begin{align*}
+\text{sum} &= 1\times0.24 + 1\times0.28 + 0\times0.90\\
+&= 0.24 + 0.28 + 0\\
+&= 0.52,\\
+\text{count} &= 1+1+0 = 2,\\
+\hat{x}(p) &= \frac{0.52}{2} = 0.26.
+\end{align*}
+Had the third tile been given a small weight such as $0.1$ instead of $0$, the sum would be
+$0.52+0.09=0.61$, the count $2.1$, and the average $0.61/2.1=0.290$: a spoiled prediction still pulls
+the answer by $0.03$.
+\end{worked}
+
+\paragraph{Why averaging smooths the map.}
+If the errors of the 16 predictions of an interior pixel were independent with equal variance $\sigma^2$,
+the variance of their mean would be
+\begin{align*}
+\operatorname{Var}\!\left(\frac{1}{16}\sum_{t=1}^{16}\xhat_t\right)
+&= \frac{1}{16^2}\sum_{t=1}^{16}\operatorname{Var}(\xhat_t)
+ = \frac{16\,\sigma^2}{256}
+ = \frac{\sigma^2}{16},
+\end{align*}
+a standard deviation four times smaller. In practice the predictions share most of their context and are
+far from independent \tagA, so the real gain is smaller, but the direction is right: overlapping tiles
+average away the noise that any one tile position adds. A smooth reconstruction is expected; a crisp one
+would suggest the model had found a way to copy.
+
+\subsection{The tile validity filter}
+
+A tile is only processed if at least $10\%$ of its pixels are valid:
+\begin{lstlisting}
+MIN_VALID_FRACTION = 0.1
+valid_frac = m.float().mean().item()      # fraction of the tile's pixels that are valid
+if valid_frac >= MIN_VALID_FRACTION:
+    valid_indices.append(i)
+\end{lstlisting}
+Tiles that are more than $90\%$ nodata are skipped: the model never saw such patches in training and its
+output on them is meaningless.
+
+\begin{sourcenote}[: the comment says 0.4, the code says 0.1]
+The comment above this line says the threshold ``matches training: patches with $<40\%$ valid pixels were
+discarded'' (\file{segformer_mae_inferencer.py}, lines 280--284). The training threshold is indeed $0.4$
+(\code{MIN_VALID_PIXEL_FRACTION}, \file{app/foundation_models/trainers/hyperspectral_segformer_mae_trainer.py},
+line 34), but inference uses $0.1$. The intent, skipping mostly empty tiles, is the same; the numbers
+differ. The course (IW29) already flags this.
+\end{sourcenote}
+
+\subsection{Memory, roughly}
+
+One full cube of $165$ bands at $1000\times1000$ pixels in 4-byte \code{float32} holds
+\begin{align*}
+165\times1000\times1000 &= 165{,}000{,}000 \text{ numbers},\\
+165{,}000{,}000\times4 &= 660{,}000{,}000 \text{ bytes} = 660\text{ MB}.
+\end{align*}
+Inference keeps at least three such arrays: the scene, \code{recon_sum}, and the final reconstruction,
+about $3\times660=1980$~MB, about 2~GB, before any network activations. For the $1210\times1219$ frame each
+array is $973{,}493{,}400$ bytes \tagC, close to 1~GB, so about 3~GB in total. That is why
+\code{inference_batch_size} is exposed as a per-action override with a conservative default of 8: the
+resolver's own comment calls it ``the main memory dial when running on a CPU-only Mac VM''
+(\file{resolver.py}, lines 59--62).
+
+\begin{sourcenote}[: two defaults for the batch size]
+\code{InferenceConfig.inference_batch_size} defaults to 16 (\file{inference_config.py}, line 104), but the
+scoring action always passes the resolver's \code{default_batch_size} of 8 unless the user overrides it
+(\file{backend/allotrope/action_types/_anomaly_scoring_run.py}, line 303). In the product the batch size is 8.
+\end{sourcenote}
+
+%======================================================================
+\section{Shapes from scene to reconstruction}\label{sec:inference:shapes}
+
+Every tensor on the inference path, for the $1210\times1219$ PRISMA frame and the 165-band Indradhanu:
+\begin{lstlisting}
+scene            (165, 1210, 1219)  float32, from filtered_vendable.pkl
+mask             (1, 1210, 1219)    1 = spatially valid (any band valid)
+eroded_mask      (1, 1210, 1219)    after a 15 x 15 erosion
+coords           1260 pairs (r, c)  35 row starts x 36 column starts
+patches          (8, 165, 128, 128) one batch of tiles
+patch_masks      (8, 1, 128, 128)
+token_validity   (8, 1024)          32 x 32 tokens per tile
+keep_mask_1/_2   (8, 1024)          1 = show, 0 = hide (complements among valid tokens)
+pass1_pixels     (1, 1, 128, 128)   token mask expanded to pixels (nearest-neighbour)
+x_hat_1, x_hat_2 (8, 165, 128, 128) the two passes
+recon            (8, 165, 128, 128) x_hat_1*pass1_pixels + x_hat_2*pass2_pixels, times mask
+recon_sum        (165, 1210, 1219)  running sum
+count            (1, 1210, 1219)    running count, 0..25
+reconstruction   (165, 1210, 1219)  recon_sum / count, or the scene where count = 0
+\end{lstlisting}
+
+%======================================================================
+\section{From reconstruction to score map}\label{sec:inference:toscore}
+
+\subsection{The scoring call}
+
+The action does not use the inferencer's own scoring method. It calls one shared numpy function,
+\code{compute_score} in \file{app/utils/anomaly_detection/scoring.py}:
+\begin{lstlisting}
+score = compute_score(cube, reconstruction, eroded_keep_mask,   # (C,H,W), (C,H,W), (H,W)
+                      method=method, combined_weight=sam_l1_alpha)   # -> (H, W) float32
+\end{lstlisting}
+It returns one number per pixel, higher meaning more anomalous, and sets every pixel outside the keep mask to
+exactly $0$ (\file{scoring.py}, line 114). Five methods exist. Four of them measure the \emph{size} of the
+residual $\vect{r}=\vect{x}-\xhat$:
+\begin{itemize}
+\item \code{L1}: the mean of $\abs{r_c}$ over the bands;
+\item \code{MSE}: the mean of $r_c^2$ (not offered for Indradhanu);
+\item \code{SAM}: the spectral angle between $\vect{x}$ and $\xhat$ in radians (\cref{ch:losses});
+\item \code{combined}: $w\cdot\text{L1}_{\text{norm}}+(1-w)\cdot\text{SAM}_{\text{norm}}$, each divided by its
+  maximum over valid pixels, $w=0.5$ by default.
+\end{itemize}
+The fifth, \code{residual_mahalanobis}, measures how \emph{unusual} the residual's direction is, and has
+been Indradhanu's default since 2026-10-15 (\file{resolver.py}, lines 152--158). \Cref{ch:residualmaha} is
+devoted to it. The inferencer's own \code{compute_anomaly_scores}, which returns a dictionary of L1 and SAM
+maps, exists for notebooks; the product never calls it.
+
+\coursefig[0.9\linewidth]{iw-30-scoring}{The \texttt{combined} scoring method (course figure 30.1): per-pixel L1
+and SAM maps are each divided by their maximum over the valid pixels and blended with weight 0.5. Since
+2026-10-15 this is no longer Indradhanu's default.}{fig:inference:combined}
+
+\begin{worked}[label={we:inference:combined}]{The combined score and its fragile denominator}
+L1 is in reflectance units and SAM in radians; adding them directly would be adding metres to kilograms. So
+each is divided by its own maximum over the scene's valid pixels. Suppose the scene maxima are
+$\max\text{L1}=0.05$ and $\max\text{SAM}=0.40$~rad, and one pixel has $\text{L1}=0.025$ and
+$\text{SAM}=0.10$~rad \tagA. Normalise:
+\begin{align*}
+\text{L1}_{\text{norm}} &= \frac{0.025}{0.05} = 0.50,\\
+\text{SAM}_{\text{norm}} &= \frac{0.10}{0.40} = 0.25.
+\end{align*}
+Blend with $w=0.5$:
+\begin{align*}
+\text{score} &= 0.5\times0.50 + 0.5\times0.25\\
+&= 0.250 + 0.125\\
+&= 0.375.
+\end{align*}
+Now let one dead detector element produce a single pixel with $\text{L1}=0.50$, ten times the old maximum.
+The same pixel becomes
+\begin{align*}
+\text{L1}_{\text{norm}} &= \frac{0.025}{0.50} = 0.05,\\
+\text{score} &= 0.5\times0.05 + 0.5\times0.25 = 0.025 + 0.125 = 0.150.
+\end{align*}
+One outlier has compressed every other pixel's L1 term by a factor of ten. The symptom is a dark score map
+with one bright dot; the check is the percentiles in \code{stats.json}, written for every model.
+\end{worked}
+
+\subsection{What the scoring action writes}
+
+For each model, in \file{models/<codename>/} under the action's output folder, where the folder name is the
+codename in lower case with spaces turned into underscores (\code{_safe_dirname}):
+
+\begin{center}\small
+\begin{tabular}{@{}lll@{}}
+\toprule
+file & shape and type & contents\\
+\midrule
+\texttt{anomaly\_score.tif} & $(H,W)$ float32 & the score map\\
+\texttt{anomaly\_score.png} & image & preview; square-root stretch for squared distances\\
+\texttt{reconstruction.tif} & $(C,H,W)$ float32 & the full-scene reconstruction\\
+\texttt{reconstruction.png} & image & RGB preview of the reconstruction\\
+\texttt{stats.json} & JSON & method, patch, stride, timings, score percentiles\\
+\bottomrule
+\end{tabular}
+\end{center}
+
+The preview stretch is a square root for the classical detectors \emph{and} for \code{residual_mahalanobis},
+because both produce squared distances with a heavy right tail; linear otherwise
+(\file{_anomaly_scoring_run.py}, line 511). Every GeoTIFF is written with an identity transform
+(\file{_anomaly_scoring_render.py}, line 61): it carries no geography until export (\cref{ch:material}).
+
+%======================================================================
+\section{One scene through the whole product}\label{sec:inference:chain}
+
+The components of this book stop being separate here. Follow one PRISMA scene from upload to a shortlist;
+each step names the chapter that explained it. The numbers are those of the anomaly course's end-to-end
+walk (AD13): a scene of $1210\times1219$ pixels, with the fractions lost at each step assumed for
+illustration \tagA.
+
+\begin{figure}[htbp]\centering
+\begin{tikzpicture}[node distance=4mm,
+  box/.style={draw,rounded corners,fill=#1!8,draw=#1!70!black,minimum width=37mm,minimum height=8mm,align=center,font=\small},
+  lab/.style={font=\scriptsize,align=left,anchor=west}]
+\node[box=maskgrey] (up) {upload + \texttt{scene\_onboard}};
+\node[box=maskgrey,below=of up] (pr) {Project (bound to the Scene)};
+\node[box=spec,below=of pr] (bf) {\texttt{band\_filter\_apply}};
+\node[box=spec,below=of bf] (ss) {\texttt{scene\_segmentation}};
+\node[box=attn,below=of ss] (as) {\texttt{anomaly\_scoring}};
+\node[box=loss,below=of as] (dp) {\texttt{anomaly\_detection\_prep}};
+\node[box=spec,below=of dp] (sm) {\texttt{spectral\_library\_match}};
+\node[box=maskgrey,below=of sm] (ex) {\texttt{POST /actions/\{id\}/export}};
+\foreach \a/\b in {up/pr,pr/bf,bf/ss,ss/as,as/dp,dp/sm,sm/ex} \draw[-Stealth] (\a) -- (\b);
+\node[lab,right=5mm of up] {vendable: cube $(165,1210,1219)$, validity; no coordinates};
+\node[lab,right=5mm of pr] {nothing computes};
+\node[lab,right=5mm of bf] {\texttt{filtered\_vendable.pkl}, nearest-valid fill};
+\node[lab,right=5mm of ss] {\texttt{keep\_mask.tif}: water, cloud, shadow, vegetation out};
+\node[lab,right=5mm of as] {two passes, 1260 tiles, average; one score map per model};
+\node[lab,right=5mm of dp] {composite score; stops at \texttt{needs\_threshold}};
+\node[lab,right=5mm of sm] {native cube; \texttt{family\_map.tif}, \texttt{match\_map.tif}};
+\node[lab,right=5mm of ex] {re-read raw file for CRS; zip of GeoTIFF, Shapefile, CSV};
+\end{tikzpicture}
+\caption{The product's action chain for a hyperspectral scene (AD13). Teal steps transform spectra, plum runs
+the model, amber is where a person decides.}\label{fig:inference:chain}
+\end{figure}
+
+\begin{enumerate}
+\item \textbf{Upload and onboarding} (\cref{ch:product}). The api streams the file to a staging folder and
+  queues a \code{scene_onboard} job; it does no analysis itself. The worker builds the vendable with the
+  eight-stage band pipeline (\cref{ch:bandpipeline}): a cube \shape{(165, 1210, 1219)} of reflectance, a
+  validity cube of the same shape, and 165 wavelengths. Note what is absent: no latitude, no longitude, no
+  projection.
+\item \textbf{Project} (\cref{ch:product}). Bound to the scene. Nothing computes.
+\item \textbf{\texttt{band\_filter\_apply}}. Re-vends the scene with explicit band settings and writes
+  \file{filtered_vendable.pkl}, filling each invalid pixel with its nearest valid neighbour so the patch
+  embedding never meets a cliff (\cref{ch:bandpipeline}).
+\item \textbf{\texttt{scene\_segmentation}}. Thresholds spectral indices into masks and writes
+  \file{keep_mask.tif}, the region worth analysing.
+\item \textbf{\texttt{anomaly\_scoring}}. This chapter and the next: tile, two passes, average, score. A
+  classical detector such as MNF-RX (\cref{ch:localrx}) can run in the same action; its covariance is
+  estimated only on the keep mask.
+\item \textbf{\texttt{anomaly\_detection\_prep}}. Combines the models' maps into one composite and
+  \emph{stops} at the status \code{needs_threshold} until a person chooses a percentile
+  (\cref{ch:material}).
+\item \textbf{\texttt{spectral\_library\_match}}. Hyperspectral only. Names the likely material family of each
+  flagged pixel, reading the native onboarding cube, not the filtered one (\cref{ch:material}).
+\item \textbf{Export}. Coordinates finally appear: the raw file is re-read for its georeferencing, and a zip
+  leaves the system (\cref{ch:material}).
+\end{enumerate}
+
+\begin{worked}[label={we:inference:funnel}]{The funnel from 1.47 million pixels to a shortlist}
+Assume onboarding loses $6\%$ of the pixels to cloud and swath edges, segmentation keeps $69\%$ of the
+rest, and the analyst flags the top $0.5\%$ of the kept pixels \tagA. On paper:
+\begin{align*}
+\text{pixels} &= 1210\times1219 = 1{,}474{,}990,\\
+\text{valid} &= 1{,}474{,}990\times0.94 = 1{,}386{,}490.6 \approx 1{,}386{,}491,\\
+\text{kept} &= 1{,}386{,}491\times0.69 = 956{,}678.8 \approx 956{,}679,\\
+\text{flagged} &\approx 956{,}679\times0.005 = 4{,}783.4.
+\end{align*}
+The reduction factor is
+\begin{align*}
+\frac{1{,}474{,}990}{4{,}783} &\approx 308.4.
+\end{align*}
+From about 1.47 million pixels to about 4,800: the system narrows, and a person reviews the shortlist.
+\Cref{ch:material} shows that the exact count the code flags is $4{,}784$, and that with a model-only chain
+the count can be quite different, because of which pixels the percentile is taken over.
+\end{worked}
+
+\paragraph{What can go wrong at each step.} The anomaly course lists the failures seen in practice:
+the wrong sensor selected (a \code{ValueError}, job failed); a class renamed in \file{vendables.py}
+(stored pickles unreadable); segmentation thresholds wrong for the terrain (the keep mask removes the
+target); the worker crash-looping (jobs sit in \code{queued} while the api reports healthy, which has
+happened twice, see CLAUDE.md); normalisation statistics wrong for the sensor (every pixel scores high); a
+threshold too tight (the real anomaly ranked a little below the cut); and georeferencing that cannot be
+resolved (\code{422 crs_missing}).
+
+%======================================================================
+\begin{confusions}
+\confusion{Does the scene get resized to 128 by 128?}{No. It is cut into overlapping $128\times128$ tiles,
+each reconstructed separately at full resolution, and the predictions are averaged back into a full-size
+cube.}
+\confusion{Are the two passes twice as slow?}{Yes, exactly twice the network calls. It is the price of the
+rule that no pixel predicts itself, and it is not negotiable.}
+\confusion{Is inference masking the same as training masking?}{No. Training hides a random $65\%$ and
+grades only there; inference hides exactly half, twice, with complementary masks, and uses every hidden
+prediction. The partition argument forces $\rho=1/K$.}
+\confusion{Why does a stride of 32 cost sixteen times more than a stride of 128?}{The number of tiles along
+each axis grows about four times ($P/S=4$ instead of $1$), and the two axes multiply: $4\times4=16$ times as
+many tiles, each giving every pixel one more prediction.}
+\confusion{Pixels near a nodata hole score zero. Is the model ignoring them?}{If no tile delivered a usable
+prediction for a pixel (all its weights eroded to 0), the reconstruction falls back to the input and the
+residual is exactly zero. If some did, the pixel is scored normally from those. Erosion of 15 removes only
+pixels within 7 of nodata from the average.}
+\confusion{The score map has a faint grid.}{Checkerboard artefacts at token boundaries. The random strategy
+or a different stride changes them; the overlap of 16 tiles already damps them.}
+\end{confusions}
+
+\begin{checkyourself}
+\item\label{ex:inference:1} Explain in two sentences why one pass with a $50\%$ mask is not enough, and why
+  one pass with no mask is worse.
+\item\label{ex:inference:2} A scene is $1200\times900$ pixels, $P=128$, $S=32$. Compute the number of tile
+  starts along each axis with \cref{eq:inference:count}, the number of tiles, the number of batches of 8
+  and the number of forward passes. Show every step.
+\item\label{ex:inference:3} With \code{cell_size = 2}, write out the $4\times4$ token grid that pass~1 hides,
+  and the one pass~2 hides.
+\item\label{ex:inference:4} A pixel lies in four tiles with predictions $0.31, 0.29, 0.30, 0.70$; the last
+  tile's weight is $0$ because of erosion. Compute the averaged reconstruction, and the residual if the
+  observed value is $0.36$. What would the residual be if all four weights were $0$?
+\item\label{ex:inference:5} Along a $W=600$ axis with $P=128$, $S=32$, list the last three tile starts and
+  give the coverage count (tiles containing it) of column $500$.
+\item\label{ex:inference:6} Why must a checkpoint be loaded into a model built with the same $D$, and what
+  happens if it is not?
+\end{checkyourself}
+
+\nextchapter{ch:residualmaha}

@@ -1,0 +1,24 @@
+\glossentry{Checkpoint}{A file holding a trained model's parameters as a dictionary from parameter names to tensors. It holds numbers, not an architecture; the model must be built first and the numbers loaded into it.}
+\glossentry{Strict loading}{The default behaviour of PyTorch's load\_state\_dict: every saved tensor must find a slot of the same name and shape, or loading fails with an error.}
+\glossentry{Inference}{Running a trained model on new data to obtain its predictions, with no learning taking place.}
+\glossentry{Two-pass masking}{Running the model twice on a tile with complementary token masks and taking each pixel's prediction from the pass in which it was hidden, so that no pixel is ever predicted while visible.}
+\glossentry{Partition}{A split of a set into pieces that do not overlap and together cover the whole set; at inference, the hidden token sets of the passes form a partition.}
+\glossentry{Mask ratio}{The fraction of valid tokens hidden in one masked pass; 0.65 in the hyperspectral training configs, 0.5 at inference.}
+\glossentry{Keep mask}{A 0/1 vector over tokens: 1 means the token is shown to the encoder, 0 means it is removed and predicted.}
+\glossentry{Prediction mask}{The complement of the keep mask among valid tokens: the tokens hidden in a pass whose predictions are used.}
+\glossentry{Checkerboard mask}{The default inference masking pattern, (row + column) mod 2 over the token grid; pass 1 hides the even tokens and pass 2 the odd ones.}
+\glossentry{Random inference mask}{The alternative strategy: a random half of the tokens and its exact complement, which scatters token-boundary artefacts differently in every tile.}
+\glossentry{Broadcasting}{Combining arrays of different shapes by repeating them along their length-1 axes, so a (4, 1) column plus a (1, 4) row gives a (4, 4) table.}
+\glossentry{Sliding window}{Covering a large image with fixed-size tiles placed at regular offsets, here 128 x 128 tiles every 32 pixels.}
+\glossentry{Stride (sliding window)}{The distance between the starts of neighbouring tiles; 32 pixels for Indradhanu at inference.}
+\glossentry{Overlap}{The number of pixels two neighbouring tiles share along an axis, patch size minus stride: 96 for a 128 tile at stride 32.}
+\glossentry{Snapped tile}{The last tile along an axis, moved back so that it ends exactly at the scene edge; it overlaps its neighbour by more than the usual overlap.}
+\glossentry{Coverage count}{The number of tiles that contain a given pixel: 16 in the interior of a scene tiled at 128/32, fewer near edges, up to 25 where snapped strips cross.}
+\glossentry{Overlap averaging}{Combining the predictions of all tiles that cover a pixel by summing them, weighted by the eroded validity mask, and dividing by the sum of weights.}
+\glossentry{Erosion}{Shrinking a validity mask so that a pixel survives only if every pixel in a square around it is valid; inference uses a 15 x 15 square.}
+\glossentry{Tile validity filter}{The rule that skips any tile with less than 10 percent valid pixels at inference (training used 40 percent).}
+\glossentry{Inference batch size}{The number of tiles passed through the network together; 8 by default in the scoring action, the main memory control on a CPU worker.}
+\glossentry{Combined score}{A size-based score: 0.5 times L1 divided by its scene maximum plus 0.5 times SAM divided by its scene maximum; Indradhanu's default until 2026-10-15.}
+\glossentry{Max-normalisation}{Dividing a map by its largest valid value; fragile, because one extreme pixel compresses all the others towards zero.}
+\glossentry{Square-root stretch}{Displaying the square root of a score so that a heavy-tailed distribution of squared distances spreads across the colour scale.}
+\glossentry{Action chain}{The sequence of product actions from upload to export: band filter, segmentation, scoring, detection prep, spectral match, export.}

@@ -1,0 +1,13 @@
+i label pauc caught1 caught01
+0 {FTH3_ep5 RM, cloud excl.} 0.1892 49.39 15.95
+1 {FTH3_ep5 RM} 0.1749 46.42 13.86
+2 {PCA-RX, cloud excl.} 0.1390 41.47 8.47
+3 {PCA-RX} 0.1281 39.71 8.14
+4 {MNF-RX, cloud excl.} 0.0966 30.80 5.17
+5 {MNF-RX} 0.0750 27.39 3.41
+6 {HyperSL RM, cloud excl.} 0.0947 40.59 6.71
+7 {HyperSL RM} 0.0832 38.50 5.39
+8 {HyperSL L2, cloud excl.} 0.0182 15.07 4.29
+9 {HyperSL L2} 0.0175 14.30 3.96
+10 {HyperSL loss, cloud excl.} 0.0039 6.93 0.88
+11 {HyperSL loss} 0.0039 6.93 0.88

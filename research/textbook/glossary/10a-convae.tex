@@ -1,0 +1,8 @@
+\glossentry{Transposed convolution}{The learnable upsampling layer that spreads each input value over a kernel-sized stretch of the output; with kernel 4, stride 2, padding 1 it doubles height and width.}
+\glossentry{Base width}{The channel count of a convolutional autoencoder's first stage; later stages double it.}
+\glossentry{Pratibimba}{The plain convolutional autoencoder (reflection): four stages, base 32, trained with nothing hidden; 1,379,393 parameters.}
+\glossentry{Antardhana}{The convolutional autoencoder trained to fill 13 to 25 percent hidden pixels with an MSE loss; 264,961 parameters.}
+\glossentry{Tirohita}{Antardhana's L1 sibling, smaller per stage, deeper, and hiding 50 to 75 percent; 329,665 parameters.}
+\glossentry{Asanskrita}{The mask-aware convolutional autoencoder with no normalisation: three input channels (temperature, validity, input mask); 267,009 parameters.}
+\glossentry{Drashta}{Asanskrita with z-score normalisation in and out, hiding 50 to 75 percent; 267,009 parameters.}
+\glossentry{Pixel checkerboard}{The inference mask of the convolutional models: one pass hides pixels whose row plus column is odd, the other those where it is even.}

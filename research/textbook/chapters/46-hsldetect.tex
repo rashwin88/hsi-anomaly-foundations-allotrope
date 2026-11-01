@@ -1,0 +1,374 @@
+\chapter{Anomaly detection: a model that completes the anomaly}\label{ch:hsldetect}
+\def\tbrk{\hfil\penalty50\hfilneg}% local: a line may break before a provenance tag
+
+\begin{onething}
+HyperSL rebuilds a pixel's hidden bands from that same pixel's visible bands, so it learns to complete whatever spectrum
+it is shown, anomalies included; measured on the 909-object PRISMA bench with the evaluator's own measures, its residual
+found 130 of the 909 objects in its top 1\% (random scores find about 93), and even scored with our own residual
+Mahalanobis its reconstruction made the score worse than using no reconstruction at all (pAUC 0.083 against 0.128).
+\end{onething}
+
+\Cref{ch:recon} built anomaly detection on one rule: \emph{a pixel must never help reconstruct itself}. Indradhanu obeys
+it by hiding whole pixels and rebuilding them from their neighbours (\cref{ch:masking}). HyperSL's masking hides bands
+of a pixel and rebuilds them from the rest of the same pixel. This chapter works out, on a three-band toy, why that is
+the opposite of what a detector needs, and then measures it, because a theory about a nine-million-parameter network is
+only a prediction until it is run.
+
+\begin{analogy}
+A cloze test, in which a reader fills in the missing words of a sentence. A good reader fills them in for \emph{any}
+sentence, however strange, because the rest of the sentence says what is missing: ``the giraffe ordered a \underline{\ \
+} of tea'' is completed as easily as ``the man ordered a cup of tea''. If you want to know whether a sentence is odd, a
+fluent cloze reader is the wrong judge: it repairs the oddness. Ask instead whether the sentence fits the paragraph it is
+in. HyperSL is the fluent cloze reader of spectra; the paragraph is the pixel's neighbourhood.
+\end{analogy}
+
+%======================================================================
+\section{Two ways to predict a pixel}\label{sec:hsldetect:two}
+
+\begin{definition}[Spatial completion, spectral self-completion]
+\emph{Spatial completion}\index{spatial completion} predicts a pixel's spectrum from \emph{other} pixels, its
+neighbours. \emph{Spectral self-completion}\index{spectral self-completion} predicts some of a pixel's bands from its
+\emph{other bands}. Indradhanu does the first; HyperSL does the second (\cref{tab:hslwhat:trace}, step 5).
+\end{definition}
+
+A reconstruction detector scores a pixel by how badly it is predicted (\cref{ch:recon}). For that to flag an anomaly, the
+predictor must \emph{fail} on it. Spatial completion fails on an anomaly because its neighbours are background: they
+carry no information about the anomaly. Self-completion uses the anomaly's own bands, which carry a great deal.
+
+\subsection{A three-band toy, by hand}
+
+Take spectra of three bands. Ordinary background is \emph{smooth}: the middle band lies halfway between the outer two.
+\begin{align*}
+\text{background } \vect{b} &= (0.20,\ 0.30,\ 0.40) \tagA,\\
+\text{smooth anomaly } \vect{t} &= (0.60,\ 0.50,\ 0.40) \tagA \quad\text{(a bright roof falling with wavelength)},\\
+\text{anomaly with a dip } \vect{d} &= (0.60,\ 0.30,\ 0.60) \tagA \quad\text{(an absorption feature in band 2)}.
+\end{align*}
+
+\paragraph{The self-completer.} Hide band 2 and predict it from bands 1 and 3 of the same pixel. What predictor would
+training on background learn? Fit $\hat x_2=w_1x_1+w_3x_3+c$ by least squares on many background spectra. If every
+background spectrum is exactly smooth, $x_2=(x_1+x_3)/2$, then $w_1=w_3=\tfrac12$, $c=0$ gives zero error on every one of
+them, and since a squared error cannot be negative, nothing does better. On 2,000 noisy smooth backgrounds the fit gives
+$w_1=0.4981$, $w_3=0.5011$, $c=-0.00018$\tagC{} (offsets and slopes drawn at random, noise 0.005\tagA): the average, as
+predicted.
+
+\begin{worked}[label={we:hsldetect:self}]{Self-completion of band 2}
+With $\hat x_2=(x_1+x_3)/2$:
+\begin{align*}
+\text{background:}\quad \hat x_2 &= (0.20+0.40)/2 = 0.30, & r_2 &= 0.30-0.30 = 0,\\
+\text{smooth anomaly:}\quad \hat x_2 &= (0.60+0.40)/2 = 0.50, & r_2 &= 0.50-0.50 = 0,\\
+\text{dip:}\quad \hat x_2 &= (0.60+0.60)/2 = 0.60, & r_2 &= 0.30-0.60 = -0.30 .
+\end{align*}
+The learned predictor gives $0.4991$ on the smooth anomaly (true 0.50) and $0.5994$ on the dip (true 0.30)\tagC. The smooth
+anomaly, three times brighter than the background in band 1, has \emph{the same residual as the background: zero}.
+\end{worked}
+
+\paragraph{The spatial completer.} Predict every band of the pixel as the mean of its four neighbours, which are
+background.
+\begin{worked}[label={we:hsldetect:spatial}]{Spatial completion of the same pixels}
+\begin{align*}
+\text{background:}\quad \vect{r} &= \vect{b}-\vect{b} = (0,0,0), & \norm{\vect{r}}^2 &= 0,\\
+\text{smooth anomaly:}\quad \vect{r} &= (0.60-0.20,\ 0.50-0.30,\ 0.40-0.40) = (0.40,\ 0.20,\ 0),\\
+\norm{\vect{r}}^2 &= 0.16+0.04+0 = 0.20,\\
+\text{dip:}\quad \vect{r} &= (0.60-0.20,\ 0.30-0.30,\ 0.60-0.40) = (0.40,\ 0,\ 0.20),\\
+\norm{\vect{r}}^2 &= 0.16+0+0.04 = 0.20 .
+\end{align*}
+Both anomalies stand out, by the same amount, whatever their shape\tagC.
+\end{worked}
+
+\begin{keypoint}
+A self-completer flags only the part of an anomaly it cannot infer from the anomaly itself: a feature narrower than the
+spacing of the bands it can see. Everything broad about the anomaly (its brightness, its slope, its overall shape) is
+completed, and the residual is the background's.
+\end{keypoint}
+
+\subsection{What this means for HyperSL}
+
+HyperSL is a far more flexible self-completer than an average: a transformer that learned, from 200--300 million
+spectra, what bands go with what. At mask 0.95 it sees 7 of 149 bands, chosen at random; those 7 carry the anomaly's
+overall level and shape, and the other 142 are filled in to match. Three details push it further towards completion.
+\begin{itemize}
+\item \textbf{Its loss covers visible bands too} (\code{MSE_SAM_loss} on the whole output), so copying what it sees is
+rewarded, the identity trap of \cref{sec:recon:identity}.
+\item \textbf{The min-max frame pins an anomaly to the edge of $[0,1]$} (\cref{we:hslnorm:anom}), where a sigmoid output is
+comfortable.
+\item \textbf{It has no neighbours to disagree with.} Even a perfect model of ``what spectra look like'' cannot know that
+this spectrum does not belong \emph{here}.
+\end{itemize}
+
+\paragraph{The first evidence (2026-09-23).} The matching run of \cref{sec:hslnorm:measured} also measured HyperSL's own
+reconstruction error (angle between pixel and reconstruction, mask 0, per-curve scaling) on the ground-truth anomaly pixels
+and on random background:
+
+\begin{center}\small
+\begin{tabular}{@{}lrrr@{}}
+\toprule
+scene & anomaly, median angle & background, median angle & AUC (anomaly above background) \\
+\midrule
+set1 & 3.18° & 6.17° & 0.094 \\
+set2 & 4.02° & 5.16° & 0.220 \\
+set3 & 3.26° & 4.27° & 0.242 \\
+set4 & 2.74° & 3.99° & 0.104 \\
+\bottomrule
+\end{tabular}
+\end{center}
+An AUC below 0.5 means the anomalies were reconstructed \emph{better} than the background, on every scene; the mean is
+0.165\tagC\tagMr{\texttt{summary.json}, \texttt{recon}}. That run showed HyperSL every band (mask 0), its weakest setting,
+and scaled per curve, off its training distribution. The run below fixes both.
+
+%======================================================================
+\section{The measurement on the labelled bench (2026-10-31)}\label{sec:hsldetect:run}
+
+For this book the question was put to HyperSL directly, under the conditions it was trained for, and scored exactly as
+Indradhanu is scored. The experiment is \file{research/experiments/hypersl-anomaly-bench/} (README, scripts and
+\file{results.json}); its score maps are outside the repository in
+\file{C:/Users/FITT/Documents/stage1_datasets/hypersl_anomaly_bench/}.
+
+\begin{center}\small
+\begin{tabular}{@{}>{\raggedright\arraybackslash}p{24mm}>{\raggedright\arraybackslash}p{112mm}@{}}
+\toprule
+item & setting \\
+\midrule
+data & the 4 labelled PRISMA L2D scenes, 909 objects; validity and object maps exported from the evaluator's own
+\code{PrismaBench} (\file{step0_export_masks.py}), so every method is counted on the same pixels \\
+HyperSL input & the 149-band PRISMA axis of every earlier HyperSL experiment; each band min-max scaled over the scene's
+valid pixels, as in \file{mutihsi.py} \\
+model & \code{10_base_mask95} (sha256 \code{3d5f1914...a74a68c}), mask ratio 0.95 (7 of 149 bands visible), 4 random
+masks per pixel (seeds 1000--1003), fp16 on an RTX 4000 SFF Ada in WSL (\file{step1_hypersl_scores.py}) \\
+reconstruction & each band's prediction averaged over the draws in which it was \emph{hidden}, so every residual is a
+prediction of a band the encoder did not see \\
+HyperSL scores & \textbf{L2}: mean squared residual in min-max units; \textbf{loss}: its own training objective
+$\text{MSE}+(1-\cos)$ per pixel; \textbf{RM}: the product's residual Mahalanobis (30 components, ring 21/61) on the
+residual converted back to reflectance \\
+baselines & \textbf{FTH3 epoch 5}, Indradhanu's release candidate (its cached score maps from the 2026-10-29 evaluation,
+found by the evaluator's cache key); \textbf{PCA-RX}, the evaluator's \code{pca_rx} (residual Mahalanobis with a
+\emph{zero} reconstruction); \textbf{MNF-RX}, the product's \code{MNFCompressionDetector}, 10 components \\
+cloud & every method also scored with FTH3 epoch 5's thick-cloud pixels set to 0, the release candidate's rule \\
+measures & \code{app.evaluation.metrics} and \code{significance} (\cref{ch:measures,ch:bootstrap}), via
+\file{step2_evaluate.py} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\paragraph{Three checks before the results.} FTH3's two rows reproduce its evaluation report exactly (pAUC 0.1749 and
+0.1892, 422 and 449 objects)\tbrk\tagM{research/experiments/indradhanu-finetune/FTH3-heavy-joint-more2/eval_report.md}.
+PCA-RX gives 0.1281, the stage-3 run's 0.128\tbrk\tagM{docs/lld/evaluation.md}. And the masking did what it should:
+
+\begin{worked}[label={we:hsldetect:never}]{How many bands should never be hidden in 4 draws?}
+In one draw a band is visible with probability $7/149$ (7 of 149 tokens kept). In 4 independent draws it is visible
+every time with probability
+\begin{align*}
+\left(\frac{7}{149}\right)^4 &= 0.046980^4 = 0.0022071^2 = 4.8713\times10^{-6}.
+\end{align*}
+Set1 has 992,708 valid pixels of 149 bands:
+\begin{align*}
+992{,}708\times149 &= 147{,}913{,}492 \text{ (pixel, band) pairs},\\
+147{,}913{,}492\times4.8713\times10^{-6} &= 720.5 .
+\end{align*}
+The run logged 706\tagM{research/experiments/hypersl-anomaly-bench/results.json}: the expected count, within chance
+($\sqrt{720}\approx27$)\tagC. For those 706 entries the script used the last draw's reconstruction, made with the band
+visible.
+\end{worked}
+
+\subsection{The results}
+
+\begin{table}[htbp]
+\centering\small
+\begin{tabular}{@{}lrrrrr@{}}
+\toprule
+method & caught top 1\% & caught top 0.1\% & pAUC & ROC-AUC & TPR at 0.001 \\
+\midrule
+\emph{chance} & 10.2\% & & & & \\
+FTH3 ep.\ 5, RM & 422 (46.4\%) & 13.9\% & 0.1749 & 0.866 & 0.058 \\
+PCA-RX (no model) & 361 (39.7\%) & 8.1\% & 0.1281 & 0.839 & 0.029 \\
+\textbf{HyperSL RM} & 350 (38.5\%) & 5.4\% & 0.0832 & 0.757 & 0.020 \\
+MNF-RX & 249 (27.4\%) & 3.4\% & 0.0750 & 0.749 & 0.019 \\
+\textbf{HyperSL L2} & 130 (14.3\%) & 4.0\% & 0.0175 & 0.624 & 0.007 \\
+\textbf{HyperSL loss} & 63 (6.9\%) & 0.9\% & 0.0039 & 0.501 & 0.000 \\
+\midrule
+\multicolumn{6}{@{}l}{\emph{cloud excluded by FTH3 epoch 5's thick-cloud mask}} \\
+FTH3 ep.\ 5, RM & 449 (49.4\%) & 16.0\% & 0.1892 & 0.869 & 0.065 \\
+PCA-RX & 377 (41.5\%) & 8.5\% & 0.1390 & 0.842 & 0.031 \\
+\textbf{HyperSL RM} & 369 (40.6\%) & 6.7\% & 0.0947 & 0.761 & 0.024 \\
+MNF-RX & 280 (30.8\%) & 5.2\% & 0.0966 & 0.753 & 0.024 \\
+\textbf{HyperSL L2} & 137 (15.1\%) & 4.3\% & 0.0182 & 0.628 & 0.007 \\
+\textbf{HyperSL loss} & 63 (6.9\%) & 0.9\% & 0.0039 & 0.503 & 0.000 \\
+\bottomrule
+\end{tabular}
+\caption{HyperSL on the 909-object PRISMA bench, beside Indradhanu FTH3 epoch 5 and two classical detectors. pAUC is up to
+FPR 0.01; pixel measures are means over the four scenes; caught is the share of all 909 objects with a pixel within 1\,px
+of the top 1\% or 0.1\%\tagM{research/experiments/hypersl-anomaly-bench/results.json}.}
+\label{tab:hsldetect:main}
+\end{table}
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}
+\begin{axis}[xbar, bar width=6pt, width=0.62\linewidth, height=62mm, xmin=0, xmax=0.23, xlabel={pAUC (FPR $\le$ 0.01)},
+  xtick={0,0.05,0.1,0.15,0.2}, xticklabel style={/pgf/number format/fixed,/pgf/number format/precision=2},
+  scaled x ticks=false,
+  ytick={0,1,2,3,4,5}, yticklabels={HyperSL loss,HyperSL L2,MNF-RX,HyperSL RM,PCA-RX (no model),FTH3 ep.\ 5},
+  y tick label style={font=\small}, enlarge y limits=0.12, legend style={at={(0.98,0.03)},anchor=south east,font=\scriptsize},
+  nodes near coords, nodes near coords style={font=\tiny}, every node near coord/.append style={/pgf/number format/fixed,/pgf/number format/precision=3}]
+\addplot[fill=maskgrey] table[y=pos, x=pauc] {figdata/hsl_detect_bar.dat};
+\addplot[fill=spec!70] table[y=pos, x=paucx] {figdata/hsl_detect_bar.dat};
+\legend{plain, cloud excluded}
+\end{axis}
+\end{tikzpicture}
+\caption{pAUC on the PRISMA bench. HyperSL's own residual (L2, loss) sits near zero; scored with residual Mahalanobis it
+lands below PCA-RX, which uses no model at all. Data \texttt{figdata/\allowbreak hsl\_detect\_bar.dat}.}
+\label{fig:hsldetect:bar}
+\end{figure}
+
+\paragraph{1. HyperSL's own residual is close to chance.} Its training loss as a score catches 63 objects, \emph{fewer}
+than the 10.2\% (about 93) that random scores would catch\tagC, with a ROC-AUC of 0.501. Its mean squared residual does
+somewhat better, 130 objects and pAUC 0.0175, a tenth of FTH3's. This is the toy of \cref{we:hsldetect:self} at full
+scale: the anomalies are completed.
+
+\paragraph{2. Our scorer rescues part of it, but not past ``no model''.} Feeding HyperSL's residual to the product's
+residual Mahalanobis gives 350 objects and pAUC 0.0832. Most of that is the scorer's work, as the next comparison shows.
+
+\paragraph{3. The decisive comparison: HyperSL's reconstruction against none.} PCA-RX \emph{is} residual Mahalanobis on
+the cube with a zero reconstruction. So ``HyperSL RM minus PCA-RX'' isolates what subtracting HyperSL's reconstruction
+does, everything else equal. Paired object bootstrap, 2,000 draws:
+
+\begin{center}\small
+\begin{tabular}{@{}lll@{}}
+\toprule
+difference (B $-$ A) & pAUC [95\% interval] & caught top 1\% [95\% interval] \\
+\midrule
+HyperSL RM $-$ PCA-RX & $-0.0450$ [$-0.0589$, $-0.0318$] & $-1.2$ [$-4.0$, $+1.5$] points \\
+HyperSL RM $-$ PCA-RX, cloud excl. & $-0.0443$ [$-0.0577$, $-0.0320$] & $-0.9$ [$-3.5$, $+1.9$] points \\
+PCA-RX $-$ FTH3 ep.\ 5 & $-0.0467$ [$-0.0604$, $-0.0327$] & $-6.7$ [$-8.8$, $-4.5$] points \\
+HyperSL RM $-$ FTH3 ep.\ 5 & $-0.0917$ [$-0.1060$, $-0.0776$] & $-7.9$ [$-10.8$, $-5.2$] points \\
+HyperSL RM $-$ FTH3 ep.\ 5, cloud excl. & $-0.0944$ [$-0.1094$, $-0.0800$] & $-8.8$ [$-11.7$, $-6.2$] points \\
+MNF-RX $-$ FTH3 ep.\ 5 & $-0.0999$ [$-0.1170$, $-0.0826$] & $-19.0$ [$-22.0$, $-16.3$] points \\
+\bottomrule
+\end{tabular}
+\end{center}
+\textbf{Subtracting HyperSL's reconstruction lowers pAUC by 0.045, an interval well clear of zero}, and leaves the object
+count statistically unchanged. Indradhanu's reconstruction does the opposite: against the same PCA-RX it \emph{adds} 0.047
+(the third row, read with its sign reversed). The two models' residuals move the same scorer by almost the same amount in
+opposite directions\tagC. That is the measured form of \cref{sec:hsldetect:two}: a spatial completer leaves the anomaly in
+the residual; a self-completer takes it out.
+
+\begin{worked}[label={we:hsldetect:sym}]{Reading the bootstrap rows}
+FTH3 against PCA-RX is the third row reversed: $+0.0467$ with interval $[+0.0327,+0.0604]$. HyperSL against PCA-RX is
+$-0.0450$ with interval $[-0.0589,-0.0318]$. Add the two point values:
+\begin{align*}
+0.0467+(-0.0450) &= 0.0017 .
+\end{align*}
+Within $0.002$ of zero: on this bench, what Indradhanu's residual adds to the cube's own statistics is about what HyperSL's
+residual removes\tagC. Both intervals exclude zero, so both effects are resolved.
+\end{worked}
+
+\paragraph{Per scene and by contrast tier.}
+
+\begin{center}\small
+\begin{tabular}{@{}lrrrrrrr@{}}
+\toprule
+& \multicolumn{4}{c}{pAUC per scene} & \multicolumn{3}{c}{caught top 1\% by tier} \\
+\cmidrule(lr){2-5}\cmidrule(lr){6-8}
+method & set1 & set2 & set3 & set4 & easy & medium & subtle \\
+\midrule
+FTH3 ep.\ 5, RM & 0.2616 & 0.1874 & 0.0543 & 0.1964 & 59.2\% & 41.0\% & 39.0\% \\
+PCA-RX & 0.1734 & 0.1171 & 0.0822 & 0.1400 & 48.7\% & 35.4\% & 35.0\% \\
+HyperSL RM & 0.0875 & 0.0966 & 0.0286 & 0.1199 & 52.0\% & 33.8\% & 29.7\% \\
+MNF-RX & 0.0871 & 0.1267 & 0.0196 & 0.0664 & 34.9\% & 25.2\% & 22.0\% \\
+HyperSL L2 & 0.0415 & 0.0225 & 0.0040 & 0.0021 & 21.1\% & 10.8\% & 11.0\% \\
+HyperSL loss & 0.0021 & 0.0117 & 0.0019 & 0.0000 & 7.9\% & 4.9\% & 8.0\% \\
+\bottomrule
+\end{tabular}
+\end{center}
+HyperSL RM is below PCA-RX and below FTH3 on every scene. It holds up best on the easy (high-contrast) tier, 52.0\% against PCA-RX's 48.7\%, and falls furthest on the
+subtle one, 29.7\% against 35.0\%: the low-contrast targets are the ones a self-completer rebuilds most
+completely\tagM{research/experiments/hypersl-anomaly-bench/results.json}.
+
+\paragraph{Cost.} 428--462\,s of GPU time per scene for about a million pixels and four draws, 1,773\,s for the bench: 438
+microseconds per pixel on a 20\,GB laptop GPU\tagC. For comparison, Indradhanu Heavy takes 454\,s per PRISMA scene on 16
+CPU threads in the product worker\tbrk\tagMr{commit \texttt{72a767c} message}.
+
+\begin{sourcenote}[: what this run did not try]
+HyperSL read the 149-band axis of the earlier experiments, not the 186-band native axis the evaluator gives Indradhanu,
+and it kept no water bands, unlike its pretraining. Mask ratio and draw count were not tuned (0.95, the training ratio,
+and 4). These choices follow the model's training and the team's earlier runs; none was tuned on the bench, so none can
+have flattered the comparison either way. A different band axis could move HyperSL's numbers a little; it cannot remove
+self-completion, which is in the masking.
+\end{sourcenote}
+
+%======================================================================
+\section{HyperSL as a false-alarm filter}\label{sec:hsldetect:filter}
+
+A gentler use was tried on 2026-09-26: keep Indradhanu as the detector, and use HyperSL's embeddings of each candidate
+pixel and of its ring to tell real targets from false alarms (\file{research/experiments/indradhanu-fp-filter/}, scripts in
+commit \code{74df314}; results outside the repository in
+\file{C:/Users/FITT/Documents/stage1_datasets/indradhanu_fp_filter/step3/results.json}). Candidates are the top 2\% of
+Indradhanu's residual-Mahalanobis score; a small classifier is trained on three scenes and tested on the fourth; the
+headline is the share of false-alarm pixels removed while keeping 90\% of real objects. ``Oracle'' sets that cut on the
+test scene's own labels (an upper bound); ``honest'' sets it on the training scenes, as deployment would.
+
+\begin{center}\small
+\begin{tabular}{@{}lrrrrr@{}}
+\toprule
+features (one hidden layer) & set1 & set2 & set3 & set4 & mean \\
+\midrule
+\multicolumn{6}{@{}l}{\emph{oracle: share of false-alarm pixels removed at 90\% object recall}} \\
+none (a stricter Indradhanu cut) & 0.339 & 0.128 & 0.198 & 0.262 & 0.232 \\
+detector scores only & 0.059 & 0.219 & 0.223 & 0.249 & 0.188 \\
+HyperSL pixel + ring embeddings & 0.615 & 0.464 & 0.188 & 0.318 & 0.396 \\
+\midrule
+\multicolumn{6}{@{}l}{\emph{honest: object recall reached / false-alarm pixels removed}} \\
+none & 1.00 / 0.00 & 0.62 / 0.56 & 1.00 / 0.00 & 0.86 / 0.31 & \\
+HyperSL embeddings & 0.72 / 0.77 & 0.42 / 0.87 & 0.45 / 0.50 & 0.69 / 0.59 & \\
+\bottomrule
+\end{tabular}
+\end{center}
+\tagMr{\texttt{indradhanu\_fp\_filter/step3/results.json}, configurations \texttt{baseline}, \texttt{scores/B},
+\texttt{hypersl/B}; means \tagC}
+
+This is HyperSL's best showing in the whole part, and it deserves to be stated plainly: with the cut chosen in hindsight,
+its embeddings removed 40\% of false-alarm pixels at 90\% object recall against 23\% for a stricter cut, so they carry
+information about what a target looks like next to its ring. But the honest cut, the only one a deployment has, did not
+transfer between scenes: it kept between 42\% and 72\% of the objects instead of 90\%. The filter was not adopted.
+
+\begin{keypoint}
+A model that rebuilds a pixel from that pixel cannot tell you the pixel is surprising. Scored as a detector, HyperSL's
+residual is near chance; scored with our own residual Mahalanobis, its reconstruction makes the score worse than using no
+reconstruction at all.
+\end{keypoint}
+
+\begin{drift}
+The bench run is of 2026-10-31 (\file{research/experiments/hypersl-anomaly-bench/}); FTH3's maps are from the 2026-10-29
+evaluation; the false-alarm-filter numbers are from 2026-09-26 and were computed on candidates from the Indradhanu of that
+date. A new HyperSL release, a different band axis, or a new release candidate would move the rows.
+\end{drift}
+
+%======================================================================
+\begin{confusions}
+\confusion{HyperSL hides 95\% of the bands, so it cannot copy.}{It cannot copy those bands, but the 7 it sees carry the
+anomaly's level and shape, and the other 142 are completed to match. Hiding bands is not hiding the pixel.}
+\confusion{A residual Mahalanobis of 350 objects shows HyperSL detects anomalies.}{The same scorer on the raw cube, with
+no model, catches 361 and has a higher pAUC. The objects are the scorer's, not HyperSL's.}
+\confusion{HyperSL's loss catching 63 objects is a little worse than chance, so it is useless but harmless.}{Below chance
+means it ranks anomalies \emph{lower} than background: it fits them better. That is self-completion, not noise.}
+\confusion{Indradhanu would have the same problem with spectral masking.}{It would, which is why spectral self-completion
+is listed as rejected in its design (\file{docs/lld/spectral-stem.md}) and band-list augmentation is allowed only because a
+hidden pixel's own bands are never an input (\cref{sec:specdecoder:traps}).}
+\confusion{The false-alarm filter result shows HyperSL helps.}{Only with a cut chosen on the test scene's labels. With an
+honest cut it lost up to 58\% of the objects.}
+\end{confusions}
+
+\begin{checkyourself}
+\item\label{ex:hsldetect:1} A third anomaly is $(0.50,\ 0.45,\ 0.40)$. Compute its self-completion residual in band 2 and its
+  spatial residual and squared length against $\vect{b}=(0.20,0.30,0.40)$.
+\item\label{ex:hsldetect:2} Set2 has 1,050,895 valid pixels. How many (pixel, band) pairs do you expect never to be hidden in 4
+  draws? The run logged 736.
+\item\label{ex:hsldetect:3} An object covers 5 pixels after the 1-pixel dilation. What is its chance of being caught in the top
+  1\% by random scores? (\Cref{ch:measures}: $1-(1-q)^m$.)
+\item\label{ex:hsldetect:4} Does the bootstrap show HyperSL RM catching fewer objects than PCA-RX? Does it show a lower pAUC?
+\item\label{ex:hsldetect:5} Why can a score catch \emph{fewer} objects than chance? What does that say about how HyperSL ranks
+  anomalies?
+\item\label{ex:hsldetect:6} At 438 microseconds per pixel with 4 draws, how long would a 1,000 by 1,000 scene take with 4 draws,
+  and roughly with 1 draw?
+\end{checkyourself}
+
+\nextchapter{ch:hslunmix}

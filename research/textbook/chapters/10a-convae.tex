@@ -1,0 +1,337 @@
+\chapter{The five convolutional autoencoders}\label{ch:convae}
+
+\begin{onething}
+Before the transformers, the project built five convolutional autoencoders for one thermal band, Pratibimba,
+Antardhana, Tirohita, Asanskrita and Drashta: two classes, one stack of stride-2 convolutions and its mirror, between
+264,961 and 1,379,393 trainable numbers, which differ in how they hide pixels, which loss they learn from and whether
+they normalise; each step answered a fault of the one before, and you can count every one of them by hand.
+\end{onething}
+
+\Cref{ch:recon} listed seven codenames; \cref{ch:shapes} counted one convolutional encoder. This chapter is the
+condensed tour of the five convolutional models, one section each: the class, the shapes of one forward pass, the
+parameter count, why the model exists, and where it sits in the product. It is shorter than its neighbours on
+purpose. These models are not the product's default for anything (Chakshu is, for thermal scenes,
+\cref{ch:chakshu}), but they are in the model volume, the scoring dialog offers them, and their history explains the
+design of everything after them.
+
+Every count and shape tagged \tagC{} comes from \file{research/textbook/tools/compute_convae.py}, which loads each
+model's served checkpoint (copied from the stack's \file{/models/} volume on 2026-10-31) into the real class with a
+strict load and records shapes with forward hooks; its output is \file{compute_convae_output.txt}. Paths abbreviate:
+\file{components/} is \file{app/foundation_models/components/}, \file{trainers/} and \file{inferencers/} likewise.
+
+\begin{analogy}
+Five apprentices learn to restore damaged photographs. The first is only ever shown undamaged photographs and asked
+to copy them. The second is shown photographs with a few holes punched in them, the third with most of the picture
+punched out. The fourth gets the punched photograph and, on a separate sheet, a stencil showing where the holes are,
+so a hole is never mistaken for a black object. The fifth gets the stencil too, and every photograph is first
+adjusted to the same brightness. On the job all five are handed photographs with every other dot punched out. Only
+the last two were trained for anything like that.
+\end{analogy}
+
+%======================================================================
+\section{Two building blocks: the stride-2 convolution and its transpose}\label{sec:convae:blocks}
+
+\begin{sloppypar}
+All five use \code{SpatialEncoder} and \code{SpatialDecoder} (\file{components/spatial_encoder.py},
+\file{components/spatial_decoder.py}). An encoder stage is a convolution with kernel $k=4$, stride $s=2$, padding
+$p=1$, then BatchNorm, GELU and a channel dropout of 0.3; by the output-size formula of \cref{ch:shapes}, a side of
+$H$ becomes $\lfloor(H+2-4)/2\rfloor+1=H/2$ for even $H$. The channel count starts at a \emph{base} width $c$ and
+doubles each stage: $c, 2c, 4c, \dots$
+\end{sloppypar}
+
+\begin{definition}[BatchNorm, briefly]
+A BatchNorm\index{BatchNorm} layer over $c$ channels standardises each channel with the batch's mean and variance in
+training (and with stored running averages at inference), then applies a learned scale and shift per channel: $2c$
+parameters, plus $2c+1$ buffers (\cref{ch:compressor} works through it).
+\end{definition}
+
+\begin{definition}[Transposed convolution]
+A \emph{transposed convolution}\index{transposed convolution} with stride $s$ spreads each input value over the
+output: input position $i$ adds $x_i$ times the kernel into the output starting at position $si$, overlapping
+contributions add, and $p$ values are cropped from each end. Its output size is
+\begin{equation}\label{eq:convae:tconv}
+H_\text{out} = (H_\text{in}-1)\,s-2p+k ,
+\end{equation}
+so with $k=4$, $s=2$, $p=1$: $(H-1)\cdot2-2+4=2H$, an exact doubling. Its parameters count like a convolution's,
+$c_\text{in}c_\text{out}k^2+c_\text{out}$.
+\end{definition}
+
+\begin{worked}[label={we:convae:tconv}]{A transposed convolution in one dimension}
+Input $(1,2)$, kernel $(1,1,1,1)$, stride 2, padding 1, no bias.
+\begin{align*}
+x_0=1 \text{ at } 0 &: \text{adds } (1,1,1,1) \text{ to positions } 0\text{--}3\\
+x_1=2 \text{ at } 2 &: \text{adds } (2,2,2,2) \text{ to positions } 2\text{--}5\\
+\text{sum} &: (1,\ 1,\ 1+2,\ 1+2,\ 2,\ 2) = (1,1,3,3,2,2)\\
+\text{crop } p=1 \text{ each end} &: (1,3,3,2)
+\end{align*}
+Two values became four, as \cref{eq:convae:tconv} says: $(2-1)\times2-2+4=4$.
+\end{worked}
+
+A decoder stage is the transpose, $k=4$, $s=2$, $p=1$, halving channels, with BatchNorm, GELU and dropout, except
+the last, which is the bare transposed convolution. The code's comment explains why: the last layer must emit real
+temperatures, which BatchNorm would force to zero mean and GELU would clip below zero
+(\file{components/spatial_decoder.py}).
+
+\paragraph{The counting rule for one stage.} With the rules of \cref{ch:shapes},
+\begin{equation}\label{eq:convae:stage}
+P_\text{enc stage}(a\to b) = 16ab+b+2b = 16ab+3b, \qquad P_\text{dec stage}(a\to b) = 16ab+3b
+\ \ (\text{last: } 16ab+b).
+\end{equation}
+
+%======================================================================
+\section{The five side by side}\label{sec:convae:table}
+
+\begin{table}[htbp]
+\centering\small
+\begin{tabular}{@{}llllllr@{}}
+\toprule
+codename & class & encoder channels & hides & loss & norm. & trainable\\
+\midrule
+Pratibimba & A & $1\to32\to64\to128\to256$ & nothing & MSE & yes & 1,379,393\\
+Antardhana & A & $1\to64\to128$ & 13--25\% & MSE & yes & 264,961\\
+Tirohita & A & $1\to32\to64\to128$ & 50--75\% & L1 & yes & 329,665\\
+Asanskrita & B & $3\to64\to128$ & 35--55\% & L1 & no & 267,009\\
+Drashta & C & $3\to64\to128$ & 50--75\% & L1 & yes & 267,009\\
+\bottomrule
+\end{tabular}
+\caption{The five convolutional models as served. Classes: A \texttt{SpatialAutoencoder}, B
+\texttt{UnNormalizedSpatialAutoencoder}, C \texttt{NormalizedMaskedSpatialAutoencoder}. ``Hides'' is the share of valid
+pixels hidden per training patch, drawn uniformly in the range for each patch. Counts from strict loads of the served checkpoints \tagC; masking ranges
+and losses from \texttt{trainers/}. Asanskrita's and Drashta's encoders read three channels: the picture, a validity
+mask and an input mask.}
+\label{tab:convae:five}
+\end{table}
+
+All five were trained on Landsat~9 thermal patches in °C at sizes 128, 256 and 512 within each epoch, with Adam at
+$10^{-3}$, and all five discard patches with under 40\% valid pixels (\file{trainers/}, \code{MIN_VALID_PIXEL_FRACTION}).
+The four normalising models carry one mean and one spread for Landsat temperatures, $24.5756\pm13.5744$ °C
+(\file{app/constants/thermal_pixel_consts.json}); \cref{ch:chakshu}, which uses the same two numbers, works with them
+in detail. Every one is served with patch 128, stride 64, and two-pass \emph{pixel} checkerboard
+inference: one pass hides every pixel whose row plus column is odd, the other those where it is even
+(\file{inferencers/spatial_autoencoder_inferencer.py} and its two siblings).
+
+%======================================================================
+\section{Pratibimba: the plain autoencoder}\label{sec:convae:pratibimba}
+
+\paragraph{What it is.} Class A with one input channel, base 32 and 4 stages
+(\file{components/spatial_auto_encoder.py}), checkpoint v8.1.0, epoch 29. Codename: ``reflection''.
+
+\begin{center}\small
+\begin{tabular}{@{}lll@{}}
+\toprule
+step & layer & shape ($B=1$, $128\times128$)\\
+\midrule
+input, normalised & & \shape{(1, 1, 128, 128)}\\
+encoder 0--3 & conv $k4\,s2\,p1$, BN, GELU, dropout & \shape{(1, 32, 64, 64)}, \shape{(1, 64, 32, 32)},\\
+ & & \shape{(1, 128, 16, 16)}, \shape{(1, 256, 8, 8)}\\
+decoder 0--2 & transposed conv, BN, GELU, dropout & \shape{(1, 128, 16, 16)}, \shape{(1, 64, 32, 32)},\\
+ & & \shape{(1, 32, 64, 64)}\\
+decoder 3 & transposed conv only & \shape{(1, 1, 128, 128)}, then denormalised\\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\paragraph{Count.} Encoder, by \cref{eq:convae:stage}:
+$(16\cdot32+96)+(16\cdot32\cdot64+192)+(16\cdot64\cdot128+384)+(16\cdot128\cdot256+768)
+=608+32{,}960+131{,}456+525{,}056=690{,}080$. Decoder: $(16\cdot256\cdot128+384)+(16\cdot128\cdot64+192)+(16\cdot64\cdot32+96)
++(16\cdot32+1)=524{,}672+131{,}264+32{,}864+513=689{,}313$. Total 1,379,393 \tagC. The manifest's 1,380,812 adds 1,419
+buffers: a running mean and variance for each of the $480+224=704$ BatchNorm channels ($2\times704=1{,}408$), 7 batch
+counters, and 4 normalisation values; $1{,}408+7+4=1{,}419$.
+
+\paragraph{Why it exists, and its fault.} It is the baseline: reproduce the patch through a bottleneck. Its trainer
+(\file{trainers/spatial_autoencoder_trainer.py}) hides nothing; the loss is the MSE over all valid pixels. That is
+the identity trap of \cref{ch:recon}: the only thing stopping a copy is the bottleneck, $256\times8\times8=16{,}384$
+values for a 16,384-pixel patch, exactly as many numbers as the input. At inference the product then hides half the
+pixels in a checkerboard, a regime the model never saw.
+
+%======================================================================
+\section{Antardhana and Tirohita: hide pixels, keep the class}\label{sec:convae:masked}
+
+\paragraph{What they are.} The same \code{SpatialAutoencoder} class. Antardhana (``concealment''), v0.1.0 epoch
+121, is base 64 with 2 stages; Tirohita (``the hidden one''), v0.4.0 epoch 77, base 32 with 3 stages. Their trainers
+(\file{trainers/spatial_masked_autoencoder_trainer.py}, \file{..._trainer_l1_loss.py}) draw a hiding share per patch,
+uniformly in $[0.13, 0.25]$ for Antardhana and $[0.50, 0.75]$ for Tirohita, hide that share of the valid pixels by
+setting them to 0, and grade only the hidden ones, with MSE and L1 respectively.
+
+\begin{center}\small
+\begin{tabular}{@{}lll@{}}
+\toprule
+ & Antardhana & Tirohita\\
+\midrule
+encoder outputs & \shape{(1, 64, 64, 64)} & \shape{(1, 32, 64, 64)}\\
+ & \shape{(1, 128, 32, 32)} & \shape{(1, 64, 32, 32)}\\
+ & & \shape{(1, 128, 16, 16)}\\
+decoder outputs & \shape{(1, 64, 64, 64)} & \shape{(1, 64, 32, 32)}\\
+ & \shape{(1, 1, 128, 128)} & \shape{(1, 32, 64, 64)}\\
+ & & \shape{(1, 1, 128, 128)}\\
+bottleneck values & $128\times32\times32=131{,}072$ & $128\times16\times16=32{,}768$\\
+trainable & 264,961 & 329,665\\
+\bottomrule
+\end{tabular}
+\end{center}
+Antardhana's stages: $16\cdot64+192=1{,}216$; $16\cdot64\cdot128+384=131{,}456$; decoder $16\cdot128\cdot64+192=131{,}264$
+and the last $16\cdot64+1=1{,}025$. Tirohita's encoder is the 165,024 of \cref{we:shapes:spatialcount}; its decoder is
+$131{,}264+32{,}864+513=164{,}641$ \tagC.
+
+\paragraph{Why they exist, and their fault.} Hiding pixels removes the identity answer for the hidden ones
+(\cref{ch:recon}); Tirohita adds the L1 loss, which does not pull predictions towards anomalies
+(\cref{sec:recon:l1l2}), and much heavier hiding. The fault both keep: a hidden pixel is set to 0, then normalised to
+$(0-24.5756)/13.5744=-1.81$, which is exactly what a real pixel at 0\,°C looks like. With one input channel the network
+cannot tell ``hidden'' from ``freezing''.
+
+\begin{sourcenote}[: two siblings that differ in more than the loss, and their validation losses]
+The manifest and \file{components/spatial_auto_encoder.py} present Antardhana and Tirohita as one model with two losses.
+They also differ in size (base 64, 2 stages against base 32, 3 stages) and in hiding share (13--25\% against 50--75\%)
+(\cref{ch:losses} noted the size difference). The manifest's note that Tirohita has ``Lower val loss than the MSE
+sibling'' compares 1.79 (an L1, in °C) with 17.29 (an MSE, in °C$^2$), and both trainers validate with
+\emph{nothing hidden} (\lstinline!model(pixels, mask=mask)!), so neither number measures the hidden-pixel task they were
+trained on. The two numbers cannot be compared. Also, both manifests name \code{MaskedSpatialAutoencoderInferencer};
+the resolver routes both through \code{SpatialAutoencoderInferencer} (their \code{foundation_model_name} is
+\code{spatial_autoencoder}), and \file{docs/04-models.md}'s ``two architectures can be trained but not run'' is true of
+the enum names only: the product runs both models under Pratibimba's inferencer.
+\end{sourcenote}
+
+%======================================================================
+\section{Asanskrita: tell the network where the holes are}\label{sec:convae:asanskrita}
+
+\paragraph{What it is.} Class B, base 64, 2 stages
+(\file{components/unnormalized_spatial_auto_encoder.py}), v0.3.0 epoch 82. Codename: ``unrefined'', a pun on
+\emph{unnormalised}: it is the only model with no normalisation buffers. Its encoder reads three channels:
+\begin{equation}\label{eq:convae:three}
+\big[\ T\cdot m_\text{valid}\cdot m_\text{input},\ \ m_\text{valid},\ \ m_\text{input}\ \big],
+\end{equation}
+the temperature in °C with hidden and invalid pixels zeroed, the validity mask, and the input mask (1 where a
+pixel is valid and visible). A hidden pixel has $m_\text{valid}=1$, $m_\text{input}=0$; an invalid one has both 0; so
+the network can tell ``hidden'' from ``nothing here'' from ``a real 0\,°C''.
+
+\begin{center}\small
+\begin{tabular}{@{}lll@{}}
+\toprule
+step & layer & shape\\
+\midrule
+concatenate & \eqref{eq:convae:three} & \shape{(1, 3, 128, 128)}\\
+encoder 0, 1 & conv $3\to64$, $64\to128$ & \shape{(1, 64, 64, 64)}, \shape{(1, 128, 32, 32)}\\
+decoder 0, 1 & transposed $128\to64$, $64\to1$ & \shape{(1, 64, 64, 64)}, \shape{(1, 1, 128, 128)}, in °C\\
+\bottomrule
+\end{tabular}
+\end{center}
+Count: the first stage is $16\cdot3\cdot64+64+128=3{,}072+192=3{,}264$; the rest is Antardhana's
+($131{,}456+131{,}264+1{,}025$), so $3{,}264+131{,}456+131{,}264+1{,}025=267{,}009$ \tagC. The two extra input channels cost
+$3{,}264-1{,}216=2{,}048=2\times16\times64$ weights.
+
+\paragraph{Why, and the trade-off.} The mask channels fix the ``hidden or freezing'' ambiguity. Dropping normalisation
+was the experiment: raw °C goes straight into the first convolution, followed by BatchNorm, which re-centres the
+channels anyway. Its trainer hides 35--55\% of valid pixels with L1; the configuration's \code{masking_range} is
+ignored by this trainer, whose function defaults happen to be the same $[0.35, 0.55]$.
+
+%======================================================================
+\section{Drashta: the masks and the normalisation}\label{sec:convae:drashta}
+
+\paragraph{What it is.} Class C, base 64, 2 stages, in
+\file{components/normalized_masked_spatial_auto_encoder.py}; v1.2.0 epoch 69. Codename: ``the seer''. Asanskrita's
+architecture with \code{PixelNormalize} on the way in and \code{PixelDenormalize} on the way out; its trainer reads
+\code{masking_range} $[0.5, 0.75]$ from the configuration, with L1. Shapes and count are Asanskrita's: 267,009
+trainable, and 519 buffers against Asanskrita's 515 (the four normalisation values) \tagC.
+
+\begin{sourcenote}[: a hidden pixel is $-1.81$, not 0]
+The class's docstring says channel 0 holds ``normalized thermal pixels (zeroed where input\_mask == 0)''. The forward
+pass multiplies by the masks \emph{before} normalising, so a hidden pixel enters as $(0-24.5756)/13.5744=-1.81$, the
+same value as in Antardhana, and only the mask channels say it is hidden. Harmless, because the mask channels are
+there; but read the docstring as describing the raw picture, not channel 0.
+\end{sourcenote}
+
+%======================================================================
+\section{What the product does with them}\label{sec:convae:product}
+
+\begin{center}\small
+\begin{tabular}{@{}llll@{}}
+\toprule
+codename & inferencer (as routed) & default score & normalisation file\\
+\midrule
+Pratibimba & \texttt{SpatialAutoencoderInferencer} & MSE & thermal\\
+Antardhana & \texttt{SpatialAutoencoderInferencer} & MSE & thermal\\
+Tirohita & \texttt{SpatialAutoencoderInferencer} & L1 & thermal\\
+Asanskrita & \texttt{MaskedSpatialAutoencoderInferencer} & L1 & none\\
+Drashta & \texttt{NormalizedMaskedAutoencoderInferencer} & L1 & thermal\\
+\bottomrule
+\end{tabular}
+\end{center}
+All five: scoring methods L1 and MSE, patch 128, stride 64, batch 8, sensor family thermal
+(\file{backend/allotrope/foundation_models/resolver.py}). The resolver rebuilds each configuration from the manifest's
+\code{encoder_dims} string (\code{"1→32→64→128"}: base 32, three stages; \code{"3→64→128"}: input 3, so constructor
+\code{in_channels} $3-2=1$), and every rebuilt configuration matches its checkpoint \tagC.
+
+Three behaviours differ from Chakshu's inferencer (\cref{ch:chakshu}): the masking is per pixel, not per token; the
+validity mask is not eroded; and a pixel no tile covers is set to 0, not to its input value, so it scores its whole
+temperature as residual (\file{docs/09-known-issues.md}, item 4).
+
+\paragraph{A synthetic comparison.} The script runs each model, through the product's own inferencer and with its
+served weights, on a smooth synthetic field, $T=25+3\sin(x/40)+2\cos(y/30)$\,°C for column $x$ and row $y$ of a
+$128\times128$ patch, and on copies with one hot pixel or a $3\times3$ hot spot at 45\,°C planted near the centre
+\tagA:
+\begin{center}\small
+\begin{tabular}{@{}lccc@{}}
+\toprule
+model & background (median) & one hot pixel & $3\times3$ spot, centre\\
+\midrule
+Pratibimba & 10.87\,°C & 19.20 & 17.60\\
+Antardhana & 6.59 & 24.23 & 22.05\\
+Tirohita & 2.32 & 20.21 & 14.78\\
+Asanskrita & 0.75 & 19.37 & 16.57\\
+Drashta & 0.58 & 18.14 & 16.42\\
+\midrule
+Chakshu ($256\times256$) & 0.019 & 20.96 & 7.59\\
+\bottomrule
+\end{tabular}
+\end{center}
+All values are $|T-\hat T|$ in °C \tagC; Chakshu's row is from \cref{ch:chakshu}, which runs the same field at its own
+patch size. On a field this smooth the background error is the number to read: a detector's hot pixel must stand above
+it. Pratibimba's 10.9\,°C, half the planted anomaly, is what happens when a model trained on whole pictures meets a
+checkerboard of holes it has never seen; the three single-channel models improve in step with how much hiding they
+trained on; the two mask-channel models are an order of magnitude better again; Chakshu is thirty times better
+than the best of them. One synthetic field is not a benchmark: nothing here was measured on a labelled thermal scene,
+and none exists in the repository.
+
+\begin{sourcenote}[: the per-scene override and these models]
+Four of the five carry \code{normalize.*} buffers in their checkpoints. \Cref{sec:chakshu:hotsat}, later, shows that loading a
+checkpoint writes those buffers back over a per-scene override, so the HotSat-1 plan fails for these four exactly as
+for Chakshu. Asanskrita has no normalisation to override: it would read HotSat's digital numbers as degrees.
+\end{sourcenote}
+
+\begin{drift}
+Read 2026-10-31 from the \file{/models/} volume's manifests: Pratibimba v8.1.0 (epoch 29, validation 13.77, MSE),
+Antardhana v0.1.0 (epoch 121, 17.29, MSE), Tirohita v0.4.0 (epoch 77, 1.79, L1), Asanskrita v0.3.0 (epoch 82, 2.15, L1),
+Drashta v1.2.0 (epoch 69, 5.53, L1). Manifest parameter figures (1,380,812; 265,480; 330,314; 267,524; 267,528) include
+buffers. Validation for every masked model is computed with nothing hidden.
+\end{drift}
+
+%======================================================================
+\begin{confusions}
+\confusion{Antardhana and Tirohita differ only in the loss.}{They also differ in width, depth and how much they hide
+(13--25\% against 50--75\%).}
+\confusion{Tirohita's validation loss is ten times lower, so it is ten times better.}{One is an L1 in °C, the other an
+MSE in °C$^2$, and both are measured with nothing hidden. They are not comparable.}
+\confusion{The masked models cannot be run: no inferencer is registered for them.}{The resolver routes Antardhana and
+Tirohita through Pratibimba's inferencer; only the enum names lack an entry.}
+\confusion{Asanskrita is unnormalised, so its network sees raw temperatures throughout.}{Only its first convolution
+does; the BatchNorm after it standardises every channel, with learned scale and shift.}
+\confusion{A hidden pixel in Drashta is a zero.}{It is $-1.81$ after normalisation; the mask channels mark it.}
+\confusion{More parameters, better model.}{Pratibimba has five times Drashta's parameters and an error nineteen times
+larger on the synthetic field ($10.87/0.58=18.7$). What it was trained to do matters more.}
+\end{confusions}
+
+\begin{checkyourself}
+\item\label{ex:convae:1} Use \cref{eq:convae:tconv} to find the output length of a transposed convolution with $k=4$,
+$s=2$, $p=1$ on an input of 16, and with $k=3$, $s=2$, $p=1$ on 16. Which one doubles?
+\item\label{ex:convae:2} Count by hand a \code{SpatialAutoencoder} with base 16 and 3 stages (one input channel), encoder
+and decoder separately.
+\item\label{ex:convae:3} How many values does Pratibimba's bottleneck hold for a $256\times256$ patch, and how does that
+compare with the input?
+\item\label{ex:convae:4} A pixel is valid and hidden. Write its three input channels for Asanskrita and for Drashta, if
+its true temperature is 30\,°C.
+\item\label{ex:convae:5} Explain in two sentences why Pratibimba's background error on the synthetic field is so large,
+using the words ``trained'' and ``checkerboard''.
+\item\label{ex:convae:6} Repeat \cref{we:convae:tconv} with input $(3,-1)$ and kernel $(1,2,2,1)$.
+\end{checkyourself}
+
+\nextchapter{ch:compressor}

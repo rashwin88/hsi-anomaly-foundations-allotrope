@@ -1,0 +1,32 @@
+\glossentry{Percentile threshold}{A cut chosen as a percentile of the scene's own score distribution ("the top 1 percent") rather than a fixed score value, so that it adapts to each scene.}
+\glossentry{needs\_threshold}{The status at which anomaly\_detection\_prep stops: the composite is ready and the action waits for a person to choose and commit a threshold.}
+\glossentry{Composite score}{The weighted sum of each model's score map after min-max rescaling to [0, 1], with weights divided by their sum.}
+\glossentry{Min-max rescaling}{Mapping a map's values to [0, 1] by subtracting its minimum and dividing by its range.}
+\glossentry{Linear-interpolation percentile}{numpy's default percentile: the value at position q/100 times (N - 1) in the sorted list, interpolated between neighbours.}
+\glossentry{Anomaly mask}{The binary raster (anomaly\_mask.tif) written when a threshold is committed: 1 where the composite is at or above the threshold.}
+\glossentry{Dilation}{Growing a binary mask by a square structuring element, optionally applied before metrics and commit.}
+\glossentry{Spectral library}{A collection of laboratory reflectance spectra of known materials; the product uses a curated subset of USGS splib07.}
+\glossentry{Band response}{The weighting over wavelengths with which a sensor band integrates light, roughly Gaussian with a given full width at half maximum.}
+\glossentry{Full width at half maximum}{The width of a peaked response at half its height; for a Gaussian it is about 2.3548 times its standard deviation.}
+\glossentry{Spectral angle mapper}{Matching by the angle between a pixel's spectrum and a library spectrum, which ignores overall brightness.}
+\glossentry{Mixed pixel}{A pixel whose spectrum is a combination of several materials because each covers part of the ground it sees.}
+\glossentry{Family matcher}{The matcher that subtracts a ring background, scores whole families of spectra, calibrates against the scene's ordinary pixels and names a man-made family only above p*.}
+\glossentry{p*}{The percentile bar 1 - alpha / F for giving a man-made name, chosen so that an ordinary pixel gets any man-made name with probability at most alpha.}
+\glossentry{Union bound}{The chance that at least one of several events happens is at most the sum of their chances.}
+\glossentry{Affine transform}{Six numbers mapping a pixel's column and row to map coordinates: X = a col + b row + c, Y = d col + e row + f.}
+\glossentry{Identity transform}{The affine transform with a = e = 1 and the rest 0, which makes map coordinates equal pixel coordinates; every action GeoTIFF uses it.}
+\glossentry{Coordinate reference system}{The definition of what map coordinates mean, such as longitude and latitude (EPSG:4326) or metres in a UTM zone.}
+\glossentry{crs\_missing}{The 422 error the export endpoint returns when no georeferencing can be recovered from the raw scene file.}
+\glossentry{Export bundle}{The zip produced by POST /actions/\{id\}/export: a georeferenced GeoTIFF, a Shapefile with one point per anomaly pixel, legends, a CSV and a manifest.}
+\glossentry{Codename}{The name a model is selected by in the scoring action, such as Indradhanu, Indradhanu V2 or MNF-RX.}
+\glossentry{Native bands}{The wavelengths a sensor actually measured, as opposed to the 165-band common grid; the band-filter default since 2026-10-31.}
+\glossentry{Band-grid check}{The worker's test that a model's expected grid matches the vendable's wavelengths, failing the action with a message naming the band-filter setting.}
+\glossentry{Cloud exclusion}{Setting to 0, after scoring, the score of pixels Indradhanu V2's segmentation head calls (thick) cloud.}
+\glossentry{excluded\_percent}{The stats.json key giving 100 times the excluded (cloud) pixels divided by the spatially valid pixels.}
+\glossentry{Class map}{Indradhanu V2's per-pixel classes: 0 land, 1 water, 2 cloud, 3 shadow, 4 snow, chosen by priority from the segmentation head's outputs.}
+\glossentry{Two-level namer}{A naming design (2026-10-31; built the same day as the spectral namer, \cref{ch:namer}): level 1 asks whether nature explains a pixel, level 2 which man-made class it is; P(class) = P(man-made) x P(class | man-made).}
+\glossentry{Open-set recognition}{Recognition that may meet classes it never saw in training and say so; here, level 1 calls man-made whatever its model of nature cannot explain.}
+\glossentry{Dual encoder}{A matching model with one network for the pixel and one for library spectra, scoring by the cosine of their embeddings, so new library entries need no retraining.}
+\glossentry{Leave-one-spectrum-out}{Matching a planted library spectrum against every other library spectrum, never itself, so the test asks whether the nearest other spectrum shares its family.}
+\glossentry{Regular expression}{A text pattern, such as asphalt|concrete, matched against names; the family library's curation assigns families with them, first match wins.}
+

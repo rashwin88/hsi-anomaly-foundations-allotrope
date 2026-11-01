@@ -1,6 +1,6 @@
-# Part 4 - The five sensors
+# Part 4 - The six sensors
 
-> **The one thing this part teaches:** five sensors hand you five incompatible things, and
+> **The one thing this part teaches:** six sensors hand you six incompatible things, and
 > almost every awkward corner of the ingestion code exists to hide that.
 
 ## The roster
@@ -10,6 +10,7 @@
 | PRISMA | hyperspectral | 239 | one `.he5` file |
 | EnMAP | hyperspectral | 224 | a folder |
 | AVIRIS-NG | hyperspectral | ~425 | a folder |
+| Tanager (Planet) | hyperspectral | 426 | one `.h5` file |
 | Landsat 9 | thermal | 1 (band B10) | one `.tif` file |
 | HotSat-1 | thermal | 1 | a folder |
 
@@ -17,8 +18,8 @@ Band counts drift as products are reprocessed. The structural differences below 
 
 ## They disagree about everything
 
-**File shape.** PRISMA is a single HDF5 file with an internal directory tree. Landsat is a
-single GeoTIFF. The other three are folders where the cube, the masks and the metadata are
+**File shape.** PRISMA and Tanager are single HDF5 files with an internal directory tree
+(PRISMA a *swath*, Tanager a map *grid*). Landsat is a single GeoTIFF. The other three are folders where the cube, the masks and the metadata are
 separate files. So "the path to a scene" sometimes means a file and sometimes a directory -
 resolved per sensor in `backend/allotrope/sensors/source_path.py`.
 
@@ -45,15 +46,17 @@ uniform gain, `SR = DN * 0.0001`. Landsat uses two published constants. There is
 formula.
 
 **Quality information.** EnMAP ships ready-made cloud, cirrus, haze, shadow and snow masks.
-PRISMA ships none. Landsat ships a bit-packed `QA_PIXEL` band you must unpack yourself. That
-asymmetry is why `BandFilterConfig.quality_masks_to_apply` exists and applies to EnMAP alone.
+Tanager ships cloud and cirrus masks (Planet calls them beta), a nodata layer and its own
+bad-band list. PRISMA ships none. Landsat ships a bit-packed `QA_PIXEL` band you must unpack
+yourself. That asymmetry is why `BandFilterConfig.quality_masks_to_apply` exists, and why it
+does something only for EnMAP and Tanager.
 
 ## How the code hides this
 
 Two layers.
 
 **`FileHelper`** wraps the physical file - `HE5Helper`, `TIFHelper`, `EnmapHelper`,
-`ENVIHelper`, `HotSatHelper`. Its job is to hand back raw arrays and metadata.
+`ENVIHelper`, `HotSatHelper`, `TanagerHelper`. Its job is to hand back raw arrays and metadata.
 
 **Templates** tell a helper where things live. A template is a dictionary mapping a logical
 component to a physical location, using one of three retrieval strategies
@@ -69,7 +72,8 @@ Templates are **injected, not looked up**. The helper never contains a sensor-sp
 which is what lets one contract serve HDF5, GeoTIFF and ENVI.
 
 Only PRISMA, Landsat and EnMAP have templates. AVIRIS-NG and HotSat bypass the system and
-parse their own sidecars - an inconsistency, honestly noted in the source.
+parse their own sidecars - an inconsistency, honestly noted in the source. Tanager skips it
+too, with less excuse needed: one fixed grid layout leaves a template nothing to map.
 
 ## Traps that will cost you an afternoon
 
@@ -119,7 +123,7 @@ out-of-distribution. Part 10 works the arithmetic.
 <details>
 <summary>1. Why does "the path to a scene" mean different things for different sensors?</summary>
 
-PRISMA and Landsat are single files; EnMAP, AVIRIS-NG and HotSat are folders holding the
+PRISMA, Tanager and Landsat are single files; EnMAP, AVIRIS-NG and HotSat are folders holding the
 cube, masks and metadata separately. `sensors/source_path.py` resolves the right thing per
 sensor.
 </details>

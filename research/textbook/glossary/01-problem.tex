@@ -1,0 +1,22 @@
+\glossentry{Allotrope}{The web application this book describes: users upload satellite scenes, run chains of analysis steps, pick a threshold and export a bundle of candidate anomalies.}
+\glossentry{Pixel}{One cell of an image grid, standing for a patch of ground; named by its row and column, counted from 0.}
+\glossentry{Scene}{One complete satellite acquisition: one patch of ground at one moment, as one file or folder.}
+\glossentry{Anomaly}{A pixel or small group of pixels unlike the rest of its scene; the word says nothing about what the pixel is.}
+\glossentry{Classifier}{A model that answers with one of a fixed list of labels; it needs labelled examples and cannot return a label it was never given.}
+\glossentry{Label}{The correct answer attached to a training example.}
+\glossentry{Accuracy}{The fraction of answers a yes/no rule gets right; meaningless when one class is extremely rare.}
+\glossentry{Base rate}{The fraction of all cases that belong to the rare class, here the fraction of pixels that are anomalous.}
+\glossentry{Anomaly score}{A non-negative number per pixel, larger meaning the pixel fits the model of normal worse.}
+\glossentry{Score map}{The anomaly scores laid out on the pixel grid, one number per pixel.}
+\glossentry{Mean}{The sum of a set of numbers divided by how many there are.}
+\glossentry{Standard deviation}{The square root of the average squared distance from the mean; the typical spread of a set of numbers, in their own units.}
+\glossentry{Classical detector}{An anomaly detector that computes statistics from the scene itself and has no trained weights, such as RX or MNF-RX.}
+\glossentry{RX detector}{The Reed-Xiaoli detector: scores each pixel by its Mahalanobis distance from the scene mean.}
+\glossentry{MNF-RX}{RX computed after a Minimum Noise Fraction transform into a smaller, better-conditioned space; the shipped classical hyperspectral detector.}
+\glossentry{Neural network}{A function built from many simple layers whose behaviour is set by a large list of learned numbers called parameters.}
+\glossentry{Parameter}{One adjustable number inside a model, set by training.}
+\glossentry{Foundation model}{In this repository, a network trained once to reconstruct ordinary imagery, whose reconstruction error is used as the anomaly score.}
+\glossentry{Indradhanu}{The hyperspectral foundation model (``rainbow''), a masked SegFormer autoencoder.}
+\glossentry{Chakshu}{The thermal foundation model (``the eye''), the one-band sibling of Indradhanu.}
+\glossentry{Percentile threshold}{A cut that keeps a fixed fraction of a scene's highest scores, so it adapts to the scene's own score scale.}
+\glossentry{Validity mask}{An array on the image grid holding 1 for a genuine measurement and 0 for dead detectors, cloud or off-swath pixels.}

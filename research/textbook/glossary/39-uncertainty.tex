@@ -1,0 +1,19 @@
+\glossentry{Uncertainty head}{A small third decoder on Indradhanu's encoder features that predicts, per pixel, the log of the reconstruction error the model expects there (FT06, 95,632 parameters).}
+\glossentry{Laplace distribution}{The probability distribution with density (1/2b) exp(-|r|/b); sharp-peaked at zero with exponential tails, and with mean absolute value equal to its scale b.}
+\glossentry{Scale parameter}{A positive number that stretches a distribution horizontally; for the Laplace it equals the mean absolute error.}
+\glossentry{Probability density}{A non-negative function whose integral over all values is one; its value times a small width approximates the probability of landing in that width.}
+\glossentry{Likelihood}{The probability (density) of the observed data viewed as a function of a model parameter.}
+\glossentry{Maximum likelihood}{Choosing the parameter value that makes the observed data most probable.}
+\glossentry{Negative log-likelihood}{Minus the logarithm of the likelihood; minimising it is the same as maximising the likelihood, and it turns products over pixels into sums.}
+\glossentry{Detached tensor}{A tensor cut out of the gradient computation, so a loss that uses it cannot change what produced it.}
+\glossentry{Log parameterisation}{Letting a network output s = log b and using b = exp(s), so b is always positive and gradients near zero stay moderate.}
+\glossentry{Scaled RM}{The scorer scaled\_rm: residual Mahalanobis on the residual divided by the head's floored b (or its square root).}
+\glossentry{Scale floor}{The per-scene lower limit on b (its 5th percentile by default) that stops very confident pixels from inflating the score.}
+\glossentry{Rank}{A value's position in a list sorted from smallest to largest.}
+\glossentry{Spearman rank correlation}{The Pearson correlation of two lists' ranks; 1 for the same order, -1 for the reverse, near 0 for unrelated orders.}
+\glossentry{Target / ring ratio}{Median b on a target's pixels divided by median b on pixels 4 to 8 city-block steps away; above 1 means the head expects more error on the target than on its own surroundings.}
+\glossentry{PSF halo}{The part of a small target's light that the sensor's point-spread function spreads into neighbouring pixels.}
+\glossentry{Hidden-pixel rule}{Train and apply a per-pixel prediction only where that pixel was hidden from the encoder, so it is judged from context alone.}
+\glossentry{Frozen backbone}{Training only a new head while every other weight, and its BatchNorm statistics, stays fixed.}
+\glossentry{Selection risk}{The optimism that enters when a variant is chosen after seeing results on the same data that then grades it.}
+\glossentry{Mode scale}{The fine-tuning trainer mode that trains only the uncertainty head with the Laplace NLL and ranks epochs by that NLL.}

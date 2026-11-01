@@ -1,11 +1,11 @@
 """Submission-ready export bundle for committed ``anomaly_detection_prep``.
 
-Mirror of ``app/spectral_match/export.py`` but for the thermal case: there's
-no material match, just an anomaly mask + per-pixel point cloud. Layout:
+Mirror of ``app/spectral_match/export.py`` without the material match: an anomaly mask + per-pixel point cloud,
+for any sensor. ``<p>`` is ``thermal`` for Landsat 9 / HotSat-1 and ``hyper`` otherwise. Layout (shown for thermal):
 
     thermal_<scene_id>_<action_id>/
         thermal_anomaly_mask.tif          # uint8 binary GeoTIFF
-        thermal_anomaly_pixels.shp        # Point per anomaly pixel
+        thermal_anomaly_pixels.shp        # Point per anomaly pixel (no score attribute)
         thermal_anomaly_pixels.shx
         thermal_anomaly_pixels.dbf
         thermal_anomaly_pixels.prj
@@ -15,7 +15,7 @@ no material match, just an anomaly mask + per-pixel point cloud. Layout:
 
 Hard requirements (2026-05-14 submission rules):
   - GeoTIFF with valid CRS (refuse to ship CRS-less bundles).
-  - Every path inside the zip starts with the literal ``thermal_``.
+  - Every path inside the zip starts with the literal ``thermal_`` / ``hyper_``.
   - Shapefile sidecar set is complete.
 """
 
@@ -28,6 +28,8 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+
+THERMAL_SENSORS = ("landsat9", "hotsat1")
 
 from app.spectral_match.export import (
     MissingCRSError,
@@ -147,21 +149,22 @@ def build_thermal_bundle(spec: ThermalExportSpec) -> tuple[bytes, str]:
         gdf["longitude"] = gdf_4326.geometry.x
 
     # ---- 4. Build the zip --------------------------------------------
-    folder = f"thermal_{_short(spec.scene_id)}_{_short(spec.action_id)}"
+    prefix = "thermal" if spec.sensor_type in THERMAL_SENSORS else "hyper"   # 2026-05-14 naming rule
+    folder = f"{prefix}_{_short(spec.scene_id)}_{_short(spec.action_id)}"
     zip_buf = io.BytesIO()
     with zipfile.ZipFile(zip_buf, "w", zipfile.ZIP_DEFLATED) as zf:
         # 4a. Mask GeoTIFF — copied verbatim. Already georef'd + compressed
         # by the commit step.
-        zf.writestr(f"{folder}/thermal_anomaly_mask.tif", mask_bytes)
+        zf.writestr(f"{folder}/{prefix}_anomaly_mask.tif", mask_bytes)
 
         # 4b. Shapefile + sidecars.
         shp_files = _write_thermal_shapefile_sidecars(gdf)
         for ext, blob in shp_files.items():
-            zf.writestr(f"{folder}/thermal_anomaly_pixels.{ext}", blob)
+            zf.writestr(f"{folder}/{prefix}_anomaly_pixels.{ext}", blob)
 
         # 4c. CSV.
         zf.writestr(
-            f"{folder}/thermal_anomaly_summary.csv",
+            f"{folder}/{prefix}_anomaly_summary.csv",
             _records_to_csv_bytes(
                 [{k: v for k, v in r.items() if k != "geometry"} for r in records],
             ),
@@ -199,7 +202,9 @@ def build_thermal_bundle(spec: ThermalExportSpec) -> tuple[bytes, str]:
 def _write_thermal_shapefile_sidecars(gdf) -> dict[str, bytes]:
     import tempfile
 
-    keep_cols = ["row", "col", "latitude", "longitude", "score", "geometry"]
+    # No score column: the submission map is boolean, and a continuous score reads as a heatmap (AIGC rules,
+    # 2026-10-31). The CSV keeps it.
+    keep_cols = ["row", "col", "latitude", "longitude", "geometry"]
     keep_cols = [c for c in keep_cols if c in gdf.columns]
     shp_gdf = gdf[keep_cols].rename(
         columns={k: v for k, v in _SHP_COLUMN_RENAME.items() if k in keep_cols}

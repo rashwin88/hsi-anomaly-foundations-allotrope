@@ -1,0 +1,924 @@
+\chapter{From residual to score: residual Mahalanobis, the ring and integral images}\label{ch:residualmaha}
+
+\begin{onething}
+L1, SAM and \texttt{combined} measure how \emph{big} a pixel's reconstruction error is, but in a real scene
+most big errors are shared by thousands of ordinary pixels. Residual Mahalanobis learns the directions those
+ordinary errors take, divides each by its ordinary spread, and measures what is left from the average of a
+ring of neighbours; an error then scores high only if it is \emph{unusual}, however small it is, and
+integral images make the ring cost four look-ups per box instead of thousands of additions.
+\end{onething}
+
+\Cref{ch:inference} ended with a reconstruction $\xhat$ of the whole scene, every pixel predicted while it
+was hidden. Subtracting gives the \emph{residual}\index{residual} at every pixel,
+\begin{equation}
+\vect{r}=\vect{x}-\xhat\in\R^{C},
+\end{equation}
+one number per band: $C=165$ on the common grid, about 185 for a native-band model. A decision needs one
+number per pixel. How you collapse $C$ numbers into one decides what you find. This chapter builds the
+collapse that has been Indradhanu's default since 2026-10-15, \code{residual_mahalanobis}, in
+\file{app/utils/anomaly_detection/residual_mahalanobis.py} (112 lines). It uses the Mahalanobis distance of
+\cref{ch:rx}, the covariance and eigenvectors of \cref{ch:linalg}, and the local windows of
+\cref{ch:localrx}, applied to a new input: the model's mistakes rather than the scene itself.
+
+%======================================================================
+\section{Size scores, and the big errors that are not anomalies}\label{sec:residualmaha:size}
+
+\subsection{Four ways to measure a residual's size}
+
+Until 2026-10-15 every score the product offered for Indradhanu measured the \emph{size} of $\vect{r}$
+(\file{app/utils/anomaly_detection/scoring.py}, lines 95--107):
+\begin{align*}
+\text{L1}(\vect{r}) &= \frac1C\sum_{c=1}^{C}\abs{r_c} &&\text{mean absolute error},\\
+\text{MSE}(\vect{r}) &= \frac1C\sum_{c=1}^{C}r_c^2 &&\text{mean squared error},\\
+\SAM(\vect{x},\xhat) &= \arccos\frac{\ip{\vect{x}}{\xhat}}{\norm{\vect{x}}\,\norm{\xhat}} &&\text{angle between spectra},\\
+\text{combined} &= 0.5\,\frac{\text{L1}}{\max\text{L1}}+0.5\,\frac{\SAM}{\max\SAM} &&\text{both, maxima over valid pixels}.
+\end{align*}
+\Cref{ch:losses} worked L1 and SAM by hand and showed that they find different things: L1 flags a pixel that
+is uniformly too bright, SAM one whose spectral \emph{shape} is wrong. Both are sizes. Size is the right
+question only if every large error is rare.
+
+\subsection{Three kinds of large error that are not rare}
+
+On the four labelled PRISMA scenes the score maps showed three kinds of large error, each shared by thousands
+of ordinary pixels (IW45):
+\begin{itemize}
+\item \textbf{Detector stripes.} A push-broom spectrometer such as PRISMA records each image column with its
+  own detector element. One element calibrated slightly off makes every pixel in its column err the same
+  way, and the score map shows a stripe. On set~4 the \texttt{combined} map was dominated by them.
+\item \textbf{Haze.} A thin layer of atmosphere over part of a scene lifts the blue end of every spectrum
+  beneath it. The model, trained mostly on clear ground, under-predicts all those pixels by a similar
+  amount. Set~4 again.
+\item \textbf{Dark sea.} On set~1, three quarters sea, the map was dominated by the sea, through the trap
+  worked next.
+\end{itemize}
+In each case thousands of pixels share one \emph{kind} of error. A size score ranks all of them above a small
+real target. The model is not at fault; the score asks the wrong question.
+
+\subsection{The dark-sea trap, and why its patch is a patch}
+
+SAM is an angle, so it measures error \emph{relative to} the signal. Give a dark sea pixel and a bright land
+pixel exactly the same residual, $(+0.01,-0.01,+0.01)$ (AD12):
+\begin{center}\small
+\begin{tabular}{@{}lccccc@{}}
+\toprule
+ & band 1 & band 2 & band 3 & L1 & SAM\\
+\midrule
+sea, true & 0.02 & 0.03 & 0.01 & & \\
+sea, reconstruction & 0.03 & 0.02 & 0.02 & 0.010 & 0.4335 rad\\
+land, true & 0.20 & 0.30 & 0.10 & & \\
+land, reconstruction & 0.21 & 0.29 & 0.11 & 0.010 & 0.0463 rad\\
+\bottomrule
+\end{tabular}
+\end{center}
+L1 cannot tell them apart. SAM gives the sea pixel nine times the angle. Measured on set~1 with the F001
+model, the median angle is 0.34~rad on sea, 0.13 on land and 0.18 on the labelled
+anomalies \tagM{docs/05-detectors.md}: ordinary sea outranks the targets.
+
+\code{compute_score(..., sam_dark_fade=t)} multiplies the angle by $w=\operatorname{clip}(\bar{x}/t,0,1)$,
+where $\bar{x}$ is the pixel's mean reflectance (\file{scoring.py}, line 131). With $t=0.05$:
+\begin{align*}
+\text{sea, } \bar x = 0.02:\quad w &= \operatorname{clip}(0.02/0.05,0,1) = \operatorname{clip}(0.4,0,1) = 0.4,\\
+\text{land, } \bar x = 0.20:\quad w &= \operatorname{clip}(0.20/0.05,0,1) = \operatorname{clip}(4.0,0,1) = 1.0.
+\end{align*}
+\begin{sloppypar}
+It works on set~1 (F001 at epoch 52: $0.731\to0.887$ \tagM{indradhanu workings/46-the-ring-and-the-comparison.md})
+and leaves the other scenes almost untouched. That is the problem. It is a patch: only set~1 has water,
+so four scenes cannot tell whether $0.05$ is right, and the result is steep in $t$ (F001 at epoch 14 scores
+$0.524$ on set~1 with $t=0.03$ and $0.810$ with $t=0.08$ \tagM{indradhanu workings/45-scoring-the-direction.md}).
+It fixes darkness only; stripes and haze are untouched. And the next failure would need another special case.
+The fade is opt-in (\code{None} by default) and the product does not pass it.
+\end{sloppypar}
+
+%======================================================================
+\section{A residual is a direction}\label{sec:residualmaha:direction}
+
+Think of a residual as an arrow in a $C$-dimensional space, one axis per band. Its \emph{length} is roughly
+what L1 measures. Its \emph{direction} says which bands erred, and how they erred together.
+
+Now look at what the shared errors have in common. Haze pushes many bands the same way at once: one
+direction. A miscalibrated detector column pushes its pixels another way: one direction. Darkness of the sea:
+another. A scene's ordinary errors are large along \emph{a few shared directions} and tiny along all the
+others. A real anomaly, a material the model never learned to predict there, errs in a direction the
+background rarely takes, even if the arrow is short.
+
+\begin{analogy}
+A doctor reads twenty blood tests. A dehydrated patient has every concentration a little high, but they all
+rise \emph{together}, because there is less water; the doctor reads them as one ordinary finding, not twenty
+alarms. One test far outside \emph{its own} normal range while the rest are ordinary is the result that
+matters, even if its deviation is smaller in absolute units than the dehydration's. Residual Mahalanobis
+reads residuals the same way: movements many pixels share are one ordinary finding, and the scale of each
+test's ``normal range'' is learned from the scene itself. A movement nobody else makes is the alarm.
+\end{analogy}
+
+\begin{definition}[Residual covariance and residual Mahalanobis distance]
+Let $\vect{r}_1,\dots,\vect{r}_N$ be the residuals of the scene's valid pixels. Their mean is
+$\muv_r=\frac1N\sum_i\vect{r}_i$ and their \emph{residual covariance}\index{residual covariance} is the
+$C\times C$ matrix
+\begin{equation}
+\Cov_r=\frac{1}{N-1}\sum_{i=1}^{N}(\vect{r}_i-\muv_r)(\vect{r}_i-\muv_r)\T.
+\label{eq:residualmaha:cov}
+\end{equation}
+The \emph{residual Mahalanobis distance}\index{residual Mahalanobis distance} of a pixel with residual
+$\vect{r}$ is
+\begin{equation}
+D^2(\vect{r})=(\vect{r}-\muv_r)\T\,\Cov_r\inv\,(\vect{r}-\muv_r).
+\label{eq:residualmaha:d2}
+\end{equation}
+\end{definition}
+The divisor $N-1$ is the one \code{np.cov} uses, which the code calls; \cref{ch:linalg} explains why it is
+the unbiased choice. \Cref{eq:residualmaha:d2} is exactly the RX detector of \cref{ch:rx} with the cube
+replaced by the residual. The rest of this section computes it by hand.
+
+\subsection{Worked by hand: three bands, four ordinary pixels}
+
+\begin{worked}[label={we:residualmaha:three}]{Residual Mahalanobis on three bands}
+Do this on paper; it takes about fifteen minutes. Three bands A, B and C. Four ordinary pixels have these
+residuals (in units of $0.001$ reflectance, to keep the numbers whole):
+\begin{center}
+\begin{tabular}{@{}cccc@{}}
+\toprule
+pixel & $r_A$ & $r_B$ & $r_C$\\
+\midrule
+1 & 1 & 2 & $-1$\\
+2 & 1 & $-1$ & $-1$\\
+3 & $-2$ & $-1$ & $-1$\\
+4 & 0 & 0 & 3\\
+\bottomrule
+\end{tabular}
+\end{center}
+Three test pixels: $\vect{P}=(3,3,0)$, $\vect{Q}=(2,-2,0)$ and $\vect{R}=(0,0,4)$.
+
+\textbf{Step 1: the mean, one band at a time.}
+\begin{align*}
+\mu_A &= \frac{1+1+(-2)+0}{4} = \frac{0}{4} = 0,\\
+\mu_B &= \frac{2+(-1)+(-1)+0}{4} = \frac{0}{4} = 0,\\
+\mu_C &= \frac{(-1)+(-1)+(-1)+3}{4} = \frac{0}{4} = 0.
+\end{align*}
+The mean residual is $(0,0,0)$, so every deviation from the mean is the residual itself.
+
+\textbf{Step 2: the covariance, one entry at a time.} Each entry is a sum of products over the four pixels,
+divided by $N-1=4-1=3$. The three variances:
+\begin{align*}
+\sigma_{AA} &= \frac{1^2+1^2+(-2)^2+0^2}{3} = \frac{1+1+4+0}{3} = \frac{6}{3} = 2,\\
+\sigma_{BB} &= \frac{2^2+(-1)^2+(-1)^2+0^2}{3} = \frac{4+1+1+0}{3} = \frac{6}{3} = 2,\\
+\sigma_{CC} &= \frac{(-1)^2+(-1)^2+(-1)^2+3^2}{3} = \frac{1+1+1+9}{3} = \frac{12}{3} = 4.
+\end{align*}
+The three covariances:
+\begin{align*}
+\sigma_{AB} &= \frac{1\cdot2+1\cdot(-1)+(-2)(-1)+0\cdot0}{3} = \frac{2-1+2+0}{3} = \frac{3}{3} = 1,\\
+\sigma_{AC} &= \frac{1\cdot(-1)+1\cdot(-1)+(-2)(-1)+0\cdot3}{3} = \frac{-1-1+2+0}{3} = \frac{0}{3} = 0,\\
+\sigma_{BC} &= \frac{2\cdot(-1)+(-1)(-1)+(-1)(-1)+0\cdot3}{3} = \frac{-2+1+1+0}{3} = \frac{0}{3} = 0.
+\end{align*}
+A covariance matrix is symmetric ($\sigma_{BA}=\sigma_{AB}$), so
+\[
+\Cov_r=\begin{pmatrix}2&1&0\\1&2&0\\0&0&4\end{pmatrix}.
+\]
+Read it: bands A and B each vary by 2 and move together ($\sigma_{AB}=1>0$); band C varies twice as much and
+independently of the other two.
+
+\textbf{Step 3: the inverse.} The matrix is \emph{block diagonal}: an A--B block and a C block, with zeros
+between them. Its inverse is the inverse of each block, in place. The C block is the number 4, whose inverse
+is $\tfrac14$. For the A--B block use the rule for a $2\times2$ matrix,
+\begin{equation}
+\begin{pmatrix}a&b\\c&d\end{pmatrix}\inv=\frac{1}{ad-bc}\begin{pmatrix}d&-b\\-c&a\end{pmatrix},
+\label{eq:residualmaha:inv2}
+\end{equation}
+which you can check by multiplying: the top-left entry of the product is
+$\frac{1}{ad-bc}(a\cdot d+b\cdot(-c))=\frac{ad-bc}{ad-bc}=1$, and the top-right is
+$\frac{1}{ad-bc}(a\cdot(-b)+b\cdot a)=0$. Here $a=2$, $b=1$, $c=1$, $d=2$:
+\begin{align*}
+ad-bc &= 2\cdot2-1\cdot1 = 4-1 = 3,\\
+\begin{pmatrix}2&1\\1&2\end{pmatrix}\inv &= \frac13\begin{pmatrix}2&-1\\-1&2\end{pmatrix}.
+\end{align*}
+So
+\[
+\Cov_r\inv=\begin{pmatrix}\tfrac23&-\tfrac13&0\\[2pt]-\tfrac13&\tfrac23&0\\[2pt]0&0&\tfrac14\end{pmatrix}.
+\]
+Check one row of $\Cov_r\Cov_r\inv$ against the identity. Row 1 of $\Cov_r$ is $(2,1,0)$:
+\begin{align*}
+\text{with column 1: } & 2\cdot\tfrac23+1\cdot(-\tfrac13)+0\cdot0 = \tfrac43-\tfrac13 = 1,\\
+\text{with column 2: } & 2\cdot(-\tfrac13)+1\cdot\tfrac23+0\cdot0 = -\tfrac23+\tfrac23 = 0,\\
+\text{with column 3: } & 2\cdot0+1\cdot0+0\cdot\tfrac14 = 0.
+\end{align*}
+That is $(1,0,0)$, the first row of the identity.
+
+\textbf{Step 4: score each test pixel.} First multiply $\Cov_r\inv$ by the residual, then take the dot product
+with the residual. For $\vect{P}=(3,3,0)$:
+\begin{align*}
+\Cov_r\inv\vect{P} &= \left(\tfrac23\cdot3-\tfrac13\cdot3+0,\ -\tfrac13\cdot3+\tfrac23\cdot3+0,\ \tfrac14\cdot0\right)\\
+&= (2-1,\ -1+2,\ 0) = (1,1,0),\\
+D^2(\vect{P}) &= 3\cdot1+3\cdot1+0\cdot0 = 6.
+\end{align*}
+For $\vect{Q}=(2,-2,0)$:
+\begin{align*}
+\Cov_r\inv\vect{Q} &= \left(\tfrac23\cdot2-\tfrac13\cdot(-2),\ -\tfrac13\cdot2+\tfrac23\cdot(-2),\ 0\right)\\
+&= \left(\tfrac43+\tfrac23,\ -\tfrac23-\tfrac43,\ 0\right) = (2,-2,0),\\
+D^2(\vect{Q}) &= 2\cdot2+(-2)(-2)+0 = 4+4 = 8.
+\end{align*}
+For $\vect{R}=(0,0,4)$:
+\begin{align*}
+\Cov_r\inv\vect{R} &= (0,\ 0,\ \tfrac14\cdot4) = (0,0,1),\\
+D^2(\vect{R}) &= 0+0+4\cdot1 = 4.
+\end{align*}
+And one ordinary pixel, pixel~1, $(1,2,-1)$:
+\begin{align*}
+\Cov_r\inv\vect{r}_1 &= \left(\tfrac23\cdot1-\tfrac13\cdot2,\ -\tfrac13\cdot1+\tfrac23\cdot2,\ \tfrac14\cdot(-1)\right)
+ = \left(0,\ 1,\ -\tfrac14\right),\\
+D^2(\vect{r}_1) &= 1\cdot0+2\cdot1+(-1)(-\tfrac14) = 0+2+\tfrac14 = 2.25.
+\end{align*}
+\end{worked}
+
+Put the answers side by side (all computed above or in the book's script \tagC):
+\begin{center}\small
+\begin{tabular}{@{}lcccc@{}}
+\toprule
+pixel & residual & length $\norm{\vect{r}}$ & L1 & $D^2$\\
+\midrule
+ordinary 1--4 & & 1.73--3.00 & 1.00--1.33 & 2.25 each\\
+$\vect{P}$ & $(3,3,0)$ & 4.24 & 2.00 & 6\\
+$\vect{R}$ & $(0,0,4)$ & 4.00 & 1.33 & 4\\
+$\vect{Q}$ & $(2,-2,0)$ & 2.83 & 1.33 & \textbf{8}\\
+\bottomrule
+\end{tabular}
+\end{center}
+\textbf{The ranking flips.} By length, $\vect{P}>\vect{R}>\vect{Q}$; by L1, $\vect{P}$ first. By $D^2$,
+$\vect{Q}$ is the most anomalous and $\vect{P}$ only second. $\vect{P}$ errs along ``A and B together'', the
+direction the ordinary pixels share. $\vect{R}$ errs in band C, which is noisy anyway. $\vect{Q}$ is the
+shortest arrow, but it has A and B \emph{disagreeing}, which the ordinary pixels rarely do.
+
+A curiosity you may have noticed: all four ordinary pixels score exactly $2.25$. That is not luck. With
+$N$ pixels in $N-1$ dimensions, every pixel used to estimate the covariance scores
+$(N-1)^2/N=3^2/4=2.25$ against it. The covariance has used up all its freedom fitting those few pixels. The
+code avoids this regime by estimating the covariance from up to 200,000 pixels.
+
+%======================================================================
+\section{Whitening: rotate, divide, measure}\label{sec:residualmaha:whiten}
+
+\subsection{The eigen-decomposition turns the inverse into a sum}
+
+The code never forms $\Cov_r\inv$. It uses the eigenvectors (\cref{ch:linalg}). A symmetric matrix has an
+\emph{eigen-decomposition}\index{eigen-decomposition}
+\begin{equation}
+\Cov_r=\mat{U}\boldsymbol{\Lambda}\mat{U}\T,
+\end{equation}
+where the columns $\vect{u}_k$ of $\mat{U}$ are unit-length, mutually perpendicular eigenvectors
+($\mat{U}\T\mat{U}=\mat{I}$) and $\boldsymbol{\Lambda}=\diag(\lambda_1,\dots,\lambda_C)$ holds the
+eigenvalues, the variance of the residuals along each $\vect{u}_k$. Derive the inverse:
+\begin{align*}
+\Cov_r\inv &= (\mat{U}\boldsymbol{\Lambda}\mat{U}\T)\inv
+\intertext{The inverse of a product is the product of the inverses in reverse order:}
+&= (\mat{U}\T)\inv\,\boldsymbol{\Lambda}\inv\,\mat{U}\inv
+\intertext{and since $\mat{U}\T\mat{U}=\mat{I}$, the inverse of $\mat{U}$ is $\mat{U}\T$ and the inverse of
+$\mat{U}\T$ is $\mat{U}$:}
+&= \mat{U}\,\boldsymbol{\Lambda}\inv\,\mat{U}\T.
+\end{align*}
+Substitute into \cref{eq:residualmaha:d2}, writing $\vect{d}=\vect{r}-\muv_r$:
+\begin{align*}
+D^2 &= \vect{d}\T\mat{U}\boldsymbol{\Lambda}\inv\mat{U}\T\vect{d}
+\intertext{Group the product as $(\mat{U}\T\vect{d})\T\,\boldsymbol{\Lambda}\inv\,(\mat{U}\T\vect{d})$, using
+$(\mat{U}\T\vect{d})\T=\vect{d}\T\mat{U}$ (the transpose of a product reverses the order). The vector
+$\vect{y}=\mat{U}\T\vect{d}$ has entries $y_k=\vect{u}_k\T\vect{d}$, the coordinates of $\vect{d}$ along each
+eigenvector. $\boldsymbol{\Lambda}\inv$ is diagonal, so the product is a sum:}
+&= \sum_{k=1}^{C}\frac{y_k^2}{\lambda_k}
+ = \sum_{k=1}^{C}\left(\frac{\vect{u}_k\T(\vect{r}-\muv_r)}{\sqrt{\lambda_k}}\right)^2.
+\end{align*}
+Define the \emph{whitened coordinates}\index{whitening}
+\begin{equation}
+z_k=\frac{\vect{u}_k\T(\vect{r}-\muv_r)}{\sqrt{\lambda_k}},\qquad D^2=\sum_k z_k^2=\norm{\vect{z}}^2.
+\label{eq:residualmaha:whiten}
+\end{equation}
+Three operations: subtract the mean, \emph{rotate} onto the eigenvectors, \emph{divide} each coordinate by its
+direction's standard deviation $\sqrt{\lambda_k}$. After that the ordinary residuals spread equally in every
+direction, and the plain squared length is the Mahalanobis distance. Dividing by $\sqrt{\lambda_k}$ and not
+by $\lambda_k$ matters: $\lambda_k$ is a variance, in squared units, and a coordinate must be divided by a
+spread in its own units.
+
+\begin{worked}[label={we:residualmaha:eigen}]{The same scores by rotate and divide}
+The eigenvectors of $\Cov_r$ from \cref{we:residualmaha:three} can be found by inspection. Check each by
+multiplying:
+\begin{align*}
+\vect{u}_1 &= \tfrac{1}{\sqrt2}(1,1,0):& \Cov_r\vect{u}_1 &= \tfrac{1}{\sqrt2}(2+1,\ 1+2,\ 0) = 3\,\vect{u}_1, & \lambda_1 &= 3,\\
+\vect{u}_2 &= \tfrac{1}{\sqrt2}(1,-1,0):& \Cov_r\vect{u}_2 &= \tfrac{1}{\sqrt2}(2-1,\ 1-2,\ 0) = 1\,\vect{u}_2, & \lambda_2 &= 1,\\
+\vect{u}_3 &= (0,0,1):& \Cov_r\vect{u}_3 &= (0,\ 0,\ 4) = 4\,\vect{u}_3, & \lambda_3 &= 4.
+\end{align*}
+``A and B together'' spreads with variance 3; ``A and B disagreeing'' with variance 1; band C with variance 4.
+Now rotate and divide, with $\tfrac{1}{\sqrt2}\approx0.7071$. For $\vect{P}=(3,3,0)$:
+\begin{align*}
+y_1 &= 0.7071\,(3+3) = 4.243, & z_1 &= 4.243/\sqrt3 = 4.243/1.732 = 2.449,\\
+y_2 &= 0.7071\,(3-3) = 0, & z_2 &= 0/1 = 0,\\
+y_3 &= 0, & z_3 &= 0/2 = 0,\\
+D^2 &= 2.449^2+0+0 = 6.00.
+\end{align*}
+For $\vect{Q}=(2,-2,0)$:
+\begin{align*}
+y_1 &= 0.7071\,(2-2) = 0, & z_1 &= 0,\\
+y_2 &= 0.7071\,(2+2) = 2.828, & z_2 &= 2.828/1 = 2.828,\\
+y_3 &= 0, & z_3 &= 0,\\
+D^2 &= 0+2.828^2+0 = 8.00.
+\end{align*}
+For $\vect{R}=(0,0,4)$: $y_3=4$, $z_3=4/\sqrt4=4/2=2$, $D^2=2^2=4$. The same three numbers as with the
+inverse matrix, as the derivation promised. Running the product's own \code{whitened_pca} on the four ordinary
+pixels gives whitened coordinates whose squares sum to $2.25$ for every pixel; it may return an eigenvector
+with the opposite sign, which changes nothing after squaring \tagC.
+\end{worked}
+
+\coursefig[0.95\linewidth]{iw-45-whitening}{Rotate, divide, measure (course figure 45.1, the course's two-band
+version of the example above). (a) Ordinary residuals (grey) spread along the shared diagonal far more than
+across it; one test pixel lies further out along the diagonal, the other across it. (b) The same points turned
+onto the eigenvectors. (c) After dividing by each direction's spread the ordinary pixels sit on one circle and
+the across-the-diagonal pixel is far outside it.}{fig:residualmaha:whitening}
+
+\coursefig[0.9\linewidth]{ad-12-residual-mahalanobis}{Size versus direction (anomaly course figure 12.3). Left:
+ordinary residuals spread widely along direction 1 and barely along direction 2. Right: after whitening the
+cloud is round; the pixel far out along the common direction is inside it, the one a short way along the rare
+direction is far outside.}{fig:residualmaha:ad12}
+
+\subsection{The same steps in the code}
+
+\code{whitened_pca} (\file{residual_mahalanobis.py}, lines 38--49) does steps 1 to 4 for a whole scene:
+\begin{lstlisting}
+X = residual[:, keep].T.astype(np.float64)          # (N, C): one row per valid pixel
+mu = X.mean(0)                                       # (C,)   step 1: the mean
+rng = np.random.default_rng(seed)                    # seed = 0: deterministic
+sub = X[rng.choice(len(X), size=min(len(X), 200_000), replace=False)] - mu   # (<=200000, C)
+evals, evecs = np.linalg.eigh(np.cov(sub.T))         # (C,), (C, C): steps 2-3 on a sample
+order = np.argsort(evals)[::-1][:d]                  # (d,)   the d largest spreads, d = 30
+P = ((X - mu) @ evecs[:, order]) / np.sqrt(np.maximum(evals[order], 1e-12))  # (N, d): rotate, divide
+out = np.zeros((len(order),) + keep.shape, dtype=np.float32)                 # (d, H, W)
+out[:, keep] = P.T                                   # whitened coordinates back on the image grid
+\end{lstlisting}
+and, with no local window, the score is \code{(X ** 2).sum(0)}: \cref{eq:residualmaha:whiten}. Three
+details:
+\begin{itemize}
+\item \textbf{A sample, with a fixed seed.} The covariance comes from at most 200,000 valid pixels
+  (\code{_SAMPLE}, line 35) drawn with seed 0, so the score is deterministic and the cost of the eigen
+  problem does not grow with the scene. The mean uses every valid pixel.
+\item \textbf{The mean is the scene's own.} Every scene gets its own directions and spreads. A stripe or a
+  haze bank that dominates \emph{this} scene is learned, and discounted, here.
+\item \textbf{The top $d=30$ directions only} (\code{PCA_COMPONENTS}, line 32), with a floor of $10^{-12}$
+  on each eigenvalue. The next section explains both.
+\end{itemize}
+
+%======================================================================
+\section{Regularisation: why only the top 30 directions}\label{sec:residualmaha:regularise}
+
+\subsection{Small eigenvalues explode}
+\index{regularisation}\index{RX detector!plain, dropped}
+
+\Cref{eq:residualmaha:whiten} divides by $\sqrt{\lambda_k}$. If an estimated eigenvalue is tiny, a tiny
+residual along it becomes huge. Watch it happen on a $2\times2$ covariance with unit variances and
+correlation $c$ close to 1, scoring the small residual $(0.01,-0.01)$, which lies exactly along the
+direction of the small eigenvalue $1-c$ (computed by the book's script \tagC):
+\begin{center}\small
+\begin{tabular}{@{}cccc@{}}
+\toprule
+$c$ & eigenvalues & diagonal of $\Cov\inv$ & $D^2$ of $(0.01,-0.01)$\\
+\midrule
+0.9 & 0.1, 1.9 & 5.26 & 0.002\\
+0.99 & 0.01, 1.99 & 50.3 & 0.02\\
+0.999 & 0.001, 1.999 & 500 & 0.2\\
+\bottomrule
+\end{tabular}
+\end{center}
+Every factor of ten in the smallest eigenvalue is a factor of ten in the score. Push it to $\lambda=10^{-10}$
+(a standard deviation of $0.00001$) and a residual of $0.001$ along it contributes
+\begin{align*}
+\frac{0.001^2}{10^{-10}} &= \frac{0.000001}{0.0000000001} = 10{,}000.
+\end{align*}
+One meaningless direction now outscores everything. With many bands the smallest eigenvalues of an
+\emph{estimated} covariance are mostly estimation noise. This is why plain RX, Mahalanobis on the raw cube over
+all bands, was dropped from the product on 2026-05-11, with distances reaching about
+$10^{11}$ \tagM{CLAUDE.md}.
+
+\subsection{Three remedies, and the one the code uses}
+
+\begin{itemize}
+\item \textbf{Truncation}\index{truncation} (what the code does): keep only the $d$ directions with the largest eigenvalues.
+  The smallest kept eigenvalue of 30 out of about 185 carries real variance; the explosive ones are
+  discarded.
+\item \textbf{A floor}: \code{np.maximum(evals, 1e-12)} only prevents a division by exactly zero; at
+  $10^{-12}$ it does not tame anything else.
+\item \textbf{Shrinkage}\index{shrinkage} (not used here): add a small $\varepsilon$ to every eigenvalue,
+  $\Cov+\varepsilon\mat{I}$ (\cref{ch:localrx}). At $c=0.999$ with $\varepsilon=0.01$ the small eigenvalue
+  becomes $0.011$ and the score of $(0.01,-0.01)$ drops from $0.2$ to $0.0002/0.011=0.018$.
+\end{itemize}
+
+\paragraph{How many numbers does the covariance estimate?} A $d\times d$ symmetric matrix has
+$d(d+1)/2$ distinct entries: the diagonal plus the triangle above it. For $d=30$:
+\begin{align*}
+\frac{30\times31}{2} = \frac{930}{2} = 465,
+\end{align*}
+from up to 200,000 pixels: well determined. The full covariance over 185 bands would need
+$185\times186/2=17{,}205$ entries, and over 165 bands $165\times166/2=13{,}695$; the smallest directions of
+those are the ones that explode.
+
+\paragraph{What truncation costs.} Truncation throws away the directions in which the background barely moves,
+and those are exactly where a small anomaly like $\vect{Q}$ stands out. Repeat \cref{we:residualmaha:eigen}
+keeping only the top $d=2$ directions, $\lambda_3=4$ and $\lambda_1=3$, and dropping $\lambda_2=1$:
+\begin{align*}
+\vect{P}: & \ z=(0,\ 2.449) \to D^2 = 6.0,\\
+\vect{R}: & \ z=(2,\ 0) \to D^2 = 4.0,\\
+\vect{Q}: & \ z=(0,\ 0) \to D^2 = 0.
+\end{align*}
+$\vect{Q}$ disappears. In a real scene the trade is better than in this toy, because the 155 discarded
+directions of a 185-band residual are mostly noise and a real material differs from its background in many
+bands at once, so it has a component along the kept directions too. But the trade is real: keeping 30 is a
+choice for stability over sensitivity in the quietest directions, made once on four labelled scenes.
+
+\subsection{Why on the residual, and how much the model adds}
+
+RX on the cube, Reed and Yu's 1990 detector \citep{reed1990adaptive}, is the same distance with a different input. A raw scene mixes very different surfaces (sea,
+crops, towns), so one set of directions fits it badly. The model has already explained ``what surface is
+this'', and what it leaves behind is closer to one cloud of ordinary errors, which is what a single
+Mahalanobis distance assumes. Be honest about the size of that effect. On the four PRISMA scenes with the
+production model v0.2.0 (mean ROC-AUC, \cref{ch:measures}):
+\begin{center}\small
+\begin{tabular}{@{}lc@{}}
+\toprule
+score & mean ROC-AUC\\
+\midrule
+L1 on the residual & 0.702\\
+Mahalanobis, top 30, on the \emph{cube} & 0.831\\
+Mahalanobis, top 30, on the \emph{residual} (global mean) & 0.839\\
+\bottomrule
+\end{tabular}
+
+\smallskip
+Source: \tagM{research/experiments/dual-window-mahalanobis/README.md}
+\end{center}
+\begin{align*}
+\text{gain from scoring the direction:} &\quad 0.839-0.702 = 0.137,\\
+\text{gain from using the residual:} &\quad 0.839-0.831 = 0.008.
+\end{align*}
+Most of the improvement comes from whitening, not from the model. The README's own words: the residual
+``adds a small, consistent edge on top of a strong classical baseline''.
+
+%======================================================================
+\section{The ring: a local mean with a global covariance}\label{sec:residualmaha:ring}
+
+\subsection{The global mean assumes one centre}
+
+\Cref{eq:residualmaha:d2} measures every pixel from the scene's mean residual $\muv_r$. That assumes every
+ordinary pixel's error scatters around one centre. It does not quite: the dual-window README puts it as ``the
+model has a per-land-cover bias: its residual over water is not centred where its residual over crops is.''
+Work it on one whitened coordinate. In a coastal scene the sea pixels sit around $+1.5$ along it and the land
+pixels around $0$ \tagA:
+\begin{center}\small
+\begin{tabular}{@{}lcccc@{}}
+\toprule
+pixel & value & global score & ring mean & local score\\
+\midrule
+ordinary sea & 1.8 & $1.8^2=3.24$ & 1.5 & $(1.8-1.5)^2=0.3^2=0.09$\\
+land target & 1.6 & $1.6^2=2.56$ & 0.0 & $(1.6-0.0)^2=1.6^2=2.56$\\
+\bottomrule
+\end{tabular}
+\end{center}
+Measured from the scene's centre the ordinary sea pixel outranks the target. Measured from its own
+neighbourhood it drops to almost nothing, and the target stands out.
+
+\subsection{The local score, derived}
+
+Let $\muv_{\text{ring}}(p)$ be the mean residual over a ring of pixels around $p$. The \emph{local-mean
+Mahalanobis distance}\index{local-mean Mahalanobis distance} replaces the global mean with it but keeps the
+global covariance:
+\begin{equation}
+D^2_{\text{local}}(p)=(\vect{r}_p-\muv_{\text{ring}}(p))\T\,\Cov_r\inv\,(\vect{r}_p-\muv_{\text{ring}}(p)).
+\label{eq:residualmaha:local}
+\end{equation}
+The code computes it in whitened space. Whitening is a fixed linear map,
+$\vect{z}=\mat{W}(\vect{r}-\muv_r)$ with $\mat{W}=\boldsymbol{\Lambda}^{-1/2}\mat{U}\T$. The mean of a linear map
+over the ring is the linear map of the mean, because a sum can be taken inside a matrix product:
+\begin{align*}
+\bar{\vect{z}}_{\text{ring}} &= \frac1n\sum_{q\in\text{ring}}\mat{W}(\vect{r}_q-\muv_r)
+ = \mat{W}\left(\frac1n\sum_{q\in\text{ring}}\vect{r}_q-\muv_r\right)
+ = \mat{W}(\muv_{\text{ring}}-\muv_r).
+\intertext{Subtract it from the pixel's own whitened vector; the global mean cancels:}
+\vect{z}_p-\bar{\vect{z}}_{\text{ring}} &= \mat{W}(\vect{r}_p-\muv_r)-\mat{W}(\muv_{\text{ring}}-\muv_r)
+ = \mat{W}(\vect{r}_p-\muv_{\text{ring}}).
+\intertext{Its squared length is \cref{eq:residualmaha:local}, restricted to the top $d$ directions:}
+\norm{\vect{z}_p-\bar{\vect{z}}_{\text{ring}}}^2 &= (\vect{r}_p-\muv_{\text{ring}})\T\mat{W}\T\mat{W}(\vect{r}_p-\muv_{\text{ring}}).
+\end{align*}
+So the code can whiten once, globally, and then average the whitened maps over rings. The covariance, the
+directions and spreads, still come from the whole scene; only the centre is local.
+
+\subsection{The ring and its guard}
+
+\code{LOCAL_WINDOW = (21, 61)} (\file{residual_mahalanobis.py}, line 33) gives two full widths, both odd so
+that they centre on the pixel:
+\begin{align*}
+\text{outer box} &= 61\times61 = 3{,}721 \text{ pixels},\\
+\text{guard box} &= 21\times21 = 441 \text{ pixels},\\
+\text{ring} &= 3{,}721-441 = 3{,}280 \text{ pixels}.
+\end{align*}
+The \emph{guard}\index{guard window}\index{ring} is the inner box left out of the average. Without it, a target several
+pixels wide would sit partly in its own ``background'', pull the ring mean towards itself and shrink its own
+score. A guard 21 wide reaches $\lfloor21/2\rfloor=10$ pixels from the centre, so anything within 10 pixels
+(in rows and in columns) is excluded; the outer box reaches $\lfloor61/2\rfloor=30$.
+
+Two edge rules from the code:
+\begin{itemize}
+\item Only \emph{valid} pixels count: the ring mean is a sum of valid values divided by the number of valid
+  pixels.
+\item If fewer than \code{MIN_RING_FACTOR} $\times\, d=2\times30=60$ valid pixels remain in a ring (at a scene
+  edge, or beside a nodata hole), that pixel falls back to its global-mean score
+  (\file{residual_mahalanobis.py}, lines 34 and 67--69).
+\end{itemize}
+
+\coursefig[0.9\linewidth]{iw-46-ring}{The ring, and a box sum from four look-ups (course figure 46.1). (a) The
+$61\times61$ window minus the hatched $21\times21$ guard leaves a ring of 3,280 pixels whose mean is subtracted
+from the centre pixel. (b) A $4\times4$ grid and its zero-led integral image: the shaded $2\times2$ box sums to
+6 from four entries of the table.}{fig:residualmaha:ring}
+
+\subsection{Why not a local covariance too?}
+
+That is the classical dual-window RX of \cref{ch:localrx}: mean \emph{and} covariance from the ring. On the
+residual it scored worse, 0.814 against the local mean's 0.854 mean AUC with v0.2.0, in step~4 of the
+dual-window experiment log \tagM{research/experiments/dual-window-mahalanobis/EXPERIMENT_LOG.md}.
+A ring of a few hundred to a few thousand pixels, of which many are correlated neighbours, cannot estimate 465
+covariance numbers reliably, and it soaks up nearby targets. The log's own conclusion: ``The local
+covariance is the problem, not locality.''
+
+%======================================================================
+\section{Summing a ring fast: integral images}\label{sec:residualmaha:integral}
+
+\subsection{The cost of doing it directly}
+
+The ring mean needs, at every pixel, the sum of 3,280 values in each of 30 whitened channels, plus the count of
+valid pixels: 31 channels. Done directly on the $1210\times1219$ PRISMA frame of \cref{ch:inference}:
+\begin{align*}
+\text{pixels} &= 1210\times1219 = 1{,}474{,}990,\\
+\text{additions} &= 3{,}280\times31\times1{,}474{,}990\\
+&= 101{,}680\times1{,}474{,}990\\
+&\approx 1.50\times10^{11}.
+\end{align*}
+About 150 billion additions \tagC. An integral image reduces each box sum to four look-ups.
+
+\subsection{Definition and construction}
+
+\begin{definition}[Integral image]
+The \emph{integral image}\index{integral image} (or \emph{summed-area table}\index{summed-area table}) of an
+$H\times W$ grid $v$ is the $(H+1)\times(W+1)$ table
+\begin{equation}
+I[i][j]=\sum_{r=0}^{i-1}\sum_{c=0}^{j-1}v[r][c],\qquad 0\le i\le H,\ 0\le j\le W,
+\end{equation}
+the sum of everything strictly above and to the left of position $(i,j)$. Row $0$ and column $0$ are all zero
+(empty sums); the table is \emph{zero-led}.
+\end{definition}
+
+You can build it entry by entry with a recurrence. The block above-left of $(i+1,j+1)$ is the value $v[i][j]$
+plus the block above it plus the block to its left; those two blocks share the block above-left of $(i,j)$,
+which has then been counted twice, so subtract it once:
+\begin{equation}
+I[i+1][j+1]=v[i][j]+I[i][j+1]+I[i+1][j]-I[i][j].
+\label{eq:residualmaha:recur}
+\end{equation}
+The code does something equivalent and faster: a running sum down each column, then a running sum along each
+row (\code{cumsum(1).cumsum(2)} on a \shape{(channels, H, W)} array), then a row and column of zeros in front.
+
+\begin{worked}[label={we:residualmaha:integral}]{Building an integral image on a $4\times4$ grid}
+Take the course's grid:
+\[
+v=\begin{pmatrix}1&2&0&1\\3&1&2&0\\0&2&1&3\\1&0&2&1\end{pmatrix}.
+\]
+\textbf{Running sum down each column.} Each entry is itself plus everything above it. Column 0: $1$, $1+3=4$,
+$4+0=4$, $4+1=5$. Column 1: $2$, $2+1=3$, $3+2=5$, $5+0=5$. Column 2: $0$, $0+2=2$, $2+1=3$, $3+2=5$.
+Column 3: $1$, $1+0=1$, $1+3=4$, $4+1=5$:
+\[
+\begin{pmatrix}1&2&0&1\\4&3&2&1\\4&5&3&4\\5&5&5&5\end{pmatrix}.
+\]
+\textbf{Running sum along each row} of that table. Row 0: $1$, $1+2=3$, $3+0=3$, $3+1=4$. Row 1: $4$,
+$4+3=7$, $7+2=9$, $9+1=10$. Row 2: $4$, $4+5=9$, $9+3=12$, $12+4=16$. Row 3: $5$, $5+5=10$, $10+5=15$,
+$15+5=20$.
+
+\textbf{Add the zero row and column in front:}
+\[
+I=\begin{pmatrix}0&0&0&0&0\\0&1&3&3&4\\0&4&7&9&10\\0&4&9&12&16\\0&5&10&15&20\end{pmatrix}.
+\]
+Check one entry with the recurrence \eqref{eq:residualmaha:recur}, the one for value row 1, column 1:
+\begin{align*}
+I[2][2] &= v[1][1]+I[1][2]+I[2][1]-I[1][1] = 1+3+4-1 = 7,
+\end{align*}
+and directly: the top-left $2\times2$ block is $1+2+3+1=7$. The last entry, 20, is the sum of the whole grid.
+\end{worked}
+
+\subsection{The four-term box sum}
+\index{box sum}\index{inclusion-exclusion}
+
+A box over rows $r_0,\dots,r_1$ and columns $c_0,\dots,c_1$ has sum
+\begin{equation}
+S=I[r_1+1][c_1+1]-I[r_0][c_1+1]-I[r_1+1][c_0]+I[r_0][c_0].
+\label{eq:residualmaha:box}
+\end{equation}
+Derive it from the definition. Call the box $B$ and name three other regions, each a block that starts at the
+top-left corner of the grid:
+\begin{itemize}
+\item $\text{Big}$: rows $0..r_1$, columns $0..c_1$; its sum is $I[r_1+1][c_1+1]$.
+\item $T$ (top strip): rows $0..r_0-1$, columns $0..c_1$; its sum is $I[r_0][c_1+1]$.
+\item $L$ (left strip): rows $0..r_1$, columns $0..c_0-1$; its sum is $I[r_1+1][c_0]$.
+\end{itemize}
+Big is the box plus the parts of $T$ and $L$:
+\begin{align*}
+\text{Big} &= B + (T\cup L).
+\intertext{$T$ and $L$ overlap in the corner $T\cap L$: rows $0..r_0-1$, columns $0..c_0-1$, with sum
+$I[r_0][c_0]$. Adding $T$ and $L$ counts the corner twice, so}
+\text{sum}(T\cup L) &= \text{sum}(T)+\text{sum}(L)-\text{sum}(T\cap L).
+\intertext{Substitute and solve for the box:}
+\text{sum}(B) &= \text{sum}(\text{Big})-\text{sum}(T)-\text{sum}(L)+\text{sum}(T\cap L),
+\end{align*}
+which is \cref{eq:residualmaha:box}. Four look-ups, three additions or subtractions, whatever the size of the
+box: a $61\times61$ box costs the same as a $2\times2$.
+
+\begin{worked}[label={we:residualmaha:box}]{A box sum and a ring mean from the table}
+With $I$ from \cref{we:residualmaha:integral}. The box of value rows 1--2 and columns 1--2 ($r_0=1$, $r_1=2$,
+$c_0=1$, $c_1=2$):
+\begin{align*}
+S &= I[3][3]-I[1][3]-I[3][1]+I[1][1]\\
+&= 12-3-4+1\\
+&= 6.
+\end{align*}
+Check by adding the four values: $1+2+2+1=6$.
+
+\textbf{A ring is one box minus another.} Shrink the windows to a toy: outer box $3\times3$, guard $1\times1$,
+around value row 1, column 1. The outer box is rows 0--2, columns 0--2:
+\begin{align*}
+S_{\text{outer}} &= I[3][3]-I[0][3]-I[3][0]+I[0][0] = 12-0-0+0 = 12.
+\end{align*}
+The guard is the single value at row 1, column 1:
+\begin{align*}
+S_{\text{guard}} &= I[2][2]-I[1][2]-I[2][1]+I[1][1] = 7-3-4+1 = 1.
+\end{align*}
+Ring:
+\begin{align*}
+\text{ring sum} &= 12-1 = 11,\\
+\text{ring count} &= 3\times3-1\times1 = 9-1 = 8,\\
+\text{ring mean} &= \frac{11}{8} = 1.375.
+\end{align*}
+The pixel's value is 1, so its local score in this one-channel toy is $(1-1.375)^2=(-0.375)^2=0.140625$.
+Running the product's \code{local_mean_score} on this grid with \code{window=(1, 3)} returns exactly
+$0.140625$ at that pixel \tagC.
+\end{worked}
+
+\subsection{Counts, padding and the code}
+
+\code{local_mean_score} (\file{residual_mahalanobis.py}, lines 58--69), annotated:
+\begin{lstlisting}
+d, H, W = X.shape                              # X: (30, H, W) whitened, 0 outside keep
+inner, outer = window                          # (21, 61)
+r = outer // 2                                 # 30
+F = np.concatenate([keep[None], X * keep], 0).astype(np.float64)   # (31, H, W): channel 0 = 1 if valid
+I = np.pad(np.pad(F, ((0, 0), (r, r), (r, r))).cumsum(1).cumsum(2),
+           ((0, 0), (1, 0), (1, 0)))           # (31, H+2r+1, W+2r+1): zero-led integral image
+A = _box(I, outer // 2, r, H, W) - _box(I, inner // 2, r, H, W)   # (31, H, W): ring count, ring sums
+n = A[0]                                       # (H, W) valid pixels in each ring
+ok = keep & (n >= MIN_RING_FACTOR * d)         # at least 60
+s = ((X - A[1:] / np.maximum(n, 1)) ** 2).sum(0)   # (H, W): |z - ring mean|^2
+return (np.where(ok, s, (X ** 2).sum(0)) * keep).astype(np.float32)   # fallback: global-mean score
+\end{lstlisting}
+and \code{_box} (lines 52--55) is \cref{eq:residualmaha:box} for every pixel at once:
+\begin{lstlisting}
+a, b = r - k, r + k + 1        # k = half-width of the box: 30 for the outer box, 10 for the guard
+return I[:, b:b+h, b:b+w] - I[:, a:a+h, b:b+w] - I[:, b:b+h, a:a+w] + I[:, a:a+h, a:a+w]
+\end{lstlisting}
+Three things make it exact.
+\begin{itemize}
+\item \textbf{Counts ride along as channel 0.} \code{keep} is 1 for valid pixels, so its box sum is the valid
+  count. Invalid pixels were set to 0 in \code{X * keep}, so they add nothing to the sums either.
+\item \textbf{Padding by $r$} surrounds the scene with zeros, so a box hanging over the edge counts fewer
+  pixels, and the count channel records how many.
+\item \textbf{The index arithmetic.} Pixel $(i,j)$ of the scene sits at $(i+r,j+r)$ in the padded array. A box
+  of half-width $k$ around it spans padded rows $i+r-k,\dots,i+r+k$, so by \cref{eq:residualmaha:box} it needs
+  $I$ at rows $i+(r-k)$ and $i+(r+k+1)$: the slices starting at $a=r-k$ and $b=r+k+1$.
+\end{itemize}
+The whole score takes about 3--4~seconds per scene on a CPU, against about 46~seconds for F001's
+reconstruction \tagM{docs/lld/residual-mahalanobis.md}.
+
+\subsection{Local covariances from the same trick, and why they are not used}
+
+Integral images give any local statistic that is a sum. A local covariance needs the sums of $\vect{x}$ and of
+$\vect{x}\vect{x}\T$. Derive it from the definition with divisor $n$:
+\begin{align*}
+\Cov_{\text{loc}} &= \frac1n\sum_q(\vect{x}_q-\vect{m})(\vect{x}_q-\vect{m})\T
+\intertext{Expand the product of the brackets into four terms:}
+&= \frac1n\sum_q\vect{x}_q\vect{x}_q\T-\frac1n\sum_q\vect{x}_q\vect{m}\T-\frac1n\sum_q\vect{m}\vect{x}_q\T+\frac1n\sum_q\vect{m}\vect{m}\T
+\intertext{and use $\frac1n\sum_q\vect{x}_q=\vect{m}$ in the middle terms and $\frac1n\sum_q1=1$ in the last:}
+&= \frac1n\sum_q\vect{x}_q\vect{x}_q\T-\vect{m}\vect{m}\T-\vect{m}\vect{m}\T+\vect{m}\vect{m}\T\\
+&= \frac1n\sum_q\vect{x}_q\vect{x}_q\T-\vect{m}\vect{m}\T.
+\end{align*}
+Each entry $\sum_q x_{q,a}x_{q,b}$ is a box sum of the product image $x_a x_b$, so it too costs four look-ups.
+
+\begin{worked}[label={we:residualmaha:localcov}]{A local covariance from five box sums}
+Two channels $a$ and $b$, one $3\times3$ box of $n=9$ pixels (values from the book's script \tagC):
+\[
+a=\begin{pmatrix}0&0&0\\3&2&2\\2&2&2\end{pmatrix},\qquad b=\begin{pmatrix}0&0&3\\0&1&1\\0&0&0\end{pmatrix}.
+\]
+The five box sums:
+\begin{align*}
+\textstyle\sum a &= 0+0+0+3+2+2+2+2+2 = 13,\\
+\textstyle\sum b &= 0+0+3+0+1+1+0+0+0 = 5,\\
+\textstyle\sum a^2 &= 0+0+0+9+4+4+4+4+4 = 29,\\
+\textstyle\sum ab &= 0+0+0+0+2+2+0+0+0 = 4,\\
+\textstyle\sum b^2 &= 0+0+9+0+1+1+0+0+0 = 11.
+\end{align*}
+Mean: $\vect{m}=(13/9,\ 5/9)=(1.444,\ 0.556)$. Covariance entries, in ninths and eighty-firsts:
+\begin{align*}
+\sigma_{aa} &= \frac{29}{9}-\left(\frac{13}{9}\right)^2 = \frac{261}{81}-\frac{169}{81} = \frac{92}{81} = 1.136,\\
+\sigma_{ab} &= \frac{4}{9}-\frac{13}{9}\cdot\frac{5}{9} = \frac{36}{81}-\frac{65}{81} = -\frac{29}{81} = -0.358,\\
+\sigma_{bb} &= \frac{11}{9}-\left(\frac{5}{9}\right)^2 = \frac{99}{81}-\frac{25}{81} = \frac{74}{81} = 0.914.
+\end{align*}
+These match \code{np.cov(..., bias=True)} on the nine pixels \tagC.
+\end{worked}
+
+\paragraph{The cost argument.} With integral images every pixel needs two boxes (outer and guard) of four
+look-ups per channel. For the 31 channels of the local mean on the PRISMA frame:
+\begin{align*}
+\text{direct:} &\quad 3{,}280\times31\times1{,}474{,}990\approx1.50\times10^{11},\\
+\text{integral:} &\quad 2\times4\times31\times1{,}474{,}990 = 365{,}797{,}520\approx3.7\times10^{8},\\
+\text{ratio:} &\quad \frac{3{,}280}{2\times4} = 410.
+\end{align*}
+Building the tables adds about two additions per entry per channel (two running sums) over the padded grid,
+$(1210+61)\times(1219+61)=1271\times1280=1{,}626{,}880$ entries:
+\begin{align*}
+2\times31\times1{,}626{,}880 = 100{,}866{,}560\approx1.0\times10^{8},
+\end{align*}
+small beside the direct method. A local covariance with $d=30$ would need $465$ product channels on top of the
+30 sums and the count, 496 in all. In \code{float64} on the padded grid that is
+\begin{align*}
+496\times1{,}626{,}880\times8 \text{ bytes} = 6{,}455{,}459{,}840 \text{ bytes}\approx6.5\text{ GB},
+\end{align*}
+against $31\times1{,}626{,}880\times8=403{,}466{,}240$ bytes, about 0.4~GB, for the local mean \tagC; and every
+pixel would then need its own $30\times30$ inverse. Slower, sixteen times the memory, and, as measured,
+worse.
+
+%======================================================================
+\section{Eleven scores, fixed before the run}\label{sec:residualmaha:eleven}
+\index{scoring methods!comparison}
+
+On 2026-10-15 eleven scoring methods were compared on the four labelled PRISMA scenes with the F001 model at
+epoch~52 (and on v0.2.0), with their parameters \emph{fixed before the run}: nothing was tuned on the
+results. The comparison scripts are not in the repository; the methods are named in
+\file{docs/lld/residual-mahalanobis.md}, and the numbers below are the course's record of the measured
+results (IW46). A letter in brackets means ``applied on top of'': E(C) is method E run on C's score map.
+
+\begin{drift}
+F001 at epoch 52, measured 2026-10-15 (\texttt{indradhanu workings/46-the-ring-and-the-comparison.md}; the means
+for C and D and the object counts 403 and 383 are confirmed by \file{docs/lld/residual-mahalanobis.md}). ROC-AUC
+per scene and the mean; ``objects'' is the number of labelled objects with at least one pixel in the top 1\%.
+\begin{center}\small
+\begin{tabular}{@{}lcccccc@{}}
+\toprule
+method & set1 & set2 & set3 & set4 & mean & objects\\
+\midrule
+A \texttt{combined} (old default) & 0.731 & 0.755 & 0.677 & 0.698 & 0.715 & 208\\
+A + SAM dark fade & 0.887 & 0.755 & 0.685 & 0.698 & 0.756 & \\
+B \texttt{combined}, rank-normalised & & & & & 0.709 & \\
+C residual Mahalanobis, global mean & 0.921 & 0.848 & 0.751 & 0.876 & 0.849 & \\
+\textbf{D} residual Mahalanobis, ring 21/61 & \textbf{0.929} & \textbf{0.859} & \textbf{0.787} & \textbf{0.885} & \textbf{0.865} & 383\\
+E(C) local z-score of the map & & & & & 0.790 & \\
+F(C) difference-of-Gaussians boost & & & & & 0.718 & 403\\
+G(C) $\pm1$ px shift suppression & & & & & 0.845 & \\
+\bottomrule
+\end{tabular}
+\end{center}
+Eight of the eleven are shown; the other three were chained variants, none of which beat D. Blank cells were
+not recorded.
+\end{drift}
+
+\begin{figure}[htbp]\centering
+\begin{tikzpicture}
+\begin{axis}[xbar,width=0.82\linewidth,height=7.2cm,xmin=0.65,xmax=0.89,
+  xlabel={mean ROC-AUC over the four PRISMA scenes},
+  symbolic y coords={B,A,F,Af,E,G,C,D},ytick=data,
+  yticklabels={{B rank-norm.},{A combined},{F(C) blob boost},{A + SAM fade},{E(C) local z},{G(C) shift supp.},{C global mean},{D ring 21/61}},
+  bar width=9pt,nodes near coords,nodes near coords align={horizontal},
+  every node near coord/.append style={font=\scriptsize,/pgf/number format/fixed,/pgf/number format/precision=3},
+  enlarge y limits=0.08,grid=major,grid style={gray!20}]
+\addplot[fill=loss!70,draw=loss!80!black] coordinates {(0.709,B) (0.715,A) (0.756,Af)};
+\addplot[fill=spec!70,draw=spec!80!black] coordinates {(0.718,F) (0.790,E) (0.845,G) (0.849,C) (0.865,D)};
+\end{axis}
+\end{tikzpicture}
+\caption{The comparison drawn to scale from the table (F001, epoch 52, 2026-10-15). Amber: scores built on the
+residual's size; teal: scores built on its direction (C, D and the filters applied to C). The axis starts at
+0.65 to separate the bars; the gap from A to C is $0.849-0.715=0.134$.}\label{fig:residualmaha:bars}
+\end{figure}
+
+\coursefig[0.9\linewidth]{iw-46-methods}{The same comparison as a dot plot (course figure 46.2), with object
+counts where they were recorded.}{fig:residualmaha:methods}
+
+\begin{figure}[htbp]\centering
+\begin{tikzpicture}
+\begin{axis}[ybar,width=0.8\linewidth,height=5.6cm,ymin=0.6,ymax=0.96,
+  symbolic x coords={set1,set2,set3,set4},xtick=data,ylabel={ROC-AUC},
+  bar width=8pt,legend style={at={(0.5,1.02)},anchor=south,legend columns=3,font=\small},
+  grid=major,grid style={gray!20},enlarge x limits=0.18]
+\addplot[fill=loss!60,draw=loss!80!black] coordinates {(set1,0.731) (set2,0.755) (set3,0.677) (set4,0.698)};
+\addplot[fill=spec!40,draw=spec!80!black] coordinates {(set1,0.921) (set2,0.848) (set3,0.751) (set4,0.876)};
+\addplot[fill=spec!85,draw=spec!80!black] coordinates {(set1,0.929) (set2,0.859) (set3,0.787) (set4,0.885)};
+\legend{A combined, C global mean, D ring 21/61}
+\end{axis}
+\end{tikzpicture}
+\caption{Per-scene ROC-AUC of A, C and D, to scale (F001, epoch 52). D beats C on every scene; the axis starts
+at 0.6.}\label{fig:residualmaha:perscene}
+\end{figure}
+
+\paragraph{How to read it.}
+\begin{itemize}
+\item \textbf{Size versus direction is the big step.} Every direction-based score except the blob boost is
+  above every size-based score. A to C is $0.849-0.715=0.134$.
+\item \textbf{D beats C on every scene}, not only on average:
+  \begin{align*}
+  \text{set1: } 0.929-0.921 &= 0.008, & \text{set2: } 0.859-0.848 &= 0.011,\\
+  \text{set3: } 0.787-0.751 &= 0.036, & \text{set4: } 0.885-0.876 &= 0.009.
+  \end{align*}
+  A gain on every scene is more convincing than a gain in the mean.
+\item \textbf{Spatial post-filters did not help AUC.} A local z-score (each score re-expressed against its
+  neighbourhood's spread), a blob boost (a difference of two blurs that favours compact blobs) and shift
+  suppression (meant to discount errors that vanish if the reconstruction moves by one pixel) all scored below
+  C.
+\item \textbf{AUC and object counts can disagree.} F(C) catches the most objects, 403 against D's 383, but its
+  AUC is 0.718. AUC judges the ranking of \emph{every} pixel; the object count looks only at the top 1\% and
+  gives one point per object touched (\cref{ch:measures}). A blob boost lifts compact objects into the top 1\%
+  while scrambling the ranking everywhere else. Against D it gave up $0.865-0.718=0.147$ of AUC for
+  $403-383=20$ more objects. The product needs the ranking: an analyst moves the threshold, so the whole order
+  matters.
+\end{itemize}
+D became Indradhanu's default on 2026-10-15 (roadmap row OB-13): the resolver lists
+\code{residual_mahalanobis} first for both Indradhanu models, and \code{combined}, \code{L1} and \code{SAM}
+stay selectable through the per-model override (\file{backend/allotrope/foundation_models/resolver.py}, lines
+152--173).
+
+\begin{drift}
+The same comparison with the production model v0.2.0 (\file{research/experiments/dual-window-mahalanobis/README.md},
+section 3): \texttt{combined} 0.662, L1 0.702, SAM 0.570, MNF-RX 0.752, PCA30-RX on the cube 0.831, residual
+Mahalanobis global mean 0.839, ring 21/61 0.854. Set~3 is the exception there: PCA30-RX on the cube (0.766)
+beats residual Mahalanobis with the global mean (0.709).
+\end{drift}
+
+\subsection{Three honest caveats}
+
+\paragraph{The window was chosen on these scenes.} The LLD says it plainly: ``The window was the best of four
+in the original sweep on the same four scenes, so the margin is slightly flattering.'' When you pick the best
+of four settings on a test, part of its lead is luck that will not repeat on new scenes. D's lead over C,
+$0.865-0.849=0.016$, is small enough that some of it may be that luck. That is why \code{local_window=None},
+the global version, which has no window to choose, stays one argument away.
+
+\paragraph{Four scenes are very few.}\index{sign test} If the two methods were truly equal, each scene would be a coin flip for
+which one wins:
+\begin{align*}
+P(\text{all 4 go to D}) &= \left(\tfrac12\right)^4 = \tfrac{1}{16},\\
+P(\text{all 4 go one way or the other}) &= 2\times\tfrac{1}{16} = \tfrac{2}{16} = 0.125.
+\end{align*}
+Even a clean sweep happens one time in eight by chance, so no paired test on four scenes can reach the usual
+$0.05$. The evidence is the consistency and the size of the gap, not a significance test (\cref{ch:bootstrap}
+develops a better tool).
+
+\paragraph{The ground truth may sit about one pixel off.} AUC counts that against every method equally; the
+object count allows one pixel of slack.
+
+\begin{sourcenote}[: the class-aware variant]
+The same module also defines \code{class_aware_residual_mahalanobis} (\file{residual_mahalanobis.py}, lines
+75--102): a separate whitening per surface class from a segmentation, with same-class rings, and classes under
+5,000 pixels merged into land. The product's scoring action does not call it; it is used by the evaluator's
+scorers (\file{app/evaluation/scorers.py}, lines 32--59) for experiments. When this book says ``residual
+Mahalanobis'' it means the default, class-blind version.
+\end{sourcenote}
+
+%======================================================================
+\begin{confusions}
+\confusion{Is residual Mahalanobis a new model?}{No. The model and its reconstruction are unchanged; only the
+step that turns a residual into a score differs. A checkpoint needs no retraining to use it.}
+\confusion{Plain RX was dropped for exploding. Why is this allowed back?}{Two changes: only the 30 largest
+directions are used, so the tiny, noisy eigenvalues that exploded are discarded; and it runs on the residual,
+which is closer to one cloud of ordinary errors than the raw cube.}
+\confusion{Is a high score a big error?}{Not necessarily, and that is the point. $\vect{Q}$ in
+\cref{we:residualmaha:three} has the smallest error and the highest score.}
+\confusion{There is already a \texttt{mahalanobis} in the product.}{That is the classical detector on the cube
+(MNF-RX, thermal GRX). The new method is deliberately named \texttt{residual\_mahalanobis} so the two are never
+confused in configurations or the interface.}
+\confusion{Local mean, so the covariance is local too?}{No. Only the mean comes from the ring. The directions
+and spreads are the whole scene's.}
+\confusion{Why does a ring pixel's validity matter if its whitened value is already 0?}{A zero value would
+still be counted in the denominator. The count channel makes the mean divide by valid pixels only.}
+\confusion{Can I threshold the score at, say, 10?}{No. Scores are squared distances with a heavy right tail, and
+their scale depends on the scene. Like every score in the product, it is thresholded by percentile
+(\cref{ch:material}) and drawn with a square-root stretch.}
+\end{confusions}
+
+\begin{checkyourself}
+\item\label{ex:residualmaha:1} Using the four ordinary pixels of \cref{we:residualmaha:three}, score a new pixel
+  with residual $(1,1,2)$ by $\Cov_r\inv$, and again by rotate-and-divide. Compare its L1 with that of
+  $\vect{Q}$.
+\item\label{ex:residualmaha:2} Using the integral image of \cref{we:residualmaha:integral}, compute the sum of
+  value rows 0--1, columns 2--3, and the toy ring mean (3$\times$3 outer, 1$\times$1 guard) around value row 1,
+  column 2. Check both by adding values.
+\item\label{ex:residualmaha:3} Four pixels in two channels have $\sum a=8$, $\sum b=4$, $\sum a^2=20$,
+  $\sum ab=6$, $\sum b^2=6$. Compute the mean and the covariance (divide by $n$) from these sums alone.
+\item\label{ex:residualmaha:4} For a window \code{(11, 31)}: how many pixels are in the ring, what is the
+  fallback threshold if $d=20$, and by what factor do integral images reduce the per-pixel cost of the ring
+  sums?
+\item\label{ex:residualmaha:5} In the 3-band example keep only the top two directions. Score $(1,1,2)$ and
+  $\vect{Q}$, and say in one sentence what truncation gave up.
+\item\label{ex:residualmaha:6} A fifth labelled scene arrives and D beats C there too. What is now the chance
+  of a clean sweep in one direction or the other if the methods were equal?
+\end{checkyourself}
+
+\nextchapter{ch:material}

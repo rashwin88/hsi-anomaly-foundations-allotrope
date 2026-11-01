@@ -15,7 +15,9 @@ Recipe per the action's META:
           batch_size, sam_l1_alpha) on top of capability defaults.
        c. predict_full_scene → reconstruction.
        d. Score with the resolved method.
-       e. Apply keep_mask if provided.
+       e. Apply keep_mask if provided. A model that excludes classes (V2)
+          with an upstream V2 segmentation zeros that one's excluded classes
+          instead of running its own head (upstream_v2_segmentation).
        f. Write per-model rasters (score + reconstruction) and
           rendered PNG previews under <output>/models/<codename>/.
        g. If GT: compute ROC + AUC.
@@ -35,6 +37,7 @@ import time
 from pathlib import Path
 from typing import Any
 
+from ._meta import PlainActionError
 from ._anomaly_scoring_render import (
     _load_annotation_gt,
     _make_rgb,
@@ -90,20 +93,81 @@ _MODELS_DIR_NAME = "models"
 # without buying more usable detail than panzoom can address.
 
 
+# First line of the failure a native-band model (V2) gives on a 165-grid band filter (the user's
+# 2026-11-01 run on PRS_L2D_STD_20251127041712, a July band filter). The dialog greys those out too.
+OLD_GRID_MESSAGE = ("This band filter is on the old 165-band grid; add a new Band filter (native bands) "
+                    "and use that.")
+
+
 def _check_band_grid(codename: str, band_grid: str, wavelengths: Any) -> None:
-    """A 165-grid model (v0.2.0) needs band_filter_apply's common grid; a native-band model (Indradhanu V2) needs
-    use_common_wavelength_grid=false. The vendable's wavelengths say which one the upstream band filter applied."""
+    """Refuse a native-band model (Indradhanu V2) on a 165-grid vendable - it needs use_common_wavelength_grid=false.
+    A 165-grid model (v0.2.0) on native bands is resampled by _to_common_grid instead. The vendable's wavelengths say
+    which one the upstream band filter applied."""
     import numpy as np
     from app.models.dataset.vendables import DEFAULT_COMMON_WAVELENGTH_GRID
 
     grid = np.asarray(DEFAULT_COMMON_WAVELENGTH_GRID, dtype=np.float64)
     on_grid = len(wavelengths) == len(grid) and np.allclose(wavelengths, grid)
     if band_grid == "native" and on_grid:
-        raise ValueError(f"model {codename!r} reads native bands: run band_filter_apply with "
-                         "use_common_wavelength_grid=false (this one resampled to the 165-band grid)")
-    if band_grid == "common165" and not on_grid:
-        raise ValueError(f"model {codename!r} needs the 165-band grid: run band_filter_apply with "
-                         "use_common_wavelength_grid=true (this one kept native bands)")
+        raise PlainActionError(OLD_GRID_MESSAGE + f"\n(model {codename!r} reads native bands; this band filter "
+                               "ran with use_common_wavelength_grid=true)")
+    # common165 on native bands is not an error: _to_common_grid resamples for that model (band filters default to
+    # native bands since 2026-10-31, and the 165-grid models must keep working on them).
+
+
+def _to_common_grid(cube: Any, validity: Any, wavelengths: Any):
+    """(cube, wavelengths) on the 165-band grid for a common165 model reading a native-band vendable - the same
+    resampler band_filter_apply uses; a cube already on the grid is returned as is."""
+    import numpy as np
+    from app.models.dataset.vendables import DEFAULT_COMMON_WAVELENGTH_GRID
+    from app.utils.data_transformations.spectral_resampler import resample_to_common_grid
+
+    grid = np.asarray(DEFAULT_COMMON_WAVELENGTH_GRID, dtype=np.float64)
+    if len(wavelengths) == len(grid) and np.allclose(wavelengths, grid):
+        return cube, wavelengths
+    out, _, _ = resample_to_common_grid(cube=cube.astype(np.float32, copy=False), validity_cube=validity,
+                                        source_wavelengths=np.asarray(wavelengths, dtype=np.float64),
+                                        target_wavelengths=grid, spectral_families=[None] * len(wavelengths))
+    return out, grid
+
+
+def upstream_v2_segmentation(ss_dir: Path) -> dict[str, Any] | None:
+    """The upstream scene_segmentation's summary plus its class map when it ran Indradhanu V2's head
+    (method "indradhanu_v2", _scene_segmentation_run.py), else None. With it a model that excludes
+    classes (V2) uses these classes instead of running its own head again (docs/lld/segmentation-v2.md)."""
+    import numpy as np
+    import rasterio
+
+    summary_path, cm_path = ss_dir / "summary.json", ss_dir / "class_map.tif"
+    if not summary_path.exists() or not cm_path.exists():
+        return None
+    seg = json.loads(summary_path.read_text())
+    if seg.get("method") != "indradhanu_v2":
+        return None
+    with rasterio.open(cm_path) as src:
+        cm = src.read(1)
+    # Back to the internal head's format: 0 (land) outside valid, not 255.
+    seg["class_map"] = np.where(cm == seg.get("invalid_code", 255), 0, cm).astype(np.uint8)
+    return seg
+
+
+def keep_mask_for_classes(ss_dir: Path, exclude_classes: list[str]) -> Any:
+    """(H, W) uint8 keep mask of an upstream V2 segmentation with ``exclude_classes`` left out:
+    1 = valid and in none of them. Read from class_codes.bin (class code, HAZE_BIT on thin cloud,
+    255 outside valid), so "thin_cloud" can be left out too; no re-segmentation."""
+    import numpy as np
+
+    from ._scene_segmentation_run import CLASS_NAMES, HAZE_BIT, INVALID_CODE
+
+    seg = json.loads((ss_dir / "summary.json").read_text())
+    h, w = seg["scene_shape"]
+    codes = np.fromfile(ss_dir / "class_codes.bin", dtype=np.uint8).reshape(h, w)
+    valid = codes != INVALID_CODE
+    cls = codes & np.uint8(~HAZE_BIT & 0xFF)
+    excluded = np.isin(cls, [CLASS_NAMES.index(c) for c in exclude_classes if c in CLASS_NAMES])
+    if "thin_cloud" in exclude_classes:
+        excluded |= (codes & HAZE_BIT).astype(bool)
+    return (valid & ~excluded).astype(np.uint8)
 
 
 def run(ctx: Any) -> None:
@@ -179,17 +243,38 @@ def run(ctx: Any) -> None:
     # combinations are rejected at validate_config time.
     keep_mask: np.ndarray = spatial_valid.copy()
     keep_source = "spatial_validity"
+    upstream_seg: dict[str, Any] | None = None
+    # Classes the user leaves out here (None = the segmentation's own keep_mask, unchanged).
+    exclude_at_scoring = cfg.get("exclude_classes")
+    if exclude_at_scoring is not None and not cfg.get("input_scene_segmentation_output_id"):
+        raise PlainActionError("Leaving classes out needs a Scene segmentation input (method Indradhanu V2).")
     if cfg.get("input_scene_segmentation_output_id"):
         ctx.on_step("load_keep_mask")
         ss_dir = ctx.resolve_action_output(cfg["input_scene_segmentation_output_id"])
         keep_tif = ss_dir / "keep_mask.tif"
-        if keep_tif.exists():
+        if exclude_at_scoring is not None:
+            # The same contract as the segmentation's keep_mask, rebuilt from its class map with the
+            # classes chosen here: V2 still zeroes them after scoring, classical detectors still
+            # leave them out of their background (docs/lld/segmentation-v2.md).
+            upstream_seg = upstream_v2_segmentation(ss_dir)
+            if upstream_seg is None or not (ss_dir / "class_codes.bin").exists():
+                raise PlainActionError(
+                    "Leaving classes out at scoring needs a Scene segmentation made with method "
+                    "Indradhanu V2; the one picked is not. Run a V2 segmentation, or clear the classes.")
+            keep_mask = (keep_mask_for_classes(ss_dir, list(exclude_at_scoring)) & spatial_valid).astype(np.uint8)
+            keep_source = f"scene_segmentation.class_map without {list(exclude_at_scoring)} and spatial_validity"
+            upstream_seg["exclude_classes_effective"] = list(exclude_at_scoring)
+        elif keep_tif.exists():
             with rasterio.open(keep_tif) as src:
                 km = src.read(1).astype(np.uint8)
             keep_mask = (km & spatial_valid).astype(np.uint8)
             keep_source = "scene_segmentation.keep_mask âˆ§ spatial_validity"
+            upstream_seg = upstream_v2_segmentation(ss_dir)
         else:
             logger.warning("scene_segmentation output missing keep_mask.tif")
+        if upstream_seg and upstream_seg.get("upstream_band_filter_output_id") != bf_output_id:
+            logger.warning("upstream V2 segmentation used band filter %s, scoring uses %s",
+                           upstream_seg.get("upstream_band_filter_output_id"), bf_output_id)
     elif cfg.get("input_cloud_mask_output_id"):
         ctx.on_step("load_keep_mask")
         cm_dir = ctx.resolve_action_output(cfg["input_cloud_mask_output_id"])
@@ -212,7 +297,7 @@ def run(ctx: Any) -> None:
     # --- 3b. Per-scene normalisation override for uncalibrated sensors --
     # The foundation models (Chakshu thermal, Indradhanu hyperspectral)
     # carry baked per-band normalisation stats that assume the input
-    # cube is in the same units as their training data (Kelvin /
+    # cube is in the same units as their training data (Celsius for Chakshu - stored stats 24.6 +/- 13.6 C -
     # reflectance respectively). Sensors that ship vendables in a
     # different unit space — currently HotSat-1 L2 Visual, which is
     # uncalibrated 14-bit DN — would be many standard deviations out of
@@ -288,11 +373,28 @@ def run(ctx: Any) -> None:
     per_model_records: list[dict[str, Any]] = []
     roc_records: dict[str, dict[str, Any]] = {}
 
+    # A generic_hsi cube the reader found not to be reflectance (DN, radiance) is out of every
+    # foundation model's training distribution; only unit-free classical detectors run on it.
+    not_reflectance = units == "not_reflectance"
+    models_skipped: list[str] = []
+    if not_reflectance and all(
+        (by_codename.get(c.strip().lower()) is not None and by_codename[c.strip().lower()].family == "foundation")
+        for c in cfg["model_codenames"]
+    ):
+        raise ValueError(
+            "this scene is not reflectance (see its pre-flight report); foundation models cannot score it. "
+            "Pick MNF-RX, or re-upload with a scale override if the reader's decision is wrong."
+        )
+
     for codename in cfg["model_codenames"]:
         ctx.on_step(f"model={codename} Â· resolve")
         m = by_codename.get(codename.strip().lower())
         if m is None:
             raise ValueError(f"unknown codename at run time: {codename!r}")
+        if not_reflectance and m.family == "foundation":
+            logger.warning("scene is not reflectance; %s skipped", codename)
+            models_skipped.append(codename)
+            continue
         if not is_thermal and m.family == "foundation":
             _check_band_grid(codename, m.band_grid, wavelengths)
 
@@ -317,6 +419,11 @@ def run(ctx: Any) -> None:
         keep_mask_erosion_ks = int(
             ovr.get("keep_mask_erosion_kernel_size") or 1
         )
+        # A model that excludes classes (V2) given an upstream V2 segmentation is scored exactly as
+        # without one - over spatial validity, the excluded classes zeroed after scoring (below) -
+        # so its scores match the chain where it ran its own head.
+        uses_upstream_seg = upstream_seg is not None and m.family != "classical" and bool(m.exclude_classes)
+        model_keep = spatial_valid if uses_upstream_seg else keep_mask
         if keep_mask_erosion_ks > 1:
             from scipy.ndimage import binary_erosion
             half = keep_mask_erosion_ks // 2
@@ -324,16 +431,16 @@ def run(ctx: Any) -> None:
                 (keep_mask_erosion_ks, keep_mask_erosion_ks), dtype=bool
             )
             eroded_keep_mask = binary_erosion(
-                keep_mask.astype(bool), structure=structure
+                model_keep.astype(bool), structure=structure
             ).astype(np.uint8)
             logger.info(
                 "model=%s Â· keep_mask eroded by %d (kernel=%d): "
                 "%d → %d pixels kept",
                 codename, half, keep_mask_erosion_ks,
-                int(keep_mask.sum()), int(eroded_keep_mask.sum()),
+                int(model_keep.sum()), int(eroded_keep_mask.sum()),
             )
         else:
-            eroded_keep_mask = keep_mask
+            eroded_keep_mask = model_keep
 
         # Two dispatch paths. The "foundation" path loads a torch
         # checkpoint and produces a reconstruction; the "classical"
@@ -422,7 +529,8 @@ def run(ctx: Any) -> None:
                 # — for the thermal SegFormerMAE this is always 1, but
                 # we validate to catch any future single-band-by-mistake
                 # bugs early.
-                in_ch = getattr(m.model_config, "in_channels", None)
+                in_ch = (m.model_config.get("in_channels") if isinstance(m.model_config, dict)
+                         else getattr(m.model_config, "in_channels", None))   # a dict for the thermal models
                 if in_ch is not None and len(pixel_stats_override.mean) != int(in_ch):
                     raise ValueError(
                         "pixel_stats_override length "
@@ -444,6 +552,10 @@ def run(ctx: Any) -> None:
             if m.band_grid == "native":
                 model_cube, model_wl, _ = inferencer.read_bands(cube_np, wavelengths)
                 model_scene = torch.from_numpy(np.ascontiguousarray(model_cube)).float()
+            elif m.band_grid == "common165" and not is_thermal:
+                model_cube, model_wl = _to_common_grid(cube_np, validity_np, wavelengths)
+                if model_cube is not cube_np:
+                    model_scene = torch.from_numpy(np.ascontiguousarray(model_cube)).float()
 
             ctx.on_step(f"model={codename} Â· predict_full_scene")
             t0 = time.time()
@@ -469,8 +581,19 @@ def run(ctx: Any) -> None:
             )
 
             # Classes the model excludes (Indradhanu V2: thick cloud) are zeroed AFTER scoring, from its own
-            # segmentation - the evaluated semantics (docs/proposals/ship-ft04.md; app/evaluation/scorers.py).
-            if m.exclude_classes:
+            # segmentation - the evaluated semantics (docs/proposals/ship-ft04.md; app/evaluation/scorers.py) -
+            # or, when an upstream V2 scene_segmentation is attached, from that one's keep_mask (its head
+            # already ran there, with the user's exclude_classes).
+            if uses_upstream_seg:
+                excluded = spatial_valid.astype(bool) & (keep_mask == 0)
+                score = np.where(excluded, 0.0, score).astype(np.float32)
+                classes = upstream_seg.get("exclude_classes_effective", upstream_seg["exclude_classes"])
+                thin = upstream_seg.get("thin_cloud_is_cloud") or "thin_cloud" in classes
+                exclusion = {"classes": list(classes), "class_map": upstream_seg["class_map"],
+                             "mask": excluded,
+                             "cloud_rule": "cloud_or_thin" if thin else "thick",
+                             "segmentation": f"from upstream scene_segmentation {upstream_seg.get('action_id')}"}
+            elif m.exclude_classes:
                 ctx.on_step(f"model={codename} Â· segment")
                 class_map, _ = inferencer.segment_full_scene(
                     model_cube, spatial_valid.astype(bool), thin_cloud=m.thin_cloud_is_cloud
@@ -478,7 +601,8 @@ def run(ctx: Any) -> None:
                 excluded = np.isin(class_map, [inferencer.CLASS_NAMES.index(c) for c in m.exclude_classes])
                 score = np.where(excluded, 0.0, score).astype(np.float32)
                 exclusion = {"classes": list(m.exclude_classes), "class_map": class_map, "mask": excluded,
-                             "cloud_rule": "cloud_or_thin" if m.thin_cloud_is_cloud else "thick"}
+                             "cloud_rule": "cloud_or_thin" if m.thin_cloud_is_cloud else "thick",
+                             "segmentation": "internal head"}
 
         # Write per-model rasters + rendered previews.
         model_dir = models_root / _safe_dirname(codename)
@@ -596,6 +720,10 @@ def run(ctx: Any) -> None:
             "bands_read": None if is_classical else int(len(model_wl)),
             "excluded_classes": exclusion["classes"] if exclusion else [],
             "cloud_rule": exclusion["cloud_rule"] if exclusion else None,
+            # Where the excluded classes came from: "internal head" or "from upstream scene_segmentation <id>".
+            "segmentation": exclusion["segmentation"] if exclusion else None,
+            # The classes left out at scoring (config exclude_classes); None = the segmentation's keep_mask.
+            "exclude_classes_at_scoring": exclude_at_scoring,
             "excluded_percent": (
                 round(100.0 * float(exclusion["mask"].sum()) / float(spatial_valid.sum() or 1), 3) if exclusion else 0.0
             ),
@@ -641,7 +769,8 @@ def run(ctx: Any) -> None:
     # --- 6. Write summary + rich diagnostics -----------------------
     summary = {
         "n_models": len(per_model_records),
-        "model_codenames": cfg["model_codenames"],
+        # The models that ran: prep and the viewer read their rasters from this list.
+        "model_codenames": [c for c in cfg["model_codenames"] if c not in models_skipped],
         # Scene id (wire format) lets the frontend call the existing
         # /scenes/{id}/spectrum endpoint for click-to-inspect inside
         # the action viewer modal without an extra round-trip to fetch
@@ -656,6 +785,12 @@ def run(ctx: Any) -> None:
             else 0.0
         ),
         "keep_source": keep_source,
+        "exclude_classes": exclude_at_scoring,
+        "upstream_segmentation": (
+            {"method": upstream_seg["method"], "action_id": upstream_seg.get("action_id"),
+             "model_codename": upstream_seg.get("model_codename"), "exclude_classes": upstream_seg.get("exclude_classes")}
+            if upstream_seg else None
+        ),
         "device": device_label,
         "has_gt": gt_np is not None,
         # Normalisation provenance for the score panel. "baked" =
@@ -667,6 +802,8 @@ def run(ctx: Any) -> None:
         # scene-relative when this mode is active.
         "normalization_mode": normalization_mode,
         "scene_units": units if isinstance(units, str) else None,
+        # Foundation models not run because the scene is not reflectance (generic_hsi).
+        "models_skipped_not_reflectance": models_skipped,
         "per_model": [
             {
                 "codename": r["codename"],

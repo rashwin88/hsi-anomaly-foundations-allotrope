@@ -1,0 +1,64 @@
+{
+  "_description": "N003: N001b plus library-spectrum augmentation (within-class mixing p 0.5, wavelength shift +/-5 nm and stretch +/-1%, smooth tilt +/-15%, on the planted spectra and on the library tower's inputs) and dropout 0.1 in both towers, weight decay 0.05 - aimed at level 2's generalisation to unseen spectra (N001b: held-out class accuracy flat at 0.65-0.69 from epoch 5 while train CE kept falling; same at fill 1.0 as at 0.25). User approved 2026-10-31.",
+  "run_dir": "/opt/dlami/nvme/runs/N003",
+  "init_from": "/opt/dlami/nvme/models/FTH3_ep5.pt",
+  "library_root": "/opt/allotrope/data/family_library",
+  "holdout_class": null,
+  "model": {
+    "hidden": 256,
+    "embed": 128,
+    "dropout": 0.1
+  },
+  "sources": [
+    {
+      "name": "enmap",
+      "train_dir": "/opt/dlami/nvme/ft/enmap/train",
+      "test_dir": "/opt/dlami/nvme/ft/enmap/test",
+      "band_list_path": "/opt/dlami/nvme/ft/band_lists/enmap_224.json"
+    },
+    {
+      "name": "prisma",
+      "train_dir": "/opt/dlami/nvme/ft/prisma/train",
+      "test_dir": "/opt/dlami/nvme/ft/prisma/test"
+    },
+    {
+      "name": "aviris_ng",
+      "train_dir": "/opt/dlami/nvme/ft/aviris_ng/train",
+      "test_dir": "/opt/dlami/nvme/ft/aviris_ng/test",
+      "band_list_path": "/opt/dlami/nvme/ft/band_lists/aviris_ng_372.json"
+    }
+  ],
+  "tiles_per_batch": 16,
+  "pixels_per_tile": 512,
+  "loader_workers": 4,
+  "kinds": [
+    0.5,
+    0.25,
+    0.25
+  ],
+  "a_min": 0.05,
+  "gain": 0.1,
+  "fill_weight": 0.5,
+  "lr": 0.0003,
+  "stem_lr_scale": 0.3,
+  "weight_decay": 0.05,
+  "warmup_steps": 500,
+  "epochs": 40,
+  "steps_per_epoch": 500,
+  "eval_fills": [
+    0.1,
+    0.25,
+    0.5,
+    1.0
+  ],
+  "eval_batches": 40,
+  "ace_baseline_dir": "/opt/allotrope/research/experiments/spectral-namer",
+  "level1": "matching",
+  "lib_aug": {
+    "mix_p": 0.5,
+    "shift_nm": 5.0,
+    "stretch": 0.01,
+    "tilt": 0.15,
+    "library_side": true
+  }
+}

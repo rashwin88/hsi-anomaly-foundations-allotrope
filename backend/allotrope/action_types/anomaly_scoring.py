@@ -19,6 +19,9 @@ Inputs (all carried inside `actions.configuration`):
                                   scoring to `keep_mask`
   - input_annotation_id           optional — triggers ROC computation
   - model_codenames               required — list of 1+ codenames
+  - exclude_classes               optional, HSI only — classes left out,
+                                  read from the upstream V2 segmentation's
+                                  class map (None = its keep_mask as is)
   - model_overrides               optional — per-codename dict of
                                   {scoring_method, patch_size, stride,
                                    batch_size, sam_l1_alpha} fields,
@@ -41,7 +44,9 @@ Output layout under
         stats.json                  per-model timing + score range
         mask_cloud.tif, class_map.tif   uint8; only for models with exclude_classes
                                     (Indradhanu V2): the excluded pixels, scored 0,
-                                    and the head's classes 0 land .. 4 snow
+                                    and the head's classes 0 land .. 4 snow - taken from an
+                                    upstream scene_segmentation of method indradhanu_v2 when
+                                    one is attached (the head then does not run here)
 
 `run` / `summarize` / `preview` are implemented in
 `_anomaly_scoring_run.py` to keep this module light on import (api
@@ -64,6 +69,10 @@ KIND = "anomaly_scoring"
 
 
 _VALID_METHODS = {"L1", "MSE", "SAM", "combined", "mahalanobis", "residual_mahalanobis"}
+
+# Classes anomaly_scoring may leave out (exclude_classes): the V2 head's classes minus land, plus
+# its thin-cloud display layer (bit 0x10 in class_codes.bin, _scene_segmentation_run.HAZE_BIT).
+SCORING_EXCLUDABLE_CLASSES = ("water", "cloud", "thin_cloud", "shadow", "snow")
 
 
 class ModelOverride(BaseModel):
@@ -184,6 +193,17 @@ class AnomalyScoringConfig(BaseModel):
         ),
     )
 
+    exclude_classes: list[str] | None = Field(
+        default=None,
+        description=(
+            "Classes left out at scoring, from the upstream Indradhanu V2 "
+            "scene_segmentation's class map: a subset of water, cloud, "
+            "thin_cloud, shadow, snow. None = use that segmentation's own "
+            "keep_mask, unchanged. Needs input_scene_segmentation_output_id "
+            "of method indradhanu_v2 (checked when the worker runs)."
+        ),
+    )
+
 
 # --- Sensor-keyed defaults -------------------------------------------------
 
@@ -203,6 +223,17 @@ _DEFAULT_AVIRIS_NG: dict[str, Any] = {
     "model_codenames": ["Indradhanu"],
     "model_overrides": {},
 }
+_DEFAULT_TANAGER: dict[str, Any] = {
+    # Native-band model: band_filter_apply's Tanager default keeps native bands.
+    "model_codenames": ["Indradhanu V2"],
+    "model_overrides": {},
+}
+_DEFAULT_GENERIC_HSI: dict[str, Any] = {
+    # Native bands, like Tanager. MNF-RX alongside because it is unit-free: on a scene
+    # the reader found not to be reflectance the run skips V2 and MNF-RX alone remains.
+    "model_codenames": ["Indradhanu V2", "MNF-RX"],
+    "model_overrides": {},
+}
 _DEFAULT_HOTSAT1: dict[str, Any] = {
     # HotSat is single-band thermal but ships uncalibrated DN, not
     # Kelvin. The action handler overrides Chakshu's pixel-norm stats
@@ -218,11 +249,7 @@ _DEFAULT_HOTSAT1: dict[str, Any] = {
 META = ActionTypeMeta(
     type=KIND,
     label="Anomaly scoring",
-    short_description=(
-        "Run one or more foundation models on the cube. Per-model "
-        "anomaly score raster + reconstruction · zoomable side-by-side "
-        "viewer · optional ROC vs GT."
-    ),
+    short_description="Score how unusual every pixel is, with one or more models.",
     description=(
         "The headline scoring action. Loads the (filtered, on HSI) "
         "vendable, fans out across every selected model codename: load "
@@ -242,54 +269,36 @@ META = ActionTypeMeta(
         "distributions and (if GT) ROC arrays. No thresholding — this "
         "is the raw scoring pass; downstream actions can threshold."
     ),
-    when_to_use=(
-        "After band_filter_apply (HSI) and ideally after "
-        "scene_segmentation (recommended). Pick one model to scout, or "
-        "several to compare scoring behaviour on the same scene."
-    ),
+    when_to_use="",
     inputs=[
         ActionInputSpec(
             key="input_band_filter_output_id",
-            label="Filtered vendable (HSI only)",
-            description=(
-                "Hyperspectral scenes: required — pick a completed "
-                "band_filter_apply Output. Thermal scenes: not used."
-            ),
+            label="Band filter result",
+            description="Hyperspectral scenes only.",
             ref_kind="action_output",
             producing_action_types=["band_filter_apply"],
             required=False,
         ),
         ActionInputSpec(
             key="input_scene_segmentation_output_id",
-            label="Keep mask · scene segmentation (HSI)",
-            description=(
-                "Optional, HSI only. Output of a scene_segmentation "
-                "Action in this project. When set, anomaly score is "
-                "computed only on its keep_mask."
-            ),
+            label="Scene segmentation mask",
+            description="Optional.",
             ref_kind="action_output",
             producing_action_types=["scene_segmentation"],
             required=False,
         ),
         ActionInputSpec(
             key="input_cloud_mask_output_id",
-            label="Keep mask · cloud mask (thermal)",
-            description=(
-                "Optional, thermal only. Output of a cloud_mask "
-                "Action in this project. When set, anomaly score is "
-                "computed only on its keep_mask (clear, valid pixels)."
-            ),
+            label="Cloud mask",
+            description="Optional.",
             ref_kind="action_output",
             producing_action_types=["cloud_mask"],
             required=False,
         ),
         ActionInputSpec(
             key="input_annotation_id",
-            label="GT annotation (optional)",
-            description=(
-                "Optional. A raster annotation on the bound Scene. When "
-                "set, the worker computes per-model ROC + AUC against it."
-            ),
+            label="Ground truth",
+            description="Optional; adds ROC curves.",
             ref_kind="annotation",
             required=False,
         ),
@@ -339,13 +348,15 @@ META = ActionTypeMeta(
             always_present=False,
         ),
     ],
-    accepted_sensor_types=["prisma", "enmap", "landsat9", "aviris_ng", "hotsat1"],
+    accepted_sensor_types=["prisma", "enmap", "landsat9", "aviris_ng", "hotsat1", "tanager", "generic_hsi"],
     default_config_per_sensor={
         "prisma": _DEFAULT_PRISMA,
         "enmap": _DEFAULT_ENMAP,
         "landsat9": _DEFAULT_LANDSAT9,
         "aviris_ng": _DEFAULT_AVIRIS_NG,
         "hotsat1": _DEFAULT_HOTSAT1,
+        "tanager": _DEFAULT_TANAGER,
+        "generic_hsi": _DEFAULT_GENERIC_HSI,
     },
 )
 
@@ -420,6 +431,19 @@ def validate_config(raw_cfg: dict[str, Any], sensor_type: str) -> dict[str, Any]
             "input_cloud_mask_output_id — cloud_mask is thermal-only. "
             "Use input_scene_segmentation_output_id instead."
         )
+
+    if parsed.exclude_classes is not None:
+        unknown = set(parsed.exclude_classes) - set(SCORING_EXCLUDABLE_CLASSES)
+        if unknown:
+            raise ValueError(
+                f"exclude_classes: unknown classes {sorted(unknown)}; "
+                f"choose from {list(SCORING_EXCLUDABLE_CLASSES)}"
+            )
+        if not parsed.input_scene_segmentation_output_id:
+            raise ValueError(
+                "exclude_classes needs a scene segmentation input (method "
+                "indradhanu_v2): the classes are read from its class map"
+            )
 
     for override_codename, override in parsed.model_overrides.items():
         m = picked.get(override_codename)

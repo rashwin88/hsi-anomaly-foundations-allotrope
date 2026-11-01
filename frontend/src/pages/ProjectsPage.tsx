@@ -24,6 +24,8 @@ const SENSOR_LABELS: Record<string, string> = {
   enmap: "EnMAP",
   aviris_ng: "AVIRIS-NG",
   hotsat1: "HotSAT-1",
+  tanager: "Tanager",
+  generic_hsi: "Other hyperspectral",
 };
 
 function formatDate(iso: string | null): string {

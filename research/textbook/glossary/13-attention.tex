@@ -1,0 +1,20 @@
+\glossentry{Token}{A short vector of numbers that stands for one small block of the image; at stage 1 of the encoder, 32 numbers for one 4-by-4 block of pixels.}
+\glossentry{Dot product}{The sum of the products of matching components of two equal-length vectors; large when they point the same way, zero when they are at right angles.}
+\glossentry{Softmax}{The function that turns a list of scores into positive weights summing to one, by exponentiating each score and dividing by the total.}
+\glossentry{Stable softmax}{Computing the softmax after subtracting the largest score from all scores, which leaves the result unchanged and prevents overflow.}
+\glossentry{Saturation (softmax)}{The state in which one score is so far above the others that it takes almost all the weight and the softmax's derivatives are almost zero.}
+\glossentry{Query}{The learned projection of a token that expresses what it is looking for; compared against every key.}
+\glossentry{Key}{The learned projection of a token that expresses what it advertises about itself; compared against queries.}
+\glossentry{Value}{The learned projection of a token that it hands over, in proportion to its attention weight, when another token attends to it.}
+\glossentry{Linear layer}{A matrix product plus a bias vector, mapping a vector of length C-in to one of length C-out with C-in times C-out plus C-out parameters.}
+\glossentry{Attention matrix}{The N-by-N (or N-by-N-reduced) matrix of softmax weights; row i says how query i shares its attention among the keys, and every row sums to one.}
+\glossentry{Scaled dot-product attention}{softmax of Q times K-transpose divided by the square root of the head dimension, multiplied by V.}
+\glossentry{Head dimension}{The number of features each attention head works with, d = C / h.}
+\glossentry{Multi-head attention}{Several attentions run side by side on separate slices of the features, concatenated and mixed by an output projection.}
+\glossentry{Output projection}{The final C-by-C linear layer of an attention module, which lets the separate heads' outputs interact.}
+\glossentry{Permutation equivariance}{The property that reordering the input tokens reorders the outputs the same way and changes nothing else; plain attention has it, so it cannot tell where a token is.}
+\glossentry{Positional encoding}{A vector added to each token to tell a transformer where the token sits; Indradhanu has none and gets position from a depthwise convolution instead.}
+\glossentry{Self-attention}{Attention in which queries, keys and values all come from the same set of tokens.}
+\glossentry{Cross-attention}{Attention in which the queries come from one set and the keys and values from another.}
+\glossentry{Variance}{The average squared distance of a random number from its mean; its square root is the standard deviation.}
+\glossentry{Float32}{The 32-bit floating-point number format; its largest value is about 3.4 times 10 to the 38, so exp of anything above 88.72 overflows.}

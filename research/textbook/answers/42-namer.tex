@@ -1,0 +1,102 @@
+\answersfor{ch:namer}
+
+\begin{solution}{ex:namer:1}
+Still 0.20. The halo and the target lie within Chebyshev distance 2 of the centre, so they are inside both the
+$15\times15$ and the $5\times5$ boxes and cancel in the difference:
+\begin{align*}
+S_{15}-S_5 &= (216\times0.20+8\times0.60+0.90)-(16\times0.20+8\times0.60+0.90)\\
+&= 216\times0.20-16\times0.20 = 200\times0.20 = 40.0,\qquad \vect{r}=40.0/200=0.20 .
+\end{align*}
+\end{solution}
+
+\begin{solution}{ex:namer:2}
+\begin{align*}
+P(a\le0.25) &= \frac{\ln(0.25/0.02)}{\ln(1/0.02)} = \frac{\ln12.5}{\ln50} = \frac{2.5257}{3.9120} = 0.6456,\\
+\E[a] &= \frac{1-0.02}{\ln50} = \frac{0.98}{3.9120} = 0.2505 .
+\end{align*}
+Lowering $a_{\min}$ pushes even more of the training to small fills: from 0.5372 to 0.6456 at or below 0.25, and the
+mean falls from 0.3171 to 0.2505 \tagC.
+\end{solution}
+
+\begin{solution}{ex:namer:3}
+\begin{align*}
+a\vect{t} &= (0.5\times0.30,\ 0.5\times0.10) = (0.15,\ 0.05),\\
+(1-a)\vect{b} &= (0.5\times0.20,\ 0.5\times0.40) = (0.10,\ 0.20),\\
+\text{sum} &= (0.25,\ 0.25),\\
+\vect{x} &= (1.1\times0.25,\ 0.9\times0.25) = (0.275,\ 0.225).
+\end{align*}
+\end{solution}
+
+\begin{solution}{ex:namer:4}
+Metal's only remaining member is $e_2$, and the logsumexp of one number is that number: $S_{\text{metal}}=7.0$.
+\begin{align*}
+e^{7.0} &= 1096.63,\quad e^{7.5}=1808.04,\quad e^{2.0}=7.39,\quad \text{sum}=2912.06,\\
+P(\text{metal}) &= 1096.63/2912.06 = 0.3766,\qquad L=-\ln0.3766 = 0.9766 .
+\end{align*}
+Fewer class members, less evidence: the loss is higher than the 0.7931 of \cref{we:namer:classscore}.
+\end{solution}
+
+\begin{solution}{ex:namer:5}
+The stem (17,825), the BatchNorm (128) and the two scalars (2) do not depend on \code{hidden} or \code{embed}.
+\begin{align*}
+\text{pixel MLP} &= (192\times128+128)+(128\times128+128)+(128\times128+128)\\
+&= 24{,}704+16{,}512+16{,}512 = 57{,}728,\\
+\text{heads} &= (128\times64+64)+2\times(128+1) = 8{,}256+258 = 8{,}514,\\
+\text{library MLP} &= (64\times128+128)+(128\times128+128)+(128\times64+64)\\
+&= 8{,}320+16{,}512+8{,}256 = 33{,}088,\\
+\text{total} &= 57{,}728+8{,}514+33{,}088+17{,}825+128+2 = 117{,}285 .
+\end{align*}
+Instantiation gives 117,285 \tagC. The stem is then 15\% of the model.
+\end{solution}
+
+\begin{solution}{ex:namer:6}
+It needs ACE's recall plus 0.10, $0.7724+0.10=0.8724$ (\cref{tab:namer:bars}). At 0.85 it does not pass on PRISMA, even
+though its false alarms equal ACE's.
+\end{solution}
+
+\begin{solution}{ex:namer:7}
+\begin{align*}
+\sum_j\big(q_j-\mathbf{1}[j\in c]\,w_j\big) &= \sum_j q_j-\sum_{j\in c}w_j = 1-1 = 0,
+\end{align*}
+because the $q_j$ are a softmax over all entries and the $w_j$ a softmax over the true class's entries. A step
+redistributes score; it cannot raise all of them.
+\end{solution}
+
+\begin{solution}{ex:namer:8}
+The natural class now has two members of score 5.5:
+\begin{align*}
+S_{\text{nat}} &= \ln(e^{5.5}+e^{5.5}) = 5.5+\ln2 = 5.5+0.6931 = 6.1931,\\
+\ell &= 6.3133-6.1931 = 0.1201\ \ (\text{from unrounded values}),\\
+p &= \sigma(0.1201) = 1/(1+e^{-0.1201}) = 1/(1+0.8868) = 0.5300,\\
+L_1 &= -\ln0.5300 = 0.6349,\qquad p-y = -0.4700 .
+\end{align*}
+Gradients by \cref{eq:namer:l1grad}: within the man-made side $u=(0.7311,0.2689)$ as before; within the natural side
+$v=(0.5,0.5)$:
+\begin{align*}
+\text{plastic} &: -0.4700\times0.7311 = -0.3436, & \text{metal} &: -0.4700\times0.2689 = -0.1264,\\
+\text{soil} &: +0.4700\times0.5 = +0.2350, & \text{water} &: +0.4700\times0.5 = +0.2350 .
+\end{align*}
+They sum to zero; autograd agrees \tagC. The natural side gained: $P(M)$ fell from 0.6928 to 0.5300 although no score
+changed. One more natural entry at the same score adds $\ln2$ to $S_{\text{nat}}$. This is the count offset of
+\cref{sec:namer:level1}, and the bias $b$ is what can undo it.
+\end{solution}
+
+\begin{solution}{ex:namer:9}
+Gaps: $1800-1790=10$; $1960-1800=160$, capped to 20; $1970-1960=10$. Widths:
+\begin{align*}
+w_{1790} &= 10,\quad w_{1800}=(10+20)/2=15,\quad w_{1960}=(20+10)/2=15,\quad w_{1970}=10 .
+\end{align*}
+Bins: $\lfloor(1790-400)/40\rfloor=\lfloor34.75\rfloor=34$; $\lfloor1400/40\rfloor=35$; $\lfloor1560/40\rfloor=39$;
+$\lfloor1570/40\rfloor=\lfloor39.25\rfloor=39$. The code gives the same \tagC. Bins 36 to 38 hold none of these bands and
+would be masked out of attention.
+\end{solution}
+
+\begin{solution}{ex:namer:10}
+With every $s_j=s$, $\sum_{\mathcal{M}}e^{s_j}=125\,e^{s}$ and $\sum_{\mathcal{N}}e^{s_j}=219\,e^{s}$. By
+\cref{eq:namer:l1share} with $b=0$:
+\begin{align*}
+P(M) &= \frac{125\,e^{s}}{125\,e^{s}+219\,e^{s}} = \frac{125}{344} = 0.3634 .
+\end{align*}
+For $\frac12$ the two sides must weigh the same: $e^{b}\times125=219$, so $b=\ln(219/125)=0.5608$ \tagC. A pixel that
+looks like nothing in particular starts out ``natural'', by the count of entries alone, until $b$ learns otherwise.
+\end{solution}

@@ -75,7 +75,8 @@ class ModelCapabilities:
     # app/ sits at /srv/app/) and local dev.
     pixel_stats_relpath: str | None = None
     # Band grid the model reads: "common165" (band_filter_apply's default resample) or "native" (the sensor's own
-    # bands, band_filter_apply with use_common_wavelength_grid=False). anomaly_scoring refuses a mismatch.
+    # bands, band_filter_apply with use_common_wavelength_grid=False, the sensor default since 2026-10-31). anomaly_scoring
+    # refuses a native model on the 165 grid and resamples native bands for a common165 model.
     band_grid: str = "common165"
     # Segmentation classes scored 0 AFTER scoring (the evaluated semantics, docs/proposals/ship-ft04.md); only for
     # models with a segmentation head. Classes: water, cloud, shadow, snow.
@@ -260,6 +261,10 @@ _SCENE_SENSOR_FAMILY: dict[str, str] = {
     # common-grid reflectance cube PRISMA/EnMAP produce, so the same
     # hyperspectral foundation models apply unchanged.
     "aviris_ng": "hyperspectral",
+    # Planet Tanager: native 5 nm reflectance like AVIRIS-NG; Indradhanu V2 reads its trained bands from it.
+    "tanager": "hyperspectral",
+    # Any other hyperspectral file, read by GDAL (docs/lld/generic-hsi.md). Native bands, like Tanager.
+    "generic_hsi": "hyperspectral",
     # HotSat-1 L2 Visual is single-band thermal but ships uncalibrated
     # DN, not Kelvin. The anomaly_scoring action handler detects the
     # vendable's ``units == "DN_14bit_relative"`` and overrides the
@@ -532,3 +537,41 @@ def _parse_int_list(s: str) -> list[int]:
         except ValueError:
             continue
     return out
+
+
+# --- The spectral namer -------------------------------------------------
+#
+# Not a reconstruction model, so it has no _CAPABILITIES entry and list_catalog skips it; the
+# /models list skips its directory. spectral_library_match reads its manifest
+# directly. Swapping checkpoints (N001b -> N003) is an edit of current.file in the manifest.
+
+NAMER_ARCHITECTURE = "spectral_namer"
+
+
+@dataclass(frozen=True)
+class NamerModel:
+    checkpoint_abs_path: str
+    checkpoint_filename: str
+    codename: str
+    label: str
+    version: str
+    epoch: int
+
+
+def resolve_spectral_namer(models_root: Path) -> NamerModel:
+    """The checkpoint `<models_root>/spectral_namer/current.json` points at.
+
+    Raises FileNotFoundError when the manifest or its checkpoint is missing."""
+    arch_dir = models_root / NAMER_ARCHITECTURE
+    manifest_path = arch_dir / "current.json"
+    if not manifest_path.is_file():
+        raise FileNotFoundError(f"no spectral namer manifest at {manifest_path}")
+    data = json.loads(manifest_path.read_text())
+    current = data.get("current") or {}
+    ckpt = arch_dir / current.get("file", "")
+    if not current.get("file") or not ckpt.is_file():
+        raise FileNotFoundError(f"spectral namer checkpoint missing: {ckpt}")
+    return NamerModel(checkpoint_abs_path=str(ckpt), checkpoint_filename=current["file"],
+                      codename=(data.get("codename") or {}).get("name", NAMER_ARCHITECTURE),
+                      label=data.get("label", ""), version=str(current.get("version", "")),
+                      epoch=int(current.get("epoch", 0)))

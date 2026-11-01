@@ -118,6 +118,8 @@ What each sensor expects:
 | `enmap` | the **folder** containing `*-METADATA.XML` |
 | `aviris_ng` | the **folder** containing `*_corr_*.bin` |
 | `hotsat1` | the **folder** containing `metadata.json` + GeoTIFFs |
+| `tanager` | a single ortho surface-reflectance `.h5` (Planet's `ortho_sr_hdf5` asset), **or** an ENVI pair picked together: the `.hdr` plus its data file (`.img` / `.bsq` / `.bil` / `.bip` / `.dat` / no extension). If both are uploaded the `.h5` is used |
+| `generic_hsi` ("Other hyperspectral (any format)") | every file of the scene picked together: a GeoTIFF / COG, an ENVI `.hdr` + its data file (`.hsi`, `.img`, `.bsq`, ..., or none) plus an OSK `.igm` + `.igm.hdr` if there is one, or an HDF5 / NetCDF file. Add a wavelength CSV / JSON when the cube carries no band table. The Scale picker overrides the detected scale (x1, x0.0001, not reflectance). The finished job shows the pre-flight report ([lld/generic-hsi.md](lld/generic-hsi.md)) |
 
 Upload returns `202` with a `job_id`; the work happens in the worker. Watch the Jobs page.
 nginx allows 20 GB bodies with 30-minute timeouts — an AVIRIS-NG folder is ~6.5 GB.

@@ -1,0 +1,94 @@
+\answersfor{ch:measures}
+
+\begin{solution}{ex:measures:1}
+$P = 2$ targets (0.6, 0.3), $N = 2$ background pixels (0.5, 0.4). Sweep the threshold down:
+\begin{center}
+\begin{tabular}{lcccc}
+\toprule
+threshold & TP & FP & TPR & FPR \\
+\midrule
+above 0.6 & 0 & 0 & 0 & 0 \\
+0.6 (T) & 1 & 0 & 1/2 & 0 \\
+0.5 (B) & 1 & 1 & 1/2 & 1/2 \\
+0.4 (B) & 1 & 2 & 1/2 & 1 \\
+0.3 (T) & 2 & 2 & 1 & 1 \\
+\bottomrule
+\end{tabular}
+\end{center}
+ROC points: $(0,0), (0,\frac12), (\frac12,\frac12), (1,\frac12), (1,1)$.
+
+Trapezoids:
+\begin{align*}
+(0,0)\to(0,\tfrac12):&\ \text{width } 0 \to 0\\
+(0,\tfrac12)\to(\tfrac12,\tfrac12):&\ \tfrac12 \times \tfrac{\frac12+\frac12}{2} = \tfrac12 \times \tfrac12 = \tfrac14\\
+(\tfrac12,\tfrac12)\to(1,\tfrac12):&\ \tfrac12 \times \tfrac12 = \tfrac14\\
+(1,\tfrac12)\to(1,1):&\ \text{width } 0 \to 0\\
+\text{AUC} &= \tfrac14 + \tfrac14 = \tfrac12.
+\end{align*}
+Pairs ($2 \times 2 = 4$): target 0.6 beats 0.5 and 0.4 (2 wins); target 0.3 beats neither (0 wins). AUC $= 2/4 =
+0.5$.
+
+$\mathrm{pAUC}_{0.01}$: the curve is at TPR $\frac12$ from FPR 0 to $\frac12$, so the area to 0.01 is $0.01 \times
+\frac12 = 0.005$, and $0.005 / 0.01 = 0.5$. $\mathrm{TPR}@0.001$: the points with FPR $\le 0.001$ are $(0,0)$ and
+$(0, \frac12)$, so the best TPR is $\frac12$.
+
+AUC (0.5) says ``random''; pAUC (0.5, a hundred times its chance of 0.005) says the top of the list is excellent.
+Half the targets are at the very top and half at the very bottom: AUC averages the two, the top-of-list measures
+see only the first.
+\end{solution}
+
+\begin{solution}{ex:measures:2}
+Chance: the diagonal gives $\frac1m\int_0^m f\,df = \frac1m \cdot \frac{m^2}{2} = \frac m2 = \frac{0.05}{2} = 0.025$.
+
+McClish for $A = 0.02$:
+\begin{align*}
+A_{\min} &= m^2/2 = 0.05^2 / 2 = 0.0025 / 2 = 0.00125\\
+A_{\max} &= m = 0.05\\
+\frac{A - A_{\min}}{A_{\max} - A_{\min}} &= \frac{0.02 - 0.00125}{0.05 - 0.00125} = \frac{0.01875}{0.04875} = 0.3846\\
+\mathrm{pAUC}^{\text{McClish}} &= \tfrac12(1 + 0.3846) = \tfrac12 \times 1.3846 = 0.6923.
+\end{align*}
+On the repository's scale the same area is $0.02 / 0.05 = 0.40$ (chance 0.025).
+\end{solution}
+
+\begin{solution}{ex:measures:3}
+Cells (0,0), (1,0), (1,1). Their 4-neighbours not in the object:
+\begin{itemize}
+\item from (0,0): $(-1,0)$, $(0,-1)$, $(0,1)$ [$(1,0)$ is in the object];
+\item from (1,0): $(2,0)$, $(1,-1)$ [$(0,0)$ and $(1,1)$ are in the object];
+\item from (1,1): $(2,1)$, $(1,2)$ [$(0,1)$ already counted; $(1,0)$ in the object].
+\end{itemize}
+That is $3 + 2 + 2 = 7$ neighbours, so $m = 3 + 7 = 10$.
+\begin{align*}
+0.99^{10} &= 0.99^5 \times 0.99^5 = 0.95099 \times 0.95099 = 0.90438\\
+P(\text{caught}) &= 1 - 0.90438 = 0.0956.
+\end{align*}
+About 9.6\%; the straight three-in-a-row (m = 11) gets 10.5\% because a straight line exposes one more neighbour.
+\end{solution}
+
+\begin{solution}{ex:measures:4}
+\begin{align*}
+n_{\text{pts}} &= \min(256, \max(20, 600{,}000 /\!/ 10{,}000 + 64)) = \min(256, \max(20, 60 + 64)) = 124\\
+\text{spacing} &= 100 / (124 - 1) = 100 / 123 = 0.813 \text{ percentile.}
+\end{align*}
+The sampled thresholds below the maximum flag the top 0.813\%, then 1.626\%, \ldots{} So only one sampled point
+lies between 0 and 1\% of the pixels, and the first-1\% area is a single straight-line guess.
+\end{solution}
+
+\begin{solution}{ex:measures:5}
+\begin{align*}
+\text{chance, 1 pixel} &= 1 - 0.99^5 = 0.049\\
+\text{chance, domino} &= 1 - 0.99^8 = 0.077\\
+\text{mean} &= (0.049 + 0.077)/2 = 0.126/2 = 0.063\\
+12\% / 6.3\% &= 0.12 / 0.063 = 1.9.
+\end{align*}
+The model catches 1.9 times as many objects as random scores would.
+\end{solution}
+
+\begin{solution}{ex:measures:6}
+Background pixels in descending order: 0.5 and 0.4. When the walk reaches 0.5, one target (0.6) has been passed:
+TPR $\frac12$. When it reaches 0.4, still one target: TPR $\frac12$. Each rectangle has width $1/N = \frac12$:
+\[
+\text{AUC} = \tfrac12 \times \tfrac12 + \tfrac12 \times \tfrac12 = \tfrac14 + \tfrac14 = \tfrac12.
+\]
+The same 0.5 as the trapezoids and the pair count.
+\end{solution}

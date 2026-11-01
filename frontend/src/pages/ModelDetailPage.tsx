@@ -7,7 +7,6 @@
 // Sequence diagram: final design/diagrams/models-detail.drawio
 
 import {
-  Background,
   Controls,
   MiniMap,
   ReactFlow,
@@ -66,7 +65,7 @@ function StageLegend() {
           <span key={kind} className="model-detail__legend-item">
             <span
               className="model-detail__legend-swatch"
-              style={{ background: c.bg, borderColor: c.border }}
+              style={{ background: "transparent", borderColor: c.badge }}
             />
             {label}
           </span>
@@ -449,19 +448,18 @@ function ModelDetailInner({ model, flow, error }: InnerProps) {
                       elementsSelectable={false}
                       proOptions={{ hideAttribution: true }}
                       defaultEdgeOptions={{
-                        style: { stroke: "#94a3b8", strokeWidth: 1.6 },
+                        style: { stroke: "var(--ink-3)", strokeWidth: 1 },
                         labelStyle: {
-                          fontFamily:
-                            "ui-monospace, SFMono-Regular, Menlo, monospace",
-                          fontSize: 10,
-                          fill: "#475569",
+                          fontFamily: "var(--font-ui)",
+                          fontStyle: "italic",
+                          fontSize: 11,
+                          fill: "var(--ink-2)",
                         },
-                        labelBgStyle: { fill: "#f8fafc", opacity: 0.92 },
+                        labelBgStyle: { fill: "var(--paper)", opacity: 0.92 },
                         labelBgPadding: [4, 2] as [number, number],
-                        labelBgBorderRadius: 3,
+                        labelBgBorderRadius: 0,
                       }}
                     >
-                      <Background gap={18} size={1} color="#cbd5e1" />
                       <MiniMap
                         pannable
                         zoomable
@@ -472,8 +470,8 @@ function ModelDetailInner({ model, flow, error }: InnerProps) {
                           }
                           return "#64748b";
                         }}
-                        maskColor="rgba(241, 245, 249, 0.65)"
-                        style={{ background: "#f8fafc", border: "1px solid #cbd5e1" }}
+                        maskColor="rgba(128, 128, 120, 0.15)"
+                        style={{ background: "var(--paper)", border: "1px solid var(--rule)" }}
                       />
                       <Controls showInteractive={false} />
                     </ReactFlow>

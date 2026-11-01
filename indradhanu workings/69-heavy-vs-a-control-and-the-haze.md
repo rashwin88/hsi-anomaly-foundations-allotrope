@@ -9,9 +9,9 @@
 ## Where we are
 
 **Status (2026-10-29): H100 block 1 done at 10:39 UTC. Release candidate: FTH3 epoch 5, real-bench
-pAUC 0.189 against shipped FT04's 0.170, resolved; caught at the top 0.1% a tie. Not shipped: the
-product still runs Indradhanu V2 (FT04) opt-in and v0.2.0 by default, and shipping Heavy is the user's
-call.**
+pAUC 0.189 against shipped FT04's 0.170, resolved; caught at the top 0.1% a tie. Shipped the same
+day: on 2026-10-29 FTH3 epoch 5 became Indradhanu V2 `v2.1.0`, opt-in next to v0.2.0, which is still
+the default (part 70). When this part was first written, Heavy was not yet shipped.**
 
 | file | what it holds |
 |---|---|
@@ -379,5 +379,5 @@ Not for this product. See the lesson table.
 
 ---
 
-That is the course so far. Indradhanu V2 (FT04, part 61) is still what ships; Indradhanu Heavy is the
-base model, and FTH3 epoch 5 is the release candidate waiting on the product work above.
+Next: part 70, Heavy in the product - the three items above were done and FTH3 epoch 5 shipped as
+Indradhanu V2 `v2.1.0` on 2026-10-29.

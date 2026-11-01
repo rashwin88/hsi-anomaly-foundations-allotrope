@@ -8,6 +8,9 @@
 //   prisma   → single .he5
 //   landsat9 → single .tif
 //   enmap    → directory (webkitdirectory) — multi-file
+//   tanager  → one .h5, or an ENVI .hdr + data file (multiple, no folder)
+//   generic_hsi → any GDAL cube plus its sidecars (multiple, any extension), an optional
+//              scale override, and the reader's pre-flight report once the job finishes
 //
 // Storyboard-spec § 5 (Scenes destination) — Ingest is the data-in
 // surface; everything else on this page is read.
@@ -18,6 +21,7 @@ import { type FormEvent, useEffect, useRef, useState } from "react";
 import { ApiError } from "../api/client";
 import { onboardScene } from "../api/scenes";
 import { useJobStatus } from "../hooks/useJobStatus";
+import { PreflightReport } from "./PreflightReport";
 import type { SensorType } from "../types";
 import { useToast } from "./Toast";
 
@@ -32,6 +36,16 @@ const SENSOR_OPTIONS: { value: SensorType; label: string; hint: string }[] = [
   { value: "enmap", label: "EnMAP", hint: "folder containing METADATA.XML + TIFs" },
   { value: "aviris_ng", label: "AVIRIS-NG", hint: "ang<date>t<time> folder containing _corr_.bin + .hdr" },
   { value: "hotsat1", label: "HotSAT-1", hint: "SatVu L2 Visual folder with metadata.json + _ortho.tiff + _udm.tiff" },
+  { value: "tanager", label: "Tanager", hint: "Planet Tanager ortho surface reflectance: one .h5, or an ENVI .hdr + its data file (pick both)" },
+  { value: "generic_hsi", label: "Other hyperspectral (any format)", hint: "GeoTIFF / COG, ENVI .hdr + data (.hsi, .img, ...; add the .igm), or HDF5 / NetCDF. Add a wavelength CSV / JSON if the cube has none. Pick every file at once" },
+];
+
+// generic_hsi scale override (backend/allotrope/api/scenes.py `scale_override`).
+const SCALE_OPTIONS: { value: string; label: string }[] = [
+  { value: "auto", label: "Detect (recommended)" },
+  { value: "x1", label: "Reflectance 0-1 (x1)" },
+  { value: "x0.0001", label: "Reflectance x10000 (x0.0001)" },
+  { value: "radiance", label: "Not reflectance (DN / radiance)" },
 ];
 
 function formatBytes(b: number): string {
@@ -44,6 +58,7 @@ function formatBytes(b: number): string {
 export function IngestPanel({ onClose, onComplete }: IngestPanelProps) {
   const [sensor, setSensor] = useState<SensorType>("prisma");
   const [files, setFiles] = useState<File[]>([]);
+  const [scaleOverride, setScaleOverride] = useState("auto");
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [jobId, setJobId] = useState<string | null>(null);
@@ -108,6 +123,7 @@ export function IngestPanel({ onClose, onComplete }: IngestPanelProps) {
           // app froze at 100%.
           setStaging(true);
         },
+        sensor === "generic_hsi" && scaleOverride !== "auto" ? { scale_override: scaleOverride } : undefined,
       );
       setJobId(res.job_id);
       // Upload finished — keep the bar at 100% until the polling phase
@@ -145,7 +161,11 @@ export function IngestPanel({ onClose, onComplete }: IngestPanelProps) {
 
   const totalBytes = files.reduce((acc, f) => acc + f.size, 0);
   const isFolderSensor = sensor === "enmap" || sensor === "aviris_ng" || sensor === "hotsat1";
-  const accept = sensor === "prisma" ? ".he5" : sensor === "landsat9" ? ".tif,.tiff" : undefined;
+  const accept =
+    sensor === "prisma" ? ".he5" : sensor === "landsat9" ? ".tif,.tiff" : sensor === "tanager" ? ".h5,.he5,.hdf5,.hdr,.img,.bsq,.bil,.bip,.dat" : undefined;
+  // generic_hsi takes any extension: OSK's .hsi / .igm and wavelength sidecars are not in an accept list.
+  const preflight =
+    (job?.payload?.preflight as Record<string, unknown> | undefined) ?? null;
 
   return (
     <section className="ingest panel">
@@ -210,9 +230,23 @@ export function IngestPanel({ onClose, onComplete }: IngestPanelProps) {
                 type="file"
                 onChange={onFilesChosen}
                 accept={accept}
+                multiple={sensor === "tanager" || sensor === "generic_hsi"}   /* ENVI is a header + data pair */
               />
             )}
           </label>
+
+          {sensor === "generic_hsi" && (
+            <label className="form__field">
+              <span className="form__label">Scale</span>
+              <select value={scaleOverride} onChange={(e) => setScaleOverride(e.target.value)}>
+                {SCALE_OPTIONS.map((o) => (
+                  <option key={o.value} value={o.value}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
 
           {files.length > 0 && (
             <p className="ingest__summary">
@@ -300,6 +334,7 @@ export function IngestPanel({ onClose, onComplete }: IngestPanelProps) {
                   </>
                 )}
               </p>
+              {preflight && <PreflightReport report={preflight} />}
               <button type="button" className="form__submit" onClick={onClose}>
                 Close
               </button>

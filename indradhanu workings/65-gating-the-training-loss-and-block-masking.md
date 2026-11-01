@@ -147,6 +147,12 @@ exactly as much as FT04 did; it only hides it in bigger pieces.
 
 ### Inference cells match training
 
+> **Update 2026-10-31: this section describes code that had a leak, since fixed.** The override below
+> changed only which tokens each pass hides; the parent still chose each pixel's pass with cells of one
+> token, so half of each block's pixels were predicted by a pass that could see them. The fix moved
+> `mask_block` into the configuration in `SpectralStemInferencer.__init__`, and FT08 re-evaluated at
+> pAUC 0.1638 (was 0.164) with the same verdict. Part 70 works through it.
+
 Part 29's inference fills the scene in two complementary checkerboard passes, each pixel taken from
 the pass in which it was hidden. A model trained to fill 8 px holes but asked to fill 4 px ones sees
 more context than it ever trained on - a train-test mismatch. So `SpectralStemInferencer` overrides

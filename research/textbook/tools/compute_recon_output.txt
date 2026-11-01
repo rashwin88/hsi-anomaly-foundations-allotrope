@@ -1,0 +1,14 @@
+Indradhanu v0.2 (D=32) parameters(): 5506629
+Indradhanu v0.2 (D=32) state_dict() values: 5507354
+difference (buffers): 725
+  buffer normalize.mean (1, 165, 1, 1) 165
+  buffer normalize.std (1, 165, 1, 1) 165
+  buffer denormalize.mean (1, 165, 1, 1) 165
+  buffer denormalize.std (1, 165, 1, 1) 165
+  buffer compressor.norm.running_mean (32,) 32
+  buffer compressor.norm.running_var (32,) 32
+  buffer compressor.norm.num_batches_tracked () 1
+SpatialEncoder(1, 32, 3) parameters: 165024
+leave-one-out predictions: [1.1, 1.1, 3.05, 1.3, 3.25, 1.4]
+residuals: [-0.1, 0.0, -1.85, 3.7, -1.85, 0.1]
+self-including pred at pixel 4: 2.5333 residual 2.4667

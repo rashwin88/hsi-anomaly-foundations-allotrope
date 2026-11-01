@@ -1,0 +1,742 @@
+\chapter{Chakshu: the same machine for one thermal band}\label{ch:chakshu}
+
+\begin{onething}
+Chakshu, the product's thermal model, is the SegFormer masked autoencoder of the last nine chapters with one
+input band of surface temperature in degrees Celsius, widths shrunk to 16, 32, 64 and 96, one block per stage and a
+feed-forward expansion of 2: 406,496 trainable numbers that you can count by hand, trained to fill in 70\% hidden
+tokens of 256-pixel Landsat patches, and scored by the absolute temperature error; its one serious weakness is
+outside the network, in the normalisation path that was meant to let it read HotSat-1 and does not.
+\end{onething}
+
+You have now built Indradhanu from its parts. This chapter uses every one of those parts again, on a simpler input,
+and asks you to redo the arithmetic at new sizes. Nothing here is new machinery; what is new is the thermal domain,
+the training recipe and three places where the code and its documentation part company. It is also the chapter
+where you can check yourself: if a shape or a count below surprises you, the chapter that explains it is named
+beside it.
+
+Provenance tags abbreviate paths. \file{components/} is \file{app/foundation_models/components/}; the shipped
+checkpoint is \file{segformer_mae_v0.8.0_epoch495.pt} in the stack's \file{/models/segformer_mae/} volume, which is
+not in the repository. Its configuration is also in the repository as \file{configs/seg_former_exp_8.json}, which
+matches the checkpoint's saved configuration key for key. Every count and shape tagged \tagC{} comes from
+\file{research/textbook/tools/compute_chakshu.py}, which loads that checkpoint (copied from the volume on 2026-10-31)
+into the real classes; its output is saved beside it as \file{compute_chakshu_output.txt}.
+
+\begin{analogy}
+A town has a thermometer on every street corner. One morning you cover seven out of every ten and ask an
+apprentice to say what each covered one reads, from the uncovered ones around it. On an ordinary morning the
+apprentice is right to a fraction of a degree, because temperature varies smoothly across a town. If a warehouse is
+burning, the covered thermometer beside it reads 20 degrees more than anything its neighbours suggest, and the
+apprentice's guess is 20 degrees wrong. That error is the alarm. Two details of the analogy will matter later: the
+apprentice must never see the covered thermometer itself, and if the fire is large enough to reach an uncovered
+thermometer too, the apprentice sees part of the fire and the alarm is quieter.
+\end{analogy}
+
+%======================================================================
+\section{Why a thermal model, and why this one}\label{sec:chakshu:why}
+
+Two of the product's five sensors are \emph{thermal} (\cref{ch:light,ch:sensors}): Landsat~9's band~10 and
+SatVu's HotSat-1. Each records one number per pixel, related to how much heat the ground radiates, near
+$10.9\,\mu$m (the product files thermal scenes under the wavelength \code{10900.0} nm,
+\file{backend/allotrope/action_types/_anomaly_scoring_run.py}). A thermal anomaly is something hotter or colder than
+its surroundings say it should be: a fire, a furnace, a cooling-water plume, a vessel's engine.
+
+\begin{definition}[Land surface temperature]
+The \emph{land surface temperature}\index{land surface temperature} of a pixel is the temperature of the ground's
+skin, as inferred from the radiation it emits. The product stores it in degrees Celsius for Landsat~9.
+\end{definition}
+
+The product has two ways to score a thermal scene. The classical \code{thermal_grx} detector (\cref{ch:rx}) measures
+how far each pixel's temperature sits from the scene's mean, in standard deviations: a hot pixel in a cold field
+scores high, but so does every ordinary hot roof in a city. A reconstruction model asks a sharper question, ``is
+this pixel hot \emph{for where it is}?'', because its prediction comes from the pixel's own neighbourhood
+(\cref{ch:recon}).
+
+Which reconstruction model? \Cref{ch:convae} ran the five convolutional autoencoders over a smooth synthetic field with the
+product's own inference: their median background error ran from 0.58\,°C (Drashta) to 10.9\,°C (Pratibimba, which
+never trained with hidden pixels). Three of them cannot tell a hidden pixel from a real one at 0\,°C. The SegFormer
+design avoids that: hidden tokens are \emph{deleted} before the encoder (\cref{ch:masking}), so there is no stand-in
+value to misread, and the decoder's pixel shuffle gives every pixel its own output (\cref{ch:decoder}), so a
+one-pixel hot spot is not averaged into its neighbours. On the same synthetic field Chakshu's background error is 0.019\,°C (\cref{sec:chakshu:score}).
+
+\paragraph{Why so small.} Indradhanu's encoder is 32, 64, 160, 256 channels wide, with two blocks per stage.
+Chakshu's is 16, 32, 64, 96 with one. A thermal pixel carries one number, not 165, so there is far less to model;
+and the project's own record says the small model won. The manifest lists the larger SegFormer-B0 run (v0.1.0,
+3,714,086 numbers) as an alternative with validation loss 6.59877, against 0.2565 for the small one, and notes that
+the small one ``currently outperforms it 25$\times$ on val loss'' \tagMr{the \texttt{/models/segformer\_mae/current.json}
+manifest}. Read that comparison with care: the large run had trained for 10 epochs, the small one for 495, and the
+two losses were measured on different patch sizes (128 and 256 pixels). It shows that the large run was unfinished,
+not that the large architecture is worse.
+
+%======================================================================
+\section{The input: one band, in Celsius}\label{sec:chakshu:input}
+
+\subsection{From Landsat's numbers to degrees}
+
+Landsat~9's Level-2 surface-temperature product stores band~10 as a 16-bit integer, a \emph{digital
+number}\index{digital number} (DN). The builder (\file{app/utils/dataset_builder/landsat_dataset_builder.py}) converts
+it with the published scale and offset (\file{app/utils/data_transformations/l2sp_dn_to_temperature_transformer.py}):
+\begin{equation}\label{eq:chakshu:dn}
+T_{\mathrm{K}} = 0.00341802\cdot\mathrm{DN} + 149.0, \qquad T = T_{\mathrm{K}} - 273.15 .
+\end{equation}
+The unit is fixed to Celsius in the builder; it is not an option.
+
+\begin{worked}[label={we:chakshu:dn}]{Two Landsat pixels into degrees}
+An ordinary pixel, DN $=43{,}500$:
+\begin{align*}
+0.00341802\times43{,}500 &= 148.68387 && \text{scale}\\
+148.68387+149.0 &= 297.68387\ \text{K} && \text{offset}\\
+297.68387-273.15 &= 24.53\ \text{°C} && \text{Kelvin to Celsius}
+\end{align*}
+A hot pixel, DN $=52{,}000$: $0.00341802\times52{,}000=177.73704$; $+149.0=326.73704$\,K; $-273.15=53.59$\,°C.
+\end{worked}
+
+\subsection{The normalisation the checkpoint carries}
+
+Chakshu normalises its input with one mean and one spread, stored in the checkpoint as buffers
+(\cref{ch:bandpipeline}): $\mu_T=24.5756$ and $\sigma_T=13.5744$ \tagMr{checkpoint buffers \texttt{normalize.mean},
+\texttt{normalize.std}}. The same two numbers are in \file{app/constants/thermal_pixel_consts.json}, measured over
+10,000 Landsat patches of 64 pixels (25,413,600 valid pixels) \tagM{app/constants/thermal_pixel_consts.json}.
+\begin{equation}\label{eq:chakshu:z}
+z = \frac{T-\mu_T}{\sigma_T} .
+\end{equation}
+
+\begin{worked}[label={we:chakshu:z}]{Normalising the two pixels, and an invalid one}
+\begin{align*}
+\text{ordinary} &: (24.5339-24.5756)/13.5744 = -0.0417/13.5744 = -0.0031\\
+\text{hot} &: (53.5870-24.5756)/13.5744 = 29.0114/13.5744 = 2.1372\\
+\text{invalid, zeroed to } 0\text{ °C} &: (0-24.5756)/13.5744 = -24.5756/13.5744 = -1.8104
+\end{align*}
+The model zeroes invalid pixels \emph{before} normalising (\lstinline!x = x * mask! in \file{components/seg_former_mae.py}),
+so a cloud pixel arrives as $-1.81$: a consistent value that the network learns to read as ``no measurement''
+(\cref{ch:bandpipeline}) \tagC.
+\end{worked}
+
+\begin{sourcenote}[: Celsius near 25, not Kelvin near 290]
+Three places describe Chakshu's input wrongly. The comment above the per-scene override in
+\file{backend/allotrope/action_types/_anomaly_scoring_run.py} says the models assume ``Kelvin / reflectance'' (the same
+comment, ten lines later, says Landsat is ``already in Celsius''). \code{PixelStatsOverride}'s docstring
+(\file{app/models/training/inference_config.py}) and \file{docs/lld/pixel-stats.md} say a model ``fitted on Celsius
+(\textasciitilde290 +/- 10)'', and the LLD and the course (part AD10) work the HotSat example with a mean of 290 and
+a spread of 10. 290 is a Kelvin-sized number. The code and the checkpoint agree on Celsius: the vendable's field is
+documented as ``surface temperatures in celsius'' (\file{app/models/dataset/vendables.py}), the builder converts to
+Celsius, and the buffers are $24.58\pm13.57$. In Kelvin the mean would be $24.5756+273.15=297.73$.
+The comment in \file{components/spatial_decoder.py} (``e.g.\ surface temperatures in Kelvin'') is the same slip in
+the convolutional family.
+\end{sourcenote}
+
+%======================================================================
+\section{The configuration}\label{sec:chakshu:config}
+
+\begin{table}[htbp]
+\centering\small
+\begin{tabular}{lll}
+\toprule
+setting & Chakshu (v0.8.0, served) & class default (SegFormer-B0)\\
+\midrule
+\texttt{in\_channels} & 1 & 1\\
+\texttt{embed\_dims} & 16, 32, 64, 96 & 32, 64, 160, 256\\
+\texttt{num\_heads} & 1, 2, 4, 8 & 1, 2, 5, 8\\
+channels per head & 16, 16, 16, 12 & 32, 32, 32, 32\\
+\texttt{reduction\_ratios} & 8, 4, 2, 1 & 8, 4, 2, 1\\
+\texttt{num\_blocks} & 1, 1, 1, 1 & 2, 2, 2, 2\\
+\texttt{expansion\_ratio} $E$ & 2 & 4\\
+\texttt{decoder\_dim} & 96 & 256\\
+\texttt{drop\_rate} & 0.3 (training) & 0.3\\
+\texttt{mask\_ratio} $\rho$ & 0.7 & 0.5\\
+\texttt{trim\_fraction} $\tau$ & 0.05 & 0.0\\
+patch size in training & 256 & --\\
+\bottomrule
+\end{tabular}
+\caption{Chakshu against the defaults of \texttt{SegFormerMAEConfig} (\texttt{app/models/training/training\_config.py}).
+Source: \tagM{configs/seg_former_exp_8.json}, identical to the checkpoint's saved configuration \tagC.}
+\label{tab:chakshu:config}
+\end{table}
+
+\begin{sourcenote}[: the served model is not SegFormer-B0]
+\file{research/model_break_down/04_segformer_mae_thermal.md} draws its architecture diagram with stage widths 32, 64,
+160, 256 and two blocks per stage, and says ``The default config (used by both checkpoints)'' is SegFormer-B0. Only
+the unused alternative, v0.1.0, has that configuration. The served v0.8.0 is the shrunk one of
+\cref{tab:chakshu:config}; the same document's checkpoint table, further down, says so correctly. The book's earlier
+remark that Chakshu ``shares almost all its code with Indradhanu'' (\cref{ch:light}) is true of the classes, not of
+the sizes.
+\end{sourcenote}
+
+How does the product build this model? The worker never opens the checkpoint's configuration. The resolver
+rebuilds it from the manifest (\code{_model_config_from_manifest} in
+\file{backend/allotrope/foundation_models/resolver.py}): widths from the manifest's \code{encoder_dims} string
+\lstinline!"[16, 32, 64, 96]"!, decoder width from \code{decoder_dim}, and \emph{fixed} heads $[1,2,4,8]$, ratios
+$[8,4,2,1]$, one block per stage and expansion 2, hard-coded for \code{segformer_mae}. Those happen to equal the
+checkpoint's, and the strict load succeeds \tagC. A future thermal checkpoint with two blocks per stage would build
+the wrong model and fail to load.
+
+%======================================================================
+\section{One forward pass at full size}\label{sec:chakshu:trace}
+
+Follow one masked pass, as in training, with patches of $256\times256$ pixels, all valid, and the training mask
+ratio 0.7. Training batches hold 64 patches; take $B=8$, the product's inference batch, since the batch size changes
+no shape except the first axis.
+
+\subsection{Stage 1: the patch embedding and the deletion}
+
+The stage-1 patch embedding is a convolution with kernel 4, stride 4 and no padding (\cref{ch:patchembed}) from 1
+channel to 16. A $256\times256$ patch becomes a $64\times64$ grid:
+\begin{align*}
+\left\lfloor\frac{256+2\cdot0-4}{4}\right\rfloor+1 &= \lfloor 63\rfloor+1 = 64 && \text{output-size formula, \cref{ch:shapes}}\\
+64\times64 &= 4{,}096 \text{ tokens of 16 numbers.}
+\end{align*}
+Each token is a weighted sum of its own $4\times4=16$ temperatures and nothing else: the weights form a $16\times16$
+matrix, one row per output channel. With one input band, stage~1 is exactly a linear map from a block's 16
+temperatures to 16 features, followed by LayerNorm.
+
+\begin{worked}[label={we:chakshu:mask}]{How many tokens a training pass hides}
+The hiding count rounds down (\cref{ch:masking}):
+\begin{align*}
+4{,}096\times0.7 &= 2{,}867.2 && \text{tokens to hide, unrounded}\\
+\lfloor2{,}867.2\rfloor &= 2{,}867 && \text{the code's \texttt{.long()} rounds down}\\
+4{,}096-2{,}867 &= 1{,}229 && \text{tokens the encoder sees}\\
+2{,}867\times16 &= 45{,}872 && \text{hidden pixels, the loss's positions}
+\end{align*}
+Running the real encoder gives 2,867 hidden and 1,229 kept per item \tagC.
+\end{worked}
+
+The encoder sees 1,229 of 4,096 tokens, 30\%. Indradhanu hides 65\% (\cref{ch:masking}); Chakshu hides more because a
+temperature field is smoother than a reflectance cube, so the same context predicts more of it. That is a design
+judgement recorded only in the configuration's value; no document gives the reason.
+
+\subsection{The four stages}
+
+\begin{table}[htbp]
+\centering\small
+\begin{tabular}{@{}lp{0.36\linewidth}lp{0.2\linewidth}@{}}
+\toprule
+stage & step & shape after the step & note\\
+\midrule
+input & normalise, $z=(T-\mu_T)/\sigma_T$ & \shape{(8, 1, 256, 256)} & \cref{we:chakshu:z}\\
+1 & patch embed $k4\,s4\,p0$, $1\to16$ & \shape{(8, 4096, 16)} & 64 $\times$ 64 grid\\
+ & remove hidden tokens & \shape{(8, 1229, 16)} & 2,867 deleted\\
+ & 1 block: attention, Mix-FFN ($16\to32\to16$) & \shape{(8, 1229, 16)} & full attention; no depthwise conv\\
+ & LayerNorm, restore, reshape & \shape{(8, 16, 64, 64)} = F1 & zeros at hidden tokens\\\midrule
+2 & patch embed $k3\,s2\,p1$, $16\to32$ & \shape{(8, 1024, 32)} & 32 $\times$ 32 grid\\
+ & 1 block, $R=4$, 2 heads; FFN $32\to64\to32$ & \shape{(8, 1024, 32)} & 64 keys\\
+ & LayerNorm, reshape & \shape{(8, 32, 32, 32)} = F2 & \\\midrule
+3 & patch embed, $32\to64$; 1 block, $R=2$, 4 heads & \shape{(8, 256, 64)} & 64 keys\\
+ & reshape & \shape{(8, 64, 16, 16)} = F3 & \\\midrule
+4 & patch embed, $64\to96$; 1 block, $R=1$, 8 heads & \shape{(8, 64, 96)} & 64 keys\\
+ & reshape & \shape{(8, 96, 8, 8)} = F4 & \\
+\bottomrule
+\end{tabular}
+\caption{Chakshu's encoder on a masked training pass, $B=8$, $256\times256$, $\rho=0.7$. Forward hooks on the real
+modules record every shape \tagC.}
+\label{tab:chakshu:encoder}
+\end{table}
+
+Two rows deserve a second look. At stage~1 the token count after deletion, 1,229, is not $64\times64$, so efficient
+self-attention cannot rebuild its grid and attends over all kept tokens with no reduction, and Mix-FFN skips its
+depthwise convolution (\cref{ch:esa,ch:block}, the \code{can_reduce} test). And at stage~4 each head is
+$96/8=12$ channels wide, not a power of two: harmless, since nothing in attention needs one.
+
+\begin{worked}[label={we:chakshu:keys}]{Every stage attends to 64 keys}
+Efficient self-attention shrinks the key grid by $R$ on each side (\cref{ch:esa}). At $256\times256$:
+\begin{align*}
+\text{stage 1} &: (64/8)^2 = 8^2 = 64 \text{ keys for } 4{,}096 \text{ queries}\\
+\text{stage 2} &: (32/4)^2 = 8^2 = 64 \text{ keys for } 1{,}024 \text{ queries}\\
+\text{stage 3} &: (16/2)^2 = 8^2 = 64 \text{ keys for } 256 \text{ queries}\\
+\text{stage 4} &: (8/1)^2 = 64 \text{ keys for } 64 \text{ queries}
+\end{align*}
+Unmasked, stage~1's score table has $4{,}096\times64=262{,}144$ entries per head. Masked, it falls back to full
+attention among the kept tokens: in training $1{,}229^2=1{,}510{,}441$, and at inference, where half the tokens are
+kept, $2{,}048^2=4{,}194{,}304$, sixteen times the unmasked table \tagC. The fallback is the expensive case.
+\end{worked}
+
+\subsection{The decoder}
+
+The decoder is \code{SegFormerDecoder} (\cref{ch:decoder}) at width 96, writing $1\times4\times4=16$ channels for the
+pixel shuffle:
+\begin{center}\small
+\begin{tabular}{@{}lll@{}}
+\toprule
+step & operation & shape\\
+\midrule
+project & $1\times1$ conv of each F$_i$ to 96 channels & F1 \shape{(8, 96, 64, 64)}, \dots, F4 \shape{(8, 96, 8, 8)}\\
+upsample & bilinear, to $64\times64$ & four of \shape{(8, 96, 64, 64)}\\
+concatenate & along channels & \shape{(8, 384, 64, 64)}\\
+fuse & $1\times1$ conv $384\to96$, GELU & \shape{(8, 96, 64, 64)}\\
+refine & $3\times3$ conv $96\to96$, GELU & \shape{(8, 96, 64, 64)}\\
+sub-pixel & $3\times3$ conv $96\to16$, no activation & \shape{(8, 16, 64, 64)}\\
+pixel shuffle & factor 4 & \shape{(8, 1, 256, 256)}\\
+denormalise & $T=z\,\sigma_T+\mu_T$ & \shape{(8, 1, 256, 256)}, in °C\\
+\bottomrule
+\end{tabular}
+\end{center}
+Every shape was recorded by forward hooks \tagC. \Cref{fig:chakshu:trace} draws the whole pass.
+
+\begin{figure}[htbp]\centering
+\begin{tikzpicture}[node distance=3.6mm,
+  box/.style={draw,rounded corners=2pt,minimum width=5.6cm,minimum height=6mm,font=\small,align=center},
+  lab/.style={font=\footnotesize\ttfamily,anchor=west},
+  side/.style={font=\footnotesize,anchor=east}]
+\node[box,fill=loss!12] (in) {temperature $T$, °C};
+\node[box,below=of in] (mask) {zero invalid pixels; $z=(T-24.58)/13.57$};
+\node[box,below=of mask,fill=spat!15] (s1) {stage 1: embed $1\to16$, delete 70\%, 1 block};
+\node[box,below=of s1,fill=spat!15] (s2) {stage 2: embed $16\to32$, 1 block, $R=4$};
+\node[box,below=of s2,fill=spat!15] (s3) {stage 3: embed $32\to64$, 1 block, $R=2$};
+\node[box,below=of s3,fill=spat!15] (s4) {stage 4: embed $64\to96$, 1 block, $R=1$};
+\node[box,below=of s4,fill=attn!12] (fuse) {project to 96, upsample, fuse $384\to96$};
+\node[box,below=of fuse,fill=attn!12] (ref) {refine $3\times3$; sub-pixel $96\to16$};
+\node[box,below=of ref,fill=attn!12] (ps) {pixel shuffle $\times4$};
+\node[box,below=of ps,fill=loss!12] (out) {denormalise: reconstruction $\hat T$, °C};
+\foreach \a/\b in {in/mask,mask/s1,s1/s2,s2/s3,s3/s4,s4/fuse,fuse/ref,ref/ps,ps/out}
+  \draw[-{Stealth}] (\a) -- (\b);
+\node[lab] at ($(in.east)+(2mm,0)$) {(8, 1, 256, 256)};
+\node[lab] at ($(s1.east)+(2mm,0)$) {(8, 4096, 16) -> 1229 kept};
+\node[lab] at ($(s1.east)+(2mm,-3.4mm)$) {F1 (8, 16, 64, 64)};
+\node[lab] at ($(s2.east)+(2mm,0)$) {F2 (8, 32, 32, 32)};
+\node[lab] at ($(s3.east)+(2mm,0)$) {F3 (8, 64, 16, 16)};
+\node[lab] at ($(s4.east)+(2mm,0)$) {F4 (8, 96, 8, 8)};
+\node[lab] at ($(fuse.east)+(2mm,0)$) {(8, 96, 64, 64)};
+\node[lab] at ($(ref.east)+(2mm,0)$) {(8, 16, 64, 64)};
+\node[lab] at ($(ps.east)+(2mm,0)$) {(8, 1, 256, 256)};
+\node[lab] at ($(out.east)+(2mm,0)$) {(8, 1, 256, 256)};
+\node[side] at ($(mask.west)+(-2mm,0)$) {ch.~\ref{ch:bandpipeline}};
+\node[side] at ($(s1.west)+(-2mm,0)$) {ch.~\ref{ch:patchembed}, \ref{ch:masking}};
+\node[side] at ($(s2.west)+(-2mm,0)$) {ch.~\ref{ch:esa}--\ref{ch:encoder}};
+\node[side] at ($(fuse.west)+(-2mm,0)$) {ch.~\ref{ch:decoder}};
+\end{tikzpicture}
+\caption{Chakshu's forward pass on a masked batch of eight $256\times256$ Landsat patches, with the shape after each
+box (recorded by forward hooks on the real model \tagC). Blue: encoder; plum: decoder; amber: the two ends, in
+degrees Celsius. The chapters on the left explain each box.}
+\label{fig:chakshu:trace}
+\end{figure}
+
+%======================================================================
+\section{The parameters, counted by hand}\label{sec:chakshu:params}
+
+\Cref{ch:params} counted a block with expansion 4. Chakshu's expansion is 2, so first generalise the block formula to
+any expansion $E$, then use it. The counting rules are those of \cref{sec:params:rules}: a linear layer from $a$ to
+$b$ has $ab+b$, a convolution $c_\text{in}c_\text{out}k^2+c_\text{out}$, a depthwise convolution $ck^2+c$, a
+LayerNorm $2c$.
+
+\subsection{A block of width \texorpdfstring{$C$}{C}, reduction \texorpdfstring{$R$}{R}, expansion \texorpdfstring{$E$}{E}}
+
+\begin{align*}
+\text{norm1} &: 2C\\
+\text{q, k, v, proj} &: 4\,(C\cdot C+C) = 4C^2+4C\\
+\text{reduction conv } (R>1) &: C\cdot C\cdot R^2+C = R^2C^2+C\\
+\text{reduction norm } (R>1) &: 2C\\
+\text{norm2} &: 2C\\
+\text{fc1 } (C\to EC) &: C\cdot EC+EC = EC^2+EC\\
+\text{depthwise } 3\times3 \text{ on } EC &: EC\cdot9+EC = 10EC\\
+\text{fc2 } (EC\to C) &: EC\cdot C+C = EC^2+C
+\end{align*}
+Collect the $C^2$ terms: $4+R^2+E+E=4+R^2+2E$. Collect the $C$ terms: $2+4+1+2+2+E+10E+1=12+11E$. So
+\begin{equation}\label{eq:chakshu:block}
+P_\text{block}(C,R,E) = (4+2E+R^2)\,C^2 + (12+11E)\,C \quad (R>1),
+\end{equation}
+and for $R=1$ drop the reduction convolution and its norm: $(4+2E)\,C^2+(9+11E)\,C$.
+
+\emph{Check against \cref{ch:params}.} With $E=4$ the coefficients are $4+8+R^2=12+R^2$ and $12+44=56$.
+\Cref{eq:params:block} gives $12C^2+53C+R^2C^2+3C=(12+R^2)C^2+56C$ for $R>1$: the two agree. With $E=2$ the
+coefficients are $8+R^2$ and $34$ (31 for $R=1$).
+
+\begin{worked}[label={we:chakshu:blocks}]{Chakshu's four blocks}
+\begin{align*}
+C=16,R=8 &: (8+64)\times256+34\times16 = 72\times256+544 = 18{,}432+544 = 18{,}976\\
+C=32,R=4 &: (8+16)\times1{,}024+34\times32 = 24{,}576+1{,}088 = 25{,}664\\
+C=64,R=2 &: (8+4)\times4{,}096+34\times64 = 49{,}152+2{,}176 = 51{,}328\\
+C=96,R=1 &: 8\times9{,}216+31\times96 = 73{,}728+2{,}976 = 76{,}704
+\end{align*}
+Line by line for stage 1, to see where the weight is: norm1 32; q, k, v, proj $4\times272=1{,}088$; reduction
+$16\times16\times64+16=16{,}400$; reduction norm 32; norm2 32; fc1 $16\times32+32=544$; depthwise $32\times9+32=320$;
+fc2 $32\times16+16=528$. Sum: $32+1{,}088+16{,}400+32+32+544+320+528=18{,}976$. The $8\times8$ reduction convolution
+is $16{,}400/18{,}976=86\%$ of the block. All four match the built model \tagC.
+\end{worked}
+
+\subsection{The rest of the encoder}
+
+Patch embeddings, each a convolution plus a LayerNorm of $2c_\text{out}$:
+\begin{align*}
+\text{stage 1 } (k=4) &: 1\times16\times16+16+32 = 256+48 = 304\\
+\text{stage 2 } (k=3) &: 16\times32\times9+32+64 = 4{,}608+96 = 4{,}704\\
+\text{stage 3} &: 32\times64\times9+64+128 = 18{,}432+192 = 18{,}624\\
+\text{stage 4} &: 64\times96\times9+96+192 = 55{,}296+288 = 55{,}584\\
+\text{sum} &: 304+4{,}704 = 5{,}008;\ +18{,}624 = 23{,}632;\ +55{,}584 = 79{,}216
+\end{align*}
+Stage-end LayerNorms: $2\times(16+32+64+96)=2\times208=416$. Blocks: $18{,}976+25{,}664=44{,}640$;
+$+51{,}328=95{,}968$; $+76{,}704=172{,}672$. Encoder:
+\[
+172{,}672+79{,}216+416 = 252{,}304 .
+\]
+
+\subsection{The decoder and the total}
+
+\begin{align*}
+\text{projections} &: (16+32+64+96)\times96+4\times96 = 208\times96+384 = 19{,}968+384 = 20{,}352\\
+\text{fuse} &: 384\times96+96 = 36{,}864+96 = 36{,}960\\
+\text{refine } 3\times3 &: 96\times96\times9+96 = 82{,}944+96 = 83{,}040\\
+\text{sub-pixel } 3\times3 &: 96\times16\times9+16 = 13{,}824+16 = 13{,}840\\
+\text{decoder} &: 20{,}352+36{,}960 = 57{,}312;\ +83{,}040 = 140{,}352;\ +13{,}840 = 154{,}192
+\end{align*}
+\begin{equation}\label{eq:chakshu:total}
+252{,}304+154{,}192 = 406{,}496 \text{ trainable numbers.}
+\end{equation}
+\lstinline!sum(p.numel() for p in model.parameters())! on the loaded checkpoint returns 406,496 \tagC.
+
+\begin{sourcenote}[: 406,500 counts four buffers]
+The manifest, \file{docs/04-models.md} (``406 k params'') and the course (AD10: ``406,500 parameters'') quote 406,500.
+That is the number of values in the checkpoint's \code{state_dict}, which also holds four buffers: the normalisation
+mean and spread, once in \code{PixelNormalize} and once in \code{PixelDenormalize}. $406{,}496+4=406{,}500$. The
+same distinction explained 5,506,629 against 5,507,354 for Indradhanu (\cref{ch:recon}).
+\end{sourcenote}
+
+\begin{figure}[htbp]\centering
+\begin{tikzpicture}
+\begin{axis}[xbar, bar shift=0pt, width=0.8\linewidth, height=6.2cm, xmin=0, xmax=100000,
+  symbolic y coords={sub-pixel,refine,fuse,projections,patch embeds,stage 4 block,stage 3 block,stage 2 block,stage 1 block},
+  ytick={sub-pixel,refine,fuse,projections,patch embeds,stage 4 block,stage 3 block,stage 2 block,stage 1 block},
+  yticklabel style={font=\small}, xlabel={trainable parameters},
+  scaled x ticks=false, xticklabel style={/pgf/number format/fixed,/pgf/number format/1000 sep={{,}},font=\scriptsize},
+  nodes near coords, nodes near coords style={font=\scriptsize,/pgf/number format/1000 sep={{,}}},
+  bar width=3.4mm, enlarge y limits=0.07]
+\addplot[fill=spat!40,draw=spat] coordinates {(18976,stage 1 block) (25664,stage 2 block) (51328,stage 3 block)
+  (76704,stage 4 block) (79216,patch embeds)};
+\addplot[fill=attn!35,draw=attn] coordinates {(20352,projections) (36960,fuse) (83040,refine) (13840,sub-pixel)};
+\end{axis}
+\end{tikzpicture}
+\caption{Where Chakshu's 406,496 parameters live, drawn to scale from \cref{we:chakshu:blocks} and the sums above
+(blue encoder, plum decoder). The largest single layer is the decoder's refine convolution, 20\% of the model; the
+stage-4 patch embedding (55,584) alone outweighs the first three blocks together (stage-end norms, 416, not drawn).}
+\label{fig:chakshu:params}
+\end{figure}
+
+\subsection{The unused alternative, and why it cannot load}
+
+The manifest's alternative, v0.1.0, is SegFormer-B0 with 3,714,086 values in its \code{state_dict}. Today's code
+cannot load it. Its stage-1 kernel is $7\times7$ (\lstinline!(32, 1, 7, 7)!), from before the change to non-overlapping
+$4\times4$ tokens (\cref{ch:patchembed}), and its decoder has a BatchNorm after the fuse and a single final
+projection where today's has the two refine convolutions. A strict load reports four missing keys, seven unexpected
+ones and one size mismatch \tagC. Selecting it in the product would fail at the load.
+
+%======================================================================
+\section{Training: 70\% hidden, the trimmed L1}\label{sec:chakshu:train}
+
+The trainer is \file{app/foundation_models/trainers/segformer_mae_trainer.py}. Each step:
+\begin{enumerate}
+\item builds the validity mask as \lstinline!pure_validity * predicted_cloud_mask!: the provider's valid pixels and the
+  cloud mask of the scene's own temperature mixture model (\cref{sec:product:thermal});
+\item drops patches with less than 40\% valid pixels, the rule Indradhanu's trainers share (\cref{sec:losses:forty}
+  covers it later);
+\item turns pixel validity into token validity (a token is valid if more than half of its 16 pixels are) and hides
+  $\lfloor0.7\times\text{valid tokens}\rfloor$ of the valid ones at random (\cref{ch:masking});
+\item runs the model with that keep mask and takes the absolute error at every hidden, valid pixel;
+\item trims, then averages.
+\end{enumerate}
+
+\subsection{The trimmed L1}
+
+\begin{definition}[Trimmed mean]
+The \emph{trimmed mean}\index{trimmed loss} of $n$ numbers at trim fraction $\tau$ sorts them, keeps the smallest
+$\lfloor n(1-\tau)\rfloor$ and averages those. Chakshu's loss is the trimmed mean of the per-pixel absolute errors
+$|\hat T-T|$ over the hidden, valid pixels of the whole batch, with $\tau=0.05$.
+\end{definition}
+
+The code says why: ``The highest-error pixels are assumed to be anomalies - dropping them from the training signal
+teaches the model to reconstruct only normal background patterns.'' The training archive has no anomaly labels, so
+any fire in it would otherwise be a target the model is graded on reconstructing, which is exactly what you do not
+want it to learn (\cref{sec:recon:l1l2}).
+
+\begin{worked}[label={we:chakshu:trim}]{Trimming 20 errors at 5\%}
+Twenty hidden pixels have errors (°C) of 0.10, 0.20, 0.15, 0.30, 0.05, 0.25, 0.20, 0.10, 0.15, 0.10, 0.20, 0.30,
+0.25, 0.10, 0.15, 0.20, 0.05, 0.10, 0.20, and one fire pixel at 9.00 \tagA.
+\begin{align*}
+\text{keep} &: \lfloor20\times(1-0.05)\rfloor = \lfloor19.0\rfloor = 19 \text{ smallest}\\
+\text{sum of all 20} &: 3.15+9.00 = 12.15 \quad(\text{the nineteen small ones sum to }3.15)\\
+\text{plain mean} &: 12.15/20 = 0.6075\\
+\text{trimmed mean} &: 3.15/19 = 0.1658
+\end{align*}
+To get 3.15: $2\times0.05=0.10$; $5\times0.10=0.50$; $3\times0.15=0.45$; $5\times0.20=1.00$; $2\times0.25=0.50$;
+$2\times0.30=0.60$; and $0.10+0.50+0.45+1.00+0.50+0.60=3.15$. One fire pixel had made the loss almost four times
+larger. After the trim it contributes nothing, and its gradient is zero: the model is not pushed to reconstruct it.
+The script gives the same two means \tagC.
+\end{worked}
+
+At full size the trim is large in absolute terms. A batch of 64 fully valid patches has $64\times45{,}872=2{,}935{,}808$
+hidden pixels; the trim keeps $\lfloor2{,}935{,}808\times0.95\rfloor=2{,}789{,}017$ and drops 146,791 \tagC. The 5\% is
+taken over the whole batch, not per patch, so a patch with a large fire can lose more than 5\% of its pixels and a
+quiet one none.
+
+\subsection{Optimiser, schedule, data}
+
+The optimiser is Adam at a learning rate of $10^{-4}$, lowered along half a cosine wave over 500 epochs to $10^{-6}$
+(both are derived in \cref{ch:trainloop}); the configuration's
+\lstinline!warmup_epochs: 5! is read by nothing in \file{app/abstract_classes/foundation_trainer.py}, which builds
+\code{CosineAnnealingLR} with only \code{T_max}, \code{eta_min} and \code{last_epoch}. An epoch is a budget of 30,000
+patches of $256\times256$ from the Landsat archive, $30{,}000/64=468.75$ batches, and validation draws 1,000
+\tagM{configs/seg_former_exp_8.json}. By the cosine formula, epoch 495 runs at
+$10^{-6}+(10^{-4}-10^{-6})\tfrac{1+\cos(495\pi/500)}{2}=1.02\times10^{-6}$ \tagC: the shipped checkpoint was taken
+when the learning rate was within 2.5\% of its floor.
+
+\subsection{Validation, and why train loss is lower}
+
+Validation (\code{compute_validation_loss}) masks a random half of the valid tokens, then the complementary half,
+keeps each pixel's prediction from the pass that hid it, and averages $|\hat T-T|$ over every valid pixel with no
+trim. So the two numbers in the checkpoint measure different things \tagMr{checkpoint \texttt{train\_loss},
+\texttt{avg\_val\_loss}}:
+\begin{center}
+train loss 0.1730\,°C (70\% hidden, trimmed)\qquad validation loss 0.2565\,°C (50\% hidden twice, untrimmed).
+\end{center}
+The validation number is the more honest one: a mean absolute temperature error of about a quarter of a degree on
+held-out patches.
+
+%======================================================================
+\section{Inference on a scene}\label{sec:chakshu:infer}
+
+The inferencer is \file{app/foundation_models/inferencers/segformer_mae_inferencer.py}; \cref{ch:inference} covers the
+same machinery for Indradhanu. The product's settings for Chakshu come from the resolver's capability entry and
+\code{InferenceConfig}'s defaults:
+\begin{center}\small
+\begin{tabular}{@{}ll@{}}
+\toprule
+setting & value\\
+\midrule
+patch, stride & 256, 128 (half-overlapping tiles)\\
+batch & 8 patches\\
+masking & checkerboard of single stage-1 tokens, two complementary passes\\
+erosion of the validity mask & kernel 15: a 7-pixel margin at every invalid edge\\
+skip a patch if valid share is below & 0.1\\
+uncovered pixels & take the input value, so their residual is exactly 0\\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\begin{worked}[label={we:chakshu:tiles}]{Tiles over two scene sizes}
+Along an axis of length $W$ with patch $P=256$ and stride $S=128$, tiles start every $S$ pixels while a whole tile
+fits, and one more is snapped back to end exactly at the edge, so the count is $\lceil(W-P)/S\rceil+1$ when
+$(W-P)/S$ is not whole (\cref{eq:inference:count} derives it). For $W=1{,}000$:
+\begin{align*}
+(1{,}000-256)/128 &= 744/128 = 5.8125, \qquad \lceil5.8125\rceil+1 = 6+1 = 7,
+\end{align*}
+starts 0, 128, \dots, 640, and the snapped last one at $1{,}000-256=744$. A $1{,}000\times1{,}000$ scene needs
+$7\times7=49$ tiles and $2\times49=98$ forward passes. A full Landsat scene of about $7{,}801\times7{,}681$ pixels
+\tagA{} needs $60\times60=3{,}600$ tiles and 7,200 passes. The patch planner returns 49 and 3,600 \tagC.
+\end{worked}
+
+\begin{sourcenote}[: two training-inference mismatches, already known]
+\file{docs/09-known-issues.md} (item 3) records both, and the source confirms them. Inference defaults to the
+checkerboard while training and validation use random masks; and the inferencer's \lstinline!MIN_VALID_FRACTION = 0.1!
+sits under a comment saying it ``Matches training'', where training discards below 0.4. A patch between 10\% and
+40\% valid is therefore reconstructed by a model that never trained on one.
+\end{sourcenote}
+
+%======================================================================
+\section{From reconstruction to score}\label{sec:chakshu:score}
+
+The resolver offers Chakshu two scoring methods, \code{L1} (the default) and \code{MSE}. With one band both are simple
+(\file{app/utils/anomaly_detection/scoring.py}, \code{compute_score}):
+\begin{equation}\label{eq:chakshu:score}
+s_\text{L1}(p) = \big|T(p)-\hat T(p)\big|, \qquad s_\text{MSE}(p) = \big(T(p)-\hat T(p)\big)^2,
+\end{equation}
+in °C and °C$^2$. There is no spectral angle (one number has no direction) and no residual Mahalanobis; there is no
+segmentation head, so nothing is excluded after scoring. A \code{cloud_mask} action upstream supplies a keep mask,
+and pixels outside it score 0.
+
+\subsection{A synthetic test, with the real weights}
+
+To see the score at work, the script builds a smooth $256\times256$ field, $T=25+3\sin(x/40)+2\cos(y/30)$\,°C, and
+plants hot spots at 45\,°C in copies of it \tagA. It runs the product's inferencer on each with the shipped weights
+and the product's checkerboard. These are synthetic numbers, not a measurement on Landsat scenes.
+\begin{center}\small
+\begin{tabular}{@{}lccc@{}}
+\toprule
+field & median $|T-\hat T|$, background & at the spot & largest\\
+\midrule
+plain & 0.019\,°C & -- & 0.092\,°C\\
+1 pixel at 45\,°C & 0.019\,°C & 20.96\,°C & 20.96\,°C\\
+$4\times4$ spot inside one token & 0.019\,°C & 21.05\,°C (centre) & 21.17\,°C\\
+$3\times3$ spot across four tokens & 0.019\,°C & 7.59\,°C (centre) & 12.60\,°C\\
+\bottomrule
+\end{tabular}
+\end{center}
+\tagC. The background is reconstructed to two hundredths of a degree. A one-pixel or token-sized hot spot is
+reconstructed as background: at the token-sized spot the model predicts 23.95\,°C where the field reads 45, and the
+residual, 21.05\,°C, is the whole of the anomaly. The $3\times3$ spot is the surprise.
+
+\subsection{Why a smaller spot can score lower}\label{sec:chakshu:straddle}
+
+Stage-1 tokens are $4\times4$ blocks starting at multiples of 4. The $3\times3$ spot occupies rows and columns 126 to
+128: rows 126 and 127 lie in token row 31 (pixels 124--127), row 128 in token row 32 (128--131), and the same for
+columns. So the spot straddles a $2\times2$ group of tokens. The checkerboard colours a token by
+$(\text{row}+\text{column}) \bmod 2$:
+\begin{align*}
+(31,31) &: 62 \bmod 2 = 0, & (31,32) &: 63 \bmod 2 = 1,\\
+(32,31) &: 63 \bmod 2 = 1, & (32,32) &: 64 \bmod 2 = 0 .
+\end{align*}
+In the pass that hides colour 0, tokens $(31,32)$ and $(32,31)$ are visible, and each holds two of the spot's hot
+pixels. The model sees part of the spot beside the hidden part and predicts warm. In the other pass the roles swap.
+So every hot pixel is predicted from context that contains other pixels of the same spot: the spot helps
+reconstruct itself, and the residual drops from about 21\,°C to 7.6\,°C at the centre. \Cref{fig:chakshu:straddle}
+draws it.
+
+\begin{figure}[htbp]\centering
+\begin{tikzpicture}[x=5mm,y=-5mm]
+  % 8x8 pixels = tokens (31,31),(31,32),(32,31),(32,32); pixel 124..131
+  \foreach \tr/\tc/\col in {0/0/0,0/1/1,1/0/1,1/1/0}{
+    \ifnum\col=0 \fill[maskgrey!45] (4*\tc,4*\tr) rectangle ++(4,4);
+    \else \fill[spec!18] (4*\tc,4*\tr) rectangle ++(4,4); \fi}
+  \fill[loss!75] (2,2) rectangle (5,5);
+  \foreach \i in {0,...,8}{\draw[gray!60,line width=0.2pt] (\i,0)--(\i,8); \draw[gray!60,line width=0.2pt] (0,\i)--(8,\i);}
+  \foreach \i in {0,4,8}{\draw[black,line width=0.9pt] (\i,0)--(\i,8); \draw[black,line width=0.9pt] (0,\i)--(8,\i);}
+  \node[font=\scriptsize,above] at (2,0) {col 31}; \node[font=\scriptsize,above] at (6,0) {col 32};
+  \node[font=\scriptsize,left] at (0,2) {row 31}; \node[font=\scriptsize,left] at (0,6) {row 32};
+  \node[font=\scriptsize,anchor=west,align=left] at (8.6,1.5) {grey: hidden in pass 1\\(colour 0)};
+  \node[font=\scriptsize,anchor=west,align=left] at (8.6,4) {teal: visible in pass 1\\(colour 1)};
+  \node[font=\scriptsize,anchor=west,align=left] at (8.6,6.5) {amber: the $3\times3$ hot spot,\\pixels 126--128};
+\end{tikzpicture}
+\caption{An $8\times8$-pixel window around the $3\times3$ spot of \cref{sec:chakshu:straddle}. Thick lines are stage-1
+token borders. In pass 1 the grey tokens are hidden, but the two teal tokens still show four of the spot's nine hot
+pixels to the encoder, so the hidden hot pixels are predicted warm; pass 2 swaps the colours.}
+\label{fig:chakshu:straddle}
+\end{figure}
+
+\begin{keypoint}
+A hot object larger than one pixel can reconstruct itself through the visible tokens it reaches into; Chakshu's
+residual is largest for objects that fit inside one $4\times4$ token.
+\end{keypoint}
+
+This is the analogy's large fire, and it is the same leakage Indradhanu has. It is a property of the two-pass
+design, not a bug in the code, but it means a residual's size depends on where an object falls on the token grid.
+Larger checkerboard cells (\code{checkerboard_cell_size}, \cref{ch:inference}) would hide $2\times2$ groups of tokens
+together; the product does not use them for Chakshu, and no measurement of that option on thermal scenes exists.
+
+%======================================================================
+\section{The HotSat-1 units caveat}\label{sec:chakshu:hotsat}
+
+HotSat-1's L2 Visual product carries uncalibrated digital numbers, ``relative radiance differences within a
+scene'', around 5,000 with a spread of about 400 (the builder's and the override's docstrings,
+\file{app/utils/dataset_builder/hotsat_dataset_builder.py}, \file{app/models/training/inference_config.py}). The
+product scores HotSat-1 with Chakshu by default (\file{backend/allotrope/action_types/anomaly_scoring.py}), and its
+plan is a \emph{per-scene override}: replace $\mu_T$ and $\sigma_T$ by the scene's own mean and spread, so the input
+arrives centred with unit spread and scores become comparable within the scene, not across scenes.
+
+\begin{worked}[label={we:chakshu:hotsat}]{A HotSat number under the baked statistics}
+\begin{align*}
+z &= (5{,}000-24.5756)/13.5744 = 4{,}975.4244/13.5744 = 366.53
+\end{align*}
+Training inputs sat within a few units of 0. The course and \file{docs/lld/pixel-stats.md} give 471.0 for this,
+from a mean of 290 and spread of 10 (\cref{sec:chakshu:input}); with the real buffers it is 366.5 \tagC. Under the
+override with mean 5,000 and spread 400, the same pixel gives $(5{,}000-5{,}000)/400=0$ and a pixel at 5,400 gives
+$400/400=1$.
+\end{worked}
+
+That is the plan. The code defeats it twice, and the second time is new.
+
+\begin{sloppypar}\noindent\textbf{First: the units never arrive.} The override is built only when the vendable's \code{units} begins with
+\code{"DN_"}. \code{HotSatDatasetBuilder} passes \code{units="DN_14bit_relative"} to \code{VendableThermalDataset},
+which declares no such field, so Pydantic discards it, and \lstinline!getattr(vendable, "units", None)! is \code{None}
+(\file{docs/09-known-issues.md}, item 7; \cref{ch:product,ch:bandpipeline}).\end{sloppypar}
+
+\begin{sloppypar}\noindent\textbf{Second: the checkpoint overwrites the override.} Suppose the units did arrive. The handler builds
+\lstinline!PixelStatsOverride(mean=[5000], std=[...])!, and the inferencer constructs \code{SegFormerMAE} with those
+numbers in its \code{PixelNormalize} buffers. Then \code{FoundationInferencer._load_weights} calls
+\code{load_state_dict(ckpt["model_state_dict"])}, and the checkpoint's state dictionary contains
+\code{normalize.mean}, \code{normalize.std}, \code{denormalize.mean} and \code{denormalize.std}: it writes 24.5756 and
+13.5744 back over the override. The script shows it directly: a model built with mean 5,000.03 has mean 24.5756
+after the load, and an inferencer constructed with the override holds $[24.5756]$, $[13.5744]$ \tagC.
+\file{docs/lld/pixel-stats.md}'s invariant, ``The override wins outright'', holds in \code{resolve_pixel_stats} and
+is undone two calls later.\end{sloppypar}
+
+\begin{sourcenote}[: the override cannot work for any checkpoint with normalisation buffers]
+Measured on CPU with the shipped weights (\file{tools/compute_chakshu.py}): a synthetic HotSat-like field
+(5,000 DN, spread 193) reconstructs to a mean of 100.3 DN, a median residual of 4,899.5 DN everywhere, with and
+without the override; the two runs are identical \tagC. Every pixel looks equally anomalous, which is the failure the
+LLD describes as the reason the override exists. The same load-after-build order applies to every model whose
+checkpoint carries \code{normalize.*} buffers: Pratibimba, Antardhana, Tirohita and Drashta (\cref{ch:convae}).
+A third, smaller fault: the handler's check that the override's length matches \code{in_channels} reads
+\lstinline!getattr(m.model_config, "in_channels", None)!, but \code{model_config} is a dictionary, so the attribute is
+never found and the check never runs. Fixing the second fault means applying the override after the weights load, or
+dropping the \code{normalize.*} keys from the state dictionary before loading; this book does not change code.
+\end{sourcenote}
+
+There is no HotSat-1 scene in the local database (\file{docs/proposals/aigc-evaluation-submission.md}, row R3), so
+none of this has been seen on real data. The diagnostics would still say \lstinline!normalization_mode: "baked"!, which is
+true, and nothing would warn that the input was 366 standard deviations from anything the model learned.
+
+%======================================================================
+\section{Where Chakshu sits in the product}\label{sec:chakshu:product}
+
+\begin{center}\small
+\begin{tabular}{@{}ll@{}}
+\toprule
+resolver field (\texttt{\_CAPABILITIES}, key \texttt{segformer\_mae}) & value\\
+\midrule
+\texttt{foundation\_model\_name} & \texttt{segformer\_mae} $\to$ \texttt{SegFormerMAEInferencer}\\
+\texttt{scoring\_methods}, default & L1, MSE; L1\\
+\texttt{default\_patch\_size}, \texttt{default\_stride} & 256, 128\\
+\texttt{default\_batch\_size} & 8\\
+\texttt{valid\_patch\_sizes} & 64, 128, 256 (each divisible by 32)\\
+\texttt{pixel\_stats\_relpath} & \texttt{constants/thermal\_pixel\_consts.json}\\
+\texttt{band\_grid}, \texttt{exclude\_classes} & common165 (not checked for thermal), none\\
+\bottomrule
+\end{tabular}
+\end{center}
+\begin{sloppypar}\noindent The scoring action's sensor defaults pick Chakshu for \code{landsat9} and \code{hotsat1}
+(\file{backend/allotrope/action_types/anomaly_scoring.py}). For a thermal scene the action reads the onboarding
+vendable directly (no band filter), takes \code{normalized_thermal_cube} as one band, attaches a \code{cloud_mask}
+output's keep mask if there is one, and writes \file{models/Chakshu/anomaly_score.tif}, the reconstruction and their
+previews. The thermal chain is \code{cloud_mask} $\to$ \code{anomaly_scoring} $\to$ \code{anomaly_detection_prep} $\to$
+export, with the georeference read back from the Landsat GeoTIFF at export time (\cref{ch:material}). That chain
+has not been run end to end on the local stack: no thermal scene is loaded
+(\file{docs/proposals/aigc-evaluation-submission.md}).\end{sloppypar}
+
+\begin{drift}
+Read 2026-10-31 from the \file{/models/segformer_mae/} volume: current checkpoint \file{segformer_mae_v0.8.0_epoch495.pt},
+epoch 495, train loss 0.1730, validation loss 0.2565 (256-pixel patches), 406,496 trainable numbers (406,500 with
+buffers); normalisation $24.5756\pm13.5744$\,°C; alternative v0.1.0 (epoch 10, validation 6.59877 on 128-pixel patches),
+not loadable by the current code. Synthetic-field residuals in \cref{sec:chakshu:score} were computed with these
+weights \tagC.
+\end{drift}
+
+%======================================================================
+\begin{confusions}
+\confusion{Chakshu reads Kelvin.}{It reads Celsius. The Landsat builder converts to Celsius and the buffers are
+24.58 and 13.57. ``Kelvin'' and ``290'' in comments and in the pixel-stats LLD are wrong.}
+\confusion{Chakshu is SegFormer-B0 with one input channel.}{The classes are, the sizes are not: widths 16 to 96, one
+block per stage, expansion 2, decoder width 96. Only the unused v0.1.0 run is B0.}
+\confusion{406,500 parameters.}{406,496 parameters and 4 buffers. The 406,500 is the state dictionary's size.}
+\confusion{The small model beat the large one 25 times over.}{The large run had 10 epochs against 495, and their
+losses were on different patch sizes. It shows the large run was unfinished.}
+\confusion{Train loss 0.173 below validation 0.257 means overfitting.}{The two measure different things: training
+trims the worst 5\% and hides 70\%; validation hides half twice and trims nothing.}
+\confusion{The per-scene override makes Chakshu safe for HotSat-1.}{It is never built (the units field is dropped),
+and if it were built the checkpoint's buffers would overwrite it when the weights load.}
+\confusion{A bigger hot spot always scores higher.}{Not with two-pass masking: a spot that straddles token borders
+shows part of itself to the encoder in both passes and reconstructs itself partly; a spot inside one token is
+hidden whole.}
+\confusion{With one band, L1 and MSE rank pixels differently.}{They cannot: the square is increasing for non-negative
+numbers, so $|r_1|<|r_2|$ exactly when $r_1^2<r_2^2$, and every threshold on one is a threshold on the other. They
+differ only in how the map looks.}
+\end{confusions}
+
+\begin{checkyourself}
+\item\label{ex:chakshu:1} Use \cref{eq:chakshu:block} to count a Chakshu stage-2 block ($C=32$, $R=4$, $E=2$), and the
+same block with $E=4$. How much does doubling the expansion add, and why is it exactly $2EC^2$-shaped?
+\item\label{ex:chakshu:2} At a patch size of 128 instead of 256, give the token grid, the number of tokens and the
+number of attention keys at each stage, and the number of tokens a training pass hides at $\rho=0.7$. Does the
+parameter count change?
+\item\label{ex:chakshu:3} A Landsat pixel has DN $=48{,}000$. Convert it to °C with \cref{eq:chakshu:dn} and normalise
+it with \cref{eq:chakshu:z}.
+\item\label{ex:chakshu:4} Ten hidden pixels have errors 0.1, 0.3, 0.2, 0.1, 0.4, 0.2, 0.1, 0.3, 0.2 and 5.0\,°C. Compute
+the plain mean and the trimmed mean at $\tau=0.05$. Then at $\tau=0.1$. What does the floor do at $\tau=0.05$ with
+only ten numbers?
+\item\label{ex:chakshu:5} A scene is $1{,}000\times600$ pixels. How many Chakshu tiles does the product run, and how
+many forward passes?
+\item\label{ex:chakshu:6} A HotSat-1 pixel reads 4,600 DN. Compute its $z$ under the baked statistics, and under a
+per-scene override of mean 5,000 and spread 400. Which $z$ does the product actually use today, and why?
+\item\label{ex:chakshu:7} A $2\times2$ hot spot covers pixels 127--128 in both rows and columns. Which stage-1 tokens does
+it touch, what are their checkerboard colours, and would you expect its residual to be closer to the one-token spot's
+or the $3\times3$ spot's?
+\item\label{ex:chakshu:8} The resolver hard-codes heads, ratios, blocks and expansion for \code{segformer_mae}. Name
+the one manifest field that changes the model's width and the one that changes the decoder, and say what would happen
+if a two-blocks-per-stage thermal checkpoint were published with the same manifest format.
+\end{checkyourself}
+
+\nextchapter{ch:ceiling}

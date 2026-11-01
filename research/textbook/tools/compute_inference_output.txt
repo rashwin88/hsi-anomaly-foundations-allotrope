@@ -1,0 +1,70 @@
+== tiles per axis: code vs ceil((W-P)/S)+1 ==
+W=  128  code=  2  unique=  1  ceil+1=  1  (W-P)/S=0.0000  first=[0, 0] last=[0, 0]
+W=  160  code=  3  unique=  2  ceil+1=  2  (W-P)/S=1.0000  first=[0, 32, 32] last=[0, 32, 32]
+W=  600  code= 16  unique= 16  ceil+1= 16  (W-P)/S=14.7500  first=[0, 32, 64] last=[416, 448, 472]
+W= 1000  code= 29  unique= 29  ceil+1= 29  (W-P)/S=27.2500  first=[0, 32, 64] last=[832, 864, 872]
+W= 1024  code= 30  unique= 29  ceil+1= 29  (W-P)/S=28.0000  first=[0, 32, 64] last=[864, 896, 896]
+W= 1205  code= 35  unique= 35  ceil+1= 35  (W-P)/S=33.6562  first=[0, 32, 64] last=[1024, 1056, 1077]
+W= 1210  code= 35  unique= 35  ceil+1= 35  (W-P)/S=33.8125  first=[0, 32, 64] last=[1024, 1056, 1082]
+W= 1212  code= 35  unique= 35  ceil+1= 35  (W-P)/S=33.8750  first=[0, 32, 64] last=[1024, 1056, 1084]
+W= 1219  code= 36  unique= 36  ceil+1= 36  (W-P)/S=34.0938  first=[0, 32, 64] last=[1056, 1088, 1091]
+W= 1200  code= 35  unique= 35  ceil+1= 35  (W-P)/S=33.5000  first=[0, 32, 64] last=[1024, 1056, 1072]
+W=  900  code= 26  unique= 26  ceil+1= 26  (W-P)/S=24.1250  first=[0, 32, 64] last=[736, 768, 772]
+
+== whole-scene tiles and forward passes (batch 8, two passes per batch) ==
+1000x1000: tiles=841 batches=106 forward_passes=212
+1210x1219: tiles=1260 batches=158 forward_passes=316
+1205x1212: tiles=1225 batches=154 forward_passes=308
+600x600: tiles=256 batches=32 forward_passes=64
+1200x900: tiles=910 batches=114 forward_passes=228
+
+== coverage along one axis (W=1000): how many tiles contain each column ==
+columns    0-  31: 1 tiles
+columns   32-  63: 2 tiles
+columns   64-  95: 3 tiles
+columns   96- 871: 4 tiles
+columns  872- 895: 5 tiles
+columns  896- 927: 4 tiles
+columns  928- 959: 3 tiles
+columns  960- 991: 2 tiles
+columns  992- 999: 1 tiles
+2-D interior coverage = 4 x 4 = 16
+
+== coverage along one axis (W=1219) ==
+columns    0-  31: 1 tiles
+columns   32-  63: 2 tiles
+columns   64-  95: 3 tiles
+columns   96-1090: 4 tiles
+columns 1091-1119: 5 tiles
+columns 1120-1151: 4 tiles
+columns 1152-1183: 3 tiles
+columns 1184-1215: 2 tiles
+columns 1216-1218: 1 tiles
+
+== memory of one (165, 1000, 1000) float32 cube ==
+660000000 bytes
+(165, 1210, 1219): 973493400 bytes
+
+== checkerboard: hidden pattern vs selection pattern ==
+mask_block=1: hidden pass1=
+[[1 0 1 0]
+ [0 1 0 1]
+ [1 0 1 0]
+ [0 1 0 1]]
+ selected from pass1=
+[[1 0 1 0]
+ [0 1 0 1]
+ [1 0 1 0]
+ [0 1 0 1]]
+ tokens taken from a pass where VISIBLE: 0 of 16
+mask_block=2: hidden pass1=
+[[1 1 0 0]
+ [1 1 0 0]
+ [0 0 1 1]
+ [0 0 1 1]]
+ selected from pass1=
+[[1 0 1 0]
+ [0 1 0 1]
+ [1 0 1 0]
+ [0 1 0 1]]
+ tokens taken from a pass where VISIBLE: 8 of 16

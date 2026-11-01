@@ -1,0 +1,10 @@
+decoder 6401 {'channel_identity': 1024, 'query_from_wavelength.weight': 1024, 'query_from_wavelength.bias': 32, 'channel_value_embed.weight': 32, 'channel_value_embed.bias': 32, 'q.weight': 1024, 'q.bias': 32, 'k.weight': 1024, 'k.bias': 32, 'v.weight': 1024, 'v.bias': 32, 'o.weight': 1024, 'o.bias': 32, 'to_value.weight': 32, 'to_value.bias': 1}
+gate202 13162 {'score.0.weight': 6464, 'score.0.bias': 32, 'score.2.weight': 6464, 'score.2.bias': 202}
+gate165 10757 {'score.0.weight': 5280, 'score.0.bias': 32, 'score.2.weight': 5280, 'score.2.bias': 165}
+reduced 14721 {'queries': 1024, 'band_weight.0.weight': 2048, 'band_weight.0.bias': 64, 'band_weight.2.weight': 2048, 'band_weight.2.bias': 32, 'skip_weight.0.weight': 2048, 'skip_weight.0.bias': 64, 'skip_weight.2.weight': 2048, 'skip_weight.2.bias': 32, 'bin_bias.weight': 1024, 'bin_bias.bias': 32, 'q.weight': 1024, 'q.bias': 32, 'k.weight': 1024, 'k.bias': 32, 'v.weight': 1024, 'v.bias': 32, 'o.weight': 1024, 'o.bias': 32, 'to_channel.weight': 32, 'to_channel.bias': 1}
+wavelength_linear_decoder 4257 {'out_weight.0.weight': 2048, 'out_weight.0.bias': 64, 'out_weight.2.weight': 2112, 'out_weight.2.bias': 33}
+bins 53 occupied 42 max 9 empty [23, 24, 25, 26, 33, 34, 35, 36, 37, 38, 52]
+counts [5, 8, 8, 8, 8, 6, 7, 5, 6, 5, 6, 5, 6, 9, 9, 4, 3, 4, 3, 4, 3, 3, 1, 0, 0, 0, 0, 1, 3, 4, 3, 4, 4, 0, 0, 0, 0, 0, 0, 3, 4, 5, 4, 5, 5, 4, 5, 5, 5, 5, 6, 1, 0]
+reduced 99-test masked max change 0.0
+MACs per-band 1554752 reduced 606400 ratio 2.56
+53-slot tensor bf16 MiB 53.0

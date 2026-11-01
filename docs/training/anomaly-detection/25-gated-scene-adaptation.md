@@ -435,25 +435,4 @@ pretrained model.
 
 ---
 
-## You have finished
-
-You can now read the source. Where to go next:
-
-- **`docs/01-orientation.md`** through **`docs/10-code-style.md`** - the reference docs
-- **`docs/lld/`** - low-level designs for individual subsystems; for the last ten parts,
-  `docs/lld/evaluation.md`, `docs/lld/implant-bench.md` and `docs/lld/spectral-stem.md` ("Serving")
-- **`docs/09-known-issues.md`** - what is currently broken, and what to check before trusting
-  a green test run
-
-One habit worth keeping from this course: **when a comment and the code disagree, the code
-wins**, and when a summary and the data disagree, the data wins. You met several such disagreements -
-the regularisation default, the `MIN_VALID_FRACTION` comment and the discarded `units` field in parts 1
-to 15; `compute_roc`'s threshold docstring in part 16; the LLD's old `strength_for_z` and "10 px apart" in
-part 18; the cache key and `dirty` flag in part 19, both fixed since; bench-v2's per-tier foreignness in
-part 20; "no real object sits on water" and "set4 is bright desert" in part 21; a "close to, not
-identical" docstring that was hiding a factor of nearly three (15.8% against 44.2%), and a cross-check
-whose result was misread, in part 22; a band filter description that still said the common grid was
-"Required for cross-sensor models like Indradhanu" - true of v0.2.0, wrong for V2 - in part 23; a scorer
-that met every pass criterion while finding fewer real objects in part 24; and, in this part, two
-expectations written down in advance and both wrong, and "barely see" meaning small weight rather than
-few visits. There will be more.
+Next: part 26, naming materials - natural first, then the class.

@@ -1,0 +1,74 @@
+\answersfor{ch:finetune}
+
+\begin{solution}{ex:finetune:1}
+Apply $r \leftarrow 0.9\,r + 0.1 \times 0.30$, where $0.1 \times 0.30 = 0.03$:
+\begin{align*}
+  r_1 &= 0.9 \times 0.10 + 0.03 = 0.09 + 0.03 = 0.12\\
+  r_2 &= 0.9 \times 0.12 + 0.03 = 0.108 + 0.03 = 0.138\\
+  r_3 &= 0.9 \times 0.138 + 0.03 = 0.1242 + 0.03 = 0.1542.
+\end{align*}
+Closed form: $0.9^3 = 0.729$, so $r_3 = 0.729 \times 0.10 + (1 - 0.729) \times 0.30 = 0.0729 + 0.271 \times 0.30 = 0.0729 + 0.0813 = 0.1542$. The two agree.
+\end{solution}
+
+\begin{solution}{ex:finetune:2}
+The last 5 micro-batches carry $1 - 0.9^5 = 1 - 0.590 = 0.41$, about 41\%.
+
+For 95\%: $1 - 0.9^K = 0.95$, so $0.9^K = 0.05$ and
+\[
+  K = \frac{\ln 0.05}{\ln 0.9} = \frac{-2.996}{-0.1054} = 28.4,
+\]
+so 29 micro-batches carry 95\% of the stored mean: still under 1\% of a 3,750-micro-batch epoch.
+\end{solution}
+
+\begin{solution}{ex:finetune:3}
+\begin{itemize}
+  \item 999.8 is $1000 - 999.8 = 0.2$\,nm from 1000: already known, skipped.
+  \item 1004.6 is 4.6\,nm from 1000 and 5.4\,nm from 1010: new.
+  \item 1005.0 is new against the record but $1005.0 - 1004.6 = 0.4$\,nm from 1004.6: counted once with it.
+  \item 1030.0 is 20\,nm from 1010: new.
+\end{itemize}
+Record: 1000, 1004.6, 1010, 1030; the call returns 2. A band at 1018\,nm is $1018 - 1010 = 8$\,nm from the nearest recorded wavelength, within 15\,nm:
+accepted by \texttt{trained\_band\_mask}.
+\end{solution}
+
+\begin{solution}{ex:finetune:4}
+\begin{align*}
+  \text{EnMAP:}&\quad \operatorname{round}(0.40 \times 4) = \operatorname{round}(1.6) = 2\\
+  \text{PRISMA:}&\quad \operatorname{round}(0.35 \times 4) = \operatorname{round}(1.4) = 1\\
+  \text{AVIRIS-NG:}&\quad \max(1, \operatorname{round}(0.25 \times 4)) = \max(1, 1) = 1\\
+  \text{total:}&\quad 2 + 1 + 1 = 4.
+\end{align*}
+Effective shares $2/4, 1/4, 1/4 = 0.50, 0.25, 0.25$: EnMAP gains 10 points, PRISMA loses 10. Small batches round coarsely.
+
+Toy problem from $w = 1$, using the maps $B: w \mapsto 0.5w - 0.5$ and $A: w \mapsto 0.5w + 0.5$:
+\begin{align*}
+  \text{B:}&\quad 0.5 \times 1 - 0.5 = 0\\
+  \text{A:}&\quad 0.5 \times 0 + 0.5 = 0.5\\
+  \text{B:}&\quad 0.5 \times 0.5 - 0.5 = -0.25.
+\end{align*}
+\end{solution}
+
+\begin{solution}{ex:finetune:5}
+With $a = 0.1$ and $b = 0.6$:
+\begin{align*}
+  \text{after the mixed pass:}&\quad 0.9\,r^\ast + 0.01\\
+  \text{after the EnMAP-only pass:}&\quad 0.9(0.9\,r^\ast + 0.01) + 0.06\\
+                                   &\quad = 0.81\,r^\ast + 0.009 + 0.06 = 0.81\,r^\ast + 0.069\\
+  r^\ast &= 0.81\,r^\ast + 0.069 \;\Rightarrow\; 0.19\,r^\ast = 0.069 \;\Rightarrow\; r^\ast = 0.363.
+\end{align*}
+With \texttt{segment\_mixed} both passes see the mix's 0.1, so the fixed point is $(0.09 \times 0.1 + 0.1 \times 0.1)/0.19 = 0.019/0.19 = 0.1$: the stored mean stays at
+the mix's value.
+\end{solution}
+
+\begin{solution}{ex:finetune:6}
+\begin{align*}
+  4.5^\circ &= 4.5 \times 3.1416 / 180 = 0.0785 \text{ rad}\\
+  \text{reconstruction} &= 0.015 + 0.5 \times 0.0785 = 0.015 + 0.0393 = 0.0543.
+\end{align*}
+Segmentation shares with segmentation 0.3 and reconstruction 0.06:
+\begin{align*}
+  w_s = 1.0:&\quad 0.3 / (0.06 + 0.3) = 0.3 / 0.36 = 83\%\\
+  w_s = 0.1:&\quad 0.03 / (0.06 + 0.03) = 0.03 / 0.09 = 33\%\\
+  w_s = 0.2:&\quad 0.06 / (0.06 + 0.06) = 0.06 / 0.12 = 50\%.
+\end{align*}
+\end{solution}

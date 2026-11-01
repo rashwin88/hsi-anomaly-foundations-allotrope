@@ -1,0 +1,925 @@
+\chapter{Attention, from one query to many heads}\label{ch:attention}
+
+\begin{onething}
+Attention is a similarity-weighted average: every token scores every other token with a dot
+product, turns the scores into proportions that add up to one with a softmax, and replaces
+itself with the matching blend of the other tokens' values.
+\end{onething}
+
+This chapter builds ordinary self-attention from nothing. \Cref{ch:esa} then shows the one
+change SegFormer makes to it, and \cref{ch:block} wraps it into the repeating unit of the
+encoder. Every formula here is followed by a calculation small enough to do on paper; please do
+them on paper, with a pencil, because the arithmetic is the understanding. All the numbers in
+this chapter were also checked by a small script, \file{research/textbook/tools/compute_13-15.py},
+whose output is saved next to it.
+
+\section{The problem: a token needs its surroundings}\label{sec:attention:problem}
+
+After the patch embedding of \cref{ch:patchembed}, a $128\times128$ patch has become a grid of
+$32\times32 = 1024$ \emph{tokens}. A token\index{token} is a short vector of numbers (32 of them at
+stage~1) that summarises one $4\times4$ block of pixels. Recall from \cref{ch:shapes} that the
+encoder holds all the tokens of a batch in a tensor of shape \shape{(B, N, C)}: $B$ patches in the
+batch, $N$ tokens per patch, $C$ numbers per token.
+
+So far each token knows only its own block. But the meaning of a block depends on what surrounds
+it. A dark block in the middle of a lake is ordinary water. The identical dark block in the middle
+of a bright desert is exactly the kind of thing an anomaly detector exists to notice. If the model
+is to reconstruct a block from its context (the whole idea of \cref{ch:recon}), each token must be
+able to look at other tokens and revise itself.
+
+\paragraph{The obvious fixes, and why they fail.}
+\begin{enumerate}
+  \item \emph{Average the neighbours with fixed weights.} That is a convolution
+  (\cref{ch:shapes}). Its weights are learned once and then applied identically everywhere,
+  whatever the content. A convolution cannot decide that, for \emph{this} dark block, the
+  relevant neighbours are the other dark blocks two rows away rather than the bright ones next
+  door.
+  \item \emph{Learn one weight for every pair of tokens.} With $N = 1024$ tokens that is
+  $1024 \times 1024 = 1{,}048{,}576$ weights, and they would still be fixed: pair (3, 517) would
+  get the same weight in a lake patch and in a desert patch.
+\end{enumerate}
+What we want is weights that are \emph{computed from the content}, freshly for every patch. That
+is what attention provides.
+
+\begin{analogy}
+You walk into a library with a question. You do not read every book with equal care, and you do
+not consult a fixed list of books regardless of the question. You read the titles on the spines
+(keys), compare each with your question (query), and spend your time on the books whose titles
+match best, taking from each a share of its contents (values) in proportion to how well it
+matched. Change the question and you read a different blend of books. Every token in the encoder
+is, at the same time, a reader with a question and a book on the shelf.
+\end{analogy}
+
+The mechanism has three ingredients: a way to measure similarity (the dot product,
+\cref{sec:attention:dot}), a way to turn similarities into proportions (the softmax,
+\cref{sec:attention:softmax}), and a way to blend (the weighted average,
+\cref{sec:attention:onequery}). Then we assemble them in matrix form, explain the scaling by
+$\sqrt{d}$, and split the work across several heads.
+
+\section{Similarity: the dot product}\label{sec:attention:dot}
+
+\begin{definition}[Dot product]
+For two vectors $\vect{a} = (a_1, \dots, a_d)$ and $\vect{b} = (b_1, \dots, b_d)$ of the same
+length $d$, the dot product\index{dot product} is
+\begin{equation}\label{eq:attention:dot}
+  \vect{a}\cdot\vect{b} = \vect{a}\T\vect{b} = \sum_{i=1}^{d} a_i b_i .
+\end{equation}
+\end{definition}
+
+\Cref{ch:linalg} met it already; here is the property attention relies on. Writing
+$\norm{\vect{a}} = \sqrt{\vect{a}\cdot\vect{a}}$ for the length of a vector and $\theta$ for the
+angle between the two vectors,
+\begin{equation}\label{eq:attention:cos}
+  \vect{a}\cdot\vect{b} = \norm{\vect{a}}\,\norm{\vect{b}}\cos\theta .
+\end{equation}
+So the dot product is large and positive when the vectors point the same way ($\cos\theta$ near
+1), near zero when they are at right angles, and negative when they point in opposite directions.
+It is a similarity score, and it grows with the lengths of the vectors too, which will matter in
+\cref{sec:attention:scale}.
+
+\begin{worked}[label={we:attention:dots}]{Three dot products}
+Take the query $\vect{q} = (1, 0)$ and three keys $\vect{k}_1 = (1, 0)$, $\vect{k}_2 = (0, 1)$,
+$\vect{k}_3 = (1, 1)$. Multiply component by component and add.
+\begin{align*}
+  \vect{q}\cdot\vect{k}_1 &= 1\cdot 1 + 0\cdot 0 = 1 + 0 = 1,\\
+  \vect{q}\cdot\vect{k}_2 &= 1\cdot 0 + 0\cdot 1 = 0 + 0 = 0,\\
+  \vect{q}\cdot\vect{k}_3 &= 1\cdot 1 + 0\cdot 1 = 1 + 0 = 1.
+\end{align*}
+The query ``asks about'' the first feature. Keys 1 and 3 both have a first feature of 1, so
+they score 1; key 2 has none, so it scores 0. Note that $\vect{k}_3$ is longer
+($\norm{\vect{k}_3} = \sqrt{2}$) but the score depends only on the part of $\vect{k}_3$ that lies
+along $\vect{q}$.
+\end{worked}
+
+\section{From scores to proportions: the softmax}\label{sec:attention:softmax}
+
+\subsection{What we need, and the formula that delivers it}
+
+Scores can be any real numbers, negative included. To take a weighted average we need weights
+that are
+\begin{enumerate}
+  \item \emph{positive}, so that no token is subtracted;
+  \item \emph{summing to one}, so that the result is an average and not a sum that grows with
+  the number of tokens;
+  \item \emph{order-preserving}, so that a higher score always gets a higher weight;
+  \item \emph{smooth}, so that a small change in a score makes a small change in the weights
+  (training needs derivatives, \cref{ch:trainloop}).
+\end{enumerate}
+Step 1, make every score positive while keeping the order: apply the exponential function
+$e^{s}$, which is positive for every real $s$ and strictly increasing. Step 2, make them sum to
+one: divide each by their total. The result is the softmax.
+
+\begin{definition}[Softmax]
+For scores $\vect{s} = (s_1, \dots, s_n)$,
+\begin{equation}\label{eq:attention:softmax}
+  \softmax(\vect{s})_i = \frac{e^{s_i}}{\sum_{j=1}^{n} e^{s_j}}, \qquad i = 1,\dots,n.
+\end{equation}
+\end{definition}\index{softmax}
+
+Check the four requirements. Each numerator is positive and so is the denominator, so every
+weight is positive. Adding all $n$ weights gives $\sum_i e^{s_i} / \sum_j e^{s_j} = 1$. Because
+$e^{s}$ is increasing, $s_a > s_b$ gives $e^{s_a} > e^{s_b}$ and so a larger weight. And $e^s$ is
+smooth.
+
+The name says what it does: it is a ``soft'' version of picking the maximum. The largest score
+gets the largest share, but every score gets something.
+
+\begin{worked}[label={we:attention:softmax}]{Softmax of three scores}
+Take $\vect{s} = (2, 1, 0)$. Do this on paper with a calculator for $e^x$.
+
+\emph{Exponentiate each score.}
+\begin{align*}
+  e^{2} &= 7.3891, & e^{1} &= 2.7183, & e^{0} &= 1.0000 .
+\end{align*}
+\emph{Add them.}
+\begin{align*}
+  7.3891 + 2.7183 + 1.0000 &= 11.1074 .
+\end{align*}
+(To four decimals the exact total is 11.1073; the last digit differs because each term was
+rounded first.)
+
+\emph{Divide each by the total.}
+\begin{align*}
+  7.3891 / 11.1073 &= 0.6652,\\
+  2.7183 / 11.1073 &= 0.2447,\\
+  1.0000 / 11.1073 &= 0.0900.
+\end{align*}
+\emph{Check the sum.} $0.6652 + 0.2447 + 0.0900 = 0.9999$, which is 1 up to rounding.
+
+The scores were evenly spaced (2, 1, 0), but the weights are not: each step down in score
+divides the weight by $e \approx 2.718$. Softmax turns \emph{differences} of scores into
+\emph{ratios} of weights.
+\end{worked}
+
+That last remark is worth making exact. For any two positions $a$ and $b$,
+\begin{align}
+  \frac{\softmax(\vect{s})_a}{\softmax(\vect{s})_b}
+  &= \frac{e^{s_a} / \sum_j e^{s_j}}{e^{s_b} / \sum_j e^{s_j}}
+  && \text{write out both weights} \notag\\
+  &= \frac{e^{s_a}}{e^{s_b}} && \text{the common denominator cancels} \notag\\
+  &= e^{s_a - s_b} && \text{rule } e^{x}/e^{y} = e^{x-y}. \label{eq:attention:ratio}
+\end{align}
+A score lead of 1 means a weight ratio of $e = 2.718$; a lead of 2 means $e^2 = 7.389$; a lead of
+11 means about 60{,}000.
+
+\subsection{Shifting all scores changes nothing}\label{sec:attention:shift}
+
+\begin{keypoint}
+Adding the same constant to every score leaves the softmax unchanged; only the differences
+between scores matter.
+\end{keypoint}
+
+\emph{Proof.} Let $c$ be any number and add it to every score.
+\begin{align*}
+  \softmax(\vect{s} + c)_i
+  &= \frac{e^{s_i + c}}{\sum_j e^{s_j + c}} && \text{definition, with } s_j + c \text{ in place of } s_j\\
+  &= \frac{e^{s_i} e^{c}}{\sum_j e^{s_j} e^{c}} && \text{rule } e^{x+y} = e^{x} e^{y}\\
+  &= \frac{e^{c}\, e^{s_i}}{e^{c} \sum_j e^{s_j}} && e^{c} \text{ does not depend on } j \text{, so it comes out of the sum}\\
+  &= \frac{e^{s_i}}{\sum_j e^{s_j}} = \softmax(\vect{s})_i && \text{cancel } e^{c} \neq 0. \qquad\blacksquare
+\end{align*}
+This agrees with \cref{eq:attention:ratio}: the ratios depend only on differences.
+
+\subsection{Numerical stability: subtract the maximum}\label{sec:attention:stable}
+
+Computers store these numbers as 32-bit floating-point values (\emph{float32}). The largest
+float32 is about $3.4028\times10^{38}$, and $\ln(3.4028\times10^{38}) = 88.72$. So $e^{s}$ for
+any score above 88.72 cannot be stored; it becomes ``infinity''. In PyTorch,
+\code{torch.exp(torch.tensor(89.0))} returns \code{inf}. Two infinities divided give
+``not a number'', and one such value poisons a whole training run.
+
+The cure follows from \cref{sec:attention:shift}. Choose $c = -\max_j s_j$: subtract the largest
+score from all of them. The softmax is unchanged, but now the largest shifted score is exactly 0,
+so the largest exponential is $e^0 = 1$ and nothing can overflow. Every other exponential lies
+between 0 and 1. \index{softmax!numerical stability}
+
+\begin{worked}[label={we:attention:stable}]{The stable softmax}
+First redo \cref{we:attention:softmax} the stable way. The maximum of $(2, 1, 0)$ is 2.
+
+\emph{Subtract the maximum.} $(2-2,\ 1-2,\ 0-2) = (0, -1, -2)$.
+
+\emph{Exponentiate.} $e^{0} = 1.0000$, $e^{-1} = 0.3679$, $e^{-2} = 0.1353$.
+
+\emph{Add.} $1.0000 + 0.3679 + 0.1353 = 1.5032$.
+
+\emph{Divide.} $1.0000/1.5032 = 0.6652$, $0.3679/1.5032 = 0.2447$, $0.1353/1.5032 = 0.0900$.
+
+The same weights as before, as the proof promised. Now a case where it matters: scores
+$(1000, 999)$. Directly, $e^{1000}$ overflows. Stably:
+\begin{align*}
+  (1000 - 1000,\ 999 - 1000) &= (0, -1),\\
+  e^{0} = 1.0000,\quad e^{-1} &= 0.3679,\\
+  1.0000 + 0.3679 &= 1.3679,\\
+  1.0000/1.3679 = 0.7311,\quad 0.3679/1.3679 &= 0.2689.
+\end{align*}
+PyTorch's \code{F.softmax}, which the model calls, does this subtraction internally.
+\end{worked}
+
+\subsection{Saturation: when one score takes everything}\label{sec:attention:saturation}
+
+Stability stops the computer from failing. It does not stop softmax from becoming useless when
+the scores are spread far apart. Consider scores $(20, 0, -15)$:
+\begin{align*}
+  e^{20} &= 485{,}165{,}195.4, & e^{0} &= 1, & e^{-15} &= 0.000\,000\,306 .
+\end{align*}
+The total is $485{,}165{,}196.4$ (the third term does not even reach the first decimal), so the
+weights are
+\begin{align*}
+  485{,}165{,}195.4 / 485{,}165{,}196.4 &= 0.999\,999\,998,\\
+  1 / 485{,}165{,}196.4 &= 0.000\,000\,002\,1,\\
+  0.000\,000\,306 / 485{,}165{,}196.4 &= 0.000\,000\,000\,000\,000\,63 .
+\end{align*}
+The first token takes the whole average. We say the softmax has
+\emph{saturated}\index{softmax!saturation}. Two things go wrong.
+\begin{enumerate}
+  \item The output is a copy of one value; no blending happens.
+  \item Training cannot fix it, because, as we now show, the softmax's derivatives are
+  essentially zero when it is saturated.
+\end{enumerate}
+
+\paragraph{The derivative of the softmax.} Training adjusts every number in the model in the
+direction that lowers the loss (\cref{ch:recon} introduced the loss; \cref{ch:trainloop} does the
+adjusting). To know that direction it needs derivatives. Write $p_i = \softmax(\vect{s})_i$ and
+$Z = \sum_j e^{s_j}$, so $p_i = e^{s_i}/Z$. We want $\partial p_i / \partial s_k$, how much weight
+$i$ changes when score $k$ moves.
+
+First, $\partial Z / \partial s_k = e^{s_k}$, because only the $k$-th term of the sum contains
+$s_k$, and the derivative of $e^{s}$ is $e^{s}$.
+
+\emph{Case $k = i$.} Use the quotient rule $(u/v)' = (u'v - uv')/v^2$ with $u = e^{s_i}$,
+$v = Z$:
+\begin{align*}
+  \frac{\partial p_i}{\partial s_i}
+  &= \frac{e^{s_i} Z - e^{s_i} e^{s_i}}{Z^2} && \text{quotient rule}\\
+  &= \frac{e^{s_i}}{Z}\cdot\frac{Z - e^{s_i}}{Z} && \text{take out the factor } e^{s_i}/Z\\
+  &= p_i (1 - p_i) && \text{since } e^{s_i}/Z = p_i .
+\end{align*}
+\emph{Case $k \neq i$.} Now $u = e^{s_i}$ does not depend on $s_k$, so $u' = 0$:
+\begin{align*}
+  \frac{\partial p_i}{\partial s_k}
+  &= \frac{0\cdot Z - e^{s_i} e^{s_k}}{Z^2} = -\frac{e^{s_i}}{Z}\cdot\frac{e^{s_k}}{Z} = -p_i p_k .
+\end{align*}
+Both cases in one line, with $\delta_{ik}$ equal to 1 when $i = k$ and 0 otherwise:
+\begin{equation}\label{eq:attention:softmaxgrad}
+  \frac{\partial p_i}{\partial s_k} = p_i(\delta_{ik} - p_k).
+\end{equation}
+
+Every derivative contains a product of two weights. If one weight is nearly 1 and the rest
+nearly 0, every such product is nearly 0.
+
+\begin{worked}[label={we:attention:satgrad}]{Gradients of a healthy and a saturated softmax}
+Use $\partial p_i/\partial s_i = p_i(1-p_i)$.
+
+\emph{Healthy scores $(1, 0, -1)$.} By the stable recipe the weights are $(0.6652, 0.2447,
+0.0900)$ (the same as for $(2,1,0)$, by \cref{sec:attention:shift}). Then
+\begin{align*}
+  0.6652\times(1 - 0.6652) &= 0.6652\times0.3348 = 0.2227,\\
+  0.2447\times(1 - 0.2447) &= 0.2447\times0.7553 = 0.1848,\\
+  0.0900\times(1 - 0.0900) &= 0.0900\times0.9100 = 0.0819.
+\end{align*}
+\emph{Saturated scores $(20, 0, -15)$.} The weights are $(0.999\,999\,998,\ 2.1\times10^{-9},\
+6.3\times10^{-16})$. Then
+\begin{align*}
+  0.999\,999\,998\times 0.000\,000\,002 &\approx 2.1\times10^{-9},\\
+  2.1\times10^{-9}\times(1 - 2.1\times10^{-9}) &\approx 2.1\times10^{-9},\\
+  6.3\times10^{-16}\times(1 - 6.3\times10^{-16}) &\approx 6.3\times10^{-16}.
+\end{align*}
+The healthy softmax passes about a fifth of any error signal back to its scores; the saturated
+one passes about two parts in a billion. The losing tokens never get the signal that would let
+them improve, and learning stalls.
+\end{worked}
+
+So we want scores whose spread is of order 1, not of order 20. \Cref{sec:attention:scale} shows
+where large spreads come from and how one division prevents them.
+
+\section{One query against many keys}\label{sec:attention:onequery}
+
+We now have all three ingredients. Give one token a \emph{query} vector $\vect{q}$ and give every
+token $j = 1,\dots,n$ a \emph{key} $\vect{k}_j$ and a \emph{value} $\vect{v}_j$, all of length
+$d$. Then
+\begin{align}
+  s_j &= \vect{q}\cdot\vect{k}_j && \text{score: how relevant is token } j\text{?} \label{eq:attention:s}\\
+  p_j &= \softmax(s_1,\dots,s_n)_j && \text{weight: its share of attention} \label{eq:attention:p}\\
+  \vect{o} &= \sum_{j=1}^{n} p_j \vect{v}_j && \text{output: the weighted average of values.} \label{eq:attention:o}
+\end{align}
+(The full model also divides each score by $\sqrt{d}$; we add that in
+\cref{sec:attention:scale}, and the worked example below already includes it so that its numbers
+match the course.)
+
+\begin{worked}[label={we:attention:onequery}]{One query, three tokens of dimension 2}
+Three tokens, each with two features:
+\[
+  \vect{x}_1 = (1, 0),\qquad \vect{x}_2 = (0, 1),\qquad \vect{x}_3 = (1, 1).
+\]
+For now let the query, key and value of every token be the token itself (in the next section
+they become learned transformations of it). Token 1 asks: $\vect{q} = \vect{x}_1 = (1, 0)$.
+
+\emph{Step 1, scores.} From \cref{we:attention:dots}: $(1, 0, 1)$.
+
+\emph{Step 1b, scale by $1/\sqrt{d}$ with $d = 2$.} $1/\sqrt{2} = 0.7071$, so the scaled scores
+are $(0.7071,\ 0,\ 0.7071)$.
+
+\emph{Step 2, softmax.} Exponentiate:
+\begin{align*}
+  e^{0.7071} &= 2.0281, & e^{0} &= 1.0000, & e^{0.7071} &= 2.0281.
+\end{align*}
+Add: $2.0281 + 1.0000 + 2.0281 = 5.0562$. Divide:
+\begin{align*}
+  2.0281/5.0562 &= 0.4011, & 1.0000/5.0562 &= 0.1978, & 2.0281/5.0562 &= 0.4011.
+\end{align*}
+Check: $0.4011 + 0.1978 + 0.4011 = 1.0000$.
+
+\emph{Step 3, weighted average of the values,} one feature at a time.
+First feature (the first number of each value):
+\begin{align*}
+  0.4011\times 1 &= 0.4011\\
+  0.1978\times 0 &= 0.0000\\
+  0.4011\times 1 &= 0.4011\\
+  \text{sum} &= 0.8022 .
+\end{align*}
+Second feature:
+\begin{align*}
+  0.4011\times 0 &= 0.0000\\
+  0.1978\times 1 &= 0.1978\\
+  0.4011\times 1 &= 0.4011\\
+  \text{sum} &= 0.5989 .
+\end{align*}
+So $\vect{o}_1 = (0.8022,\ 0.5989)$.
+
+Token 1 went in as $(1, 0)$ and came out as $(0.80, 0.60)$. Its second feature was zero and is
+now 0.60, because it judged tokens 2 and 3, which have a second feature, worth listening to.
+It has absorbed context.
+\end{worked}
+
+\section{Queries, keys and values are learned projections}\label{sec:attention:qkv}
+
+In \cref{we:attention:onequery} the query, key and value were all the token itself. That forces
+a token to search for exactly what it advertises, and to hand over exactly what it is. Real
+attention separates the three roles with three learned matrices.
+
+\begin{definition}[Query, key, value]
+Let $\vect{x}\in\R^{C}$ be a token. With three learned matrices
+$\mat{W}_Q, \mat{W}_K, \mat{W}_V \in \R^{C\times C}$ and bias vectors
+$\vect{b}_Q, \vect{b}_K, \vect{b}_V\in\R^{C}$,
+\begin{align}
+  \vect{q} = \vect{x}\T\mat{W}_Q + \vect{b}_Q\T,\qquad
+  \vect{k} = \vect{x}\T\mat{W}_K + \vect{b}_K\T,\qquad
+  \vect{v} = \vect{x}\T\mat{W}_V + \vect{b}_V\T .
+\end{align}
+The query\index{query} is what the token is looking for, the key\index{key} is what it
+advertises about itself, and the value\index{value} is what it hands over when consulted.
+\end{definition}
+
+Each is a \emph{linear layer}\index{linear layer} (\cref{ch:shapes}): a matrix product plus a
+bias. The learned numbers in $\mat{W}$ and $\vect{b}$ are \emph{parameters}: values the training
+loop adjusts. In code (\file{app/foundation_models/components/efficient_self_attention.py},
+lines 87--94):
+\begin{lstlisting}
+self.q = nn.Linear(embed_dim, embed_dim)     # (*, C) -> (*, C)
+self.k = nn.Linear(embed_dim, embed_dim)
+self.v = nn.Linear(embed_dim, embed_dim)
+self.proj = nn.Linear(embed_dim, embed_dim)  # output projection, section 7
+\end{lstlisting}
+\begin{sourcenote}[: which way round PyTorch stores the matrix]
+PyTorch's \code{nn.Linear(in, out)} stores its weight with shape \shape{(out, in)} and computes
+$\vect{y} = \vect{x}\mat{W}\T + \vect{b}$, as the source comment at
+\file{efficient_self_attention.py} line 89 says. This book writes $\vect{x}\T\mat{W}$ with
+$\mat{W}$ of shape $(\text{in}, \text{out})$; the two are the same map with $\mat{W}$ stored
+transposed. The parameter count, $\text{in}\times\text{out} + \text{out}$, is the same either way.
+\end{sourcenote}
+
+Why three separate matrices and not one? Because ``what I am looking for'' and ``what I
+advertise'' are usually different. A token over a road edge might want to find other road
+pixels (its query), while advertising itself as ``bright, linear'' (its key) and contributing
+its exact spectrum-derived features (its value). Separate projections let a token search for one
+thing while offering another.
+
+\section{Attention in matrix form}\label{sec:attention:matrix}
+
+Doing \cref{we:attention:onequery} once per token is slow to write and slow to compute. Matrices
+do all tokens at once.
+
+\subsection{Stacking tokens}
+
+Stack the $N$ tokens as the rows of a matrix $\mat{X}$ of shape $(N, C)$; row $i$ is token $i$.
+Then all queries at once are
+\begin{equation}
+  \mat{Q} = \mat{X}\mat{W}_Q,\qquad (N, C)\,(C, C) \to (N, C),
+\end{equation}
+because row $i$ of a product $\mat{X}\mat{W}$ is (row $i$ of $\mat{X}$) times $\mat{W}$. (We drop
+the biases in this section to keep the algebra short; they add the same vector to every row.)
+Likewise $\mat{K} = \mat{X}\mat{W}_K$ and $\mat{V} = \mat{X}\mat{W}_V$, each $(N, C)$.
+
+\subsection{All scores at once: \texorpdfstring{$\mat{Q}\mat{K}\T$}{QK transpose}}
+
+The transpose $\mat{K}\T$ swaps rows and columns, so it has shape $(C, N)$ and its column $j$ is
+key $j$. Recall that entry $(i, j)$ of a product $\mat{A}\mat{B}$ is the dot product of row $i$ of
+$\mat{A}$ with column $j$ of $\mat{B}$. Therefore
+\begin{equation}\label{eq:attention:S}
+  \mat{S} = \mat{Q}\mat{K}\T,\qquad (N, C)\,(C, N) \to (N, N),\qquad
+  S_{ij} = \vect{q}_i\cdot\vect{k}_j .
+\end{equation}
+Entry $(i, j)$ is ``how relevant token $j$ is to token $i$''. Row $i$ holds all of token $i$'s
+scores.
+
+\subsection{The whole layer}
+
+\begin{definition}[Scaled dot-product attention]
+\begin{equation}\label{eq:attention:sdpa}
+  \operatorname{Attention}(\mat{Q}, \mat{K}, \mat{V}) = \softmax_{\text{row}}\!\left(\frac{\mat{Q}\mat{K}\T}{\sqrt{d}}\right)\mat{V},
+\end{equation}
+where $\softmax_{\text{row}}$ applies \cref{eq:attention:softmax} to each row separately and $d$
+is the length of each query and key.
+\end{definition}\index{attention!scaled dot-product}
+Shapes, step by step:
+\begin{align*}
+  \mat{Q}\mat{K}\T/\sqrt{d} &: (N, d)(d, N)\to(N, N) && \text{one score per (query, key) pair}\\
+  \mat{A} = \softmax_{\text{row}}(\cdot) &: (N, N) && \text{each row sums to 1}\\
+  \mat{A}\mat{V} &: (N, N)(N, d)\to(N, d) && \text{one blended value per token.}
+\end{align*}
+Row $i$ of $\mat{A}\mat{V}$ is $\sum_j A_{ij}\vect{v}_j$, exactly \cref{eq:attention:o} for query
+$i$. The matrix $\mat{A}$ is the \emph{attention matrix}\index{attention matrix}.
+
+This is the operation of \citet{vaswani2017attention}, and it is what the four lines of the
+model's forward pass compute (\file{efficient_self_attention.py}, lines 182--195):
+\begin{lstlisting}
+scores  = Q_x @ K_x.transpose(-2, -1) * self.scale   # (B, h, N, N_red)
+weights = F.softmax(scores, dim=-1)                   # rows sum to 1
+out     = weights @ V_x                               # (B, h, N, d)
+out     = self.proj(out_concatenated)                 # section 7
+\end{lstlisting}
+(\code{@} is matrix multiplication in Python; \code{dim=-1} means ``along the last axis'', that is,
+along each row; \code{N_red} becomes $N$ until \cref{ch:esa}.)
+
+\begin{worked}[label={we:attention:full}]{Full attention on three tokens, identity projections}
+Use the tokens of \cref{we:attention:onequery} with $\mat{W}_Q=\mat{W}_K=\mat{W}_V=\mat{I}$, so
+\[
+  \mat{Q} = \mat{K} = \mat{V} = \mat{X} =
+  \begin{pmatrix} 1 & 0\\ 0 & 1\\ 1 & 1 \end{pmatrix}.
+\]
+\emph{Transpose.} $\mat{K}\T = \begin{pmatrix} 1 & 0 & 1\\ 0 & 1 & 1\end{pmatrix}$.
+
+\emph{Scores $\mat{Q}\mat{K}\T$,} one entry at a time (row of $\mat{Q}$ dotted with column of
+$\mat{K}\T$):
+\begin{align*}
+  S_{11} &= 1\cdot1 + 0\cdot0 = 1, & S_{12} &= 1\cdot0 + 0\cdot1 = 0, & S_{13} &= 1\cdot1 + 0\cdot1 = 1,\\
+  S_{21} &= 0\cdot1 + 1\cdot0 = 0, & S_{22} &= 0\cdot0 + 1\cdot1 = 1, & S_{23} &= 0\cdot1 + 1\cdot1 = 1,\\
+  S_{31} &= 1\cdot1 + 1\cdot0 = 1, & S_{32} &= 1\cdot0 + 1\cdot1 = 1, & S_{33} &= 1\cdot1 + 1\cdot1 = 2.
+\end{align*}
+\emph{Scale} by $0.7071$:
+\[
+  \frac{\mat{S}}{\sqrt2} = \begin{pmatrix} 0.7071 & 0 & 0.7071\\ 0 & 0.7071 & 0.7071\\ 0.7071 & 0.7071 & 1.4142\end{pmatrix}.
+\]
+\emph{Softmax each row.} Row 1 was done in \cref{we:attention:onequery}: $(0.4011, 0.1978,
+0.4011)$. Row 2 has the same numbers in a different order, so its weights are $(0.1978, 0.4011,
+0.4011)$. Row 3 is new:
+\begin{align*}
+  e^{0.7071} = 2.0281,\quad e^{0.7071} &= 2.0281,\quad e^{1.4142} = 4.1133,\\
+  2.0281 + 2.0281 + 4.1133 &= 8.1695,\\
+  2.0281/8.1695 = 0.2483,\quad 2.0281/8.1695 &= 0.2483,\quad 4.1133/8.1695 = 0.5035.
+\end{align*}
+Check: $0.2483 + 0.2483 + 0.5035 = 1.0001$, one up to rounding. So
+\[
+  \mat{A} = \begin{pmatrix} 0.4011 & 0.1978 & 0.4011\\ 0.1978 & 0.4011 & 0.4011\\ 0.2483 & 0.2483 & 0.5035\end{pmatrix}.
+\]
+\emph{Multiply by $\mat{V}$.} Row 1 gave $(0.8022, 0.5989)$. Row 2:
+\begin{align*}
+  \text{feature 1: } 0.1978\cdot1 + 0.4011\cdot0 + 0.4011\cdot1 &= 0.1978 + 0 + 0.4011 = 0.5989,\\
+  \text{feature 2: } 0.1978\cdot0 + 0.4011\cdot1 + 0.4011\cdot1 &= 0 + 0.4011 + 0.4011 = 0.8022.
+\end{align*}
+Row 3:
+\begin{align*}
+  \text{feature 1: } 0.2483\cdot1 + 0.2483\cdot0 + 0.5035\cdot1 &= 0.2483 + 0 + 0.5035 = 0.7518,\\
+  \text{feature 2: } 0.2483\cdot0 + 0.2483\cdot1 + 0.5035\cdot1 &= 0 + 0.2483 + 0.5035 = 0.7518.
+\end{align*}
+(The script gives 0.7517 from unrounded weights.) The output is
+\[
+  \mat{A}\mat{V} = \begin{pmatrix} 0.8022 & 0.5989\\ 0.5989 & 0.8022\\ 0.7518 & 0.7518\end{pmatrix}.
+\]
+Tokens 1 and 2 are mirror images, as the symmetry of the input demands, and token 3, which
+resembles both, has become an even blend.
+\end{worked}
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}[x=1.45cm,y=1.0cm]
+  % cells: row/col/value (rows top to bottom)
+  \foreach \r/\c/\v in {1/1/0.4011,1/2/0.1978,1/3/0.4011,
+                         2/1/0.1978,2/2/0.4011,2/3/0.4011,
+                         3/1/0.2483,3/2/0.2483,3/3/0.5035}{
+    \pgfmathtruncatemacro{\p}{\v*140}
+    \fill[attn!\p] (\c-1, -\r+1) rectangle (\c, -\r);
+    \draw[white, line width=1pt] (\c-1, -\r+1) rectangle (\c, -\r);
+    \pgfmathsetmacro{\tc}{\v > 0.45 ? 1 : 0}
+    \ifdim\tc pt>0.5pt
+      \node[white, font=\small\bfseries] at (\c-0.5, -\r+0.5) {\v};
+    \else
+      \node[black, font=\small] at (\c-0.5, -\r+0.5) {\v};
+    \fi
+  }
+  \foreach \c/\t in {1/{key 1},2/{key 2},3/{key 3}}
+    \node[font=\small, spat] at (\c-0.5, 0.35) {\t};
+  \foreach \r/\t in {1/{query 1},2/{query 2},3/{query 3}}
+    \node[font=\small, spat, anchor=east] at (-0.1, -\r+0.5) {\t};
+  \foreach \r/\s in {1/{0.4011 + 0.1978 + 0.4011 = 1},2/{0.1978 + 0.4011 + 0.4011 = 1},3/{0.2483 + 0.2483 + 0.5035 = 1}}
+    \node[font=\footnotesize, anchor=west] at (3.15, -\r+0.5) {row sum: $\s$};
+  \draw[decorate,decoration={brace,amplitude=4pt,mirror}] (0,-3.15) -- (3,-3.15)
+    node[midway, below=5pt, font=\small] {softmax runs along each row};
+\end{tikzpicture}
+\caption{The attention matrix $\mat{A}$ of \cref{we:attention:full}, drawn as a heat map (darker
+plum = larger weight). Row $i$ is how query $i$ shares its attention among the three keys; every
+row sums to 1, columns need not. Token 3, which resembles both others, puts half its attention on
+itself.}
+\label{fig:attention:heatmap}
+\end{figure}
+
+\coursefig[0.95\linewidth]{iw-12-attention}{The same example as the course draws it: (a) three
+2-number tokens with $\mat{Q}=\mat{K}=\mat{V}=\mat{X}$; (b) scaled scores $\vect{q}\cdot\vect{k}/\sqrt2$;
+(c) softmax along each row; (d) each output is the weighted average of the values. Every number
+matches \cref{we:attention:full}.}{fig:attention:course}
+
+\begin{worked}[label={we:attention:proj}]{Full attention with real projections}
+Now let the three roles differ. Keep $\mat{X}$ as before and take
+\[
+  \mat{W}_Q = \begin{pmatrix}1 & 0\\ 1 & 1\end{pmatrix},\qquad
+  \mat{W}_K = \mat{I},\qquad
+  \mat{W}_V = \begin{pmatrix}0 & 1\\ 1 & 0\end{pmatrix}.
+\]
+$\mat{W}_V$ swaps the two features: what a token hands over is its features in reverse order.
+
+\emph{Queries $\mat{Q} = \mat{X}\mat{W}_Q$,} row by row (row of $\mat{X}$ times each column of
+$\mat{W}_Q$):
+\begin{align*}
+  (1,0)\mat{W}_Q &= (1\cdot1 + 0\cdot1,\ 1\cdot0 + 0\cdot1) = (1, 0),\\
+  (0,1)\mat{W}_Q &= (0\cdot1 + 1\cdot1,\ 0\cdot0 + 1\cdot1) = (1, 1),\\
+  (1,1)\mat{W}_Q &= (1\cdot1 + 1\cdot1,\ 1\cdot0 + 1\cdot1) = (2, 1).
+\end{align*}
+\emph{Keys} $\mat{K} = \mat{X}$. \emph{Values $\mat{V} = \mat{X}\mat{W}_V$:} $(0,1)$, $(1,0)$,
+$(1,1)$.
+
+\emph{Scores $\mat{Q}\mat{K}\T$:}
+\begin{align*}
+  \text{row 1, } \vect{q}=(1,0)&: \quad 1,\ 0,\ 1\\
+  \text{row 2, } \vect{q}=(1,1)&: \quad 1\cdot1+1\cdot0 = 1,\ \ 1\cdot0+1\cdot1 = 1,\ \ 1\cdot1+1\cdot1 = 2\\
+  \text{row 3, } \vect{q}=(2,1)&: \quad 2\cdot1+1\cdot0 = 2,\ \ 2\cdot0+1\cdot1 = 1,\ \ 2\cdot1+1\cdot1 = 3 .
+\end{align*}
+\emph{Scale by 0.7071 and softmax.} Rows 1 and 2 are rows we have met: $(0.4011, 0.1978,
+0.4011)$ and $(0.2483, 0.2483, 0.5035)$. Row 3, scaled, is $(1.4142, 0.7071, 2.1213)$:
+\begin{align*}
+  e^{1.4142} = 4.1133,\quad e^{0.7071} &= 2.0281,\quad e^{2.1213} = 8.3421,\\
+  4.1133 + 2.0281 + 8.3421 &= 14.4835,\\
+  4.1133/14.4835 = 0.2840,\quad 2.0281/14.4835 &= 0.1400,\quad 8.3421/14.4835 = 0.5760.
+\end{align*}
+\emph{Blend the values.} Row 1: $0.4011(0,1) + 0.1978(1,0) + 0.4011(1,1)$:
+\begin{align*}
+  \text{feature 1: } 0 + 0.1978 + 0.4011 &= 0.5989,\qquad
+  \text{feature 2: } 0.4011 + 0 + 0.4011 = 0.8022 .
+\end{align*}
+Row 2: $0.2483(0,1) + 0.2483(1,0) + 0.5035(1,1)$ gives $(0.2483 + 0.5035,\ 0.2483 + 0.5035) =
+(0.7518, 0.7518)$. Row 3: $0.2840(0,1) + 0.1400(1,0) + 0.5760(1,1)$:
+\begin{align*}
+  \text{feature 1: } 0 + 0.1400 + 0.5760 &= 0.7160,\qquad
+  \text{feature 2: } 0.2840 + 0 + 0.5760 = 0.8600 .
+\end{align*}
+Compare with \cref{we:attention:full}. Token 2 used to attend mostly to itself and token 3;
+with its new query $(1,1)$ it now prefers token 3, the one that has both features. The projections
+changed \emph{who} is listened to (through $\mat{W}_Q$) and \emph{what} is heard (through
+$\mat{W}_V$). Training learns these matrices.
+\end{worked}
+
+\section[Why divide by the square root of d]{Why divide by \texorpdfstring{$\sqrt{d}$}{the square root of d}}\label{sec:attention:scale}
+
+\Cref{sec:attention:saturation} showed that softmax saturates when the scores are spread over
+tens of units. Where would such spreads come from? From the length of the vectors.
+
+\subsection{The variance of a dot product}
+
+Recall from \cref{ch:linalg} that the \emph{variance}\index{variance} of a random number $X$ is
+$\operatorname{Var}(X) = \E[X^2] - (\E[X])^2$, the average squared distance from its mean; its
+square root is the \emph{standard deviation}, the typical size of a deviation.
+
+\paragraph{Assumptions.} Model the components of a query and a key as random numbers:
+$q_1,\dots,q_d$ and $k_1,\dots,k_d$, all independent, each with mean 0 and variance 1. (This is roughly
+what LayerNorm, \cref{ch:block}, and standard weight initialisation produce at the start of
+training.)
+
+\emph{Step 1: one term $q_i k_i$ has mean 0.} For independent numbers the mean of a product is the
+product of the means:
+\[
+  \E[q_i k_i] = \E[q_i]\,\E[k_i] = 0\cdot0 = 0 .
+\]
+\emph{Step 2: one term has variance 1.} Using the definition of variance and then independence
+again (now for $q_i^2$ and $k_i^2$):
+\begin{align*}
+  \operatorname{Var}(q_i k_i) &= \E[(q_i k_i)^2] - (\E[q_i k_i])^2 && \text{definition}\\
+  &= \E[q_i^2 k_i^2] - 0^2 && \text{step 1}\\
+  &= \E[q_i^2]\,\E[k_i^2] && \text{independence}\\
+  &= 1\cdot1 = 1 && \E[q_i^2] = \operatorname{Var}(q_i) + (\E[q_i])^2 = 1 + 0 .
+\end{align*}
+\emph{Step 3: add $d$ independent terms.} The variance of a sum of independent random numbers is
+the sum of their variances. The terms $q_1k_1, \dots, q_dk_d$ are independent of each other, so
+\begin{equation}\label{eq:attention:vard}
+  \operatorname{Var}(\vect{q}\cdot\vect{k}) = \sum_{i=1}^{d}\operatorname{Var}(q_i k_i) = \underbrace{1 + 1 + \dots + 1}_{d\text{ terms}} = d .
+\end{equation}
+The standard deviation of a raw score is therefore $\sqrt{d}$: it grows with the head dimension.
+
+\emph{Step 4: divide by $\sqrt d$.} For any constant $a$, $\operatorname{Var}(aX) =
+a^2\operatorname{Var}(X)$ (every deviation is multiplied by $a$, every squared deviation by $a^2$).
+With $a = 1/\sqrt d$:
+\begin{equation}\label{eq:attention:var1}
+  \operatorname{Var}\!\left(\frac{\vect{q}\cdot\vect{k}}{\sqrt d}\right) = \frac{1}{d}\cdot d = 1 .
+\end{equation}
+Whatever the head dimension, the scaled scores have a standard deviation of about 1, which keeps
+the softmax in its gradual, trainable range.\index{attention!scaling by root d}
+
+\begin{worked}[label={we:attention:enum}]{The variance of a 2-dimensional dot product, exactly}
+Let each of $q_1, q_2, k_1, k_2$ be $+1$ or $-1$ with equal probability. Each has mean
+$\tfrac12(1) + \tfrac12(-1) = 0$ and variance $\tfrac12(1)^2 + \tfrac12(-1)^2 = 1$, so the
+assumptions hold. There are $2^4 = 16$ equally likely combinations.
+
+Each product $q_ik_i$ is $+1$ (when the signs agree) or $-1$ (when they differ), each with
+probability $\tfrac12$. The score $q_1k_1 + q_2k_2$ is therefore
+\begin{align*}
+  (+1) + (+1) &= +2 && \text{probability } \tfrac12\cdot\tfrac12 = \tfrac14 \quad(4\text{ of the 16})\\
+  (+1) + (-1) \text{ or } (-1) + (+1) &= 0 && \text{probability } \tfrac14 + \tfrac14 = \tfrac12 \quad(8\text{ of the 16})\\
+  (-1) + (-1) &= -2 && \text{probability } \tfrac14 \quad(4\text{ of the 16}).
+\end{align*}
+The mean is $\tfrac14(2) + \tfrac12(0) + \tfrac14(-2) = 0$. The variance is the mean of the
+squares:
+\begin{align*}
+  \tfrac14(2)^2 + \tfrac12(0)^2 + \tfrac14(-2)^2 &= \tfrac14\cdot4 + 0 + \tfrac14\cdot4 = 1 + 0 + 1 = 2 = d .
+\end{align*}
+Dividing every score by $\sqrt2$ gives scores $\pm1.4142$ and 0, with variance $2/2 = 1$.
+\end{worked}
+
+The script repeats the experiment with 200{,}000 random Gaussian queries and keys for larger
+$d$\tagC:
+
+\begin{center}
+\begin{tabular}{rrrrr}
+\toprule
+$d$ & sample variance of $\vect{q}\cdot\vect{k}$ & sample std & $\sqrt d$ & variance after $\div\sqrt d$\\
+\midrule
+2 & 2.002 & 1.415 & 1.414 & 1.001\\
+16 & 15.985 & 3.998 & 4.000 & 0.999\\
+32 & 31.746 & 5.634 & 5.657 & 0.992\\
+64 & 64.029 & 8.002 & 8.000 & 1.000\\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\paragraph{What this means in this model.} The head dimension at stages 2--4 is 32 (next
+section). Unscaled, a typical score would be $\pm5.66$, and a score two standard deviations above
+another ($2\times5.657 = 11.31$ higher) would get $e^{11.31} \approx 81{,}937$ times the weight, by
+\cref{eq:attention:ratio}. Scaled, the same two-standard-deviation lead is 2, a weight ratio of
+$e^2 = 7.39$. The first is a single-token copy; the second is a blend. The code
+(\file{efficient_self_attention.py}, line 82) stores the factor once:
+\begin{lstlisting}
+self.scale = self.head_dim ** -0.5     # 1 / sqrt(d); d = 16 gives 0.25
+\end{lstlisting}
+(\code{** -0.5} is ``to the power minus one half'', which is one over the square root.)
+
+\section{Attention ignores order: permutation equivariance}\label{sec:attention:perm}
+
+Here is a property that surprises most readers. Shuffle the tokens before attention, and the
+outputs come out shuffled in exactly the same way, with the same values. Attention has no idea
+where any token sits.
+
+\emph{Why.} Let $\mat{P}$ be a \emph{permutation matrix}: the identity matrix with its rows
+reordered, so that $\mat{P}\mat{X}$ is $\mat{X}$ with its rows reordered. Feed $\mat{P}\mat{X}$
+to attention.
+\begin{align*}
+  \mat{Q}' &= \mat{P}\mat{X}\mat{W}_Q = \mat{P}\mat{Q},\quad \mat{K}' = \mat{P}\mat{K},\quad \mat{V}' = \mat{P}\mat{V} && \text{rows reordered}\\
+\intertext{The scores use the rule for the transpose of a product, $(\mat{A}\mat{B})\T = \mat{B}\T\mat{A}\T$ (for example, a $1\times2$ row times a $2\times1$ column is a number, and transposing swaps the order of the factors):}
+  \mat{Q}'\mat{K}'^{\top} &= \mat{P}\mat{Q}(\mat{P}\mat{K})\T = \mat{P}\mat{Q}\mat{K}\T\mat{P}\T = \mat{P}\mat{S}\mat{P}\T\\
+\intertext{The softmax works row by row, and reordering the rows of $\mat{S}$ and the entries within each row only reorders the softmax's output the same way:}
+  \softmax_{\text{row}}(\mat{P}\mat{S}\mat{P}\T) &= \mat{P}\,\softmax_{\text{row}}(\mat{S})\,\mat{P}\T = \mat{P}\mat{A}\mat{P}\T\\
+  \mat{A}'\mat{V}' &= \mat{P}\mat{A}\mat{P}\T\mat{P}\mat{V} = \mat{P}\mat{A}\mat{V} && \mat{P}\T\mat{P} = \mat{I}.
+\end{align*}
+The output is the old output with its rows reordered by the same $\mat{P}$. A function with this
+property is called \emph{permutation equivariant}\index{permutation equivariance}.
+
+\begin{worked}[label={we:attention:perm}]{Swapping two tokens}
+Swap tokens 1 and 2 of \cref{we:attention:full}: the input becomes $(0,1), (1,0), (1,1)$. Redo
+row 1: query $(0,1)$ against keys $(0,1), (1,0), (1,1)$ scores $1, 0, 1$, exactly the old row 1
+of $\mat{S}$, so the weights are $(0.4011, 0.1978, 0.4011)$ and the output is
+\begin{align*}
+  0.4011(0,1) + 0.1978(1,0) + 0.4011(1,1) &= (0 + 0.1978 + 0.4011,\ 0.4011 + 0 + 0.4011)\\
+  &= (0.5989,\ 0.8022),
+\end{align*}
+which is the old output of token 2. The script confirms the whole output is the old one with rows
+1 and 2 swapped: $(0.5989, 0.8022), (0.8022, 0.5989), (0.7517, 0.7517)$\tagC.
+\end{worked}
+
+For a picture this is a problem: ``next to'' and ``far from'' are among the most useful facts
+about a token, and attention cannot see them. Most transformers add a learned \emph{positional
+encoding}\index{positional encoding} vector to every token to say where it is. This codebase has
+none: a search of \file{app/} for \code{pos_embed} finds nothing. SegFormer gets its sense of
+position from a $3\times3$ depthwise convolution inside the feed-forward network
+\citep{xie2021segformer}, which \cref{ch:block} explains.
+
+\section{Many heads}\label{sec:attention:heads}
+
+\subsection{Split, attend, concatenate, project}
+
+One attention gives one blend per token: a single compromise between everything the token might
+want to know. Multi-head attention runs $h$ smaller attentions side by side, each on its own slice
+of the features, so that different heads can learn different notions of relevance (one might
+attend to near neighbours, another to anything of similar brightness anywhere in the patch).
+
+\begin{definition}[Multi-head attention]
+Let $C$ be divisible by $h$ and let $d = C/h$, the \emph{head dimension}\index{head dimension}.
+Compute $\mat{Q}, \mat{K}, \mat{V}$ of shape $(N, C)$ as before and cut each into $h$ blocks of
+$d$ columns: $\mat{Q} = [\mat{Q}^{(1)}\,|\,\cdots\,|\,\mat{Q}^{(h)}]$, and likewise for
+$\mat{K}$ and $\mat{V}$. Then
+\begin{align}
+  \mat{O}^{(m)} &= \softmax_{\text{row}}\!\left(\frac{\mat{Q}^{(m)}\mat{K}^{(m)\top}}{\sqrt d}\right)\mat{V}^{(m)}, \qquad m = 1,\dots,h, \label{eq:attention:head}\\
+  \operatorname{MHA}(\mat{X}) &= [\mat{O}^{(1)}\,|\,\cdots\,|\,\mat{O}^{(h)}]\,\mat{W}_O + \vect{b}_O\T . \label{eq:attention:mha}
+\end{align}
+Each head has its own $(N, N)$ attention matrix. The outputs, each $(N, d)$, are concatenated
+back to $(N, C)$ and passed through an output projection\index{output projection}
+$\mat{W}_O\in\R^{C\times C}$.
+\end{definition}\index{attention!multi-head}
+
+The output projection matters. Without it the $h$ heads would never interact; the model would be
+$h$ separate narrow models stapled side by side. $\mat{W}_O$ lets every output feature draw on
+every head.
+
+\begin{analogy}
+The library again. One reader forms one impression. Five specialists reading the same shelf (a
+lawyer, an accountant, an engineer, a historian, an editor) each notice different things; the
+output projection is the meeting where their notes are merged into one report.
+\end{analogy}
+
+\subsection{The reshaping, with shapes}
+
+With a batch, $\mat{Q}$ is a tensor \shape{(B, N, C)}. The code splits the last axis into
+(head, feature within head) and moves the head axis forward so each head's data is a contiguous
+\shape{(N, d)} matrix (\file{efficient_self_attention.py}, lines 128--134 and 190--195):
+\begin{lstlisting}
+Q_x = self.q(x)                                        # (B, N, C)
+Q_x = torch.reshape(Q_x, (B, N, self.num_heads, self.head_dim))  # (B, N, h, d)
+Q_x = Q_x.transpose(1, 2)                              # (B, h, N, d)
+# ... K_x, V_x likewise; attention runs on the last two axes for every (b, head)
+out = out.transpose(1, 2)                              # (B, N, h, d)
+out = torch.reshape(out, (B, N, self.head_dim * self.num_heads))  # (B, N, C)
+out = self.proj(out)                                   # (B, N, C)
+\end{lstlisting}
+Matrix multiplication with \code{@} on 4-axis tensors treats the first two axes as a batch: for
+every patch $b$ and head $m$ it multiplies the \shape{(N, d)} and \shape{(d, N)} matrices on the
+last two axes. So \shape{(B, h, N, d) @ (B, h, d, N)} gives \shape{(B, h, N, N)}.
+
+\begin{worked}[label={we:attention:split}]{Splitting a 4-number token into two heads}
+Let $C = 4$, $h = 2$, so $d = 4/2 = 2$. A token's query $(0.5, -1, 2, 0)$ is cut into head 1's
+query $(0.5, -1)$ and head 2's query $(2, 0)$. If a key is $(1, 1, 1, -3)$, head 1 scores
+$0.5\cdot1 + (-1)\cdot1 = -0.5$ and head 2 scores $2\cdot1 + 0\cdot(-3) = 2$, each then divided by
+$\sqrt2$. The full 4-number dot product would be $-0.5 + 2 = 1.5$: one head sees the key as
+irrelevant, the other as highly relevant, and a single head would have averaged the two views
+away.
+\end{worked}
+
+\subsection{The heads in this model}
+
+\begin{center}
+\begin{tabular}{crrrc}
+\toprule
+stage & $C$ (\code{embed_dim}) & $h$ (\code{num_heads}) & $d = C/h$ & whole number?\\
+\midrule
+1 & 32 & 2 & $32/2 = 16$ & yes\\
+2 & 64 & 2 & $64/2 = 32$ & yes\\
+3 & 160 & 5 & $160/5 = 32$ & yes\\
+4 & 256 & 8 & $256/8 = 32$ & yes\\
+\bottomrule
+\end{tabular}
+\end{center}
+Widths and heads are those of the shipped fine-tune FT04: \code{embed_dims}
+$= [32, 64, 160, 256]$ and \code{num_heads} $= [2, 2, 5, 8]$
+\par\noindent\tagM{research/experiments/indradhanu-finetune/FT04-final-joint/config.json}.
+\par\noindent Version 0.1.0 used $[1, 2, 5, 8]$\tagM{configs/hyperspectral_segformer_exp_1.json},
+which gave stage 1 a head dimension of 32.
+
+\begin{sourcenote}[: the code's default head count is not the trained one]
+The constructors \file{app/foundation_models/components/hyperspectral_seg_former_mae.py}
+(line 71) and \file{spectral_stem_seg_former_mae.py} (line 54) default to
+\code{num_heads = [1, 2, 5, 8]}, and the encoder's docstring table
+(\file{seg_former_encoder.py}, line 78) lists 1 head at stage 1. Every Indradhanu run since
+v0.2.0 passes $[2, 2, 5, 8]$ explicitly (\file{configs/hyperspectral_segformer_exp_2.json}
+line 33, the FT04 config above, and the backend's
+\file{backend/allotrope/foundation_models/resolver.py} line 489). The course table follows the
+configs and is right for the trained models; a model built with no arguments would have one head
+at stage 1. As the next subsection shows, the parameter count is the same either way.
+\end{sourcenote}
+
+\subsection{Parameter count: \texorpdfstring{$4C^2 + 4C$}{4C squared plus 4C}}
+
+The learned parts of plain multi-head attention are four linear layers, each $C\to C$: the matrices
+$\mat{W}_Q$, $\mat{W}_K$, $\mat{W}_V$ and $\mat{W}_O$, and their biases. A linear layer from
+$C_\text{in}$ to $C_\text{out}$ has $C_\text{in}C_\text{out}$ weights and $C_\text{out}$ biases
+(\cref{ch:shapes}). So
+\begin{align}
+  \text{one projection} &= C\cdot C + C = C^2 + C, \notag\\
+  \text{four projections} &= 4(C^2 + C) = 4C^2 + 4C . \label{eq:attention:params}
+\end{align}
+\emph{The number of heads does not appear.} Splitting into heads reshapes the outputs of the same
+four matrices; it adds no weights. The script builds the stage-1 attention module with one head
+and with two and gets 69{,}856 parameters both times\tagC\ (that total includes the
+spatial-reduction convolution of \cref{ch:esa}).
+
+\begin{worked}[label={we:attention:params}]{The projection parameters at every stage}
+Apply \cref{eq:attention:params} stage by stage, squaring first, then multiplying, then adding.
+\begin{align*}
+  C = 32:&\quad 32^2 = 1{,}024;\ \ 4\times1{,}024 = 4{,}096;\ \ 4\times32 = 128;\ \ 4{,}096 + 128 = 4{,}224\\
+  C = 64:&\quad 64^2 = 4{,}096;\ \ 4\times4{,}096 = 16{,}384;\ \ 4\times64 = 256;\ \ 16{,}384 + 256 = 16{,}640\\
+  C = 160:&\quad 160^2 = 25{,}600;\ \ 4\times25{,}600 = 102{,}400;\ \ 4\times160 = 640;\\
+  &\quad 102{,}400 + 640 = 103{,}040\\
+  C = 256:&\quad 256^2 = 65{,}536;\ \ 4\times65{,}536 = 262{,}144;\ \ 4\times256 = 1{,}024;\\
+  &\quad 262{,}144 + 1{,}024 = 263{,}168
+\end{align*}
+\emph{Check against the model.} Building the real \code{EfficientSelfAttention} modules, the
+script reports \code{q}, \code{k}, \code{v}, \code{proj} at 1{,}056 each for $C=32$
+($4\times1{,}056 = 4{,}224$), 4{,}160 each for $C=64$, 25{,}760 each for $C=160$, and 65{,}792 each
+for $C=256$\tagC. At stage 4, where there is no reduction convolution, the whole attention module
+is 263{,}168, exactly our number.
+\end{worked}
+
+\subsection{Cost}
+
+Per head, $\mat{Q}\mat{K}\T$ takes $N\cdot N\cdot d$ multiply-adds (each of $N^2$ entries is a
+$d$-term dot product) and $\mat{A}\mat{V}$ another $N\cdot N\cdot d$. Over $h$ heads that is
+$2hN^2d = 2N^2C$: the work grows with the \emph{square} of the number of tokens.
+
+\section{Self-attention and cross-attention}\label{sec:attention:cross}
+
+Everything in this chapter is \emph{self}-attention\index{attention!self}: the queries, keys and
+values all come from the same set of tokens. In \emph{cross}-attention\index{attention!cross} the
+queries come from somewhere else (a small set of learned ``askers'') while the keys and values
+still come from the tokens. The four steps are identical; only the source of $\mat{Q}$ changes,
+and with it the shape of the score matrix, which becomes (number of askers)$\times N$. Part IV of
+this book uses exactly that to compress a spectrum (\cref{ch:ceiling,ch:crossstem}).
+
+\coursefig[0.9\linewidth]{iw-32-self-cross}{Where the questions come from. (a) In self-attention
+the tokens produce queries, keys and values. (b) In cross-attention an outside set of queries
+reads the tokens' keys and values. Right: the two score matrices for the spectral case of
+\cref{ch:ceiling}, drawn to scale.}{fig:attention:selfcross}
+
+\section{The cost problem}\label{sec:attention:cost}
+
+The score matrix has one entry per (query, key) pair: $N\times N$ per head, per patch, per block.
+For a $128\times128$ patch:
+\begin{center}
+\begin{tabular}{crrr}
+\toprule
+stage & grid & $N$ & $N\times N$\\
+\midrule
+1 & $32\times32$ & 1024 & $1024\times1024 = 1{,}048{,}576$\\
+2 & $16\times16$ & 256 & $256\times256 = 65{,}536$\\
+3 & $8\times8$ & 64 & $64\times64 = 4{,}096$\\
+4 & $4\times4$ & 16 & $16\times16 = 256$\\
+\bottomrule
+\end{tabular}
+\end{center}
+Stage 1 has over a million scores for one head of one block of one patch: 4{,}096 times stage 4.
+And it is the stage where every other tensor is largest. \Cref{ch:esa} is the fix.
+
+\begin{confusions}
+\confusion{Is attention the same as correlation?}{Related but not identical. Correlation is a
+fixed statistic of two signals. Attention compares learned projections of the tokens, so training
+decides what ``similar'' means for this task.}
+\confusion{Do the rows or the columns of the attention matrix sum to one?}{The rows. Softmax runs
+along the last axis (\texttt{dim=-1}), which is the key axis, so each query distributes exactly
+one unit of attention. A column sum says how popular a key is and can be anything from 0 to $N$
+(in \cref{fig:attention:heatmap} column 3 sums to 1.3057).}
+\confusion{Why three separate matrices instead of comparing tokens directly?}{Because what a token
+looks for, what it advertises, and what it hands over are different things. \Cref{we:attention:proj}
+shows one projection changing who is listened to and another changing what is heard.}
+\confusion{Do more heads mean more parameters?}{No. The head count only decides how the $C$
+features are cut up; the four $C\times C$ matrices are the same size. It changes the head
+dimension $d = C/h$, the scale $1/\sqrt d$, and how many separate attention patterns are formed.}
+\confusion{Does the scale $1/\sqrt d$ change which token wins?}{No. Dividing every score by the
+same positive number keeps their order. It changes how decisively the winner wins: the gaps
+between scores shrink, so the weights are less extreme.}
+\confusion{What does ``self'' mean in self-attention?}{That queries, keys and values all come
+from the same token set. Cross-attention takes its queries from elsewhere (\cref{sec:attention:cross}).}
+\end{confusions}
+
+\begin{checkyourself}
+\item\label{ex:attention:1} Compute $\softmax(3, 1, 0)$ by hand, first directly and then by the
+stable recipe (subtract the maximum). Show every exponential, the sum and each division, and check
+that the weights sum to 1.
+\item\label{ex:attention:2} Redo \cref{we:attention:onequery} for token 2, $\vect{q} = (0, 1)$,
+with identity projections. Give the scores, scaled scores, exponentials, weights and output.
+\item\label{ex:attention:3} Show that for two scores the softmax weight of the first is
+$1/(1 + e^{-(s_1 - s_2)})$, the logistic sigmoid of the score difference. What weight does a lead
+of $s_1 - s_2 = 2$ give?
+\item\label{ex:attention:4} Suppose the query and key components are independent with mean 0 but
+variance $\sigma^2 = 4$ instead of 1. Rederive $\operatorname{Var}(\vect{q}\cdot\vect{k})$ step by
+step for head dimension $d = 16$. What divisor would bring the variance back to 1?
+\item\label{ex:attention:5} Stage 3 has $C = 160$ and $h = 5$. (a) What is the head dimension and
+the scale factor? (b) Count the parameters of its four projections by hand. (c) The whole stage-3
+attention module has 205{,}920 parameters; how many belong to something other than the four
+projections?
+\item\label{ex:attention:6} Stage 4 has $C = 256$, $h = 8$ and $N = 16$. Give the shapes of
+$\mat{Q}$ after the head split, of the score tensor for a batch of $B$ patches, and of the output
+after concatenation. How many score entries are there per patch, summed over all heads?
+\end{checkyourself}
+
+\nextchapter{ch:esa}

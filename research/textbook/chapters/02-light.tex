@@ -1,0 +1,610 @@
+\chapter{Light, bands and the hyperspectral cube}\label{ch:light}
+
+\begin{onething}
+A hyperspectral pixel is not a colour, it is a curve: one reflectance value per narrow band of
+wavelengths, which you can treat as a vector of $C$ numbers. That curve identifies what the
+pixel is made of, and a whole image is a three-dimensional array of such curves.
+\end{onething}
+
+\section{Why three numbers are not enough}\label{sec:light:motivation}
+
+A digital photograph stores three numbers per pixel: how much red, how much green and how much
+blue. Your eye works the same way, with three kinds of colour receptor, so three numbers are
+enough to fool it. Three numbers are also very little information. Fresh grass and a sheet of
+green-painted metal can produce the same red, green and blue triple, and once the three numbers
+match, nothing distinguishes them.
+
+The sensors in this book record \emph{hundreds} of numbers per pixel instead of three, most of
+them for light your eye cannot see. With those extra numbers grass and green paint stop looking
+alike, because grass has a sharp rise in reflected light immediately beyond red and paint does not. This
+chapter builds the vocabulary for that statement, carefully and with arithmetic: what a
+wavelength is, what ``reflectance'' measures, what a band actually records, and how all of it is
+stored as an array.
+
+\section{Light and wavelength}\label{sec:light:wavelength}
+
+Light is an electromagnetic wave. Its \textbf{wavelength}\index{wavelength}, written $\lambda$
+(the Greek letter ``lambda''), is the distance from one crest of the wave to the next. Different
+wavelengths are what we perceive as different colours, and beyond the ends of the visible range
+the same physics continues invisibly.
+
+Wavelengths of light are tiny, so they are measured in \textbf{nanometres}\index{nanometre}
+(nm):
+\[ 1\ \text{nm} = 10^{-9}\ \text{m} = 0.000\,000\,001\ \text{m}. \]
+So $1{,}650$ nm is $1{,}650 \times 10^{-9}$ m $= 1.65 \times 10^{-6}$ m, which is $1.65$
+micrometres. Remote-sensing papers often quote micrometres ($\mu$m); this codebase uses
+nanometres everywhere.
+
+\begin{table}[htbp]\centering
+\caption{The wavelength ranges used in this book. Boundaries between the named regions are
+conventions, not physics.}\label{tab:light:ranges}
+\begin{tabular}{@{}lll@{}}\toprule
+Region & Range (nm) & What it shows \\\midrule
+Visible (VIS) & about 400--700 & colour as you see it\\
+Near infrared (NIR) & about 700--1{,}000 & leaf structure, the ``red edge''\\
+Shortwave infrared (SWIR) & about 1{,}000--2{,}500 & water, minerals, clays\\
+Thermal infrared (TIR) & about 10{,}000--12{,}000 & emitted heat (temperature)\\\bottomrule
+\end{tabular}
+\end{table}
+
+The hyperspectral sensors in this book cover roughly $400$ to $2{,}500$ nm and the shared grid of
+\cref{ch:sensors} keeps $460$ to $2{,}450$ nm. Most of that is invisible. Two of the five sensors
+are thermal: they record emitted heat near $10{,}000$ nm and are treated separately in
+\cref{sec:light:thermal}.
+
+\section{Radiance, irradiance and reflectance}\label{sec:light:reflectance}
+
+A satellite does not measure ``what the ground is''. It measures light arriving at its detector.
+To turn that into a property of the ground you need three quantities, which are easy to confuse
+because all three are ``amounts of light''.
+
+\begin{definition}[Irradiance]\index{irradiance}
+\textbf{Irradiance} $E(\lambda)$ is the power of sunlight \emph{arriving} on a surface, per
+square metre of surface and per nanometre of wavelength. Units: W\,m$^{-2}$\,nm$^{-1}$.
+\end{definition}
+
+\begin{definition}[Radiance]\index{radiance}
+\textbf{Radiance} $L(\lambda)$ is the power \emph{leaving} a surface in one particular direction,
+per square metre, per unit of solid angle (a ``steradian'', sr, the three-dimensional version of
+an angle), and per nanometre. Units: W\,m$^{-2}$\,sr$^{-1}$\,nm$^{-1}$. A sensor looking down at
+the ground measures radiance.
+\end{definition}
+
+\begin{definition}[Reflectance]\index{reflectance}
+\textbf{Reflectance} $\rho(\lambda)$ (Greek ``rho'') is the fraction of the arriving light that
+the surface sends back, at wavelength $\lambda$. Because it is a ratio of two amounts of light,
+it has no units.
+\end{definition}
+
+\subsection{Reflectance as a ratio}
+
+In its simplest form reflectance is ``what came back divided by what arrived''. If $1.20$ units of
+light arrive at some wavelength and $0.30$ units come back,
+\[ \rho = \frac{0.30}{1.20} = 0.25, \]
+so the surface reflects a quarter of the light at that wavelength. A value of $0$ would mean the
+surface absorbs everything (perfectly black); $1$ would mean it returns everything.
+
+The ratio is what makes reflectance useful. If the sun is lower, both the arriving and the
+returned light fall, and their ratio stays the same. If a different satellite measures the same
+field, its electronics differ but the surface's ratio does not. Reflectance is a property of the
+\emph{surface}, which is what lets one model work across sensors and lets a pixel be compared with
+a laboratory measurement of a known material.
+
+\subsection{From radiance to reflectance: where the \texorpdfstring{$\pi$}{pi} comes from}
+
+The sensor measures radiance in one direction, but the surface sends light in all directions.
+To compare ``what came back'' with ``what arrived'' you need the total returned over the whole sky
+above the surface. The standard simplifying assumption is a
+\textbf{Lambertian}\index{Lambertian surface} surface: one that looks equally bright from every
+viewing direction, so its radiance $L$ is the same in all directions. Matt surfaces such as soil
+are close to this; water and metal are not.
+
+The total power per square metre leaving such a surface, called its exitance $M$, adds up the
+radiance over every direction of the upper hemisphere, weighting each direction by
+$\cos\theta$ (a beam leaving at angle $\theta$ from vertical crosses a horizontal square metre
+at a slant, so only $\cos\theta$ of it counts). Measure directions by $\theta$ from vertical
+($0$ to $\pi/2$) and $\varphi$ around the vertical ($0$ to $2\pi$); a small patch of directions
+has solid angle $\sin\theta\,d\theta\,d\varphi$. Then:
+\begin{align}
+M &= \int_{0}^{2\pi}\!\!\int_{0}^{\pi/2} L \cos\theta \sin\theta \, d\theta\, d\varphi.
+\intertext{$L$ is the same in every direction (Lambertian), so take it outside both integrals:}
+M &= L \int_{0}^{2\pi} d\varphi \int_{0}^{\pi/2} \cos\theta\sin\theta\, d\theta.
+\intertext{The $\varphi$ integral is the length of the range, $2\pi$. For the $\theta$ integral
+note that the derivative of $\tfrac{1}{2}\sin^2\theta$ is $\sin\theta\cos\theta$, so}
+\int_{0}^{\pi/2}\cos\theta\sin\theta\,d\theta &= \Big[\tfrac{1}{2}\sin^2\theta\Big]_{0}^{\pi/2}
+ = \tfrac{1}{2}(1)^2 - \tfrac{1}{2}(0)^2 = \tfrac{1}{2}.
+\intertext{Multiply the two pieces:}
+M &= L \times 2\pi \times \tfrac{1}{2} = \pi L. \label{eq:light:exitance}
+\end{align}
+Sunlight arriving from a sun at angle $\theta_s$ from vertical is spread over a larger patch of
+ground than when the sun is overhead, so the irradiance on a horizontal surface is
+$E\cos\theta_s$, where $E$ is the irradiance on a surface facing the sun. Reflectance is returned
+over arrived:
+\begin{equation}\label{eq:light:rho}
+\rho = \frac{M}{E\cos\theta_s} = \frac{\pi L}{E \cos\theta_s}.
+\end{equation}
+
+\begin{worked}[label={we:light:rho}]{Radiance to reflectance}
+The numbers here are illustrative\tagA, chosen to be of a realistic size. At $860$ nm a sensor
+measures radiance $L = 0.10$ W\,m$^{-2}$\,sr$^{-1}$\,nm$^{-1}$; the solar irradiance is
+$E = 1.50$ W\,m$^{-2}$\,nm$^{-1}$ and the sun is $\theta_s = 30^\circ$ from vertical. Do each step
+on paper.
+
+The cosine of the sun angle:
+\[ \cos 30^\circ \approx 0.8660. \]
+Numerator of \cref{eq:light:rho}:
+\[ \pi L = 3.1416 \times 0.10 = 0.31416. \]
+Denominator:
+\[ E\cos\theta_s = 1.50 \times 0.8660 = 1.2990. \]
+Divide:
+\[ \rho = 0.31416 / 1.2990 \approx 0.242. \]
+The surface returns about $24\%$ of the light at $860$ nm, typical of vegetation in the near
+infrared. If the sun dropped to $60^\circ$ ($\cos 60^\circ = 0.5$) and the surface were unchanged,
+the arriving light would fall to $1.50 \times 0.5 = 0.75$ and the measured radiance would fall in
+proportion to $L = 0.242 \times 0.75 / \pi \approx 0.0578$; the ratio $\rho$ would still come out
+as $0.242$.
+\end{worked}
+
+This is background physics. In this codebase the satellite providers have already done the
+correction for the atmosphere and the sun: PRISMA's \emph{L2D} and EnMAP's \emph{L2A} products
+are surface reflectance stored as integers, and the code's job is only to undo the integer
+scaling (\cref{ch:sensors}). The ``L2'' prefix means ``level 2'', a processing level at which the
+provider delivers a physical surface quantity rather than raw counts.
+
+\subsection{What real reflectance looks like}
+
+Real ground sits mostly between about $0.02$ and $0.30$: most surfaces return between $2\%$ and
+$30\%$ of the light. You can check this against the project's own data. The file
+\file{app/constants/hyperspectral.json} holds the average of every band over the training corpus
+(\cref{ch:bandpipeline} uses it). Its first value, for $460$ nm, is
+$0.04301$\tagM{app/constants/hyperspectral.json}, and the largest of its $165$ averages is $0.2775$
+at $1{,}270$ nm\tagC{} (computed by \file{research/textbook/tools/compute_light.py}). Both are in
+the range quoted above.
+
+Values above $1$ are not automatically bugs. Sunlight glinting off water or metal can be brighter
+than a perfect matt reflector would give, and after atmospheric correction it can exceed $1$.
+Do not add a hard clamp at $1$ assuming otherwise.
+
+\section{What a band records}\label{sec:light:band}
+
+\begin{definition}[Band]\index{band}
+A \textbf{band} is one measurement channel of a sensor: the amount of light it records in one
+narrow range of wavelengths. ``Red'' is a band; so is ``light between $1{,}645$ and $1{,}655$ nm''.
+In deep-learning code the same thing is called a \textbf{channel}\index{channel}; this codebase
+uses both words, often in the same file.
+\end{definition}
+
+A band is not a knife-edge at one wavelength. A detector element responds to a small range of
+wavelengths, most strongly at its centre and less towards the sides. The shape of that response
+is the band's \textbf{spectral response function}\index{spectral response function} (SRF), a
+curve $w(\lambda) \ge 0$. What the band reports is a \emph{weighted average} of the scene's
+spectrum, with the SRF as the weights:
+\begin{equation}\label{eq:light:srf}
+b = \frac{\int w(\lambda)\,\rho(\lambda)\,d\lambda}{\int w(\lambda)\,d\lambda}
+\;\approx\; \frac{\sum_k w_k\,\rho(\lambda_k)}{\sum_k w_k}.
+\end{equation}
+The right-hand form samples the curve at a few wavelengths $\lambda_k$ with weights
+$w_k = w(\lambda_k)$. Read it in words: multiply each reflectance by how strongly the band
+responds at that wavelength, add the products, and divide by the total weight so that a flat
+spectrum comes back unchanged.
+
+\begin{worked}[label={we:light:srf}]{A band as a weighted average of three samples}
+A band is centred at $1{,}650$ nm. Sample its response at three wavelengths: $1{,}645$, $1{,}650$
+and $1{,}655$ nm, with weights $0.5$, $1$, $0.5$ (half as sensitive $5$ nm either side of the
+centre; \cref{we:light:fwhm} shows where those halves come from). The surface's reflectance at the
+three wavelengths is $0.20$, $0.22$, $0.30$ (illustrative\tagA). Compute the band value.
+
+Multiply each reflectance by its weight:
+\begin{align*}
+0.5 \times 0.20 &= 0.10,\\
+1 \times 0.22 &= 0.22,\\
+0.5 \times 0.30 &= 0.15.
+\end{align*}
+Add the products, and add the weights:
+\begin{align*}
+0.10 + 0.22 + 0.15 &= 0.47,\\
+0.5 + 1 + 0.5 &= 2.
+\end{align*}
+Divide:
+\[ b = 0.47 / 2 = 0.235. \]
+Compare three possible answers: the reflectance at the centre alone is $0.22$; the plain average of
+the three samples is $(0.20 + 0.22 + 0.30)/3 = 0.72/3 = 0.24$; the band reports $0.235$. The band
+is pulled towards the steeply rising side of the spectrum, but less than an unweighted average
+would be. Check the normalisation: if all three reflectances were $0.22$, the numerator would be
+$0.5\times0.22 + 0.22 + 0.5\times0.22 = 0.44$ and the band would report $0.44/2 = 0.22$, unchanged.
+\end{worked}
+
+\subsection{Band width: the full width at half maximum}
+
+A common model of an SRF is the bell-shaped \textbf{Gaussian} curve
+\begin{equation}\label{eq:light:gauss}
+w(\lambda) = \exp\!\left(-\frac{(\lambda - \lambda_c)^2}{2\sigma^2}\right),
+\end{equation}
+centred at the band's \textbf{centre wavelength}\index{centre wavelength} $\lambda_c$, with
+width set by $\sigma$. At the centre $w = \exp(0) = 1$. Sensor documentation does not quote
+$\sigma$; it quotes the \textbf{full width at half maximum}\index{full width at half maximum}
+(FWHM): the distance between the two wavelengths where the response has fallen to half its peak.
+The two are related by a fixed factor, which you can derive.
+
+Find the offset $\Delta = \lambda - \lambda_c$ where the response is one half:
+\begin{align*}
+\exp\!\left(-\frac{\Delta^2}{2\sigma^2}\right) &= \frac{1}{2}.
+\intertext{Take the natural logarithm of both sides (the logarithm undoes the exponential):}
+-\frac{\Delta^2}{2\sigma^2} &= \ln\tfrac{1}{2} = -\ln 2.
+\intertext{Multiply both sides by $-2\sigma^2$:}
+\Delta^2 &= 2\sigma^2\ln 2.
+\intertext{Take the positive square root:}
+\Delta &= \sigma\sqrt{2\ln 2}.
+\intertext{The half-maximum points sit at $\lambda_c - \Delta$ and $\lambda_c + \Delta$, so the
+full width is twice $\Delta$:}
+\text{FWHM} &= 2\sqrt{2\ln 2}\;\sigma.
+\end{align*}
+Now the number. $\ln 2 \approx 0.6931$, so $2\ln 2 \approx 1.3863$, its square root is about
+$1.1774$, and twice that is about $2.3548$:
+\begin{equation}\label{eq:light:fwhm}
+\text{FWHM} \approx 2.3548\,\sigma, \qquad \sigma \approx \frac{\text{FWHM}}{2.3548}.
+\end{equation}
+
+\begin{worked}[label={we:light:fwhm}]{The weights of a 10 nm band}
+A band has FWHM $10$ nm. Find $\sigma$, then the Gaussian weight $5$ nm from the centre.
+
+By \cref{eq:light:fwhm}:
+\[ \sigma = 10 / 2.3548 \approx 4.2466 \text{ nm}. \]
+At $\Delta = 5$ nm, square the offset and the width:
+\begin{align*}
+\Delta^2 &= 25,\\
+2\sigma^2 &= 2 \times 4.2466^2 = 2 \times 18.034 = 36.068.
+\end{align*}
+Divide and exponentiate:
+\begin{align*}
+\Delta^2 / (2\sigma^2) &= 25/36.068 \approx 0.6931,\\
+w &= \exp(-0.6931) \approx 0.5000.
+\end{align*}
+Exactly one half, as it must be: $5$ nm is half of the FWHM, and the FWHM is by definition where the
+response is half. Those are the weights $0.5$, $1$, $0.5$ used in \cref{we:light:srf}. For PRISMA,
+whose bands are about $12$ nm wide, $\sigma \approx 12/2.3548 \approx 5.096$ nm\tagC.
+\end{worked}
+
+\begin{figure}[htbp]\centering
+\begin{tikzpicture}
+\begin{axis}[width=0.9\linewidth,height=5.2cm,xmin=1625,xmax=1675,ymin=0,ymax=1.15,
+  xlabel={wavelength $\lambda$ (nm)},ylabel={response $w(\lambda)$},
+  axis lines=left,tick label style={font=\small},label style={font=\small},
+  xtick={1630,1640,1645,1650,1655,1660,1670}]
+\addplot[spec,very thick,domain=1625:1675,samples=120]{exp(-((x-1650)^2)/(2*4.2466^2))};
+\addplot[only marks,mark=*,mark size=2pt,loss] coordinates {(1645,0.5) (1650,1) (1655,0.5)};
+\draw[dashed,maskgrey] (axis cs:1625,0.5) -- (axis cs:1675,0.5);
+\draw[<->,thick,attn] (axis cs:1645,0.42) -- node[below,font=\small]{FWHM $=10$ nm} (axis cs:1655,0.42);
+\node[font=\small,anchor=west] at (axis cs:1656,0.95) {$\lambda_c = 1650$ nm, $\sigma \approx 4.25$ nm};
+\end{axis}
+\end{tikzpicture}
+\caption{A Gaussian spectral response function with FWHM $10$ nm, drawn from
+\cref{eq:light:gauss}. The response falls to one half exactly $5$ nm either side of the centre;
+the three amber points are the samples used in \cref{we:light:srf}.}\label{fig:light:srf}
+\end{figure}
+
+Every band therefore carries two numbers of metadata: its centre wavelength and its FWHM. The
+codebase stores them as lists, one entry per band (\cref{ch:product}). FWHM matters most for
+naming materials: comparing a satellite spectrum with a laboratory spectrum means simulating how
+the laboratory curve would look through \emph{this} sensor's bands, which is
+\cref{eq:light:srf} applied to the laboratory curve. The companion volume on spectral matching
+works that convolution in full. A scene without FWHM values cannot be material-matched at all.
+
+\section{A spectrum is a vector}\label{sec:light:spectrum}
+
+Pick one pixel and read its value in every band in order. You get $C$ numbers. Plotted against
+the bands' centre wavelengths they form a curve, the pixel's
+\textbf{spectrum}\index{spectrum}. For mathematics it is more useful to treat those $C$ numbers as
+a single object.
+
+\begin{definition}[Vector]\index{vector}
+A \textbf{vector} in $\R^C$ is an ordered list of $C$ real numbers, written as a column,
+\[ \vect{x} = \begin{pmatrix} x_0 \\ x_1 \\ \vdots \\ x_{C-1} \end{pmatrix}, \]
+where $x_c$ is its $c$-th \textbf{component}. $\R^C$ (``R to the C'') is the set of all such
+lists.
+\end{definition}
+
+A pixel's spectrum on the shared grid is a vector $\vect{x} \in \R^{165}$, and the component
+$x_c$ is its reflectance in band $c$. Two operations on vectors are used constantly, and both act
+component by component.
+
+\begin{itemize}
+\item \textbf{Subtraction}: $(\vect{x} - \vect{y})_c = x_c - y_c$. The residual of
+\cref{we:problem:residual} was $\vect{x} - \xhat$.
+\item \textbf{Scaling} by a number $a$: $(a\vect{x})_c = a\,x_c$.
+\end{itemize}
+
+\begin{worked}[label={we:light:vector}]{Two pixels of the same material}
+Two pixels on the same field have spectra over three bands
+\[ \vect{x} = (0.04,\ 0.24,\ 0.12), \qquad \vect{y} = (0.02,\ 0.12,\ 0.06) \]
+(illustrative\tagA; written as rows to save space). The second pixel lies in the shadow of a
+hill. Compare them.
+
+Divide each component of $\vect{y}$ by the matching component of $\vect{x}$:
+\begin{align*}
+0.02/0.04 &= 0.5,\\
+0.12/0.24 &= 0.5,\\
+0.06/0.12 &= 0.5.
+\end{align*}
+Every ratio is $0.5$, so $\vect{y} = 0.5\,\vect{x}$: the same shape, half the brightness. Their
+difference is
+\[ \vect{x} - \vect{y} = (0.04 - 0.02,\ 0.24 - 0.12,\ 0.12 - 0.06) = (0.02,\ 0.12,\ 0.06), \]
+which is not small, even though the material is identical. A score built on plain differences
+calls the shadowed pixel different; a score built on the \emph{shape} (the direction of the
+vector) does not. \Cref{ch:losses} builds that second kind of score, the spectral angle.
+\end{worked}
+
+\subsection{What a real spectrum looks like}
+
+\Cref{fig:light:meanspec} plots a real spectrum: the average of each of the $165$ grid bands
+over the corpus used to fit Indradhanu's normalisation (\cref{ch:bandpipeline}), with a shaded
+band one standard deviation either side. Three features are worth finding on it.
+
+\begin{itemize}
+\item \textbf{The red edge}\index{red edge}. Between $680$ and $760$ nm the mean rises from
+$0.0777$ to $0.1831$\tagC, more than doubling in $80$ nm. Chlorophyll absorbs red light, and leaf
+structure scatters near-infrared light strongly, so vegetated pixels jump sharply here. Nothing
+else does that, which is why it separates grass from green paint.
+\item \textbf{Water absorption}. The curve is cut at four places, around $940$, $1{,}140$,
+$1{,}400$ and $1{,}875$ nm. Water vapour in the air absorbs so strongly there that the bands are
+removed from the grid (\cref{ch:sensors}). Next to the gaps the curve dips, for example to
+$0.1341$ at $1{,}480$ nm\tagC.
+\item \textbf{SWIR fall-off}. Beyond about $1{,}700$ nm reflectance falls, with small dips such as
+the one near $2{,}200$ nm where clay minerals absorb.
+\end{itemize}
+
+\begin{figure}[htbp]\centering
+\begin{tikzpicture}
+\begin{axis}[width=\linewidth,height=6.2cm,xmin=440,xmax=2470,ymin=0,ymax=0.40,
+  xlabel={wavelength (nm)},ylabel={reflectance},axis lines=left,
+  tick label style={font=\small},label style={font=\small},
+  xtick={460,700,1000,1300,1600,1900,2200,2450},ytick={0,0.1,0.2,0.3,0.4},
+  yticklabel style={/pgf/number format/fixed}]
+\addplot[draw=none,name path=hiSEG0,forget plot] coordinates {(460,0.0782) (470,0.0782) (480,0.0811) (490,0.0844) (500,0.0861) (510,0.0894) (520,0.0934) (530,0.1010) (540,0.1081) (550,0.1119) (560,0.1135) (570,0.1150) (580,0.1173) (590,0.1168) (600,0.1186) (610,0.1202) (620,0.1214) (630,0.1232) (640,0.1245) (650,0.1246) (660,0.1251) (670,0.1267) (680,0.1290) (690,0.1358) (700,0.1468) (710,0.1622) (720,0.1824) (730,0.2057) (740,0.2273) (750,0.2444) (760,0.2506) (770,0.2618) (780,0.2684) (790,0.2673) (800,0.2732) (810,0.2780) (820,0.2762) (830,0.2818) (840,0.2861) (850,0.2881) (860,0.2903) (870,0.2921) (880,0.2991) (890,0.3027) (900,0.3011) (910,0.2995)};
+\addplot[draw=none,name path=loSEG0,forget plot] coordinates {(460,0.0078) (470,0.0078) (480,0.0100) (490,0.0117) (500,0.0125) (510,0.0149) (520,0.0194) (530,0.0250) (540,0.0310) (550,0.0341) (560,0.0349) (570,0.0340) (580,0.0325) (590,0.0314) (600,0.0314) (610,0.0310) (620,0.0303) (630,0.0302) (640,0.0298) (650,0.0285) (660,0.0266) (670,0.0255) (680,0.0264) (690,0.0331) (700,0.0488) (710,0.0676) (720,0.0862) (730,0.1002) (740,0.1082) (750,0.1144) (760,0.1157) (770,0.1208) (780,0.1241) (790,0.1237) (800,0.1263) (810,0.1285) (820,0.1291) (830,0.1314) (840,0.1322) (850,0.1329) (860,0.1338) (870,0.1346) (880,0.1375) (890,0.1388) (900,0.1386) (910,0.1372)};
+\addplot[spec!25,forget plot] fill between[of=hiSEG0 and loSEG0];
+\addplot[spec,thick,mark=none,forget plot] coordinates {(460,0.0430) (470,0.0430) (480,0.0455) (490,0.0481) (500,0.0493) (510,0.0521) (520,0.0564) (530,0.0630) (540,0.0696) (550,0.0730) (560,0.0742) (570,0.0745) (580,0.0749) (590,0.0741) (600,0.0750) (610,0.0756) (620,0.0758) (630,0.0767) (640,0.0771) (650,0.0766) (660,0.0758) (670,0.0761) (680,0.0777) (690,0.0845) (700,0.0978) (710,0.1149) (720,0.1343) (730,0.1530) (740,0.1677) (750,0.1794) (760,0.1831) (770,0.1913) (780,0.1963) (790,0.1955) (800,0.1997) (810,0.2032) (820,0.2026) (830,0.2066) (840,0.2092) (850,0.2105) (860,0.2120) (870,0.2133) (880,0.2183) (890,0.2207) (900,0.2199) (910,0.2183)};
+\addplot[draw=none,name path=hiSEG1,forget plot] coordinates {(980,0.3145) (990,0.3170) (1000,0.3211) (1010,0.3244) (1020,0.3297) (1030,0.3355) (1040,0.3392) (1050,0.3431) (1060,0.3477) (1070,0.3502) (1080,0.3502) (1090,0.3521) (1100,0.3507) (1110,0.3397) (1120,0.3127) (1130,0.3228)};
+\addplot[draw=none,name path=loSEG1,forget plot] coordinates {(980,0.1513) (990,0.1516) (1000,0.1527) (1010,0.1539) (1020,0.1559) (1030,0.1580) (1040,0.1590) (1050,0.1603) (1060,0.1623) (1070,0.1637) (1080,0.1638) (1090,0.1650) (1100,0.1654) (1110,0.1610) (1120,0.1404) (1130,0.1446)};
+\addplot[spec!25,forget plot] fill between[of=hiSEG1 and loSEG1];
+\addplot[spec,thick,mark=none,forget plot] coordinates {(980,0.2329) (990,0.2343) (1000,0.2369) (1010,0.2392) (1020,0.2428) (1030,0.2468) (1040,0.2491) (1050,0.2517) (1060,0.2550) (1070,0.2569) (1080,0.2570) (1090,0.2586) (1100,0.2581) (1110,0.2504) (1120,0.2266) (1130,0.2337)};
+\addplot[draw=none,name path=hiSEG2,forget plot] coordinates {(1160,0.3159) (1170,0.3196) (1180,0.3267) (1190,0.3358) (1200,0.3381) (1210,0.3375) (1220,0.3402) (1230,0.3433) (1240,0.3466) (1250,0.3565) (1260,0.3693) (1270,0.3779) (1280,0.3695) (1290,0.3563) (1300,0.3457) (1310,0.3395) (1320,0.3359) (1330,0.3270) (1340,0.3214)};
+\addplot[draw=none,name path=loSEG2,forget plot] coordinates {(1160,0.1523) (1170,0.1544) (1180,0.1568) (1190,0.1598) (1200,0.1602) (1210,0.1602) (1220,0.1613) (1230,0.1625) (1240,0.1638) (1250,0.1675) (1260,0.1724) (1270,0.1771) (1280,0.1737) (1290,0.1687) (1300,0.1647) (1310,0.1625) (1320,0.1616) (1330,0.1572) (1340,0.1509)};
+\addplot[spec!25,forget plot] fill between[of=hiSEG2 and loSEG2];
+\addplot[spec,thick,mark=none,forget plot] coordinates {(1160,0.2341) (1170,0.2370) (1180,0.2418) (1190,0.2478) (1200,0.2491) (1210,0.2488) (1220,0.2508) (1230,0.2529) (1240,0.2552) (1250,0.2620) (1260,0.2708) (1270,0.2775) (1280,0.2716) (1290,0.2625) (1300,0.2552) (1310,0.2510) (1320,0.2487) (1330,0.2421) (1340,0.2361)};
+\addplot[draw=none,name path=hiSEG3,forget plot] coordinates {(1460,0.2286) (1470,0.2073) (1480,0.2057) (1490,0.2212) (1500,0.2320) (1510,0.2432) (1520,0.2529) (1530,0.2572) (1540,0.2604) (1550,0.2645) (1560,0.2685) (1570,0.2729) (1580,0.2784) (1590,0.2829) (1600,0.2856) (1610,0.2888) (1620,0.2905) (1630,0.2913) (1640,0.2925) (1650,0.2939) (1660,0.2944) (1670,0.2940) (1680,0.2933) (1690,0.2901) (1700,0.2875) (1710,0.2855) (1720,0.2838) (1730,0.2808) (1740,0.2779) (1750,0.2751) (1760,0.2708) (1770,0.2627) (1780,0.2560) (1790,0.2506)};
+\addplot[draw=none,name path=loSEG3,forget plot] coordinates {(1460,0.0676) (1470,0.0611) (1480,0.0625) (1490,0.0721) (1500,0.0776) (1510,0.0824) (1520,0.0869) (1530,0.0901) (1540,0.0932) (1550,0.0965) (1560,0.0996) (1570,0.1028) (1580,0.1061) (1590,0.1088) (1600,0.1111) (1610,0.1139) (1620,0.1156) (1630,0.1166) (1640,0.1177) (1650,0.1188) (1660,0.1190) (1670,0.1189) (1680,0.1185) (1690,0.1172) (1700,0.1158) (1710,0.1143) (1720,0.1127) (1730,0.1111) (1740,0.1100) (1750,0.1087) (1760,0.1063) (1770,0.1040) (1780,0.1012) (1790,0.0967)};
+\addplot[spec!25,forget plot] fill between[of=hiSEG3 and loSEG3];
+\addplot[spec,thick,mark=none,forget plot] coordinates {(1460,0.1481) (1470,0.1342) (1480,0.1341) (1490,0.1467) (1500,0.1548) (1510,0.1628) (1520,0.1699) (1530,0.1737) (1540,0.1768) (1550,0.1805) (1560,0.1840) (1570,0.1878) (1580,0.1923) (1590,0.1959) (1600,0.1984) (1610,0.2013) (1620,0.2030) (1630,0.2039) (1640,0.2051) (1650,0.2064) (1660,0.2067) (1670,0.2064) (1680,0.2059) (1690,0.2037) (1700,0.2016) (1710,0.1999) (1720,0.1982) (1730,0.1960) (1740,0.1939) (1750,0.1919) (1760,0.1886) (1770,0.1833) (1780,0.1786) (1790,0.1736)};
+\addplot[draw=none,name path=hiSEG4,forget plot] coordinates {(1960,0.1574) (1970,0.1758) (1980,0.1902) (1990,0.2043) (2000,0.1809) (2010,0.1734) (2020,0.1755) (2030,0.2086) (2040,0.2199) (2050,0.2139) (2060,0.2215) (2070,0.2099) (2080,0.2152) (2090,0.2117) (2100,0.2099) (2110,0.2098) (2120,0.2088) (2130,0.2100) (2140,0.2125) (2150,0.2110) (2160,0.2098) (2170,0.2136) (2180,0.2122) (2190,0.2153) (2200,0.2114) (2210,0.2169) (2220,0.2166) (2230,0.2150) (2240,0.2128) (2250,0.2074) (2260,0.2041) (2270,0.2005) (2280,0.1980) (2290,0.1941) (2300,0.1886) (2310,0.1794) (2320,0.1667) (2330,0.1766) (2340,0.1729) (2350,0.1594) (2360,0.1408) (2370,0.1317) (2380,0.1278) (2390,0.1284) (2400,0.1304) (2410,0.1198) (2420,0.1160) (2430,0.1248) (2440,0.1251) (2450,0.1224)};
+\addplot[draw=none,name path=loSEG4,forget plot] coordinates {(1960,0.0334) (1970,0.0368) (1980,0.0398) (1990,0.0414) (2000,0.0377) (2010,0.0386) (2020,0.0414) (2030,0.0480) (2040,0.0502) (2050,0.0491) (2060,0.0510) (2070,0.0520) (2080,0.0538) (2090,0.0540) (2100,0.0549) (2110,0.0559) (2120,0.0565) (2130,0.0574) (2140,0.0583) (2150,0.0590) (2160,0.0599) (2170,0.0611) (2180,0.0619) (2190,0.0634) (2200,0.0634) (2210,0.0650) (2220,0.0647) (2230,0.0638) (2240,0.0620) (2250,0.0594) (2260,0.0569) (2270,0.0545) (2280,0.0528) (2290,0.0507) (2300,0.0486) (2310,0.0464) (2320,0.0447) (2330,0.0453) (2340,0.0436) (2350,0.0413) (2360,0.0348) (2370,0.0301) (2380,0.0259) (2390,0.0257) (2400,0.0269) (2410,0.0199) (2420,0.0153) (2430,0.0195) (2440,0.0146) (2450,0.0016)};
+\addplot[spec!25,forget plot] fill between[of=hiSEG4 and loSEG4];
+\addplot[spec,thick,mark=none,forget plot] coordinates {(1960,0.0954) (1970,0.1063) (1980,0.1150) (1990,0.1228) (2000,0.1093) (2010,0.1060) (2020,0.1085) (2030,0.1283) (2040,0.1351) (2050,0.1315) (2060,0.1362) (2070,0.1309) (2080,0.1345) (2090,0.1329) (2100,0.1324) (2110,0.1329) (2120,0.1327) (2130,0.1337) (2140,0.1354) (2150,0.1350) (2160,0.1349) (2170,0.1374) (2180,0.1371) (2190,0.1394) (2200,0.1374) (2210,0.1410) (2220,0.1407) (2230,0.1394) (2240,0.1374) (2250,0.1334) (2260,0.1305) (2270,0.1275) (2280,0.1254) (2290,0.1224) (2300,0.1186) (2310,0.1129) (2320,0.1057) (2330,0.1109) (2340,0.1083) (2350,0.1004) (2360,0.0878) (2370,0.0809) (2380,0.0769) (2390,0.0770) (2400,0.0787) (2410,0.0698) (2420,0.0656) (2430,0.0722) (2440,0.0699) (2450,0.0620)};
+\node[font=\footnotesize,anchor=south west] at (axis cs:560,0.29) {red edge};
+\draw[->,attn] (axis cs:640,0.29) -- (axis cs:715,0.14);
+\end{axis}
+\end{tikzpicture}
+\caption{The mean reflectance of each of the $165$ common-grid bands over the normalisation corpus
+(teal line), with one standard deviation either side (shaded). Real numbers from
+\texttt{app/constants/hyperspectral.json}, plotted at the grid wavelengths; the four breaks are
+the atmospheric windows removed from the grid.}\label{fig:light:meanspec}
+\end{figure}
+
+\section{The cube}\label{sec:light:cube}
+
+Stack one image per band and you get a three-dimensional block of numbers.
+
+\begin{definition}[Array, tensor and shape]\index{array}\index{tensor}\index{shape}
+An \textbf{array} is a block of numbers indexed by one or more whole-number positions. Its
+\textbf{shape} lists how many positions each index has. A one-index array is a vector, a
+two-index array is a matrix, and arrays with more indices are commonly called
+\textbf{tensors}. In this book ``tensor'' means a multi-index array of numbers, nothing more.
+\end{definition}
+
+\begin{definition}[Hyperspectral cube]\index{hyperspectral cube}
+A \textbf{hyperspectral cube} is an array $\mat{X}$ of shape \shape{(C, H, W)}: $C$ bands,
+$H$ rows, $W$ columns. Its entry $\mat{X}[c, i, j] = x_c(i,j)$ is the reflectance of band $c$ at
+pixel $(i,j)$. A sensor that records $200$ or more narrow bands is called
+\textbf{hyperspectral}\index{hyperspectral}.
+\end{definition}
+
+``Hyperspectral'' means high \emph{spectral} resolution: many narrow wavelength ranges. It does
+not mean sharp images. Spatially these sensors are coarse; a PRISMA or EnMAP pixel covers about
+$30$ metres on the ground. The ``cube'' is not three-dimensional on the ground either: every
+layer is a picture of the same flat ground, and the third axis is wavelength, not height.
+
+The cube can be read in two ways, both correct and both used.
+\begin{itemize}
+\item \textbf{A stack of images.} Fix the band $c$ and take $\mat{X}[c, :, :]$, an
+\shape{(H, W)} array: the whole scene at one wavelength, a grey picture. Visualisation uses this
+reading.
+\item \textbf{A grid of spectra.} Fix the pixel $(i,j)$ and take $\mat{X}[:, i, j]$, a vector of
+length $C$: one pixel at every wavelength. Detectors use this reading.
+\end{itemize}
+In Python the colon ``\code{:}'' means ``every position along this axis''.
+
+\coursefig[0.95\linewidth]{iw-02-cube}{From photograph to spectrum. (a) A colour photograph
+stores three bands per pixel. (b) A hyperspectral cube stores one image per wavelength, with shape
+\texttt{(C, H, W)}. (c) Reading one pixel down the band axis gives its spectrum. (Course figure,
+Indradhanu part 2; the curve is illustrative.)}{fig:light:cube}
+
+\begin{worked}[label={we:light:cube}]{Slicing a 3-band, 2-by-2 cube}
+This small cube is used again in \cref{ch:bandpipeline}, so copy it down. It has $C=3$ bands, at
+$460$, $860$ and $1{,}650$ nm, and $H = W = 2$ (values illustrative\tagA):
+\[
+\mat{X}[0] = \begin{pmatrix} 0.03 & 0.05 \\ 0.05 & 0.03 \end{pmatrix},\quad
+\mat{X}[1] = \begin{pmatrix} 0.20 & 0.30 \\ 0.30 & 0.20 \end{pmatrix},\quad
+\mat{X}[2] = \begin{pmatrix} 0.14 & 0.10 \\ 0.14 & 0.10 \end{pmatrix}.
+\]
+Each matrix is one band; rows are $i = 0, 1$ and columns $j = 0, 1$.
+
+\emph{A band.} $\mat{X}[1, :, :]$ is the $860$ nm image, the middle matrix.
+
+\emph{A spectrum.} For pixel $(0,1)$ (row $0$, column $1$) read position $(0,1)$ of each
+matrix in turn:
+\begin{align*}
+\mat{X}[0,0,1] &= 0.05,\\
+\mat{X}[1,0,1] &= 0.30,\\
+\mat{X}[2,0,1] &= 0.10,
+\end{align*}
+so $\vect{x}_{01} = (0.05,\ 0.30,\ 0.10)$. The other three spectra are
+$\vect{x}_{00} = (0.03,\ 0.20,\ 0.14)$, $\vect{x}_{10} = (0.05,\ 0.30,\ 0.14)$ and
+$\vect{x}_{11} = (0.03,\ 0.20,\ 0.10)$.
+
+\emph{Counting.} The cube holds $3 \times 2 \times 2 = 12$ numbers: $3$ bands of $4$ pixels, or
+equivalently $4$ spectra of $3$ values.
+\end{worked}
+
+\begin{worked}[label={we:light:bytes}]{The size of a real cube}
+A PRISMA cube has shape \shape{(239, 1210, 1219)} stored as \code{float32} (4 bytes per
+number). How large is it? Count the pixels, then the numbers, then the bytes:
+\begin{align*}
+1{,}210 \times 1{,}219 &= 1{,}474{,}990 \text{ pixels},\\
+1{,}474{,}990 \times 239 &= 352{,}522{,}610 \text{ numbers},\\
+352{,}522{,}610 \times 4 &= 1{,}410{,}090{,}440 \text{ bytes} \approx 1.41\ \text{GB}.
+\end{align*}
+After resampling to the $165$-band grid of \cref{ch:sensors} the same scene needs
+\[ 1{,}474{,}990 \times 165 \times 4 = 973{,}493{,}400 \text{ bytes} \approx 0.97\ \text{GB}. \]
+\end{worked}
+
+\begin{table}[htbp]\centering
+\caption{Vocabulary to pin down now. The two easiest to confuse are band and spectrum: a band is
+a horizontal slice (one wavelength, all pixels), a spectrum a vertical skewer (one pixel, all
+wavelengths).}\label{tab:light:vocab}
+\begin{tabular}{@{}lll@{}}\toprule
+Word & What it is & Shape \\\midrule
+band & one wavelength layer, a grey picture & \shape{(H, W)}\\
+spectrum & one pixel's values across all bands & \shape{(C,)}\\
+cube & the whole stack & \shape{(C, H, W)}\\
+patch & a small square cut from a cube for training & \shape{(165, 128, 128)}\\
+scene & one complete acquisition & \shape{(C, about 1000, about 1000)}\\
+validity cube & the 0/1 companion of the cube (\cref{sec:light:validity}) & \shape{(C, H, W)}\\\bottomrule
+\end{tabular}
+\end{table}
+
+\section{Thermal images: the one-band cousin}\label{sec:light:thermal}
+
+Two of the five sensors, Landsat~9 and HotSat-1, are \textbf{thermal}\index{thermal sensor}: they
+record one band in the thermal infrared, which measures how much heat the ground
+\emph{emits}, and so how hot it is. A thermal image is the same cube structure with $C = 1$,
+shape \shape{(1, H, W)}. ``Hotter than its surroundings'' is exactly what a fire, a gas flare or a
+running machine looks like, so anomaly detection is still useful, but there is no spectrum to
+compare. The thermal model Chakshu shares almost all its code with Indradhanu; everywhere this
+book says ``$165$ bands'', Chakshu says ``$1$ band''.
+
+A sensor does not store physics directly. It stores \textbf{digital numbers}\index{digital
+number} (DN): integers proportional to the energy that hit the detector, scaled by the
+electronics. DN are not comparable across sensors, dates or sun angles, so the first processing
+step converts them to a physical quantity. For Landsat's surface-temperature product the
+conversion is a straight line with two published constants\tagM{l2sp_dn_to_temperature_transformer.py},
+in \file{app/utils/data_transformations/l2sp_dn_to_temperature_transformer.py}:
+\begin{equation}\label{eq:light:landsat}
+T_{\mathrm{K}} = 0.00341802 \times \mathrm{DN} + 149.0, \qquad T_{^\circ\mathrm{C}} = T_{\mathrm{K}} - 273.15.
+\end{equation}
+The first gives temperature in kelvin (K), the scale that starts at absolute zero; subtracting
+$273.15$ converts to degrees Celsius.
+
+\begin{worked}[label={we:light:landsat}]{A Landsat digital number to Celsius}
+A Landsat pixel reports $\mathrm{DN} = 30{,}000$. Do each step on paper.
+
+Multiply by the scale factor:
+\[ 0.00341802 \times 30{,}000 = 102.5406. \]
+Add the offset to get kelvin:
+\[ T_{\mathrm{K}} = 102.5406 + 149.0 = 251.5406\ \mathrm{K}. \]
+Subtract $273.15$:
+\[ T_{^\circ\mathrm{C}} = 251.5406 - 273.15 = -21.6094 \approx -21.61\ ^\circ\mathrm{C}. \]
+Minus $21.6$ degrees: plausibly the top of a cold cloud.
+\end{worked}
+
+\section{Validity: not every number is a measurement}\label{sec:light:validity}
+
+\Cref{ch:problem} introduced the validity mask. For hyperspectral data the codebase keeps one
+validity value per band per pixel.
+
+\begin{definition}[Validity cube]\index{validity cube}
+The \textbf{validity cube} $\mat{V}$ has the same shape \shape{(C, H, W)} as the cube, with
+$\mat{V}[c,i,j] = 1$ if band $c$ of pixel $(i,j)$ is a real measurement and $0$ if it is not
+(dead detector, cloud, off-swath).
+\end{definition}
+
+After the processing of \cref{ch:bandpipeline}, hyperspectral validity is \emph{all-or-nothing per
+pixel}: a pixel is valid in all bands or in none. That lets code collapse the cube to one
+\shape{(H, W)} map, and the codebase does it in two different ways. The training code reads band
+$0$ alone (\file{app/foundation_models/trainers/hyperspectral_segformer_mae_trainer.py}, line 160):
+\begin{lstlisting}
+# Use band 0 as spatial validity proxy: (B, C, H, W) -> (B, 1, H, W)
+return validity[:, 0:1, :, :].float()
+\end{lstlisting}
+The scoring code sums over bands and asks whether any band is valid
+(\file{backend/allotrope/action_types/_anomaly_scoring_run.py}, line 174):
+\begin{lstlisting}
+spatial_valid = (validity_np.sum(axis=0) > 0).astype(np.uint8)   # (H, W)
+\end{lstlisting}
+Here \code{B} is the \textbf{batch}\index{batch} size, the number of image patches processed
+together in one step; \code{sum(axis=0)} adds along the first axis (the bands).
+
+\begin{worked}[label={we:light:validity}]{Two ways to collapse validity}
+A $3$-band, $1 \times 3$ image (one row, three pixels) has validity
+\[
+\mat{V}[0] = (1,\ 0,\ 0),\quad \mat{V}[1] = (1,\ 0,\ 1),\quad \mat{V}[2] = (1,\ 0,\ 1).
+\]
+Sum over bands, pixel by pixel:
+\begin{align*}
+\text{pixel } 0:\ 1 + 1 + 1 &= 3,\\
+\text{pixel } 1:\ 0 + 0 + 0 &= 0,\\
+\text{pixel } 2:\ 0 + 1 + 1 &= 2.
+\end{align*}
+``Sum $> 0$'' gives $(1,\ 0,\ 1)$. ``Band $0$ only'' gives $(1,\ 0,\ 0)$. They disagree on pixel
+$2$, which is valid in two bands but not in band $0$. That pixel is \emph{not} all-or-nothing, so
+this validity cube has not been through the pipeline. After the pipeline, pixel $2$ would have been
+either filled to $(1,1,1)$ or wiped to $(0,0,0)$ (\cref{ch:bandpipeline}), and both methods would
+agree. The training code's shortcut reads one band instead of $165$, which is $165$ times less
+memory traffic on an operation done for every batch; it is safe only because of the
+all-or-nothing guarantee.
+\end{worked}
+
+\begin{keypoint}
+The two collapses agree only on cubes that have been through the band pipeline; on raw validity
+the band-0 shortcut is wrong.
+\end{keypoint}
+
+\begin{confusions}
+\confusion{Is a band the same as a channel?}{In practice yes. Remote sensing says band, deep
+learning says channel; the $C$ in \shape{(C, H, W)} is the band count either way.}
+\confusion{Does hyperspectral mean high resolution?}{It means high \emph{spectral} resolution,
+many narrow bands. Spatially a pixel is about $30$ m, coarse by photographic standards.}
+\confusion{Is the band value the reflectance at the centre wavelength?}{Not exactly. It is a
+weighted average over the band's response function (\cref{eq:light:srf}). For narrow bands and a
+smooth spectrum the two are close; near a sharp feature they differ
+(\cref{we:light:srf}).}
+\confusion{Are more bands always better?}{No. Adjacent bands $10$ nm apart carry nearly the same
+information, each narrow band is noisier, and many bands relative to usable pixels make some
+statistics numerically unstable (\cref{ch:rx}). Indradhanu's first layer compresses the $165$
+bands for exactly this reason (\cref{ch:compressor}).}
+\confusion{Reflectance is between $0$ and $1$, so values above $1$ are bugs?}{Usually, not always.
+Specular glint off water or metal can exceed $1$. Do not clamp blindly.}
+\confusion{Radiance or reflectance: which does the model see?}{Reflectance. The providers' level-2
+products are already surface reflectance (as scaled integers); the codebase undoes the integer
+scaling and never handles radiance.}
+\confusion{If validity is all-or-nothing, why is the validity cube $C$ layers deep?}{Because the
+same type is used at earlier pipeline stages where validity genuinely varies per band. By the time
+a model sees it, the layers agree.}
+\end{confusions}
+
+\begin{checkyourself}
+\item\label{ex:light:1} A band has FWHM $12$ nm. Compute $\sigma$ to three decimal places, then the
+Gaussian weight $3$ nm from the centre. Show every step.
+\item\label{ex:light:2} A band samples wavelengths $1{,}000$, $1{,}005$, $1{,}010$ nm with weights
+$0.5$, $1$, $0.5$; the reflectances there are $0.30$, $0.26$, $0.18$. Compute the band value and
+compare it with the reflectance at the centre.
+\item\label{ex:light:3} A Landsat pixel reports $\mathrm{DN} = 41{,}000$. Compute its temperature in
+kelvin and in Celsius.
+\item\label{ex:light:4} Using the cube of \cref{we:light:cube}, write the spectrum of pixel
+$(1,0)$ and the $1{,}650$ nm band as a matrix. Is pixel $(1,0)$ a scaled copy of pixel $(0,0)$?
+Check by dividing component by component.
+\item\label{ex:light:5} With the numbers of \cref{we:light:rho}, a second surface gives radiance
+$L = 0.05$ under the same sun. What is its reflectance? Then explain in one or two sentences why
+reflectance, not radiance, is what lets one model be used on several sensors.
+\end{checkyourself}
+
+\nextchapter{ch:sensors}

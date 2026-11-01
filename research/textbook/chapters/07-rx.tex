@@ -1,0 +1,1002 @@
+\chapter{Anomaly as surprise: the Gaussian, Mahalanobis distance and the RX detector}\label{ch:rx}
+
+\begin{onething}
+Every detector in this book answers one question, ``how badly does this pixel fit the pattern of
+normal?'', and the RX detector answers it by modelling normal as one Gaussian cloud and scoring a
+pixel by its Mahalanobis distance from the centre: Euclidean distance after whitening. On 165
+correlated bands the covariance that whitening divides by is nearly singular, the distances explode,
+and that is why plain RX was removed from the product on 2026-05-11.
+\end{onething}
+
+\section{Anomaly as surprise}\label{sec:rx:surprise}
+
+\Cref{ch:problem} turned ``is this a gas leak?'' into ``is this pixel unlike its surroundings?''.
+This chapter makes that computable. Every detector in this repository, statistical or neural,
+follows the same three steps:
+\begin{enumerate}
+  \item build a model of what \emph{normal} looks like;
+  \item measure how badly each pixel \emph{fits} that model;
+  \item rank the pixels; the worst-fitting are the candidates.
+\end{enumerate}
+The two families of detectors differ only in step 1. The \emph{statistical} family describes normal
+with statistics computed from the scene itself (its mean spectrum, and how its bands vary
+together) and needs no training, no checkpoint and no labels. The \emph{reconstruction} family
+(\cref{ch:recon}) trains a network to redraw ordinary imagery and treats a bad redrawing as a sign
+of something unusual. This chapter and the next build the statistical family, and with it every
+piece of mathematics the residual score of \cref{ch:residualmaha} needs.
+
+Every detector outputs a \emph{score map}\index{score map}: one number per pixel, the height and
+width of the scene, higher meaning more anomalous. It does not output a yes/no decision. A threshold
+turns scores into a mask later, chosen by a person in a separate Action (\cref{ch:product}), and
+invalid pixels are excluded from scoring and from every statistic computed over the map.
+
+\subsection{Start in one dimension}
+
+A thermal scene from Landsat~9 has one number per pixel, a temperature. The shipped thermal
+statistics are a mean of 24.58\,\textdegree C\tagM{app/constants/thermal_pixel_consts.json} and a
+standard deviation of 13.57\,\textdegree C\tagM{app/constants/thermal_pixel_consts.json}. How unusual
+is a pixel at 71\,\textdegree C? Count how many standard deviations it sits above the mean:
+\begin{align*}
+z &= \frac{71 - 24.58}{13.57}\\
+  &= \frac{46.42}{13.57}\\
+  &= 3.42 .
+\end{align*}
+Three and a half standard deviations above the mean is unusual. That is the whole idea, and the
+rest of the chapter generalises it to many bands. To generalise it properly you need to know
+\emph{how} unusual 3.42 is, which needs a model of how the values are spread: the Gaussian.
+
+\begin{analogy}
+A doctor reading a blood panel does not flag a test because its number is large; she flags it
+because it is large \emph{for that test}, measured against the normal range. When several tests move
+together for an ordinary reason (dehydration raises many concentrations at once), she reads them as
+one finding, not many. One value far outside its own normal range while the rest are ordinary is the
+alarm. The RX detector reads a spectrum the same way: it measures each pixel against the normal
+range of the scene, it discounts movements that the bands always make together, and it raises the
+alarm for a movement the scene does not normally make.
+\end{analogy}
+
+\section{The one-dimensional Gaussian and the z-score}\label{sec:rx:gauss1d}
+
+\begin{definition}[Gaussian distribution]\index{Gaussian distribution}
+A quantity $x$ has a \emph{Gaussian} (or \emph{normal}) distribution with mean $\mu$ and standard
+deviation $\sigma > 0$, written $x \sim \mathcal{N}(\mu, \sigma^2)$, if its probability density is
+\begin{equation}\label{eq:rx:gauss1d}
+p(x) = \frac{1}{\sqrt{2\pi}\,\sigma}\exp\!\left(-\frac{(x - \mu)^2}{2\sigma^2}\right).
+\end{equation}
+\end{definition}
+
+A \emph{probability density}\index{probability density} is a curve whose area over an interval is
+the probability of landing in that interval; the total area under it is 1. The Gaussian is the
+familiar bell: highest at $\mu$, symmetric, falling away fast. Two pieces of \cref{eq:rx:gauss1d}
+deserve a sentence each. The factor $1/(\sqrt{2\pi}\sigma)$ is only there to make the total area 1;
+it does not depend on $x$. All the shape is in the exponent, $-(x - \mu)^2/(2\sigma^2)$, which is
+minus one half of the squared number of standard deviations from the mean.
+
+\begin{definition}[z-score]\index{z-score}
+The \emph{z-score} of a value is its distance from the mean in units of standard deviation,
+$z = (x - \mu)/\sigma$. If $x \sim \mathcal{N}(\mu, \sigma^2)$ then $z \sim \mathcal{N}(0, 1)$, the
+\emph{standard normal}\index{standard normal}, with density
+$\varphi(z) = \frac{1}{\sqrt{2\pi}}e^{-z^2/2}$.
+\end{definition}
+
+Substituting $z$ into \cref{eq:rx:gauss1d} shows the exponent is $-z^2/2$: the density of a value
+depends on it only through $z^2$. Values with the same $z^2$ (the same distance from the mean, on
+either side) are equally likely, and a larger $z^2$ means an exponentially less likely value. So
+$z^2$ is a natural surprise score in one dimension. Remember that sentence: the multi-band score is
+the same statement with $z^2$ replaced by its multi-band version.
+
+\subsection{Tail probabilities and thresholds}
+
+The probability that a standard normal lands more than $t$ from zero in either direction is the
+area in its two tails, $P(\abs{z} > t)$. There is no closed form for it, but the values are
+tabulated (and computed by \code{scipy.stats.norm.sf}):
+\begin{center}
+\begin{tabular}{ccc}
+\toprule
+$t$ & $P(\abs{z} > t)$ & roughly\\
+\midrule
+1    & 0.3173   & one pixel in 3\\
+2    & 0.0455   & one in 22\\
+3    & 0.0027   & one in 370\\
+3.42 & 0.000626 & one in 1{,}600\\
+\bottomrule
+\end{tabular}
+\end{center}
+(\texttt{tools/compute\_rx.py} computes every number in this chapter.) If the thermal scene really
+were Gaussian, a pixel at $z = 3.42$ or beyond would occur once in about 1,600 pixels; a Landsat
+scene has millions of pixels, so you would still expect thousands of them. That is the first
+lesson of detection: \emph{unusual} is relative to how many pixels you look at.
+
+Turn the table around and you have a \emph{threshold}\index{threshold}. Decide what fraction of
+normal pixels you are willing to flag by mistake, the \emph{false-alarm rate}\index{false-alarm
+rate} $\alpha$, and choose $t$ so that $P(\abs{z} > t) = \alpha$. For $\alpha = 1\%$, $t = 2.576$;
+for $\alpha = 0.1\%$, $t = 3.291$. In terms of the score $z^2$ the thresholds are
+$2.576^2 = 6.635$ and $3.291^2 = 10.83$.
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}
+\begin{groupplot}[group style={group size=2 by 1,horizontal sep=1.6cm},
+  height=5.2cm,samples=121,axis lines=left,xlabel={$z$},
+  tick label style={font=\scriptsize},label style={font=\small}]
+\nextgroupplot[width=0.58\linewidth,domain=-4:4,ymin=0,ymax=0.43,
+  ylabel={density $\varphi(z)$},xtick={-2.58,0,2.58},
+  xticklabels={$-2.58$,0,$2.58$}]
+  \addplot[fill=loss!35,draw=none,domain=2.576:4] {exp(-x^2/2)/sqrt(2*pi)} \closedcycle;
+  \addplot[fill=loss!35,draw=none,domain=-4:-2.576] {exp(-x^2/2)/sqrt(2*pi)} \closedcycle;
+  \addplot[fill=loss!85,draw=none,domain=3.291:4] {exp(-x^2/2)/sqrt(2*pi)} \closedcycle;
+  \addplot[fill=loss!85,draw=none,domain=-4:-3.291] {exp(-x^2/2)/sqrt(2*pi)} \closedcycle;
+  \addplot[spec,thick] {exp(-x^2/2)/sqrt(2*pi)};
+  \node[font=\scriptsize,align=center] at (axis cs:0,0.17) {99\%\\ of normal\\ pixels};
+  \draw[maskgrey] (axis cs:2.2,0) rectangle (axis cs:4,0.03);
+\nextgroupplot[width=0.42\linewidth,domain=2.2:4,xmin=2.2,xmax=4,ymin=0,ymax=0.03,
+  title={\scriptsize zoom on the right tail},xtick={2.58,3.29},
+  xticklabels={2.58,3.29},yticklabel style={/pgf/number format/fixed}]
+  \addplot[fill=loss!35,draw=none,domain=2.576:4] {exp(-x^2/2)/sqrt(2*pi)} \closedcycle;
+  \addplot[fill=loss!85,draw=none,domain=3.291:4] {exp(-x^2/2)/sqrt(2*pi)} \closedcycle;
+  \addplot[spec,thick] {exp(-x^2/2)/sqrt(2*pi)};
+  \draw[attn,thick,dashed] (axis cs:3.42,0) -- (axis cs:3.42,0.022)
+    node[above,font=\scriptsize,align=center] {thermal pixel\\$z = 3.42$};
+\end{groupplot}
+\end{tikzpicture}
+\caption{The standard normal density. The light and dark tails together hold 1\% of the area
+(beyond $\pm2.576$); the dark tails alone hold 0.1\% (beyond $\pm3.291$). They are thin, so the
+right panel magnifies the grey box on the right tail. The thermal pixel of \cref{sec:rx:surprise}
+sits at $z = 3.42$, beyond both thresholds.}
+\label{fig:rx:normal}
+\end{figure}
+
+\section{Why many bands need more than many z-scores}\label{sec:rx:whynotz}
+
+The obvious way to score a 165-band pixel is to compute a z-score per band and add the squares.
+That fails because \textbf{bands are not independent}. Vegetation is dark in red and bright in the
+near infrared, and across a scene the two bands move together: more vegetation, darker red and
+brighter infrared. A pixel slightly bright in both is ordinary. A pixel bright in red \emph{and}
+dark in the infrared is bizarre, even if neither value alone is extreme. Per-band z-scores look at
+one band at a time and cannot see the relationship.
+
+\begin{worked}[label={we:rx:zfail}]{Per-band z-scores miss the pattern}
+Use the two-band covariance of \cref{we:linalg:cov}, $\Cov = \begin{psmallmatrix} 2 & 3\\ 3 &
+10\end{psmallmatrix}$ (spreads $\sqrt2$ and $\sqrt{10}$, positive covariance). Two test pixels sit
+these distances from the mean:
+\begin{align*}
+\vect{d}_A &= (2, 6) && \text{(both bands up, the way the scene moves)},\\
+\vect{d}_B &= (2, -3) && \text{(band 1 up, band 2 down)}.
+\end{align*}
+Per-band squared z-scores, $d_1^2/2 + d_2^2/10$:
+\begin{align*}
+A:&\quad \frac{2^2}{2} + \frac{6^2}{10} = \frac42 + \frac{36}{10} = 2 + 3.6 = 5.6\\
+B:&\quad \frac{2^2}{2} + \frac{(-3)^2}{10} = \frac42 + \frac{9}{10} = 2 + 0.9 = 2.9 .
+\end{align*}
+By this score A is nearly twice as unusual as B. Now use the covariance properly. With
+$\Cov\inv = \frac{1}{11}\begin{psmallmatrix} 10 & -3\\ -3 & 2\end{psmallmatrix}$ (\cref{we:linalg:inv}):
+\begin{align*}
+\Cov\inv\vect{d}_A &= \tfrac{1}{11}(10\times2 - 3\times6,\ -3\times2 + 2\times6)
+  = \tfrac{1}{11}(20 - 18,\ -6 + 12) = \tfrac{1}{11}(2, 6)\\
+\vect{d}_A\T\Cov\inv\vect{d}_A &= \tfrac{1}{11}(2\times2 + 6\times6) = \tfrac{1}{11}(4 + 36)
+  = \tfrac{40}{11} = 3.64\\[4pt]
+\Cov\inv\vect{d}_B &= \tfrac{1}{11}(10\times2 - 3\times(-3),\ -3\times2 + 2\times(-3))
+  = \tfrac{1}{11}(20 + 9,\ -6 - 6) = \tfrac{1}{11}(29, -12)\\
+\vect{d}_B\T\Cov\inv\vect{d}_B &= \tfrac{1}{11}(2\times29 + (-3)\times(-12)) = \tfrac{1}{11}(58 + 36)
+  = \tfrac{94}{11} = 8.55 .
+\end{align*}
+The ranking flips. A moves along the direction the scene always moves, and scores 3.64; B breaks the
+relationship between the bands, and scores 8.55. The quantity $\vect{d}\T\Cov\inv\vect{d}$ is the
+Mahalanobis distance, and the rest of the chapter explains why it is the right score.
+\end{worked}
+
+\section{The multivariate Gaussian}\label{sec:rx:mvn}
+
+To score many bands the way $z^2$ scores one, you need a probability model for a whole spectrum: a
+density over $\R^C$ that has a mean vector, a covariance matrix, and a bell shape. Build it from the
+one-dimensional case in three steps.
+
+\paragraph{Step 1: independent standard normals.} Let $\vect{z} = (z_1, \dots, z_C)$ have entries
+that are independent standard normals. For independent quantities the joint density is the product
+of the individual densities, and products of exponentials add their exponents:
+\begin{align}
+p(\vect{z}) &= \prod_{k=1}^{C}\frac{1}{\sqrt{2\pi}}e^{-z_k^2/2}
+  = \frac{1}{(2\pi)^{C/2}}\exp\!\left(-\tfrac12\left(z_1^2 + \cdots + z_C^2\right)\right) \notag\\
+&= \frac{1}{(2\pi)^{C/2}}\exp\!\left(-\tfrac12\norm{\vect{z}}^2\right). \label{eq:rx:stdmvn}
+\end{align}
+The density depends on $\vect{z}$ only through its length: the contours of equal density are
+circles (spheres in more dimensions). Its mean is $\vect{0}$ and its covariance is $\mat{I}$ (each
+entry has variance 1, and independent entries have covariance 0). It is exactly the round, whitened
+cloud of \cref{fig:linalg:whitening}(b).
+
+\paragraph{Step 2: stretch and turn it.} Take a mean $\muv$ and a covariance $\Cov =
+\mat{U}\mat{\Lambda}\mat{U}\T$ with all eigenvalues positive. Define
+\[
+\vect{x} = \muv + \mat{A}\vect{z}, \qquad \mat{A} = \mat{U}\mat{\Lambda}^{1/2}.
+\]
+In words: stretch the round cloud by $\sqrt{\lambda_k}$ along axis $k$, rotate the axes onto the
+eigenvectors, and move the centre to $\muv$. By \cref{eq:linalg:covtransform} the covariance of
+$\vect{x}$ is $\mat{A}\mat{I}\mat{A}\T = \mat{U}\mat{\Lambda}^{1/2}\mat{\Lambda}^{1/2}\mat{U}\T =
+\mat{U}\mat{\Lambda}\mat{U}\T = \Cov$, as wanted.
+
+\paragraph{Step 3: change variables.} What is the density of $\vect{x}$? First the one-dimensional
+version. If $x = \mu + \sigma z$ then $z = (x - \mu)/\sigma$, and an interval of width $\Delta x$ in
+$x$ corresponds to an interval of width $\Delta x/\sigma$ in $z$. The same probability is spread
+over an interval $\sigma$ times wider, so the density is $\sigma$ times lower:
+$p_x(x) = \frac{1}{\sigma}\,\varphi\!\left(\frac{x - \mu}{\sigma}\right)$, which is exactly
+\cref{eq:rx:gauss1d}. In $C$ dimensions the same argument uses volume instead of width: the map
+$\vect{z} \mapsto \mat{A}\vect{z}$ multiplies volumes by $\abs{\det\mat{A}}$, so
+\[
+p_x(\vect{x}) = \frac{1}{\abs{\det\mat{A}}}\;p_z\!\left(\mat{A}\inv(\vect{x} - \muv)\right).
+\]
+Now identify the pieces. The inverse of $\mat{A} = \mat{U}\mat{\Lambda}^{1/2}$ is
+$\mat{\Lambda}^{-1/2}\mat{U}\T$ (check: $\mat{\Lambda}^{-1/2}\mat{U}\T\mat{U}\mat{\Lambda}^{1/2} =
+\mat{\Lambda}^{-1/2}\mat{\Lambda}^{1/2} = \mat{I}$), and that is the whitening matrix $\mat{W}$ of
+\cref{eq:linalg:whiten}. The determinant of a product is the product of determinants, an orthogonal
+matrix has determinant $\pm1$, and a diagonal matrix's determinant is the product of its diagonal,
+so $\abs{\det\mat{A}} = \sqrt{\lambda_1\cdots\lambda_C} = \sqrt{\det\Cov}$. Substituting into
+\cref{eq:rx:stdmvn}:
+
+\begin{definition}[Multivariate Gaussian]\index{Gaussian distribution!multivariate}
+A spectrum $\vect{x} \in \R^C$ has a multivariate Gaussian distribution with mean $\muv$ and
+positive definite covariance $\Cov$, written $\vect{x}\sim\mathcal{N}(\muv, \Cov)$, if
+\begin{equation}\label{eq:rx:mvn}
+\begin{split}
+p(\vect{x}) &= \frac{1}{(2\pi)^{C/2}\sqrt{\det\Cov}}
+\exp\!\left(-\tfrac12\,\norm{\mat{W}(\vect{x} - \muv)}^2\right)\\
+&= \frac{1}{(2\pi)^{C/2}\sqrt{\det\Cov}}
+\exp\!\left(-\tfrac12\,(\vect{x} - \muv)\T\Cov\inv(\vect{x} - \muv)\right).
+\end{split}
+\end{equation}
+\end{definition}
+
+The second form uses the identity $\norm{\mat{W}\vect{d}}^2 = \vect{d}\T\Cov\inv\vect{d}$, which the
+next section proves. With $C = 1$, $\Cov = \sigma^2$, and \cref{eq:rx:mvn} is \cref{eq:rx:gauss1d}.
+As in one dimension, everything that depends on the pixel sits in the exponent, and the exponent
+is minus one half of a squared distance.
+
+\section{Mahalanobis distance}\label{sec:rx:mahalanobis}
+
+\begin{definition}[Mahalanobis distance]\index{Mahalanobis distance}
+The (squared) \emph{Mahalanobis distance} of a vector $\vect{x}$ from a distribution with mean
+$\muv$ and covariance $\Cov$ is
+\begin{equation}\label{eq:rx:maha}
+D^2(\vect{x}) = (\vect{x} - \muv)\T\Cov\inv(\vect{x} - \muv).
+\end{equation}
+\end{definition}
+
+It is distance from the mean measured in units of how much the data actually vary in that
+direction. Ten units along a direction in which the scene varies a lot are unremarkable; ten units
+along a direction in which it hardly varies at all are extraordinary. The next result makes that
+sentence exact.
+
+\subsection{Mahalanobis distance is Euclidean distance after whitening}
+
+\paragraph{Claim.} With $\Cov = \mat{U}\mat{\Lambda}\mat{U}\T$ and
+$\mat{W} = \mat{\Lambda}^{-1/2}\mat{U}\T$,
+\begin{equation}\label{eq:rx:mahawhite}
+(\vect{x} - \muv)\T\Cov\inv(\vect{x} - \muv) = \norm{\mat{W}(\vect{x} - \muv)}^2
+= \sum_{k=1}^{C}\frac{\left(\vect{u}_k\T(\vect{x} - \muv)\right)^2}{\lambda_k}.
+\end{equation}
+
+\noindent\textit{Proof.} Three steps.
+
+\emph{(i) The inverse of the covariance.} Guess $\Cov\inv = \mat{U}\mat{\Lambda}\inv\mat{U}\T$, with
+$\mat{\Lambda}\inv = \diag(1/\lambda_1, \dots, 1/\lambda_C)$, and check by multiplying:
+\begin{align*}
+\Cov\,\mat{U}\mat{\Lambda}\inv\mat{U}\T
+&= \mat{U}\mat{\Lambda}\mat{U}\T\mat{U}\mat{\Lambda}\inv\mat{U}\T
+  && \text{spectral theorem}\\
+&= \mat{U}\mat{\Lambda}\mat{\Lambda}\inv\mat{U}\T
+  && \mat{U}\T\mat{U} = \mat{I}\\
+&= \mat{U}\mat{U}\T = \mat{I}
+  && \text{diagonal entries } \lambda_k/\lambda_k = 1;\ \mat{U}\text{ is square and orthogonal.}
+\end{align*}
+So the inverse has the same eigenvectors and the reciprocal eigenvalues. Remember this: \emph{a
+small eigenvalue of $\Cov$ is a large eigenvalue of $\Cov\inv$.}
+
+\emph{(ii) $\mat{W}\T\mat{W} = \Cov\inv$.} Using \cref{eq:linalg:abt},
+\[
+\mat{W}\T\mat{W} = (\mat{\Lambda}^{-1/2}\mat{U}\T)\T\mat{\Lambda}^{-1/2}\mat{U}\T
+= \mat{U}\mat{\Lambda}^{-1/2}\mat{\Lambda}^{-1/2}\mat{U}\T
+= \mat{U}\mat{\Lambda}\inv\mat{U}\T = \Cov\inv .
+\]
+
+\emph{(iii) Put them together.} Write $\vect{d} = \vect{x} - \muv$. Then
+\[
+\norm{\mat{W}\vect{d}}^2 = (\mat{W}\vect{d})\T(\mat{W}\vect{d}) = \vect{d}\T\mat{W}\T\mat{W}\vect{d}
+= \vect{d}\T\Cov\inv\vect{d}.
+\]
+For the sum form, entry $k$ of $\mat{W}\vect{d}$ is row $k$ of $\mat{W}$ times $\vect{d}$, which is
+$\vect{u}_k\T\vect{d}/\sqrt{\lambda_k}$; squaring and adding gives the right-hand side of
+\cref{eq:rx:mahawhite}. \hfill$\square$
+
+\begin{keypoint}
+Mahalanobis distance = turn the pixel onto the principal directions, divide each coordinate by its
+standard deviation, and take the ordinary squared length.
+\end{keypoint}
+
+The sum form is the one to hold in your head. Each principal direction contributes its squared
+coordinate divided by its eigenvalue. A direction with a large eigenvalue (the scene varies a lot
+that way) contributes little; a direction with a small eigenvalue contributes a lot. The contours of
+equal Mahalanobis distance are the ellipses of \cref{fig:linalg:whitening}(a), long along the large
+eigenvectors and short along the small ones.
+
+\begin{worked}[label={we:rx:twoways}]{Two ways to the same Mahalanobis distance}
+Take pixel B of \cref{we:rx:zfail}, $\vect{d}_B = (2, -3)$, with $\vect{u}_1 = (1, 3)/\sqrt{10}$,
+$\lambda_1 = 11$, $\vect{u}_2 = (3, -1)/\sqrt{10}$, $\lambda_2 = 1$ (\cref{we:linalg:eig}).
+Coordinates:
+\begin{align*}
+\vect{u}_1\T\vect{d}_B &= \frac{1\times2 + 3\times(-3)}{\sqrt{10}} = \frac{2 - 9}{\sqrt{10}}
+  = \frac{-7}{\sqrt{10}}\\
+\vect{u}_2\T\vect{d}_B &= \frac{3\times2 + (-1)\times(-3)}{\sqrt{10}} = \frac{6 + 3}{\sqrt{10}}
+  = \frac{9}{\sqrt{10}} .
+\end{align*}
+Squared, divided by the eigenvalues, added:
+\[
+D^2 = \frac{49/10}{11} + \frac{81/10}{1} = \frac{49}{110} + \frac{81}{10}
+= 0.445 + 8.100 = 8.545 = \frac{94}{11}.
+\]
+The same 8.55 as \cref{we:rx:zfail}, and now you can see where it comes from: 8.1 of it is the
+pixel's step of $9/\sqrt{10} = 2.85$ along $\vect{u}_2$, the direction in which the scene's spread is
+only 1.
+\end{worked}
+
+\section{The RX detector}\label{sec:rx:rx}
+
+The \emph{RX detector}\index{RX detector}, named after Reed and Xiaoli Yu, who derived it in 1990
+\citep{reed1990adaptive}, scores every pixel by its Mahalanobis distance from the scene's background
+statistics:
+\begin{equation}\label{eq:rx:rx}
+\text{RX}(\vect{x}) = (\vect{x} - \hat{\muv})\T\hat{\Cov}\inv(\vect{x} - \hat{\muv}),
+\end{equation}
+where the hats mean ``estimated from the pixels'': $\hat\muv$ is the scene's mean spectrum and
+$\hat\Cov$ its covariance matrix (\cref{eq:linalg:mean,eq:linalg:cov}). \emph{Global RX} estimates
+them once from all valid pixels of the scene; \emph{local RX} (\cref{ch:localrx}) estimates them
+separately for each pixel from a ring of its neighbours.
+
+\subsection{Where the formula comes from: a likelihood ratio}
+\index{generalised likelihood ratio}
+
+Why this score and not some other? Because it is what a likelihood-ratio test gives. Frame the
+decision at one pixel as two hypotheses:
+\begin{itemize}
+  \item $H_0$ (background): $\vect{x} \sim \mathcal{N}(\muv, \Cov)$;
+  \item $H_1$ (target): $\vect{x} \sim \mathcal{N}(\muv + \vect{s}, \Cov)$ for some unknown signature
+    shift $\vect{s}$.
+\end{itemize}
+A \emph{likelihood ratio}\index{likelihood ratio} compares how well each hypothesis explains the
+observed pixel: $p(\vect{x}\mid H_1)/p(\vect{x}\mid H_0)$. We do not know $\vect{s}$, so the
+\emph{generalised} likelihood ratio uses the $\vect{s}$ that explains the pixel best. Under $H_1$
+the exponent is $-\frac12(\vect{x} - \muv - \vect{s})\T\Cov\inv(\vect{x} - \muv - \vect{s})$, which is
+at most 0 and equals 0 when $\vect{s} = \vect{x} - \muv$. So the best $H_1$ density is the peak
+value $1/((2\pi)^{C/2}\sqrt{\det\Cov})$, and taking the logarithm of the ratio:
+\begin{align*}
+\log\frac{\max_{\vect{s}} p(\vect{x}\mid H_1)}{p(\vect{x}\mid H_0)}
+&= \log\frac{\frac{1}{(2\pi)^{C/2}\sqrt{\det\Cov}}\,e^{0}}
+  {\frac{1}{(2\pi)^{C/2}\sqrt{\det\Cov}}\,e^{-\frac12 D^2(\vect{x})}}
+  && \text{\cref{eq:rx:mvn} for both}\\
+&= \log e^{\frac12 D^2(\vect{x})}
+  && \text{the normalising factors cancel}\\
+&= \tfrac12\,D^2(\vect{x}) .
+\end{align*}
+The log likelihood ratio is half the Mahalanobis distance, and a larger ratio means stronger
+evidence for a target. Ranking by the ratio and ranking by $D^2$ are the same ranking.
+
+\begin{sourcenote}[: the original RX statistic]
+Reed and Yu derived their test with the background mean and covariance themselves estimated from a
+finite set of $N$ background pixels \citep{reed1990adaptive}, which adds terms involving $N$ to the
+statistic; it is still an increasing function of the Mahalanobis distance computed with the
+estimates, so it ranks pixels the same way, and with the large backgrounds used here it reduces to
+\cref{eq:rx:rx}. The code computes \cref{eq:rx:rx} directly: \code{GlobalRXDetector.detect}
+(\code{app/detectors/global_rx_detector.py}, lines 227--229) calls \code{spectral.rx} on the valid
+pixels, which estimates $\hat\muv$ and $\hat\Cov$ from those same pixels (the \code{spectral}
+library's \code{calc_stats}, divisor $N - 1$) and forms $\hat\Cov\inv$ with \code{np.linalg.inv}.
+\end{sourcenote}
+
+Notice what the global version implies: the statistics are estimated from \emph{all} valid pixels,
+including any anomalies. A handful of anomalous pixels among millions barely moves the mean and
+covariance, so for global RX this contamination is mild. For local RX, where the background is a
+few thousand pixels around the target, it is not mild at all, and \cref{ch:localrx} builds a guard
+window against it.
+
+\section{How large is large? The chi-square distribution}\label{sec:rx:chi2}
+
+If the background really is Gaussian, the RX score of a background pixel has a known distribution,
+and that tells you what a ``large'' score is.
+
+By \cref{eq:rx:mahawhite}, $D^2 = \norm{\vect{z}}^2 = z_1^2 + \cdots + z_C^2$ with
+$\vect{z} = \mat{W}(\vect{x} - \muv)$. If $\vect{x} \sim \mathcal{N}(\muv, \Cov)$ then, running the
+construction of \cref{sec:rx:mvn} backwards, $\vect{z}$ has independent standard normal entries. So
+under the Gaussian background,
+\begin{equation}\label{eq:rx:chi2sum}
+D^2 = z_1^2 + z_2^2 + \cdots + z_C^2,\qquad z_k \text{ independent } \mathcal{N}(0, 1).
+\end{equation}
+
+\begin{definition}[Chi-square distribution]\index{chi-square distribution}
+The distribution of a sum of $C$ squared independent standard normals is the \emph{chi-square
+distribution with $C$ degrees of freedom}, written $\chi^2_C$. Its density, for $t > 0$, is
+\begin{equation}\label{eq:rx:chi2pdf}
+f_C(t) = \frac{t^{C/2 - 1}\,e^{-t/2}}{2^{C/2}\,\Gamma(C/2)},
+\end{equation}
+where $\Gamma$ is the gamma function ($\Gamma(n) = (n-1)!$ for whole numbers $n$,
+$\Gamma(1/2) = \sqrt\pi$, $\Gamma(3/2) = \sqrt\pi/2$).
+\end{definition}
+
+You will not need to derive \cref{eq:rx:chi2pdf} in general, but three facts about it you should be
+able to derive yourself.
+
+\paragraph{The mean is $C$.} Each $z_k^2$ has mean $\E[z_k^2] = \operatorname{Var}(z_k) +
+(\E z_k)^2 = 1 + 0 = 1$, and means add, so $\E[D^2] = C$. A background pixel in a 10-dimensional
+space has an average RX score of 10, not 1. Scores grow with the number of bands even when nothing
+is anomalous, which is why you can never compare RX scores computed in different dimensions
+directly.
+
+\paragraph{The spread is $\sqrt{2C}$.} For a standard normal $\E[z^4] = 3$ (a standard fact), so
+$\operatorname{Var}(z^2) = \E[z^4] - (\E[z^2])^2 = 3 - 1 = 2$. Variances of independent quantities
+add, so $\operatorname{Var}(D^2) = 2C$ and the standard deviation is $\sqrt{2C}$: 4.47 for
+$C = 10$, 18.2 for $C = 165$.
+
+\paragraph{Two cases by hand.} For $C = 1$, $D^2 = z^2$ and $P(z^2 > t) = P(\abs{z} > \sqrt t)$: the
+one-dimensional tail table of \cref{sec:rx:gauss1d}, with $t$ squared. For $C = 2$ the tail has a
+closed form. The density of $(z_1, z_2)$ is $\frac{1}{2\pi}e^{-r^2/2}$ with $r^2 = z_1^2 + z_2^2$;
+integrate over the region outside the circle of radius $\sqrt t$ in polar coordinates (the ring at
+radius $r$ has circumference $2\pi r$):
+\[
+P(D^2 > t) = \int_{\sqrt t}^{\infty}\frac{1}{2\pi}e^{-r^2/2}\,2\pi r\,dr
+= \Big[-e^{-r^2/2}\Big]_{\sqrt t}^{\infty} = 0 - (-e^{-t/2}) = e^{-t/2}.
+\]
+So for two bands the threshold with false-alarm rate $\alpha$ solves $e^{-t/2} = \alpha$:
+$t = 2\ln(1/\alpha)$. For $\alpha = 1\%$, $t = 2\ln 100 = 2\times4.605 = 9.21$.
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}
+\begin{groupplot}[group style={group size=2 by 1,horizontal sep=1.5cm},
+  height=5.6cm,axis lines=left,xlabel={score $t = D^2$},
+  tick label style={font=\scriptsize},label style={font=\small}]
+\nextgroupplot[width=0.56\linewidth,xmin=0,xmax=32,ymin=0,ymax=0.5,ylabel={density $f_C(t)$},
+  legend style={font=\scriptsize,draw=none,at={(0.98,0.97)},anchor=north east}]
+  \addplot[spec,thick,domain=0.05:32,samples=200] {exp(-x/2)/sqrt(2*pi*x)};
+  \addlegendentry{$C = 1$}
+  \addplot[attn,thick,domain=0:32,samples=120] {0.5*exp(-x/2)};
+  \addlegendentry{$C = 2$}
+  \addplot[spat,thick,domain=0.001:32,samples=200] {sqrt(x)*exp(-x/2)/sqrt(2*pi)};
+  \addlegendentry{$C = 3$}
+  \addplot[loss,thick,domain=0:32,samples=200] {x^4*exp(-x/2)/768};
+  \addlegendentry{$C = 10$}
+  \draw[loss,dotted] (axis cs:10,0) -- (axis cs:10,0.14) node[above,font=\scriptsize] {mean 10};
+  \draw[maskgrey] (axis cs:8,0) rectangle (axis cs:32,0.04);
+\nextgroupplot[width=0.44\linewidth,xmin=8,xmax=32,ymin=0,ymax=0.04,
+  title={\scriptsize zoom: the 1\% tails},yticklabel style={/pgf/number format/fixed},
+  xtick={11.34,23.21},xticklabels={{\color{spat}11.34},{\color{loss}23.21}}]
+  \addplot[fill=spat!35,draw=none,domain=11.34:32,samples=100] {sqrt(x)*exp(-x/2)/sqrt(2*pi)} \closedcycle;
+  \addplot[fill=loss!40,draw=none,domain=23.21:32,samples=100] {x^4*exp(-x/2)/768} \closedcycle;
+  \addplot[spat,thick,domain=8:32,samples=150] {sqrt(x)*exp(-x/2)/sqrt(2*pi)};
+  \addplot[loss,thick,domain=8:32,samples=150] {x^4*exp(-x/2)/768};
+\end{groupplot}
+\end{tikzpicture}
+\caption{Chi-square densities for $C = 1, 2, 3, 10$ degrees of freedom. The right panel magnifies the
+grey box: its shaded tails hold 1\% of the area for $C = 3$ (beyond 11.34) and for $C = 10$ (beyond
+23.21). As $C$ grows the whole
+distribution moves right (mean $C$) and spreads (standard deviation $\sqrt{2C}$), so a score of 15
+is alarming in 3 dimensions and ordinary in 10.}
+\label{fig:rx:chi2}
+\end{figure}
+
+\subsection{Thresholds by false-alarm rate}
+\index{chi-square distribution!thresholds}
+
+The $\chi^2_C$ tail gives a threshold for any false-alarm rate. The values below come from
+\code{scipy.stats.chi2.isf}\tagC:
+\begin{center}
+\begin{tabular}{rcccc}
+\toprule
+$C$ & mean & standard deviation & threshold at $\alpha = 1\%$ & at $\alpha = 0.1\%$\\
+\midrule
+1   & 1   & 1.41  & 6.63   & 10.83\\
+2   & 2   & 2.00  & 9.21   & 13.82\\
+3   & 3   & 2.45  & 11.34  & 16.27\\
+10  & 10  & 4.47  & 23.21  & 29.59\\
+30  & 30  & 7.75  & 50.89  & 59.70\\
+165 & 165 & 18.17 & 210.18 & 226.88\\
+\bottomrule
+\end{tabular}
+\end{center}
+The $C = 1$ row matches the squared normal thresholds of \cref{sec:rx:gauss1d} (6.635 and 10.83), and
+the $C = 2$ row matches $2\ln100$ and $2\ln1000$. The $C = 10$ row is the one that would apply to
+MNF-RX with its 10 components (\cref{ch:localrx}), and $C = 30$ to the 30-component scores of
+\cref{ch:localrx,ch:residualmaha}.
+
+\begin{keypoint}
+Under a Gaussian background the RX score of a normal pixel is $\chi^2_C$: average $C$, and a
+threshold for any false-alarm rate can be read from a table.
+\end{keypoint}
+
+\paragraph{Why the product does not use these thresholds.} Real scenes are not one Gaussian. They
+are mixtures of surfaces, with heavy tails from edges, glint and stripes, so the fraction of real
+pixels above the $\chi^2$ threshold is usually far more than $\alpha$. Every score in the product is
+therefore thresholded by \emph{percentile} of its own map (the human threshold step of
+\cref{ch:product}), and drawn with a square-root stretch because squared distances have a long right
+tail. The chi-square result is still worth knowing: it tells you what scale to expect (scores near
+$C$ are ordinary), it explains why scores computed in different numbers of dimensions are not
+comparable, and it is the reason the residual score's docstring calls its output
+``chi-squared-like''.
+
+\subsection{A fact that holds for any data}
+
+One property of RX scores does not need the Gaussian at all. When the mean and covariance are
+estimated from the same $N$ pixels that are scored (as \code{spectral.rx} does), the scores always
+average to exactly $C(N-1)/N$. The proof uses the \emph{trace}\index{trace}, the sum of a square
+matrix's diagonal, and two of its properties: it is linear, and for vectors $\vect{a}, \vect{b}$,
+$\vect{a}\T\vect{b} = \tr(\vect{b}\vect{a}\T)$ (both are $\sum_i a_ib_i$; the second is the sum of the
+diagonal of the outer product). Then
+\begin{align*}
+\sum_{n=1}^{N}\vect{d}_n\T\hat\Cov\inv\vect{d}_n
+&= \sum_n\tr\!\left(\hat\Cov\inv\vect{d}_n\vect{d}_n\T\right)
+  && \vect{a} = \vect{d}_n,\ \vect{b} = \hat\Cov\inv\vect{d}_n\\
+&= \tr\!\Big(\hat\Cov\inv\sum_n\vect{d}_n\vect{d}_n\T\Big)
+  && \text{the trace and the matrix product are linear}\\
+&= \tr\!\left(\hat\Cov\inv(N - 1)\hat\Cov\right)
+  && \text{\cref{eq:linalg:cov}}\\
+&= (N - 1)\tr(\mat{I}_C) = (N - 1)\,C .
+\end{align*}
+Dividing by $N$ gives the average. This is a useful sanity check on any implementation: the mean
+in-sample score of a correct RX is $C(N-1)/N$, whatever the data look like. You will verify it on
+the worked example below.
+
+\section{A full worked example in three bands}\label{sec:rx:worked3}
+
+\begin{sourcenote}[: the course's three-band table cannot be scored]
+The anomaly course builds a covariance from four pixels in three bands, $(0.10, 0.20, 0.30)$,
+$(0.12, 0.24, 0.28)$, $(0.08, 0.16, 0.32)$ and $(0.10, 0.20, 0.30)$
+(\file{docs/training/anomaly-detection/08-rx-detection.md}, ``Covariance, in three bands''). Its
+deviations are $\vect{0}$, $(0.02, 0.04, -0.02)$, $-(0.02, 0.04, -0.02)$ and $\vect{0}$: every one is a
+multiple of the same vector. Their covariance is therefore $\frac{0.0008}{3}\,\vect{v}\vect{v}\T$
+with $\vect{v} = (1, 2, -1)$, a matrix of rank 1 with eigenvalues $0.0016$, $0$ and $0$
+(\texttt{tools/compute\_rx\_output.txt}). Its determinant is 0 and it has no inverse, so RX cannot
+score anything against it. The table is a fine illustration of covariance signs, which is what the
+course uses it for, and an accidental illustration of the singular covariance of
+\cref{sec:rx:singular}. The example below uses five pixels that span all three directions.
+\end{sourcenote}
+
+\begin{worked}[label={we:rx:three}]{RX by hand on three bands}
+Five background pixels, three bands, reflectance in percent. This is the longest calculation in the
+chapter; do it on paper, one step at a time.
+\begin{center}
+\begin{tabular}{cccc}
+\toprule
+pixel & band 1 & band 2 & band 3\\
+\midrule
+1 & 8  & 18 & 30\\
+2 & 9  & 21 & 30\\
+3 & 11 & 19 & 28\\
+4 & 11 & 21 & 30\\
+5 & 11 & 21 & 32\\
+\bottomrule
+\end{tabular}
+\end{center}
+\textbf{Step 1, the mean.}
+\begin{align*}
+\mu_1 &= (8 + 9 + 11 + 11 + 11)/5 = 50/5 = 10\\
+\mu_2 &= (18 + 21 + 19 + 21 + 21)/5 = 100/5 = 20\\
+\mu_3 &= (30 + 30 + 28 + 30 + 32)/5 = 150/5 = 30 .
+\end{align*}
+\textbf{Step 2, the deviations} $\vect{d}_n = \vect{x}_n - (10, 20, 30)$:
+\[
+\vect{d}_1 = (-2, -2, 0),\quad \vect{d}_2 = (-1, 1, 0),\quad \vect{d}_3 = (1, -1, -2),\quad
+\vect{d}_4 = (1, 1, 0),\quad \vect{d}_5 = (1, 1, 2).
+\]
+Each band's deviations add to zero: $-2 - 1 + 1 + 1 + 1 = 0$; $-2 + 1 - 1 + 1 + 1 = 0$;
+$0 + 0 - 2 + 0 + 2 = 0$.
+
+\textbf{Step 3, the covariance.} The six distinct entries are sums of products of deviations,
+divided by $N - 1 = 4$:
+\begin{align*}
+\Sigma_{11} &= \tfrac14\left[(-2)^2 + (-1)^2 + 1^2 + 1^2 + 1^2\right] = \tfrac14(4 + 1 + 1 + 1 + 1)
+  = \tfrac84 = 2\\
+\Sigma_{22} &= \tfrac14\left[(-2)^2 + 1^2 + (-1)^2 + 1^2 + 1^2\right] = \tfrac84 = 2\\
+\Sigma_{33} &= \tfrac14\left[0 + 0 + (-2)^2 + 0 + 2^2\right] = \tfrac84 = 2\\
+\Sigma_{12} &= \tfrac14\left[(-2)(-2) + (-1)(1) + (1)(-1) + (1)(1) + (1)(1)\right]
+  = \tfrac14(4 - 1 - 1 + 1 + 1) = \tfrac44 = 1\\
+\Sigma_{23} &= \tfrac14\left[(-2)(0) + (1)(0) + (-1)(-2) + (1)(0) + (1)(2)\right]
+  = \tfrac14(0 + 0 + 2 + 0 + 2) = 1\\
+\Sigma_{13} &= \tfrac14\left[(-2)(0) + (-1)(0) + (1)(-2) + (1)(0) + (1)(2)\right]
+  = \tfrac14(0 + 0 - 2 + 0 + 2) = 0 .
+\end{align*}
+So
+\[
+\Cov = \begin{pmatrix} 2 & 1 & 0\\ 1 & 2 & 1\\ 0 & 1 & 2\end{pmatrix}.
+\]
+Each band has variance 2; neighbouring bands have covariance 1 (correlation $1/2$); bands 1 and 3
+are uncorrelated. This is the pattern of a real spectrum in miniature: neighbours move together,
+distant bands less so.
+
+\textbf{Step 4, the determinant} by expansion along the first row (each entry times the determinant
+of the $2\times2$ block left when you delete its row and column, with signs $+,-,+$):
+\begin{align*}
+\det\Cov &= 2\det\begin{pmatrix} 2 & 1\\ 1 & 2\end{pmatrix}
+  - 1\det\begin{pmatrix} 1 & 1\\ 0 & 2\end{pmatrix}
+  + 0\det\begin{pmatrix} 1 & 2\\ 0 & 1\end{pmatrix}\\
+&= 2(4 - 1) - 1(2 - 0) + 0 = 6 - 2 = 4 .
+\end{align*}
+\textbf{Step 5, the inverse.}\index{cofactor}\index{inverse!of a 3x3 matrix} For a $3\times3$ matrix the recipe that generalises
+\cref{eq:linalg:inv2} is: for each entry, compute its \emph{cofactor} (the determinant of the block
+left after deleting its row and column, with sign $(-1)^{i+j}$), arrange the cofactors as a matrix,
+transpose it, and divide by the determinant. Because $\Cov$ is symmetric, the cofactor matrix is
+symmetric and the transpose changes nothing. The six distinct cofactors:
+\begin{align*}
+C_{11} &= +\det\begin{psmallmatrix} 2 & 1\\ 1 & 2\end{psmallmatrix} = 4 - 1 = 3, &
+C_{12} &= -\det\begin{psmallmatrix} 1 & 1\\ 0 & 2\end{psmallmatrix} = -(2 - 0) = -2,\\
+C_{13} &= +\det\begin{psmallmatrix} 1 & 2\\ 0 & 1\end{psmallmatrix} = 1 - 0 = 1, &
+C_{22} &= +\det\begin{psmallmatrix} 2 & 0\\ 0 & 2\end{psmallmatrix} = 4 - 0 = 4,\\
+C_{23} &= -\det\begin{psmallmatrix} 2 & 1\\ 0 & 1\end{psmallmatrix} = -(2 - 0) = -2, &
+C_{33} &= +\det\begin{psmallmatrix} 2 & 1\\ 1 & 2\end{psmallmatrix} = 4 - 1 = 3 .
+\end{align*}
+So
+\[
+\Cov\inv = \frac14\begin{pmatrix} 3 & -2 & 1\\ -2 & 4 & -2\\ 1 & -2 & 3\end{pmatrix}.
+\]
+Check one row: row 1 of $\Cov$ times column 1 of the bracket is $2\times3 + 1\times(-2) + 0\times1 =
+6 - 2 = 4$, and $4/4 = 1$; row 1 times column 2 is $2\times(-2) + 1\times4 + 0\times(-2) = 0$. Check
+the rest yourself.
+
+\textbf{Step 6, score a test pixel} $\vect{x} = (12, 19, 32)$. Its deviation is
+$\vect{d} = (12 - 10, 19 - 20, 32 - 30) = (2, -1, 2)$. Multiply by the inverse, row by row:
+\begin{align*}
+\text{row 1:}&\quad \tfrac14\left[3\times2 + (-2)\times(-1) + 1\times2\right] = \tfrac14(6 + 2 + 2)
+  = \tfrac{10}{4} = 2.5\\
+\text{row 2:}&\quad \tfrac14\left[(-2)\times2 + 4\times(-1) + (-2)\times2\right] = \tfrac14(-4 - 4 - 4)
+  = \tfrac{-12}{4} = -3\\
+\text{row 3:}&\quad \tfrac14\left[1\times2 + (-2)\times(-1) + 3\times2\right] = \tfrac14(2 + 2 + 6)
+  = \tfrac{10}{4} = 2.5 .
+\end{align*}
+Then the dot product with $\vect{d}$:
+\[
+D^2 = 2\times2.5 + (-1)\times(-3) + 2\times2.5 = 5 + 3 + 5 = 13 .
+\]
+\textbf{Step 7, compare.} The per-band score would be $\frac{2^2}{2} + \frac{(-1)^2}{2} +
+\frac{2^2}{2} = 2 + 0.5 + 2 = 4.5$, about the mean of $\chi^2_3$ (3): unremarkable. The
+Mahalanobis score is 13, beyond the 1\% threshold of 11.34 and with a $\chi^2_3$ tail probability of
+0.0046. The pixel is high in bands 1 and 3 and low in band 2, between them, while the background's
+neighbouring bands move together.
+
+Now a second test pixel, $\vect{x}' = (12, 23, 32)$, with $\vect{d}' = (2, 3, 2)$: further from the
+mean in every band, but in step with the background's correlations.
+\begin{align*}
+\Cov\inv\vect{d}' &= \tfrac14\left(6 - 6 + 2,\ -4 + 12 - 4,\ 2 - 6 + 6\right) = \tfrac14(2, 4, 2)
+  = (0.5, 1, 0.5)\\
+D^2 &= 2\times0.5 + 3\times1 + 2\times0.5 = 1 + 3 + 1 = 5 .
+\end{align*}
+Per-band it scores $2 + 4.5 + 2 = 8.5$, nearly twice the first pixel; by Mahalanobis it scores 5, an
+ordinary value for $\chi^2_3$ (tail probability 0.17). The \code{spectral} library, given the five
+background pixels' statistics, returns exactly $[13, 5]$\tagC.
+
+\textbf{Step 8, check the in-sample identity.} Scoring the five background pixels against their own
+statistics (\code{spectral.rx} on them) gives 3, 2.75, 2.75, 0.75 and 2.75\tagC. They add to
+$3 + 2.75 + 2.75 + 0.75 + 2.75 = 12 = (N - 1)C = 4\times3$, as \cref{sec:rx:chi2} promised.
+\end{worked}
+
+\begin{worked}[label={we:rx:threeeig}]{The same score through the eigenvectors}
+The eigenvalues of this $\Cov$ are $2 + \sqrt2 = 3.414$, $2$ and $2 - \sqrt2 = 0.586$, with unit
+eigenvectors $\vect{u}_1 = (\tfrac12, \tfrac{1}{\sqrt2}, \tfrac12)$, $\vect{u}_2 = (\tfrac{1}{\sqrt2},
+0, -\tfrac{1}{\sqrt2})$, $\vect{u}_3 = (\tfrac12, -\tfrac{1}{\sqrt2}, \tfrac12)$. (Check one:
+$\Cov\vect{u}_3 = (1 - 0.7071,\ 0.5 - 1.4142 + 0.5,\ -0.7071 + 1) = (0.2929, -0.4142, 0.2929)$, and
+$0.586\times(0.5, -0.7071, 0.5) = (0.2929, -0.4142, 0.2929)$.) The first direction is ``all bands
+up together''; the third is ``middle band against the outer two''.
+
+For $\vect{d} = (2, -1, 2)$ the coordinates are
+\begin{align*}
+\vect{u}_1\T\vect{d} &= 1 - 0.7071 + 1 = 1.2929,\\
+\vect{u}_2\T\vect{d} &= 1.4142 - 1.4142 = 0,\\
+\vect{u}_3\T\vect{d} &= 1 + 0.7071 + 1 = 2.7071,
+\end{align*}
+and \cref{eq:rx:mahawhite} gives
+\[
+D^2 = \frac{1.2929^2}{3.414} + \frac{0^2}{2} + \frac{2.7071^2}{0.586}
+= \frac{1.6716}{3.414} + 0 + \frac{7.3284}{0.586} = 0.490 + 0 + 12.51 = 13.0 .
+\]
+Almost all of the score, 12.5 of 13, comes from the direction with the smallest eigenvalue. That is
+the mechanism of RX in one line, and in the next section it becomes the problem.
+\end{worked}
+
+\section{Why global RX fails on real scenes}\label{sec:rx:fails}
+
+Global RX makes two assumptions that a real hyperspectral scene breaks: that the background is one
+Gaussian cloud, and that its covariance can be inverted safely.
+
+\subsection{Mixed backgrounds}
+\index{mixed background}\index{RX detector!global}
+
+A scene is half cool forest and half warm bare ground. A hot patch of machinery sits on the bare
+ground. Its temperature is high, but the scene-wide mean sits between forest and bare ground, and the
+standard deviation is inflated by the split.
+
+\begin{worked}[label={we:rx:mixture}]{A mixture hides an anomaly from the global mean}
+Assume for illustration\tagA{} that the forest is at 20\,\textdegree C with standard deviation 2, the
+bare ground at 40\,\textdegree C with standard deviation 2, half the scene each. The scene mean is
+$0.5\times20 + 0.5\times40 = 30$. The scene variance is the average squared value minus the squared
+mean; for each half the average squared value is its variance plus its squared mean:
+\begin{align*}
+\text{average of } x^2 &= 0.5\,(2^2 + 20^2) + 0.5\,(2^2 + 40^2) = 0.5\times404 + 0.5\times1604
+  = 202 + 802 = 1004\\
+\text{variance} &= 1004 - 30^2 = 1004 - 900 = 104,\qquad \text{standard deviation} = \sqrt{104} = 10.2 .
+\end{align*}
+The machinery is at 46\,\textdegree C. Against the whole scene, $z = (46 - 30)/10.2 = 1.57$: about
+one pixel in nine of a Gaussian scene is that far out. Against the bare ground around it,
+$z = (46 - 40)/2 = 3.0$. The global statistics hide it; the local ones reveal it.
+\end{worked}
+
+The global mean and covariance describe a cloud that no pixel belongs to: the average of two
+separate clouds, stretched along the line between them. \Cref{ch:localrx} answers this with a local
+background per pixel. Notice that the reconstruction family answers it differently: a network that
+has learnt what each surface looks like leaves residuals that are much closer to one cloud, which is
+why the residual score of \cref{ch:residualmaha} can use global statistics with less harm.
+
+\subsection{The near-singular covariance}\label{sec:rx:singular}
+
+This is the reason plain RX was taken out of the product.
+
+\begin{sourcenote}[: why plain RX is not shipped]
+\code{backend/allotrope/foundation_models/resolver.py}, lines 185--189:
+``Plain RX on hyperspectral is intentionally not shipped (dropped 2026-05-11). With 150+ surviving
+bands the covariance comes out near-singular and Mahalanobis distances blow up to 1e11. Use MNF-RX
+instead -- same machinery, but RX runs in a 10-dim noise-whitened subspace so the covariance is
+well-conditioned.'' The product's classical options are \code{mnf_rx} and \code{thermal_grx}. The
+class \code{GlobalRXDetector} still exists and is registered under \code{ADModel.RX} in
+\code{app/utils/anomaly_detection/detector_factory.py}, for notebooks and thermal use, but no
+product model resolves to it. Do not reintroduce it on hyperspectral data.
+\end{sourcenote}
+
+A matrix is \emph{singular}\index{singular matrix} when its determinant is zero, which for a
+covariance means some eigenvalue is zero: the pixels do not vary at all along that direction. It is
+\emph{near-singular} when some eigenvalue is tiny compared with the largest. The size of the problem
+is measured by the \emph{condition number}\index{condition number}
+\begin{equation}\label{eq:rx:kappa}
+\kappa(\Cov) = \frac{\lambda_{\max}}{\lambda_{\min}} .
+\end{equation}
+By step (i) of the proof in \cref{sec:rx:mahalanobis}, the eigenvalues of $\Cov\inv$ are
+$1/\lambda_k$, so the largest entry-scale of $\Cov\inv$ is $1/\lambda_{\min}$: the inverse amplifies
+the least-varying direction the most.
+
+\begin{worked}[label={we:rx:nearsingular}]{Two highly correlated bands}
+Two neighbouring bands, each with variance 1, correlation $\rho = 0.999$:
+$\Cov = \begin{psmallmatrix} 1 & 0.999\\ 0.999 & 1\end{psmallmatrix}$.
+
+\textbf{Eigenvalues.} Trace 2, determinant $1 - 0.999^2 = 1 - 0.998001 = 0.001999$. With $a = c = 1$
+and $b = \rho$, \cref{eq:linalg:eig2} gives $\lambda = 1 \pm \rho$:
+\[
+\lambda_1 = 1.999 \text{ along } \vect{u}_1 = (1, 1)/\sqrt2,\qquad
+\lambda_2 = 0.001 \text{ along } \vect{u}_2 = (1, -1)/\sqrt2 .
+\]
+The bands nearly always move together; the direction ``band 1 against band 2'' has almost no
+variance. The condition number is $1.999/0.001 = 1999$.
+
+\textbf{The inverse.} By \cref{eq:linalg:inv2},
+\[
+\Cov\inv = \frac{1}{0.001999}\begin{pmatrix} 1 & -0.999\\ -0.999 & 1\end{pmatrix}
+= \begin{pmatrix} 500.25 & -499.75\\ -499.75 & 500.25\end{pmatrix}.
+\]
+Entries of 500, from a matrix whose entries were at most 1.
+
+\textbf{Two pixels.} A pixel one unit up in both bands, $\vect{d} = (1, 1)$, has coordinate
+$2/\sqrt2 = 1.414$ along $\vect{u}_1$ and 0 along $\vect{u}_2$:
+$D^2 = 1.414^2/1.999 = 2/1.999 = 1.0005$. A pixel that differs by a tenth of a unit in opposite
+directions, $\vect{d} = (0.1, -0.1)$, has coordinate 0 along $\vect{u}_1$ and $0.2/\sqrt2 = 0.1414$
+along $\vect{u}_2$: $D^2 = 0.1414^2/0.001 = 0.02/0.001 = 20$. A difference ten times smaller in
+Euclidean length scores twenty times higher.
+
+That is RX working as designed, \emph{if} the eigenvalue 0.001 is right. Now suppose it was
+estimated slightly wrong. If the true correlation is 0.999 but the estimate says 0.9995, the small
+eigenvalue is $1 - 0.9995 = 0.0005$ and the same pixel scores $0.02/0.0005 = 40$; if the estimate
+says 0.9999, it scores $0.02/0.0001 = 200$. A change in the fourth decimal place of one covariance
+entry changed the score tenfold.
+\end{worked}
+
+Three things make small eigenvalues unreliable in practice, and all three bite hardest exactly where
+RX looks hardest.
+
+\paragraph{Sampling error.} A covariance estimated from a finite sample has errors in every entry.
+The script draws 200 pixels from the $\rho = 0.999$ distribution of \cref{we:rx:nearsingular} five
+times\tagC; the estimated small eigenvalue comes out as 0.00102, 0.00080, 0.00107, 0.00097 and
+0.00093. Scores along that direction therefore vary by $\pm25\%$ from one sample to the next, while
+the large eigenvalue's relative error is similar but harmless, because it divides a direction that
+contributes little.
+
+\paragraph{Rounding error.}\index{machine epsilon}\index{float32 and float64} A computer stores about 7 significant digits in \code{float32} (machine
+epsilon $1.19\times10^{-7}$) and about 16 in \code{float64} ($2.22\times10^{-16}$). An eigenvalue
+solver's absolute error is roughly epsilon times the largest eigenvalue, so any eigenvalue smaller
+than about $\varepsilon\,\lambda_{\max}$ is rounding noise. A rule of thumb follows: inverting a
+matrix with condition number $\kappa$ loses about $\log_{10}\kappa$ significant digits. For the
+example, $\log_{10}1999 = 3.3$ digits. The script shows the extreme case: with $\rho = 1 - 10^{-8}$
+the true small eigenvalue is $10^{-8}$; \code{float64} recovers $1.000000005\times10^{-8}$, but in
+\code{float32} the number $1 - 10^{-8}$ rounds to exactly 1, the matrix becomes exactly singular, and
+the small eigenvalue comes out as 0\tagC.
+
+\paragraph{Dimension.} With 165 bands there are 165 eigenvalues, and neighbouring bands of a
+reflectance spectrum are close to copies of each other, so many of the smallest eigenvalues sit at the
+level of noise and estimation error rather than real variation. Each one is a direction like
+$\vect{u}_2$ above, multiplied by its reciprocal. One such direction with an eigenvalue of
+$10^{-10}$ and a pixel that differs along it by $10^{-3}$ contributes
+$(10^{-3})^2/10^{-10} = 10^{-6}/10^{-10} = 10^{4}$ to the score, more than every meaningful direction
+together (\cref{ch:residualmaha} works the same arithmetic). The ranking is then decided by which
+pixels happen to have noise along the noisiest directions. That is what ``distances blow up to
+1e11''\tagM{backend/allotrope/foundation_models/resolver.py} means: the numbers are not merely large,
+they are meaningless.
+
+A careful reader will object using \cref{sec:rx:chi2}: in exact arithmetic the in-sample scores
+average exactly $C(N-1)/N$, about 165, so how can any be $10^{11}$? The identity holds only when the
+covariance that is inverted is exactly the covariance of the pixels that are scored. Three things break
+that link in practice, each through the small eigenvalues: rounding in the inverse (a direction whose
+true eigenvalue is below $\varepsilon\,\lambda_{\max}$ gets an arbitrary tiny or zero estimate, as in the
+\code{float32} example), statistics estimated on different pixels from those scored (a ring, a keep mask,
+a sample), and values substituted into the cube (the detectors fill a pixel's missing bands with the band
+mean, which puts it off the scene's correlation structure in exactly the low-variance directions). The
+anomaly score is then dominated by the mismatch, not by the anomaly.
+
+\begin{keypoint}
+Inverting a covariance turns its smallest, least reliable eigenvalues into its largest weights; on
+165 correlated bands those directions are noise, and RX ranks pixels by noise.
+\end{keypoint}
+
+\section{Regularisation}\label{sec:rx:regularisation}
+
+The standard repair is to make the small eigenvalues less small before inverting.
+
+\begin{definition}[Diagonal loading]\index{diagonal loading}\index{regularisation}
+\emph{Diagonal loading} (also called ridge regularisation) replaces $\Cov$ by $\Cov + \epsilon\mat{I}$
+for a small $\epsilon > 0$ before inverting.
+\end{definition}
+
+Its effect on the eigen-decomposition is exact and short. If $\Cov\vect{u}_k = \lambda_k\vect{u}_k$,
+then
+\[
+(\Cov + \epsilon\mat{I})\vect{u}_k = \Cov\vect{u}_k + \epsilon\vect{u}_k = \lambda_k\vect{u}_k +
+\epsilon\vect{u}_k = (\lambda_k + \epsilon)\vect{u}_k .
+\]
+The eigenvectors are unchanged and every eigenvalue moves up by $\epsilon$. Three consequences
+follow.
+\begin{enumerate}
+  \item The matrix is invertible even when $\Cov$ is singular: the smallest eigenvalue is now at
+    least $\epsilon$.
+  \item The condition number falls to $(\lambda_{\max} + \epsilon)/(\lambda_{\min} + \epsilon)$.
+  \item In the score, each direction contributes $(\vect{u}_k\T\vect{d})^2/(\lambda_k + \epsilon)$
+    instead of $(\vect{u}_k\T\vect{d})^2/\lambda_k$. Directions with $\lambda_k \gg \epsilon$ are almost
+    untouched; directions with $\lambda_k \ll \epsilon$ are capped at
+    $(\vect{u}_k\T\vect{d})^2/\epsilon$.
+\end{enumerate}
+
+\begin{worked}[label={we:rx:loading}]{Loading the correlated pair}
+For $\Cov = \begin{psmallmatrix} 1 & 0.999\\ 0.999 & 1\end{psmallmatrix}$ (eigenvalues 1.999 and
+0.001) and the pixel $\vect{d} = (0.1, -0.1)$, whose only coordinate is 0.1414 along $\vect{u}_2$
+(squared: 0.02):
+\begin{center}
+\begin{tabular}{cccc}
+\toprule
+$\epsilon$ & eigenvalues & condition number & $D^2 = 0.02/(\lambda_2 + \epsilon)$\\
+\midrule
+0         & 1.999, 0.001   & $1.999/0.001 = 1999$   & $0.02/0.001 = 20$\\
+$10^{-4}$ & 1.9991, 0.0011 & $1.9991/0.0011 = 1817$ & $0.02/0.0011 = 18.2$\\
+$10^{-3}$ & 2.000, 0.002   & $2.000/0.002 = 1000$   & $0.02/0.002 = 10$\\
+$10^{-2}$ & 2.009, 0.011   & $2.009/0.011 = 183$    & $0.02/0.011 = 1.82$\\
+\bottomrule
+\end{tabular}
+\end{center}
+The large eigenvalue barely moves; the small one is rescued. The choice of $\epsilon$ decides how
+much of the ``bands disagreeing'' direction you still believe: at $10^{-4}$ nearly all of it, at
+$10^{-2}$ almost none.
+\end{worked}
+
+Two warnings come with diagonal loading.
+
+\emph{The right $\epsilon$ depends on the units.} $\epsilon$ is added to variances, so it is in
+squared data units. $10^{-4}$ is huge for reflectances whose variances are around $10^{-4}$, and
+negligible for MNF components whose variances are 1 or more (\cref{ch:localrx}). A fixed default is
+only meaningful for data on a known scale.
+
+\emph{It keeps the solve from failing; it does not restore meaning.} With 165 near-degenerate
+directions, a small $\epsilon$ leaves them nearly as amplified as before, and a large one throws away
+the very directions RX is meant to use. The anomaly course puts it this way: the ridge ``keeps the
+solve from failing but does not restore meaning to 165 near-degenerate dimensions''. The product's
+fix (\cref{ch:localrx}) is to choose a small number of well-estimated directions first, and only
+then to whiten.
+
+\paragraph{Shrinkage.} A more general family, \emph{shrinkage}\index{shrinkage}, blends the
+covariance with a multiple of the identity:
+$(1 - \alpha)\Cov + \alpha\,\bar\lambda\,\mat{I}$, with $\bar\lambda = \tr\Cov/C$ the average
+eigenvalue and $0 \le \alpha \le 1$. By the same argument the eigenvectors are unchanged and each
+eigenvalue becomes $(1 - \alpha)\lambda_k + \alpha\bar\lambda$: pulled towards the average, small ones
+up and large ones down. For the three-band $\Cov$ of \cref{we:rx:three} (average eigenvalue
+$6/3 = 2$) with $\alpha = 0.1$, the eigenvalues $3.414, 2, 0.586$ become
+$0.9\times3.414 + 0.2 = 3.273$, $0.9\times2 + 0.2 = 2$ and $0.9\times0.586 + 0.2 = 0.727$. Unlike
+diagonal loading, shrinkage scales with the data automatically. No detector in this repository uses
+it; it is here so that you recognise it in the literature.
+
+\begin{sourcenote}[: what the code actually does to small eigenvalues]
+Four different safeguards appear in the code, and only one of them is diagonal loading.
+\begin{itemize}
+  \item Global RX (\code{GlobalRXDetector}, via \code{spectral.rx}): none. It forms
+    $\hat\Cov\inv$ with \code{np.linalg.inv}. It logs a warning when there are fewer than 10 pixels
+    per band (\code{global_rx_detector.py}, lines 145--150), which addresses sample size, not
+    conditioning.
+  \item Local RX and MNF local RX: diagonal loading with $\epsilon = 10^{-4}$
+    (\code{DEFAULT_REGULARIZATION = 1e-4}, \code{local_rx_detector.py} line 55 and
+    \code{mnf_compression_lrx_detector.py} line 39; added in
+    \code{app/detectors/_local_background.py} line 71), and a linear solve instead of an explicit
+    inverse (line 78).
+  \item MNF: a floor of $10^{-10}$ on the \emph{noise} eigenvalues
+    (\code{mnf_compression_detector.py}, line 321), then truncation to 10 components.
+  \item Residual Mahalanobis and PCA-RX: truncation to the top 30 principal directions and a floor of
+    $10^{-12}$ on their eigenvalues (\code{residual_mahalanobis.py}, line 46).
+\end{itemize}
+The anomaly course says a ridge term ``is used, in the local variants''; that matches the code.
+\end{sourcenote}
+
+\paragraph{Solving instead of inverting.}\index{linear solve} The local detectors never form $\Cov\inv$. They solve the
+linear system $(\Cov + \epsilon\mat{I})\vect{s} = \vect{d}$ for $\vect{s}$ with
+\code{torch.linalg.solve}, then take $D^2 = \vect{d}\T\vect{s}$. The two are equal in exact arithmetic,
+because $\vect{s} = \Cov\inv\vect{d}$; in floating point, solving is faster and loses fewer digits
+than computing every entry of the inverse and then multiplying. The source comment says it plainly:
+``Solving beats forming the inverse explicitly - better conditioned and faster.''
+
+\section{The thermal case: RX in one band}\label{sec:rx:thermal}
+\index{thermal RX}
+
+With one band, $\Cov$ is the single number $\sigma^2$, its inverse is $1/\sigma^2$, and
+\cref{eq:rx:rx} collapses to
+\[
+\text{RX}(x) = \frac{(x - \mu)^2}{\sigma^2} = z^2,
+\]
+the squared z-score you started the chapter with. For the thermal pixel, $3.42^2 = 11.7$, with a
+$\chi^2_1$ tail probability of 0.000625\tagC, the same as the two-sided normal tail of 3.42. Single-band
+covariance cannot be near-singular (unless the scene is perfectly uniform), which is why RX is safe on
+thermal data and is shipped there as \code{thermal_grx}.
+
+\begin{sourcenote}[: the thermal detector computes $z^2$ directly]
+\code{ThermalGRXDetector.detect} (\code{app/detectors/thermal_grx_detector.py}, lines 95--104)
+special-cases one band, because \code{spectral.rx} needs a covariance of at least $2\times2$: it
+computes \code{((vals - mu) ** 2) / var} with \code{var = vals.var()}, numpy's divisor $N$, and
+returns zeros if the variance is 0. Its mean and variance are those of the scene being scored, not the
+shipped constants in \code{thermal_pixel_consts.json} (those normalise inputs for the thermal neural
+model, Chakshu); the course's worked numbers use the shipped constants as a stand-in for a typical
+scene.
+\end{sourcenote}
+
+\begin{confusions}
+\confusion{Is RX machine learning?}{No. It is descriptive statistics computed from the scene in front
+of it: a mean, a covariance, a quadratic form. No training, no checkpoint, no labels. Hand it a new
+sensor and it works immediately.}
+\confusion{Is a high RX score a large difference from the mean?}{Not necessarily. Pixel B of
+\cref{we:rx:zfail} and pixel $(12,19,32)$ of \cref{we:rx:three} are smaller in Euclidean terms than
+pixels that score lower. RX rewards differences in directions the background rarely takes.}
+\confusion{Why is the Mahalanobis distance squared?}{Strictly, the Mahalanobis distance is the square
+root of $\vect{d}\T\Cov\inv\vect{d}$. The code and this book work with the square, $D^2$, because that is
+what appears in the Gaussian's exponent and what follows the chi-square distribution. The ranking is
+the same either way.}
+\confusion{Can I threshold RX at the chi-square value for 1\%?}{Only if the background really is one
+Gaussian, which a real scene is not; you would flag far more than 1\% of pixels. The product thresholds
+every score by percentile of its own map.}
+\confusion{Why not regularise the 165-band covariance and keep plain RX?}{A ridge keeps the solve from
+failing but cannot tell real low-variance directions from estimation noise; it either keeps the noise
+(small $\epsilon$) or discards the real directions too (large $\epsilon$). MNF-RX and the top-30 PCA scores
+choose well-estimated directions first.}
+\confusion{Does a larger number of bands make RX more sensitive?}{It makes scores larger (the mean is
+$C$) and the covariance harder to estimate (about $C^2/2$ numbers). More bands help only while each new
+direction is estimated well; on 165 correlated bands they do not.}
+\end{confusions}
+
+\begin{checkyourself}
+\item\label{ex:rx:1} A thermal pixel reads 61\,\textdegree C; use the scene mean 24.58 and standard
+  deviation 13.57. Compute its z-score and its one-band RX score. Is it beyond the $\chi^2_1$ threshold
+  for a 1\% false-alarm rate?
+\item\label{ex:rx:2} For $\Cov = \begin{psmallmatrix} 5 & 2\\ 2 & 2\end{psmallmatrix}$ (the matrix of
+  \cref{ex:linalg:3}), compute $\Cov\inv$ and the Mahalanobis distances of $\vect{d} = (1, -2)$ and
+  $\vect{d} = (2, 1)$. Both have Euclidean length $\sqrt5$; explain the difference using the eigenvectors.
+\item\label{ex:rx:3} With the three-band $\Cov$ and $\Cov\inv$ of \cref{we:rx:three}, score the deviation
+  $\vect{d} = (0, 2, 0)$ (only the middle band is high). Compare with its per-band score.
+\item\label{ex:rx:4} Two bands with variance 1 and correlation 0.99. Find the eigenvalues and the
+  condition number, the Mahalanobis distance of $\vect{d} = (0.1, -0.1)$, and both again after diagonal
+  loading with $\epsilon = 0.01$.
+\item\label{ex:rx:5} An MNF-RX score map has $C = 10$ and is computed on a $1000\times1000$ scene. If the
+  background were exactly Gaussian, how many pixels would exceed 23.21? Name two reasons a real scene
+  exceeds it far more often.
+\item\label{ex:rx:6} Show that for $C = 2$ the threshold with false-alarm rate $\alpha$ is $2\ln(1/\alpha)$,
+  and compute it for $\alpha = 0.1\%$.
+\end{checkyourself}
+
+\nextchapter{ch:localrx}

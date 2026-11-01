@@ -19,8 +19,8 @@ interface Props {
   title: string;
   /** Unit shown in the y-axis label + hover tooltip. Usually "%". */
   unit?: string;
-  /** Stroke color of the main line. */
-  color: string;
+  /** Stroke color of the main line; a `var(--token)` is resolved from the theme. Default --ink. */
+  color?: string;
   /** Optional translucent fill below the line. */
   fillColor?: string;
   /** Unix seconds, parallel to `values`. Must be the same length. */
@@ -41,10 +41,16 @@ interface Props {
   xMax?: number;
 }
 
+// uPlot draws on a canvas, which cannot read CSS variables: resolve "var(--x)" here.
+function resolveColor(c: string, cs: CSSStyleDeclaration): string {
+  const m = /^var\((--[\w-]+)\)$/.exec(c.trim());
+  return m ? cs.getPropertyValue(m[1]).trim() || "#111" : c;
+}
+
 export function MetricLineChart({
   title,
   unit = "%",
-  color,
+  color = "var(--ink)",
   fillColor,
   timestamps,
   values,
@@ -91,6 +97,13 @@ export function MetricLineChart({
       if (cancelled) return;
 
       const widthOf = () => container.clientWidth || 600;
+      // Tufte chrome: no grid, faint ticks, ET Book labels in --ink-2 (read from the theme).
+      const cs = getComputedStyle(document.documentElement);
+      const ink2 = cs.getPropertyValue("--ink-2").trim() || "#555";
+      const ink3 = cs.getPropertyValue("--ink-3").trim() || "#999";
+      const axisFont = '12px "ET Book", Georgia, serif';
+      const lineColor = resolveColor(color, cs);
+      const markColor = cs.getPropertyValue("--accent-select").trim() || "#d4a017";
 
       const opts = {
         width: widthOf(),
@@ -109,8 +122,8 @@ export function MetricLineChart({
           { label: "time" },
           {
             label: "value",
-            stroke: color,
-            width: 1.7,
+            stroke: lineColor,
+            width: 1,
             fill: fillColor,
             points: { show: false },
             value: (_self: unknown, raw: number | null) =>
@@ -121,8 +134,10 @@ export function MetricLineChart({
         ],
         axes: [
           {
-            stroke: "#9ca3af",
-            grid: { stroke: "#e5e7eb" },
+            stroke: ink2,
+            font: axisFont,
+            grid: { show: false },
+            ticks: { stroke: ink3, width: 1, size: 3 },
             // Compact "10:14" labels — drop date until the window spans a day.
             values: (_self: unknown, ticks: number[]) =>
               ticks.map((t) => {
@@ -134,8 +149,16 @@ export function MetricLineChart({
               }),
           },
           {
-            stroke: "#9ca3af",
-            grid: { stroke: "#e5e7eb" },
+            stroke: ink2,
+            font: axisFont,
+            labelFont: 'italic 13px "ET Book", Georgia, serif',
+            grid: { show: false },
+            ticks: { stroke: ink3, width: 1, size: 3 },
+            splits: (u: { scales: { y: { min?: number; max?: number } } }) => {
+              const lo = u.scales.y.min ?? yMin;
+              const hi = u.scales.y.max ?? yMax;
+              return [lo, (lo + hi) / 2, hi];
+            },
             label: unit,
             labelGap: 4,
           },
@@ -153,22 +176,34 @@ export function MetricLineChart({
                 scales: Record<string, { min?: number; max?: number }>;
               };
               const list = markersRef.current;
-              if (!list.length) return;
               const xMin = plot.scales.x.min ?? 0;
               const xMax = plot.scales.x.max ?? 0;
               if (xMax <= xMin) return;
               const ctx = plot.ctx;
               const top = plot.bbox.top;
               const bottom = top + plot.bbox.height;
+              const dpr = window.devicePixelRatio || 1;
               ctx.save();
+              ctx.font = `${Math.round(11 * dpr)}px "ET Book", Georgia, serif`;
+              // Direct label: the last value at the line's end, in the line's colour.
+              const ts = tsRef.current, vs = valsRef.current;
+              if (ts.length && vs.length) {
+                const lx = plot.valToPos(ts[ts.length - 1], "x", true);
+                const ly = plot.valToPos(vs[vs.length - 1], "y", true);
+                ctx.fillStyle = lineColor;
+                ctx.textAlign = "right";
+                ctx.textBaseline = "bottom";
+                ctx.fillText(`${vs[vs.length - 1].toFixed(0)}${unitRef.current}`, lx - 3 * dpr, ly - 3 * dpr);
+              }
+              let lastLabelX = -Infinity;
               for (const m of list) {
                 if (m.t < xMin || m.t > xMax) continue;
-                const color = m.color ?? "rgba(99, 102, 241, 0.85)";
+                const color = m.color ?? markColor;
                 const x = plot.valToPos(m.t, "x", true);
                 ctx.beginPath();
                 ctx.strokeStyle = color;
-                ctx.setLineDash([5, 4]);
-                ctx.lineWidth = 1.4;
+                ctx.setLineDash([3, 3]);
+                ctx.lineWidth = 1;
                 ctx.moveTo(x, top);
                 ctx.lineTo(x, bottom);
                 ctx.stroke();
@@ -180,6 +215,16 @@ export function MetricLineChart({
                 ctx.lineTo(x, top + 6);
                 ctx.closePath();
                 ctx.fill();
+                // Direct label: the job type beside its marker, skipped where it would overlap.
+                if (x - lastLabelX > 70 * dpr) {
+                  const text = m.label.split(" · ")[0];
+                  // Near the right edge the label goes on the marker's left, so it is never clipped.
+                  const right = x + 4 * dpr + ctx.measureText(text).width > plot.bbox.left + plot.bbox.width;
+                  ctx.textAlign = right ? "right" : "left";
+                  ctx.textBaseline = "top";
+                  ctx.fillText(text, right ? x - 4 * dpr : x + 4 * dpr, top + 1);
+                  lastLabelX = x;
+                }
               }
               ctx.restore();
             },
@@ -246,13 +291,6 @@ export function MetricLineChart({
     <div className="metric-chart">
       <header className="metric-chart__header">
         <h4 className="metric-chart__title">{title}</h4>
-        <span className="small metric-chart__legend">
-          <span
-            className="metric-chart__legend-swatch"
-            style={{ background: color }}
-          />
-          live · <span className="metric-chart__legend-mark" /> job start
-        </span>
       </header>
       <div ref={containerRef} className="metric-chart__canvas" />
       {recent.length > 0 && (

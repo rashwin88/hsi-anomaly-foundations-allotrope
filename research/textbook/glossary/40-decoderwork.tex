@@ -1,0 +1,22 @@
+\glossentry{Quantile}{The value below which a given fraction of a list lies; torch.quantile interpolates linearly between neighbouring sorted values.}
+\glossentry{Gated loss}{A training loss that leaves out the pixels with the highest current error (FT07: the top 1\% per source group, plus a halo).}
+\glossentry{Gate halo}{The square dilation around each gated pixel; halo 2 turns one pixel into a 5 x 5 square.}
+\glossentry{Max pooling as dilation}{Taking the maximum of a binary mask over a sliding window, which grows every marked pixel into a square.}
+\glossentry{Block masking}{Hiding tokens in b x b groups rather than singly (FT08: 2 x 2 tokens, 8 px), so a target and its halo vanish together.}
+\glossentry{Visible neighbours}{Of the 8 tokens around a hidden token, those the encoder can see; expected 2.81 for random single tokens and 1.77 for 2 x 2 blocks at ratio 0.65.}
+\glossentry{Linearity of expectation}{The expected value of a sum is the sum of expected values, whether or not the terms are independent.}
+\glossentry{Checkerboard cell size}{The size, in stage-1 tokens, of the cells of the two complementary inference masks.}
+\glossentry{Span}{All weighted sums of a set of vectors.}
+\glossentry{Spectral floor}{The part of a spectrum outside the span of the spectral output layer's curves; no decoder can remove it.}
+\glossentry{Orthogonal projection}{The closest point of a span to a vector; the leftover is at right angles to the span.}
+\glossentry{QR decomposition}{Writing a matrix as an orthonormal-column matrix Q times a triangular R; Q spans the same space.}
+\glossentry{Unpredictability}{Error that remains because a hidden pixel's value is not fixed by its context; it is what makes targets detectable.}
+\glossentry{Capacity limit}{Error that remains even when the network can see the pixel, because it cannot render the detail.}
+\glossentry{Token bottleneck}{Stage 1's squeeze of 4 x 4 pixels x 32 channels = 512 numbers into one 32-wide token vector.}
+\glossentry{Rank of a matrix}{The dimension of the set of outputs a linear map can produce; a map through 32 numbers has rank at most 32.}
+\glossentry{Progressive decoder}{The FT09 decoder: SegFormer fusion at 1/4 resolution, then two x2 upsampling stages that each see a masked skip of the stem output.}
+\glossentry{Full-resolution skip}{A second input that bypasses the encoder and reaches the decoder at full size; in FT09 it has every hidden pixel zeroed.}
+\glossentry{Warm start}{Initialising a new model from a trained checkpoint's matching layers; three quarters of FT09's decoder had no match and started random.}
+\glossentry{Decoder warm-up}{Training only the new decoder with everything else frozen (mode decoder, FT09a) before joint training.}
+\glossentry{Contrast (hidden-pixel)}{Mean error on hidden target pixels divided by mean error on hidden background pixels.}
+\glossentry{Checkpoint noise}{Variation in a measured score from one epoch's weights to the next, invisible to an object bootstrap.}

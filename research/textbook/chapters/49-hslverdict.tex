@@ -1,0 +1,140 @@
+\chapter{The verdict, and what would have to change}\label{ch:hslverdict}
+\def\tbrk{\hfil\penalty50\hfilneg}% local: a line may break before a provenance tag
+
+\begin{onething}
+HyperSL is a sound model of what spectra look like inside one scene, and on every one of this product's jobs a design
+choice that serves that purpose (per-scene scaling, band masking within a pixel, a tokenizer over band index, smoothing
+heads, cloud-free pretraining) works against the job; making it fit would mean retraining it with our choices, which is
+what Indradhanu already is.
+\end{onething}
+
+This chapter puts \cref{ch:hslwhat,ch:hslnorm,ch:hsldetect,ch:hslunmix,ch:hslcloud} side by side. It adds no new
+measurement; every number has its source in the chapter that measured it.
+
+\begin{analogy}
+A superb road bicycle offered to a team that delivers parcels across a ploughed field. Everything that makes it superb
+(thin tyres, no luggage rack, a riding position for speed) is a deliberate choice for a road, and each one is a problem in
+a field. You could fit fat tyres, a rack and a new frame; at that point you have built a different bicycle, and the team
+already owns one.
+\end{analogy}
+
+%======================================================================
+\section{The decision table}\label{sec:hslverdict:table}
+
+\begin{center}\small
+\begin{longtable}{@{}>{\raggedright\arraybackslash}p{30mm}>{\raggedright\arraybackslash}p{40mm}>{\raggedright\arraybackslash}p{36mm}>{\raggedright\arraybackslash}p{26mm}@{}}
+\toprule
+requirement & HyperSL & this product & evidence \\
+\midrule\endhead
+the same spectrum has the same input in every scene & no: per-band min-max over the scene &
+\code{WavelengthStats}, one fixed curve & \cref{we:hslnorm:s1,we:hslnorm:s2} \\
+a library spectrum has an input & none; the scene frame clipped 41\% of ECOSTRESS & the same curve, the same stem &
+\cref{sec:hslnorm:toy} \\
+anomalies matched to man-made library entries & below SAM on 3 of 4 scenes; one leaf took 59.6\% of set2 &
+Simplex ACE (adopted), the namer (in training) & \cref{tab:hslnorm:m1} \\
+band lists with removed windows & convolution over index; a 5-band window spans 217\,nm & 40\,nm wavelength bins &
+\cref{tab:hslnorm:spans} \\
+a pixel must not help rebuild itself & rebuilds a pixel's bands from its own bands & hides whole pixels, rebuilds from
+neighbours & \cref{we:hsldetect:self} \\
+detection on the 909-object bench & own residual: 130 objects, pAUC 0.018; with our scorer: 350, pAUC 0.083, below PCA-RX's 0.128 with no
+model & FTH3 ep.\ 5: pAUC 0.189, 449 objects & \cref{tab:hsldetect:main} \\
+sub-pixel targets kept & 0.25\,m target: object AUC 0.68 & ACE 0.97 & \cref{tab:hslunmix:hysu} \\
+blind unmixing on exact truth & worse than VCA + FCLS on every set & VCA + FCLS & \cref{tab:hslunmix:msad} \\
+thin cloud found & 28.9\% of EnMAP's cirrus & 67.9\% from raw bands; Indradhanu's head & \cref{we:hslcloud:cirrus} \\
+\bottomrule
+\end{longtable}
+\end{center}
+
+\subsection{Where HyperSL did better}
+
+A verdict that lists only losses is not a fair one. In the same experiments HyperSL was ahead on five measures:
+\begin{itemize}
+\item its embedding groups a spectral library slightly better than raw angle (5-neighbour same-class share 0.965 against
+0.949 on ECOSTRESS, \cref{sec:hslnorm:measured});
+\item the cloud classifier on its features found more thick cloud (87.1\% against 80.4\%) and made fewer false calls on the
+high plateau (4.34\% against 6.62\%, \cref{ch:hslcloud});
+\item as a second-stage filter on Indradhanu's candidates, its embeddings removed more false alarms at 90\% object recall
+when the cut was set with hindsight (\cref{sec:hsldetect:filter});
+\item on Samson, Jasper and Urban it agreed with the FCLS references better than VCA + FCLS (\cref{tab:hslunmix:msad});
+\item it reproduces its paper's clustering and fine-tuning claims (\cref{sec:hslwhat:repro}).
+\end{itemize}
+None of these is one of the product's jobs as the product does them, and the third did not survive an honest threshold.
+
+%======================================================================
+\section{What it costs}\label{sec:hslverdict:cost}
+
+\begin{center}\small
+\begin{tabular}{@{}>{\raggedright\arraybackslash}p{24mm}>{\raggedright\arraybackslash}p{110mm}@{}}
+\toprule
+cost & what the records show \\
+\midrule
+compute & HyperSL needs a GPU: 1,773\,s of laptop-GPU time for the four bench scenes, 438 microseconds per pixel at
+4 draws (\cref{sec:hsldetect:run}); Indradhanu Heavy runs at 454\,s per scene on 16 CPU threads in the product worker. The unmixing variant took 5--13 minutes per scene on a 96\,GB GPU, against seconds for VCA + FCLS. \\
+licence & no LICENSE file on GitHub; the Hugging Face card says MIT. Unresolved for a product. \\
+data & the $\sim$265\,GB pretraining corpus is on Baidu Netdisk only. We cannot audit what it learned from, or retrain it
+with our scaling, without it. \\
+paper against code & seven surprises found only by reading the code: base 100 against 10,000 in the position code; ``layer-by-layer normalization'' that
+is per-scene min-max; 300 against 200 million spectra; a 439-band airborne set not in \file{train.py}; the
+``endmember-free'' code that starts from VCA; downstream scripts that never load the checkpoint; a final encoder layer with
+no skip connection. \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+%======================================================================
+\section{What would have to change}\label{sec:hslverdict:change}
+
+Each obstacle has a fix, and each fix is a change to how the model is \emph{trained}, not to how it is called.
+\begin{enumerate}
+\item \textbf{Scaling.} Train on reflectance with a fixed per-wavelength normalisation, so a pixel's input is a property of
+the pixel and a library spectrum has one (\cref{ch:hslnorm}).
+\item \textbf{Tokenizer.} Make the first layer read wavelengths, not band positions, so a removed window is a gap rather
+than a neighbour (\cref{sec:hslnorm:conv}).
+\item \textbf{Masking and context.} Hide whole pixels and give the model their neighbours, so it cannot complete an anomaly
+from itself (\cref{ch:hsldetect}).
+\item \textbf{Data.} Keep clouds in pretraining and label them (\cref{ch:hslcloud}).
+\item \textbf{Heads.} Judge any per-pixel head at fills of 0.1--0.25, and do not smooth abundances across pixels
+(\cref{ch:hslunmix}).
+\item \textbf{Access.} Publish the training corpus somewhere it can be read, and a licence in the code repository.
+\end{enumerate}
+Items 1--4 together describe a wavelength-aware spatial masked autoencoder pretrained on reflectance with fixed
+statistics: Indradhanu on its SpectralEarth stem (\cref{ch:specdecoder,ch:pretrain}). The honest summary is not that
+HyperSL is bad. It is that \textbf{the changes it would need are the design we already chose, for the same reasons.}
+
+\subsection{What we took from it}
+
+\begin{itemize}
+\item \textbf{Wavelength as a coordinate.} HyperSL's position code accepts any band list; our stem goes further and builds
+its bins from wavelength, but the idea is shared.
+\item \textbf{A discipline for outside models.} Check the checkpoint's hash, read the code before the paper, reproduce a
+published number before measuring anything new, and keep the outputs. Every claim in this part could be checked because
+those steps were followed, and the one that could not (the 28\% of \cref{sec:hslnorm:measured}) is the one whose output
+was not kept.
+\end{itemize}
+
+\begin{drift}
+Every number in the decision table belongs to a dated run (2026-09-23 to 2026-10-31) and to HyperSL's \code{10_base_mask95}
+release. A new release (different scaling, spatial context, a licence) would reopen each row.
+\end{drift}
+
+%======================================================================
+\begin{confusions}
+\confusion{The part shows HyperSL is a bad model.}{It shows a good model for one-scene land-cover description, measured on
+jobs it was not built for.}
+\confusion{Fine-tuning would fix it.}{Fine-tuning keeps the input scaling, the band masking and the tokenizer. The obstacles
+are in what the model was trained to do, so they need a retrain.}
+\confusion{Its false-alarm filter result means it helps detection.}{The gain needed a threshold chosen with the test scene's
+labels; with a threshold set on other scenes it lost objects (\cref{sec:hsldetect:filter}).}
+\confusion{The licence is fine because Hugging Face says MIT.}{The code repository has no licence file. For a product, that
+needs settling with the authors.}
+\end{confusions}
+
+\begin{checkyourself}
+\item\label{ex:hslverdict:1} For each of the four jobs (matching, detection, unmixing, cloud), name the single design choice of
+  HyperSL most responsible for its result, and the chapter that shows it.
+\item\label{ex:hslverdict:2} Which of the six changes in \cref{sec:hslverdict:change} could be made without retraining? Explain.
+\item\label{ex:hslverdict:3} From \cref{tab:hsldetect:main}, how many more objects does FTH3 epoch 5 catch in the top 1\% than HyperSL RM,
+  both with cloud excluded? What share of the 909 is that, and which bootstrap row agrees?
+\item\label{ex:hslverdict:4} List the five measures on which HyperSL was ahead, and say for each why it does not change the
+  decision.
+\end{checkyourself}

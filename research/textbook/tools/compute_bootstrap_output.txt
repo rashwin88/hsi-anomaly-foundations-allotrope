@@ -1,0 +1,26 @@
+mean 6.0 draw means [7.4, 4.4, 5.6, 4.0, 8.0, 5.0]
+mean of draw means 5.7333 sd (pop) of draw means 1.4862 sd (n-1) 1.6281
+pop sd of x 3.4059 SE = sd/sqrt(5) 1.5232
+percentile 2.5, 97.5 of the six [4.05, 7.925]
+100k draws: sd 1.522 interval [3.4, 9.2]
+VarA 0.092 VarB 0.0904 Cov 0.091 Var(A-B) formula 0.0004 direct 0.0004 unpaired 0.1824 ratio 456.0
+parts {1: (1.2, 2), 2: (1.0, 1), 3: (0.0, 1)}
+pAUC from parts 0.5499999999999998
+pAUC exact 0.5499999999999999
+draw [1, 1, 3] A 0.48 B 0.44 B-A -0.04
+draw [2, 2, 2] A 1.0 B 0.9 B-A -0.1
+draw [1, 2, 3] A 0.55 B 0.525 B-A -0.025
+toy bootstrap {'pauc_a': 0.55, 'pauc_b': 0.525, 'pauc_diff': -0.025, 'pauc_ci': [-0.1, 0.2], 'pauc_p_b_better': 0.282}
+1000 draws: 0-based positions 24.975 974.025
+2000 draws: 0-based positions 49.975 1949.0249999999999
+scene draws C(7,4) = 35
+sim: objects 300 pixels 967 SE object-boot 0.0235 SE pixel-boot 0.0098 ratio 2.41
+deff 3.4000000000000004 n_eff of 3636 pixels 1069.4117647058822
+cloud half-width 0.0027 centre 0.0074
+adapt half-width 0.0074 centre -0.0102
+ft06 half-width 0.0106 centre -0.0068
+ft09b half-width 0.0058 centre 0.006
+ft09c half-width 0.0045 centre 0.0019
+ft09c-b half-width 0.0033 centre -0.0043
+exact: draws 3125 sd 1.5232 2.5/97.5 pct [3.4, 9.2]
+hist (2,1) (2.4,5) (2.6,5) (2.8,10) (3,25) (3.2,20) (3.4,50) (3.6,55) (3.8,60) (4,106) (4.2,75) (4.4,125) (4.6,125) (4.8,105) (5,181) (5.2,110) (5.4,175) (5.6,175) (5.8,120) (6,215) (6.2,110) (6.4,160) (6.6,155) (6.8,80) (7,171) (7.2,70) (7.4,110) (7.6,110) (7.8,40) (8,105) (8.2,30) (8.4,50) (8.6,50) (8.8,10) (9,50) (9.2,10) (9.4,20) (9.6,20) (10,15) (10.4,5) (10.6,5) (11,5) (12,1)

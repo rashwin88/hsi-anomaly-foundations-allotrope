@@ -1,0 +1,6 @@
+\glossentry{Land surface temperature}{The temperature of the ground's skin inferred from the heat it radiates; Chakshu's input, in degrees Celsius for Landsat 9.}
+\glossentry{Trimmed loss}{A loss that sorts the per-pixel errors and averages only the smallest fraction 1 minus tau of them, so the worst (presumed anomalous) pixels give no gradient; Chakshu trims 5 percent.}
+\glossentry{Trim fraction}{The share tau of the largest per-pixel errors a trimmed loss discards; 0.05 for Chakshu, 0 for Indradhanu.}
+\glossentry{Per-scene override}{Replacing a model's stored normalisation mean and spread with the scene's own (PixelStatsOverride); meant for HotSat-1, but never built, and overwritten by the checkpoint if it were.}
+\glossentry{Token straddling}{An object that crosses stage-1 token borders, so in each masked pass part of it stays visible and helps reconstruct the hidden part, lowering its residual.}
+\glossentry{Expansion ratio}{The factor E by which Mix-FFN widens each token before the depthwise convolution: 4 in Indradhanu, 2 in Chakshu.}

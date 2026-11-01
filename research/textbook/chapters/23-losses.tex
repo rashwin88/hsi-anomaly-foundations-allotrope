@@ -1,0 +1,1228 @@
+\chapter{Losses: L1, the spectral angle and the ramp}\label{ch:losses}
+\begingroup\emergencystretch=3em % long unbreakable source tags; local to this chapter
+
+\begin{onething}
+Indradhanu is trained to minimise one number, $L = L_1 + \lambda(t)\,\SAM$: the masked mean
+absolute error (how far each band is off, in reflectance) plus a weighted spectral angle (how
+far the \emph{shape} of each spectrum is off, in radians), with the weight $\lambda(t)$ rising
+from zero over the first epochs so that brightness is learned before shape.
+\end{onething}
+
+Every chapter so far has described what the network \emph{computes}. None has said how it comes
+to compute anything useful. A freshly built Indradhanu has about five and a half million
+parameters set to random values (\cref{ch:params}); its reconstructions are noise. Training is
+the process that turns those random numbers into useful ones, and training needs a single
+number that says how wrong the network currently is. That number is the \emph{loss}. This
+chapter builds Indradhanu's loss piece by piece, and computes its derivatives by hand, because
+the derivatives are what training actually uses (\cref{ch:trainloop}).
+
+\section{What a loss is, and what it must do}\label{sec:losses:what}
+
+\begin{definition}[Loss]\index{loss}
+A \emph{loss} (or \emph{loss function}, or \emph{objective}) is a function that takes the
+network's output and the truth it should have produced, and returns one non-negative real
+number. Smaller means better. Training changes the network's parameters so as to make this
+number smaller.
+\end{definition}
+
+Recall from \cref{ch:shapes} that a \emph{parameter}\index{parameter} is one adjustable number
+inside the network (one entry of a weight matrix or a bias vector), and from \cref{ch:masking}
+that the network is shown a patch with most of its tokens hidden and must reconstruct the
+hidden part. Here the truth is the patch the satellite recorded, $\vect{x}$, and the output is
+the reconstruction, $\xhat$. Both have shape \shape{(B, 165, 128, 128)}: a batch of $B$ patches,
+165 bands, 128 $\times$ 128 pixels.
+
+A loss must have two properties.
+
+\begin{enumerate}
+  \item \textbf{Smaller must mean better, always.} If two reconstructions differ and one is
+  closer to the truth in the sense you care about, it must get the smaller loss. Otherwise
+  training improves the wrong thing.
+  \item \textbf{It must be differentiable} (almost everywhere). Training does not search
+  blindly; it asks, for every parameter, ``if I nudge you up a little, does the loss go up or
+  down, and how fast?'' That rate is a derivative. \Cref{sec:losses:chain} shows how it is
+  computed through the whole network; this chapter computes it for the loss itself.
+\end{enumerate}
+
+The obvious first choice, ``count the pixels that are wrong'', fails property 2: a count does
+not change when a reflectance moves from 0.2001 to 0.2002, so its derivative is zero almost
+everywhere and gives no direction. The losses below all change smoothly (or at least
+continuously) as $\xhat$ moves.
+
+\begin{analogy}
+The loss is the marking scheme of an exam the network sits millions of times. L1 marks every
+band separately, like a spelling test: each wrong letter costs marks in proportion to how wrong
+it is. The spectral angle marks the \emph{handwriting}: it ignores how large you wrote and asks
+only whether the letters have the right shape. A good marking scheme for a hyperspectral
+model needs both, and, like a teacher, it asks for legibility before style (the ramp of
+\cref{sec:losses:ramp}).
+\end{analogy}
+
+\section{The masked mean absolute error}\label{sec:losses:l1}
+
+\subsection{Which pixels are graded}
+
+The loss is not computed over every pixel of the patch. A pixel is \emph{graded} only if all
+three of the following hold.
+
+\begin{enumerate}
+  \item It was a \textbf{prediction target}: its token was hidden from the encoder
+  (\cref{ch:masking}). Grading pixels the model could see would reward copying.
+  \item It is \textbf{valid}: a real measurement, not nodata or cloud-filled.
+  \item It is \textbf{interior}: not inside the erosion collar around an invalid region,
+  where the overlapping patch embedding has mixed invalid neighbours into it (\cref{ch:masking}).
+\end{enumerate}
+
+Conditions 2 and 3 together are the \emph{eroded mask}; condition 1 is the pixel prediction
+mask. Both are arrays of 0s and 1s of shape \shape{(B, 1, H, W)}, and the loss mask is their
+product:
+\begin{lstlisting}
+pixel_pred_mask = self._pred_mask_to_pixel_mask(pred_mask, H, W)            # (B, 1, H, W)
+eroded_mask     = TokenMasking.erode_mask(mask, kernel_size=cfg.erosion_kernel_size)
+loss_mask       = pixel_pred_mask * eroded_mask                             # (B, 1, H, W)
+\end{lstlisting}
+
+\begin{definition}[Loss mask]\index{loss mask}
+The \emph{loss mask} $M$ is the set of pixels $p$ whose mask value is 1, that is, pixels that
+were hidden, valid and interior. Its size $\abs{M}$ is the number of graded pixels.
+\end{definition}
+
+Multiplying two 0/1 numbers is a logical AND: $1 \times 1 = 1$, and any product with a 0 in
+it is 0. Four pixels show every case.
+
+\begin{center}
+\begin{tabular}{ccccl}
+\toprule
+pixel & hidden? & valid and interior? & product & graded? \\
+\midrule
+A & 1 & 1 & $1 \times 1 = 1$ & yes \\
+B & 1 & 0 & $1 \times 0 = 0$ & no: nodata, or on a border \\
+C & 0 & 1 & $0 \times 1 = 0$ & no: the model could see it \\
+D & 0 & 0 & $0 \times 0 = 0$ & no \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\coursefig[0.95\linewidth]{iw-23-loss-mask}{Which pixels are graded. The pixel prediction mask
+(hidden tokens, amber) is multiplied by the eroded validity mask (indigo; the cloud and its
+collar hatched). Multiplying 0/1 masks is a logical AND, so only pixels that were hidden, valid
+and away from invalid regions enter the loss. Right: the L1 term for one graded pixel.}{fig:losses:mask}
+
+\subsection{From the token grid to the pixel grid}
+
+The prediction mask is born on the token grid: one flag per stage-1 token, shape
+\shape{(B, N)} with $N = 32 \times 32 = 1024$ for a 128-pixel patch (stage 1 has stride 4,
+\cref{ch:patchembed}). The loss lives on the 128 $\times$ 128 pixel grid, so each flag must be
+copied to the 4 $\times$ 4 = 16 pixels its token covers:
+\begin{lstlisting}
+token_grid = pred_mask.reshape(B, 1, H_tokens, W_tokens)                    # (B, 1, 32, 32)
+return F.interpolate(token_grid, size=(H, W), mode="nearest")               # (B, 1, 128, 128)
+\end{lstlisting}
+\code{mode="nearest"} copies values; it never averages. Bilinear interpolation would produce
+0.25, 0.5 and 0.75 at block edges, and the later test \code{loss_mask == 1} would silently
+reject those pixels, leaving a lattice of ungraded gaps. Use nearest-neighbour for masks,
+always.
+
+\subsection{The definition, and the order of averaging}
+
+Write $C$ for the number of bands (165), $e_{c,p} = \hat{x}_{c,p} - x_{c,p}$ for the
+\emph{error} (or \emph{residual}) of band $c$ at pixel $p$, and $M$ for the graded pixels.
+
+\begin{definition}[Masked mean absolute error]\index{L1 loss}\index{mean absolute error}
+\begin{equation}\label{eq:losses:l1}
+L_1 \;=\; \frac{1}{\abs{M}} \sum_{p \in M} \left( \frac{1}{C} \sum_{c=1}^{C} \abs{e_{c,p}} \right)
+\;=\; \frac{1}{C\,\abs{M}} \sum_{p \in M} \sum_{c=1}^{C} \abs{\hat{x}_{c,p} - x_{c,p}} .
+\end{equation}
+\end{definition}
+
+The name comes from the \emph{L1 norm}\index{L1 norm}, $\norm{\vect{v}}_1 = \sum_i \abs{v_i}$,
+the sum of absolute values. Its sibling, the L2 norm $\norm{\vect{v}}_2 = \sqrt{\sum_i v_i^2}$,
+gives the mean squared error when you square it and average.
+
+The two forms in \cref{eq:losses:l1} are equal. To see it, move the constant $1/C$ out of the
+inner bracket:
+\begin{align*}
+\frac{1}{\abs{M}} \sum_{p \in M} \frac{1}{C} \sum_{c} \abs{e_{c,p}}
+&= \frac{1}{\abs{M}} \cdot \frac{1}{C} \sum_{p \in M} \sum_{c} \abs{e_{c,p}}
+  && \text{($1/C$ is the same for every $p$)} \\
+&= \frac{1}{C\,\abs{M}} \sum_{p \in M} \sum_{c} \abs{e_{c,p}} .
+  && \text{(multiply the two fractions)}
+\end{align*}
+The step works only because every pixel has the same number of bands $C$. A ``mean of means''
+equals the overall mean when the groups are the same size; it would not if some pixels had
+fewer bands. (That is exactly the situation in the SpectralEarth trainer, where dead bands are
+skipped per pixel; there each pixel divides by its own count of valid bands,
+\cref{ch:pretrain}.)
+
+The code follows the first form, band mean first:
+\begin{lstlisting}
+per_pixel_l1      = (x_hat - pixels).abs()                    # (B, 165, H, W)
+per_pixel_l1_mean = per_pixel_l1.mean(dim=1, keepdim=True)    # (B, 1, H, W)  one value per pixel
+valid_l1          = per_pixel_l1_mean[loss_mask == 1]         # (|M|,)  graded pixels only
+l1_loss           = valid_l1.mean()                           # ()  a single number
+\end{lstlisting}
+Line 3 is \emph{boolean indexing}: it pulls the graded pixels out into a flat list, so the mean
+on line 4 automatically divides by $\abs{M}$ and never counts a masked zero as if it were a
+perfect prediction.
+
+\begin{worked}[label={we:losses:l1}]{Masked L1 on three bands and two graded pixels}
+Do this one on paper. Use three bands instead of 165, and three pixels, of which A and B are
+graded and C was visible to the model (so its loss-mask value is 0).
+\[
+\begin{array}{lccc}
+ & \text{band 1} & \text{band 2} & \text{band 3} \\
+\vect{x}_A & 0.100 & 0.200 & 0.300 \\
+\xhat_A & 0.120 & 0.180 & 0.330 \\[2pt]
+\vect{x}_B & 0.050 & 0.100 & 0.080 \\
+\xhat_B & 0.060 & 0.070 & 0.080 \\[2pt]
+\vect{x}_C & 0.200 & 0.200 & 0.200 \\
+\xhat_C & 0.500 & 0.500 & 0.500
+\end{array}
+\]
+\textbf{Step 1, errors at A.}
+\begin{align*}
+e_{1,A} &= 0.120 - 0.100 = +0.020\\
+e_{2,A} &= 0.180 - 0.200 = -0.020\\
+e_{3,A} &= 0.330 - 0.300 = +0.030
+\end{align*}
+\textbf{Step 2, absolute values at A} (an error of $-0.02$ is as wrong as $+0.02$):
+$0.020,\ 0.020,\ 0.030$.
+
+\textbf{Step 3, band mean at A.}
+\begin{align*}
+0.020 + 0.020 + 0.030 &= 0.070\\
+0.070 / 3 &= 0.023333
+\end{align*}
+\textbf{Step 4, the same at B.}
+\begin{align*}
+e_{1,B} &= 0.060 - 0.050 = +0.010\\
+e_{2,B} &= 0.070 - 0.100 = -0.030\\
+e_{3,B} &= 0.080 - 0.080 = \phantom{+}0.000\\
+0.010 + 0.030 + 0.000 &= 0.040\\
+0.040 / 3 &= 0.013333
+\end{align*}
+\textbf{Step 5, pixel C.} Its band mean is $0.300$, a terrible reconstruction, but its mask
+value is 0, so it is not in $M$ and contributes nothing.
+
+\textbf{Step 6, mean over the graded pixels}, $\abs{M} = 2$:
+\begin{align*}
+0.023333 + 0.013333 &= 0.036667\\
+0.036667 / 2 &= 0.018333
+\end{align*}
+\textbf{Check with the second form} of \cref{eq:losses:l1}: the six absolute errors sum to
+$0.070 + 0.040 = 0.110$, and $C\abs{M} = 3 \times 2 = 6$, so $0.110 / 6 = 0.018333$. The same.
+
+The real code, run on these numbers, prints $L_1 = 0.018333$ \tagC{} (script
+\file{research/textbook/tools/compute_23-losses.py}).
+\end{worked}
+
+\paragraph{Is 0.018 good?} Reflectance sits roughly between 0.02 and 0.30, so an average error
+of 0.018 is large; you could see it in a plot. The training configuration's own baseline table
+expects $L_1$ of about 0.08--0.10 at the first epoch and 0.003--0.008 after 500
+epochs \tagM{configs/hyperspectral_segformer_exp_2.json}. So these made-up pixels are an early-training
+reconstruction.
+
+\subsection{The derivative of L1}\label{sec:losses:l1grad}
+
+Training needs $\partial L_1 / \partial \hat{x}_{c,p}$ for every band and pixel: how fast the
+loss changes when one predicted value moves.
+
+First, the derivative of the absolute value. For $e > 0$, $\abs{e} = e$, whose derivative is
+$+1$. For $e < 0$, $\abs{e} = -e$, whose derivative is $-1$. At $e = 0$ the graph has a corner
+and no derivative exists; PyTorch uses $0$ there. All three cases together are the
+\emph{sign function}\index{sign function}:
+\[
+\frac{d\abs{e}}{de} = \sign(e) = \begin{cases} +1 & e > 0\\ 0 & e = 0 \\ -1 & e < 0.\end{cases}
+\]
+
+Now differentiate \cref{eq:losses:l1} with respect to one predicted value $\hat{x}_{c,p}$ of a
+graded pixel. Only one term of the double sum contains it, the term $\abs{\hat{x}_{c,p} -
+x_{c,p}}$; every other term is a constant as far as $\hat{x}_{c,p}$ is concerned and has
+derivative zero. The derivative of $e_{c,p} = \hat{x}_{c,p} - x_{c,p}$ with respect to
+$\hat{x}_{c,p}$ is 1. So
+\begin{equation}\label{eq:losses:l1grad}
+\frac{\partial L_1}{\partial \hat{x}_{c,p}} =
+\begin{cases}
+\dfrac{\sign(e_{c,p})}{C\,\abs{M}} & p \in M,\\[8pt]
+0 & p \notin M.
+\end{cases}
+\end{equation}
+Write $n = C\abs{M}$ for the number of graded (band, pixel) entries. Every graded entry gets a
+push of the same size, $1/n$; only its direction depends on the error.
+
+\begin{worked}[label={we:losses:l1grad}]{The gradient of L1 for the two-pixel example}
+In \cref{we:losses:l1}, $n = 3 \times 2 = 6$, so $1/n = 0.16667$. Read off the signs of the
+errors:
+\[
+\begin{array}{lccc}
+ & \text{band 1} & \text{band 2} & \text{band 3}\\
+\text{signs at A} & + & - & + \\
+\text{gradient at A} & +0.16667 & -0.16667 & +0.16667\\
+\text{signs at B} & + & - & 0\\
+\text{gradient at B} & +0.16667 & -0.16667 & 0\\
+\text{gradient at C} & 0 & 0 & 0
+\end{array}
+\]
+PyTorch's autograd on the same tensors returns exactly this table \tagC. Two things to notice.
+Band 3 at B is already exact, so it gets no push. Pixel C, which has the largest errors of
+all, gets no push either, because it was not graded.
+\end{worked}
+
+\section{Why L1 and not squared error}\label{sec:losses:l1l2}
+
+The most common default loss is the \emph{mean squared error}\index{mean squared error} (MSE),
+$\frac{1}{n}\sum e^2$, whose derivative is $\frac{2e}{n}$: proportional to the error. L1's
+derivative is $\frac{\pm 1}{n}$: the same size however large the error. That one difference
+decides what each loss learns.
+
+\subsection{L1 learns a median, L2 learns a mean}
+
+Strip the problem to its bones. You must predict one number $c$ for five observations $y_1,
+\dots, y_5$, and you are graded by either
+\[
+S_2(c) = \sum_i (y_i - c)^2 \qquad\text{or}\qquad S_1(c) = \sum_i \abs{y_i - c}.
+\]
+
+\paragraph{The best $c$ under $S_2$ is the mean.} Differentiate $S_2$ with respect to $c$. By
+the chain rule (stated properly in \cref{sec:losses:chain}; here you need only that the
+derivative of $(y_i - c)^2$ is $2(y_i - c)\cdot(-1)$):
+\begin{align*}
+\frac{dS_2}{dc} &= \sum_i 2(y_i - c)(-1) = -2\sum_i (y_i - c).
+\intertext{Set it to zero, the condition for the bottom of the bowl:}
+0 &= \sum_i y_i - 5c \\
+c &= \frac{1}{5}\sum_i y_i .
+\end{align*}
+
+\paragraph{The best $c$ under $S_1$ is the median.} Differentiate $S_1$:
+\[
+\frac{dS_1}{dc} = \sum_i \sign(c - y_i) = (\text{number of } y_i \text{ below } c) -
+(\text{number of } y_i \text{ above } c).
+\]
+This is negative while more observations lie above $c$ than below (so moving $c$ up lowers
+$S_1$), positive once more lie below, and it changes sign at the middle observation: the median.
+
+\begin{worked}[label={we:losses:median}]{A glitch pulls the mean, not the median}
+Take five reflectances of the same field, one of which is a sensor glitch:
+$y = (0.10,\ 0.11,\ 0.12,\ 0.13,\ 0.90)$.
+
+\textbf{Mean.}
+\begin{align*}
+0.10 + 0.11 + 0.12 + 0.13 + 0.90 &= 1.36\\
+1.36 / 5 &= 0.272
+\end{align*}
+\textbf{Median.} Sorted, the middle value is $0.12$.
+
+The mean, $0.272$, is larger than four of the five observations; it describes none of them. The
+median, $0.12$, describes the field.
+
+\textbf{The pull of each observation at $c = 0.12$.} Under $S_2$ each observation pulls with
+$2(c - y_i)$:
+\begin{align*}
+2(0.12 - 0.10) &= +0.04\\
+2(0.12 - 0.11) &= +0.02\\
+2(0.12 - 0.12) &= \phantom{+}0.00\\
+2(0.12 - 0.13) &= -0.02\\
+2(0.12 - 0.90) &= -1.56
+\end{align*}
+The glitch pulls 39 times harder than the next largest term ($1.56 / 0.04 = 39$). Under $S_1$
+each pull is $\sign(c - y_i)$: $+1, +1, 0, -1, -1$. The glitch is one vote among five.
+\end{worked}
+
+\subsection{Why that matters for this training set}
+
+The training corpus is real satellite imagery, not curated. It contains genuine anomalies (the
+very things the model should find surprising), dead detectors and stripes, and cloud edges
+the masks missed. Under MSE, those few pixels with huge errors would dominate every gradient,
+and the model would spend its capacity learning to reconstruct exactly what it should fail on.
+Under L1, each pixel's pull has the same size; outliers vote, but they do not take over. The
+model learns the bulk of the data, which is normality, and that is what an anomaly detector
+needs (\cref{ch:recon}).
+
+\begin{center}
+\begin{tabular}{lll}
+\toprule
+ & L1 & MSE \\
+\midrule
+penalty for error $e$ & $\abs{e}$ & $e^2$\\
+a 2 $\times$ larger error costs & 2 $\times$ & 4 $\times$\\
+a 10 $\times$ larger error costs & 10 $\times$ & 100 $\times$\\
+pull (derivative) of one entry & $\pm 1/n$ & $2e/n$\\
+best constant prediction & median & mean\\
+dominated by outliers? & no & yes\\
+\bottomrule
+\end{tabular}
+\end{center}
+
+The term for a loss whose pull is bounded is \emph{robust}\index{robust loss}; the classical
+reference for robust estimation of a location is \citet{huber1964robust}.
+
+\begin{sourcenote}[: Antardhana and Tirohita are not identical apart from the loss]
+The course (IW23) says the repo holds two models that differ \emph{only} in loss, Antardhana
+(MSE) and Tirohita (L1). The model register \file{research/model_break_down/README.md} (rows 3
+and 7) lists them as the same family, the spatial masked autoencoder, but with different
+parameter counts, 330,314 for Tirohita and 265,480 for
+Antardhana \tagM{research/model_break_down/README.md}, and different versions. So they are
+siblings with the loss as the headline difference, not a controlled one-variable comparison.
+The robustness argument above stands on its own; treat the pair as a hint, not as proof.
+\end{sourcenote}
+
+\section{The 40\% rule and sample counting}\label{sec:losses:forty}
+
+Before any loss is computed, whole patches are thrown away:
+\begin{lstlisting}
+MIN_VALID_PIXEL_FRACTION = 0.4
+valid_fractions = mask.flatten(1).float().mean(dim=1)     # (B,)  mean of 0/1 = fraction valid
+keep = valid_fractions >= MIN_VALID_PIXEL_FRACTION        # (B,)  bool
+num_kept = keep.sum().item()                              # int
+\end{lstlisting}
+(\file{app/foundation_models/trainers/hyperspectral_segformer_mae_trainer.py}, lines 34 and
+162--170.) A patch less than 40\% valid is mostly nodata: training on it teaches the model to
+reconstruct holes, and its few real pixels all lie near a border. The mean of a 0/1 array is
+the fraction of 1s, the same trick as in \cref{ch:masking}.
+
+\code{compute_loss} returns the loss together with \code{num_kept}, and the training loop
+weights by it (\cref{ch:trainloop}). If no patch survives, the loss is a zero tensor and the
+loop skips the batch. The function also returns zero when the loss mask is empty, so a
+batch with nothing graded cannot divide by zero.
+
+\begin{sourcenote}[: training and inference use different thresholds]
+Training drops patches below 40\% valid. The scene-scale inference loop in
+\file{app/foundation_models/inferencers/segformer_mae_inferencer.py} (lines 281--284), which the
+hyperspectral inferencer inherits, uses \code{MIN_VALID_FRACTION = 0.1} under a comment that
+says ``Matches training: patches with $<$ 40\% valid pixels were discarded.'' The comment is
+wrong; the constant is 0.1. The looser inference threshold is defensible (you would rather
+have an imperfect score near a scene edge than none), but if you debug edge artefacts, know
+that these two numbers differ. \Cref{ch:inference} returns to this.
+\end{sourcenote}
+
+\section{The spectral angle}\label{sec:losses:sam}
+
+\subsection{Why L1 is not enough}
+
+L1 measures error in reflectance units, and so it is dominated by bright pixels. A bright pixel
+at reflectance 0.30 that is 10\% off costs $0.03$ per band; a dark pixel at 0.03 that is 10\%
+off costs $0.003$. Same proportional error, ten times the penalty, so gradient descent spends
+its effort on bright surfaces and neglects shadow, dark water and dark soil.
+
+Yet the diagnostic content of a spectrum is its \emph{shape}, not its level
+(\cref{ch:light}). Sunlit grass and shadowed grass are the same material with the same shape at
+different brightness; a gas plume changes the shape at a few wavelengths without changing the
+overall level much. You need a second measurement that sees shape and ignores brightness.
+
+\subsection{The definition}
+
+Treat each pixel's $C$ values as a vector in $\R^C$ (\cref{ch:linalg}). The angle between two
+vectors measures how differently they point, regardless of length.
+
+\begin{definition}[Spectral angle]\index{spectral angle}\index{SAM|see{spectral angle}}
+For nonzero spectra $\vect{x}, \xhat \in \R^C$,
+\begin{equation}\label{eq:losses:sam}
+u = \cos\theta = \frac{\ip{\vect{x}}{\xhat}}{\norm{\vect{x}}\,\norm{\xhat}},
+\qquad
+\SAM(\vect{x}, \xhat) = \theta = \arccos u \in [0, \pi],
+\end{equation}
+where $\ip{\vect{x}}{\xhat} = \sum_c x_c \hat{x}_c$ is the dot product and $\norm{\vect{x}} =
+\sqrt{\ip{\vect{x}}{\vect{x}}}$ the length. The angle is in radians.
+\end{definition}
+
+The name is \emph{Spectral Angle Mapper}\index{Spectral Angle Mapper}, from the remote-sensing
+classifier of \citet{kruse1993spectral}, which matches an unknown spectrum against a library by
+this angle. (The companion volume on spectral matching uses it that way; \cref{ch:material}
+uses it at the end of the chain.) Here it is repurposed as a training loss between the
+observed and the reconstructed spectrum.
+
+That $u$ really is the cosine of an angle, and lies in $[-1, 1]$, is the Cauchy--Schwarz
+inequality $\abs{\ip{\vect{x}}{\xhat}} \le \norm{\vect{x}}\norm{\xhat}$ (\cref{ch:linalg}).
+
+\begin{center}
+\begin{tabular}{ll}
+\toprule
+angle & meaning \\
+\midrule
+0 & identical shape, whatever the brightness\\
+0.01 to 0.10 rad (0.6\textdegree{} to 5.7\textdegree) & a good reconstruction here\\
+$\pi/2 \approx 1.571$ & at right angles: unrelated\\
+$\pi \approx 3.142$ & exactly opposite\\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\begin{worked}[label={we:losses:sam}]{The spectral angle of pixel A, by hand}
+Do this on paper. Pixel A of \cref{we:losses:l1}: $\vect{x} = (0.100, 0.200, 0.300)$, $\xhat =
+(0.120, 0.180, 0.330)$.
+
+\textbf{Step 1, the dot product.}
+\begin{align*}
+0.100 \times 0.120 &= 0.0120\\
+0.200 \times 0.180 &= 0.0360\\
+0.300 \times 0.330 &= 0.0990\\
+0.0120 + 0.0360 + 0.0990 &= 0.1470
+\end{align*}
+\textbf{Step 2, the two lengths.}
+\begin{align*}
+\norm{\vect{x}}^2 &= 0.100^2 + 0.200^2 + 0.300^2 = 0.0100 + 0.0400 + 0.0900 = 0.1400\\
+\norm{\vect{x}} &= \sqrt{0.1400} = 0.374166\\
+\norm{\xhat}^2 &= 0.120^2 + 0.180^2 + 0.330^2 = 0.0144 + 0.0324 + 0.1089 = 0.1557\\
+\norm{\xhat} &= \sqrt{0.1557} = 0.394588
+\end{align*}
+\textbf{Step 3, the cosine.}
+\begin{align*}
+\norm{\vect{x}}\,\norm{\xhat} &= 0.374166 \times 0.394588 = 0.147641\\
+u &= 0.1470 / 0.147641 = 0.995655
+\end{align*}
+\textbf{Step 4, the angle.}
+\begin{align*}
+\theta &= \arccos(0.995655) = 0.09325 \text{ rad}\\
+\theta &= 0.09325 \times 180 / \pi = 5.34\text{\textdegree}
+\end{align*}
+So pixel A has $L_1$ contribution $0.0233$ (its brightness is off by 0.023 reflectance on
+average) and spectral angle $0.0933$ rad (its shape is off by about 5.3\textdegree). They
+measure different things; neither implies the other.
+\end{worked}
+
+\begin{sourcenote}[: the course's angle for this pixel]
+The course (IW24) gets $\norm{\vect{x}}\norm{\xhat} = 0.147644$, $u = 0.995637$ and $\theta =
+0.0935$ rad $= 5.35$\textdegree. The product is $0.147641$ (more digits: $0.1476415$), which
+gives $u = 0.995655$ and $\theta = 0.09325$ rad $= 5.34$\textdegree. A float64 evaluation and
+the real \code{SAMLoss} (in float32, eps included) both give $0.09325$ \tagC{}
+(\file{research/textbook/tools/compute_23-losses_output.txt}). The difference is a rounding slip
+in the course's third step; it changes no conclusion. The same slip propagates into the
+course's atan2 check, which gives $\sin$-term $0.013784$ instead of $0.013748$.
+\end{sourcenote}
+
+\subsection{Scale invariance}\label{sec:losses:scaleinv}
+
+\begin{worked}[label={we:losses:double}]{A reconstruction twice as bright}
+Suppose the model predicted $\xhat = (0.200, 0.400, 0.600)$, exactly twice the truth in
+every band.
+
+\textbf{L1.}
+\begin{align*}
+\abs{0.200 - 0.100} &= 0.100\\
+\abs{0.400 - 0.200} &= 0.200\\
+\abs{0.600 - 0.300} &= 0.300\\
+(0.100 + 0.200 + 0.300)/3 &= 0.600/3 = 0.200
+\end{align*}
+Enormous: almost nine times pixel A's 0.0233.
+
+\textbf{Spectral angle.}
+\begin{align*}
+\ip{\vect{x}}{\xhat} &= 0.100 \times 0.200 + 0.200 \times 0.400 + 0.300 \times 0.600 = 0.02 + 0.08 + 0.18 = 0.28\\
+\norm{\xhat} &= \sqrt{0.04 + 0.16 + 0.36} = \sqrt{0.56} = 0.748331\\
+\norm{\vect{x}}\,\norm{\xhat} &= 0.374166 \times 0.748331 = 0.28\\
+u &= 0.28 / 0.28 = 1, \qquad \theta = \arccos 1 = 0.
+\end{align*}
+The angle reports a perfect match.
+\end{worked}
+
+This is not a coincidence of the numbers. Here is the general statement and its proof.
+
+\paragraph{Claim.} For any $\alpha > 0$, $\SAM(\vect{x}, \alpha\xhat) = \SAM(\vect{x}, \xhat)$.
+
+\paragraph{Proof.} Compute the cosine for $\alpha\xhat$ and simplify.
+\begin{align*}
+\frac{\ip{\vect{x}}{\alpha\xhat}}{\norm{\vect{x}}\,\norm{\alpha\xhat}}
+&= \frac{\alpha\ip{\vect{x}}{\xhat}}{\norm{\vect{x}}\,\norm{\alpha\xhat}}
+  && \text{(a constant factor comes out of a dot product)}\\
+&= \frac{\alpha\ip{\vect{x}}{\xhat}}{\norm{\vect{x}}\,\sqrt{\textstyle\sum_c \alpha^2\hat{x}_c^2}}
+  && \text{(definition of the length)}\\
+&= \frac{\alpha\ip{\vect{x}}{\xhat}}{\norm{\vect{x}}\,\abs{\alpha}\,\norm{\xhat}}
+  && \text{($\sqrt{\alpha^2} = \abs{\alpha}$)}\\
+&= \frac{\ip{\vect{x}}{\xhat}}{\norm{\vect{x}}\,\norm{\xhat}}
+  && \text{($\alpha > 0$, so $\abs{\alpha} = \alpha$ cancels).}
+\end{align*}
+The cosine is unchanged, so the angle is unchanged. $\square$
+
+If $\alpha < 0$, $\abs{\alpha} = -\alpha$ and the cosine changes sign: the angle becomes
+$\pi - \theta$. Reflectances are non-negative, so this case does not arise in practice.
+
+\coursefig[0.95\linewidth]{iw-24-l1-sam}{Two complementary errors. (a) Treating a spectrum as a
+vector, the spectral angle is the angle between reconstruction and truth, and L1 the average
+per-band distance. A reconstruction that is the truth scaled by 2 (amber) has an angle of
+exactly 0 but a large L1; a reconstruction close in level but slightly rotated (indigo) has a
+small L1 and a small angle. (b) The three-band numbers of \cref{we:losses:sam}.}{fig:losses:l1sam}
+
+So the model needs both terms:
+\begin{center}
+\begin{tabular}{lcc}
+\toprule
+kind of error & caught by L1 & caught by the angle\\
+\midrule
+brightness only (right shape, wrong scale) & yes & no\\
+shape only (right level, wrong colour) & weakly & yes\\
+both & yes & yes\\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\section{The chain rule}\label{sec:losses:chain}
+
+To train with the spectral angle you need its derivative with respect to every predicted
+value, and the angle is a function of a function of a function of $\xhat$. The tool for that
+is the chain rule. It is used everywhere in the rest of this book, so it is stated carefully
+here and shown on a tiny example first.
+
+\begin{definition}[Chain rule, one variable]\index{chain rule}
+If $y = f(g(w))$, write $z = g(w)$. Then
+\[
+\frac{dy}{dw} = \frac{dy}{dz}\cdot\frac{dz}{dw} = f'(g(w))\, g'(w).
+\]
+In words: the rate at which the outer function changes with the input is the rate at which it
+changes with its own input, times the rate at which that input changes with $w$.
+\end{definition}
+
+\begin{worked}[label={we:losses:chain}]{The chain rule on a tiny function}
+Let $y = (3w + 1)^2$ and find $dy/dw$ at $w = 1$.
+
+\textbf{Name the inner function.} $z = g(w) = 3w + 1$, so $y = f(z) = z^2$.
+
+\textbf{Differentiate each piece.} $dz/dw = 3$, and $dy/dz = 2z$.
+
+\textbf{Evaluate at $w = 1$.} $z = 3 \times 1 + 1 = 4$, so $dy/dz = 2 \times 4 = 8$.
+
+\textbf{Multiply.} $dy/dw = 8 \times 3 = 24$.
+
+\textbf{Check numerically.} Move $w$ a little either side and divide the change in $y$ by the
+change in $w$:
+\begin{align*}
+w = 1.001: \quad y &= (3.003 + 1)^2 = 4.003^2 = 16.024009\\
+w = 0.999: \quad y &= (2.997 + 1)^2 = 3.997^2 = 15.976009\\
+\frac{16.024009 - 15.976009}{1.001 - 0.999} &= \frac{0.048}{0.002} = 24.
+\end{align*}
+The chain rule agrees with the measured slope.
+\end{worked}
+
+With several variables the rule is the same, summed over every path. If $y$ depends on $w$
+through intermediate quantities $z_1, \dots, z_k$, then
+\[
+\frac{\partial y}{\partial w} = \sum_{j=1}^{k} \frac{\partial y}{\partial z_j}\,\frac{\partial z_j}{\partial w}.
+\]
+Training a network is this rule applied from the loss backwards through every layer, which is
+why the procedure is called \emph{backpropagation}\index{backpropagation}
+(\cref{ch:trainloop}).
+
+Two more rules are used below.
+
+\paragraph{The quotient rule.}\index{quotient rule} For $q = a/b$ where $a$ and $b$ both depend
+on $w$: $\dfrac{dq}{dw} = \dfrac{a'b - ab'}{b^2}$. Tiny check: $q = w/(w+1)$ at $w = 1$ has $a'
+= 1$, $b' = 1$, so $q' = (1 \cdot 2 - 1 \cdot 1)/2^2 = 1/4$. Numerically, $q(1.001) =
+1.001/2.001 = 0.500250$ and $q(0.999) = 0.999/1.999 = 0.499750$, so the slope is $0.000500/0.002
+= 0.25$.
+
+\paragraph{The derivative of a length.} For $b = \norm{\xhat} = \big(\sum_c
+\hat{x}_c^2\big)^{1/2}$, the chain rule with outer function $(\cdot)^{1/2}$ gives
+\[
+\frac{\partial b}{\partial \hat{x}_c} = \frac{1}{2}\Big(\sum_k \hat{x}_k^2\Big)^{-1/2}\cdot 2\hat{x}_c = \frac{\hat{x}_c}{\norm{\xhat}}.
+\]
+The gradient of a length is the unit vector pointing along it.
+
+\section{The derivative of arccos, and where it blows up}\label{sec:losses:arccos}
+
+\paragraph{Derivation.} Let $y = \arccos u$, so $\cos y = u$, with $y \in [0, \pi]$.
+\begin{align*}
+\cos y &= u
+  && \text{(definition of arccos)}\\
+-\sin y \,\frac{dy}{du} &= 1
+  && \text{(differentiate both sides with respect to $u$; chain rule on the left)}\\
+\frac{dy}{du} &= -\frac{1}{\sin y}
+  && \text{(divide by $-\sin y$)}\\
+&= -\frac{1}{\sqrt{1 - \cos^2 y}}
+  && \text{($\sin^2 + \cos^2 = 1$, and $\sin y \ge 0$ on $[0, \pi]$)}\\
+&= -\frac{1}{\sqrt{1 - u^2}} .
+  && \text{(substitute $\cos y = u$)}
+\end{align*}
+
+\paragraph{Numbers.} Here is the size of that derivative as $u$ approaches 1, with the angle
+that each $u$ corresponds to:
+\begin{center}
+\begin{tabular}{rrrrr}
+\toprule
+$u$ & $1 - u^2$ & $\sqrt{1 - u^2}$ & $d\arccos/du$ & angle \\
+\midrule
+0.9 & 0.19 & 0.4359 & $-2.29$ & 0.451 rad (25.8\textdegree)\\
+0.99 & 0.0199 & 0.1411 & $-7.09$ & 0.142 rad (8.1\textdegree)\\
+0.999 & 0.001999 & 0.04471 & $-22.4$ & 0.0447 rad (2.6\textdegree)\\
+0.9999 & 0.00019999 & 0.01414 & $-70.7$ & 0.0141 rad (0.8\textdegree)\\
+1 & 0 & 0 & $-\infty$ & 0\\
+\bottomrule
+\end{tabular}
+\end{center}
+Work the third row on paper: $0.999^2 = 0.998001$; $1 - 0.998001 = 0.001999$; $\sqrt{0.001999}
+= 0.04471$; $1 / 0.04471 = 22.37$.
+
+Now set beside this table where a \emph{good} model lives. The configuration's baseline
+expects an angle of 0.02--0.05 rad after long training \tagM{configs/hyperspectral_segformer_exp_2.json},
+that is $u$ between $\cos 0.05 = 0.99875$ and $\cos 0.02 = 0.99980$. A well-trained model sits
+at $u = 0.999$ and above, in the bottom rows, where the factor $d\arccos/du$ is in the tens and
+heading for infinity. The better the model gets, the closer it sits to the singularity.
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}
+\begin{groupplot}[group style={group size=2 by 1, horizontal sep=1.7cm},
+  width=0.47\linewidth, height=5.6cm, ymode=log, ymin=0.8, ymax=200,
+  ylabel={$\abs{d\arccos/du} = 1/\sqrt{1-u^2}$}, grid=major, grid style={gray!20}]
+\nextgroupplot[xlabel={$u = \cos\theta$}, xmin=0, xmax=1, title={(a) linear $u$}]
+  % parametric in the angle (degrees): u = cos(a), y = 1/sin(a)
+  \addplot[loss, thick, domain=0.4:90, samples=400, variable=\a] ({cos(\a)}, {1/sin(\a)});
+  \addplot[only marks, mark=*, mark size=1.6pt, spat] coordinates
+    {(0.9,2.294) (0.99,7.089) (0.999,22.37) (0.9999,70.71)};
+  \draw[dashed, maskgrey] (axis cs:0.999,0.8) -- (axis cs:0.999,200);
+  \node[font=\scriptsize, anchor=east, align=right] at (axis cs:0.985,60) {well-trained\\ $u \ge 0.999$};
+\nextgroupplot[xlabel={$1 - u$ (log scale)}, xmode=log, xmin=1e-5, xmax=1, x dir=reverse,
+  title={(b) zoom on $u \to 1$}]
+  \addplot[loss, thick, domain=-5:0, samples=200, variable=\k] ({10^\k}, {1/sqrt((10^\k)*(2-10^\k))});
+  \addplot[only marks, mark=*, mark size=1.6pt, spat] coordinates
+    {(0.1,2.294) (0.01,7.089) (0.001,22.37) (0.0001,70.71)};
+  \fill[spec, opacity=0.12] (axis cs:1e-5,0.8) rectangle (axis cs:1e-3,200);
+  \node[font=\scriptsize, align=center] at (axis cs:1e-4,1.6) {good model\\ lives here};
+\end{groupplot}
+\end{tikzpicture}
+\caption{The size of the derivative of arccos, drawn to scale from $1/\sqrt{1-u^2}$, on a
+logarithmic vertical axis. Dots are the four table rows. (a) Against $u$ itself: flat until
+about $u = 0.9$, then a wall. (b) Against $1 - u$ on a log axis, reading right to left as $u
+\to 1$: a straight line of slope $-\frac12$, because $1/\sqrt{1-u^2} \approx 1/\sqrt{2(1-u)}$
+there. The shaded band, $u \ge 0.999$, is where a well-trained model's pixels sit.}
+\label{fig:losses:arccos}
+\end{figure}
+
+\section{The gradient of the spectral angle}\label{sec:losses:samgrad}
+
+Now combine the pieces. Write $a = \norm{\vect{x}}$ (a constant, since the truth does not
+depend on the parameters), $b = \norm{\xhat}$, $s = \ip{\vect{x}}{\xhat}$, so $u = s/(ab)$ and
+$\theta = \arccos u$.
+
+\paragraph{Step 1: the derivative of the cosine.} Use the quotient rule with numerator $s$ and
+denominator $ab$. The pieces: $\partial s/\partial\hat{x}_c = x_c$ (only one term of the dot
+product contains $\hat{x}_c$), and $\partial(ab)/\partial \hat{x}_c = a\,\hat{x}_c/b$ (the
+derivative of a length, times the constant $a$).
+\begin{align}
+\frac{\partial u}{\partial \hat{x}_c}
+&= \frac{x_c \cdot ab - s \cdot a\hat{x}_c/b}{(ab)^2}
+  && \text{(quotient rule)} \notag\\
+&= \frac{x_c}{ab} - \frac{s\,\hat{x}_c}{a b^3}
+  && \text{(split the fraction; cancel $ab$ in the first, $a$ in the second)} \notag\\
+&= \frac{1}{b}\left(\frac{x_c}{a} - u\,\frac{\hat{x}_c}{b}\right).
+  && \text{(factor out $1/b$; $s/(ab) = u$)}\label{eq:losses:du}
+\end{align}
+
+\paragraph{Step 2: the chain rule through arccos.}
+\begin{equation}\label{eq:losses:dtheta}
+\frac{\partial\theta}{\partial \hat{x}_c} = \frac{d\theta}{du}\cdot\frac{\partial u}{\partial \hat{x}_c}
+= -\frac{1}{\sqrt{1 - u^2}}\cdot\frac{1}{b}\left(\frac{x_c}{a} - u\,\frac{\hat{x}_c}{b}\right).
+\end{equation}
+
+\paragraph{Reading the formula.} The bracket is the unit truth $\vect{x}/a$ minus $u$ times the
+unit reconstruction $\xhat/b$: the part of the truth's direction that is perpendicular to the
+reconstruction. Two facts follow.
+
+\begin{enumerate}
+\item \textbf{The gradient is perpendicular to $\xhat$.} Take the dot product of the bracket
+with $\xhat$: $\ip{\vect{x}}{\xhat}/a - u\,\ip{\xhat}{\xhat}/b = s/a - u b = ub - ub = 0$. So
+the angle's gradient never asks the reconstruction to get brighter or darker, only to rotate.
+That is scale invariance seen through the derivative.
+\item \textbf{The product is finite, even though one factor is not.} The squared length of the
+bracket is
+\[
+\norm{\tfrac{\vect{x}}{a} - u\tfrac{\xhat}{b}}^2 = 1 - 2u\cdot u + u^2 = 1 - u^2,
+\]
+(expand the square; the two unit vectors have length 1 and dot product $u$). So
+$\norm{\partial u/\partial \xhat} = \sqrt{1 - u^2}/b$, and
+\[
+\norm{\frac{\partial\theta}{\partial\xhat}} = \frac{1}{\sqrt{1 - u^2}}\cdot\frac{\sqrt{1-u^2}}{b} = \frac{1}{\norm{\xhat}} .
+\]
+The $\sqrt{1 - u^2}$ blowing up in the arccos factor is cancelled exactly by the same quantity
+shrinking in the cosine's gradient. In exact arithmetic the spectral angle's gradient has the
+fixed length $1/\norm{\xhat}$ at every angle $\theta > 0$. Only at $\theta = 0$ is its direction
+undefined: the angle has a corner there, as $\abs{e}$ has at $e = 0$.
+\end{enumerate}
+
+\begin{worked}[label={we:losses:samgrad}]{The gradient of the angle for pixel A}
+Continue \cref{we:losses:sam}: $a = 0.374166$, $b = 0.394588$, $s = 0.147$, $u = 0.995655$.
+
+\textbf{The first term of \cref{eq:losses:du}}, $x_c/(ab)$ with $ab = 0.147641$:
+\begin{align*}
+0.100/0.147641 &= 0.677317\\
+0.200/0.147641 &= 1.354633\\
+0.300/0.147641 &= 2.031950
+\end{align*}
+\textbf{The second term}, $s\,\hat{x}_c/(ab^3)$. First $b^3 = 0.394588^3 = 0.061437$, then
+$ab^3 = 0.374166 \times 0.061437 = 0.022988$, and $s/(ab^3) = 0.147/0.022988 = 6.39470$:
+\begin{align*}
+6.39470 \times 0.120 &= 0.767364\\
+6.39470 \times 0.180 &= 1.151047\\
+6.39470 \times 0.330 &= 2.110252
+\end{align*}
+\textbf{Subtract} to get $\partial u/\partial\xhat$:
+\begin{align*}
+0.677317 - 0.767364 &= -0.090048\\
+1.354633 - 1.151047 &= +0.203586\\
+2.031950 - 2.110252 &= -0.078302
+\end{align*}
+\textbf{The arccos factor.} $1 - u^2 = 1 - 0.991329 = 0.008671$; $\sqrt{0.008671} = 0.093116$;
+$-1/0.093116 = -10.7393$.
+
+\textbf{Multiply} to get $\partial\theta/\partial\xhat$:
+\begin{align*}
+-10.7393 \times (-0.090048) &= +0.96705\\
+-10.7393 \times (+0.203586) &= -2.18638\\
+-10.7393 \times (-0.078302) &= +0.84092
+\end{align*}
+\textbf{Interpret.} Gradient descent moves $\xhat$ \emph{against} the gradient: down in
+band 1, up in band 2, down in band 3. Compare the unit vectors: $\vect{x}/a = (0.267, 0.535,
+0.802)$ and $\xhat/b = (0.304, 0.456, 0.836)$. The reconstruction leans too far towards bands
+1 and 3 and not enough towards band 2; the gradient corrects exactly that.
+
+\textbf{Check the two facts.} The dot product with $\xhat$:
+$0.120(-0.090048) + 0.180(0.203586) + 0.330(-0.078302) = -0.010806 + 0.036645 - 0.025840 =
+-0.000001 \approx 0$. The length: $\sqrt{0.96705^2 + 2.18638^2 + 0.84092^2} = \sqrt{0.93519 +
+4.78026 + 0.70715} = \sqrt{6.42260} = 2.5343$, and $1/b = 1/0.394588 = 2.5343$.
+
+PyTorch's autograd through \code{torch.acos} in float64 returns $(0.96705, -2.18638,
+0.84092)$ \tagC; the real \code{SAMLoss} in float32 returns $(0.96701, -2.18630,
+0.84087)$ \tagC{} (\file{research/textbook/tools/compute_23-losses_output.txt}).
+\end{worked}
+
+\section{Why the code does not call arccos}\label{sec:losses:atan2}
+
+If the gradient's length is a tame $1/\norm{\xhat}$, what is the danger? The danger is in how a
+computer evaluates \cref{eq:losses:dtheta}. Automatic differentiation computes the two factors
+separately and then multiplies them. The arccos factor is evaluated from $u$ as computed in
+floating point, and close to $u = 1$ floating point cannot tell nearby angles apart.
+
+\paragraph{How coarse is float32 near 1?} A float32 number has 24 significant bits, so the gap
+between 1 and the next smaller representable number is $2^{-24} = 5.96 \times 10^{-8}$. For a
+small angle, $\cos\theta \approx 1 - \theta^2/2$. When $\theta^2/2$ is less than half the gap,
+$2.98 \times 10^{-8}$, the cosine rounds to exactly 1:
+\[
+\frac{\theta^2}{2} < 2.98\times 10^{-8} \iff \theta < \sqrt{5.96\times 10^{-8}} = 2.44 \times 10^{-4}\text{ rad}.
+\]
+Indeed, in float32 $\cos(3\times 10^{-4}) = 0.99999994$ but $\cos(2 \times 10^{-4}) = 1.0$
+exactly \tagC. Below about $2.4 \times 10^{-4}$ rad (0.014\textdegree) the cosine carries no
+information, and the computed $u$ is rounding noise that can even exceed 1.
+
+\begin{worked}[label={we:losses:nan}]{The naive formula producing NaN}
+Feed a perfect reconstruction, $\xhat = \vect{x}$, through
+\code{torch.acos(dot / (norm_x * norm_hat))} in float32 and ask for the gradient
+(\file{research/textbook/tools/compute_23-losses.py}).
+\begin{itemize}
+\item $\vect{x} = (0.2, 0.2, 0.2)$: the computed $u$ is $1.0000001$, above 1. arccos of it is
+NaN (``not a number''), and so is the gradient. With the usual guard \code{u.clamp(-1, 1)} the
+angle becomes 0 and the gradient becomes exactly 0 (a clamp passes no gradient once it is
+active), so training silently stops pushing.
+\item $\vect{x} = (0.25, 0.5, 0.125)$: $u$ comes out exactly $1.0$. arccos gives 0, but the
+factor $-1/\sqrt{1 - u^2}$ is $-\infty$ and $\partial u/\partial\xhat$ is 0, and $\infty \times 0$
+is NaN. The clamp does not help here.
+\end{itemize}
+One NaN in one pixel's gradient spreads through the optimiser into every parameter at the
+next step. And it appears precisely when the model has become good: late in a long, expensive
+run.
+\end{worked}
+
+\subsection{The atan2 formulation}
+
+\code{SAMLoss} (\file{app/foundation_models/components/sam_loss.py}) rewrites the angle with a
+sine as well as a cosine. With $N = \norm{\vect{x}}\norm{\xhat}$:
+\begin{align*}
+N\cos\theta &= \ip{\vect{x}}{\xhat} && \text{(the dot product)}\\
+N\sin\theta &= \sqrt{N^2 - \ip{\vect{x}}{\xhat}^2} && \text{(from $\sin^2\theta = 1 - \cos^2\theta$, times $N^2$)}\\
+\theta &= \operatorname{atan2}(N\sin\theta,\; N\cos\theta),
+\end{align*}
+where $\operatorname{atan2}(y, x)$ is the angle of the point $(x, y)$ measured from the positive
+$x$-axis, in $[0, \pi]$ when $y \ge 0$. Its derivatives, $\partial/\partial y = x/(x^2 + y^2)$
+and $\partial/\partial x = -y/(x^2 + y^2)$, are finite everywhere except at the origin.
+
+The code, with its guards:
+\begin{lstlisting}
+x_m  = x * mask                                                        # (B, 165, H, W)
+xh_m = x_hat * mask
+dot      = (xh_m * x_m).sum(dim=1, keepdim=True)                       # (B, 1, H, W)
+norm_hat = (xh_m * xh_m).sum(dim=1, keepdim=True).add(self.eps).sqrt() # guard 0
+norm_x   = (x_m * x_m).sum(dim=1, keepdim=True).add(self.eps).sqrt()
+cross_norm  = (norm_hat * norm_x).clamp(min=self.eps)                  # guard 1
+cos_term    = dot.clamp(-cross_norm, cross_norm)                       # guard 2
+sin_term_sq = (cross_norm ** 2 - cos_term ** 2).clamp(min=0)
+sin_term    = (sin_term_sq + self.eps).sqrt()                          # guard 3
+angles      = torch.atan2(sin_term, cos_term)                          # (B, 1, H, W), in [0, pi]
+\end{lstlisting}
+with $\varepsilon = 10^{-8}$ (\code{eps}, line 30).
+
+\begin{description}[style=nextline,leftmargin=1.2em]
+\item[Guard 0, $+\varepsilon$ inside each length.] A masked pixel is a zero vector; its length
+would be $\sqrt{0}$, whose derivative $1/(2\sqrt{0})$ is infinite.
+\item[Guard 1, \texttt{clamp(min=eps)} on the product of lengths.] Prevents a zero (or
+vanishing) $N$.
+\item[{Guard 2, clamp the dot product to $[-N, N]$.}] Mathematically $\abs{\ip{\vect{x}}{\xhat}}
+\le N$ (Cauchy--Schwarz); in floating point it can exceed it by a hair, as in
+\cref{we:losses:nan}, and then $N^2 - \text{dot}^2$ would be negative.
+\item[Guard 3, $+\varepsilon$ inside the sine's square root.] For a perfect reconstruction
+$N^2 - \text{dot}^2 = 0$, and $d\sqrt{v}/dv = 1/(2\sqrt{v})$ is infinite at $v = 0$: the same
+disease as arccos, one level down. Adding $\varepsilon$ keeps the sine term at least
+$\sqrt{10^{-8}} = 10^{-4}$, so the derivative of the square root is at most $1/(2 \times
+10^{-4}) = 5000$.
+\end{description}
+
+\begin{sourcenote}[: the module docstring, and the guard the course leaves out]
+The module docstring of \file{app/foundation_models/components/sam_loss.py} (line 9) still
+writes the loss as $\arccos\big(\ip{a}{b}/(\norm{a}\norm{b} + \varepsilon)\big)$; the code
+(lines 58--70) uses the atan2 form above, with the comment that it ``avoids arccos which has
+infinite gradient at $\pm 1$''. The code wins. The course (IW24) lists three guards; the code
+has a fourth, the $+\varepsilon$ inside each length on lines 55--56 (guard 0 above).
+\end{sourcenote}
+
+\begin{worked}[label={we:losses:atan2}]{The atan2 form on pixel A, and on a perfect reconstruction}
+\textbf{Pixel A.} $N = 0.147641$, dot $= 0.147$.
+\begin{align*}
+N^2 &= 0.147641^2 = 0.021798\\
+\text{dot}^2 &= 0.147^2 = 0.021609\\
+N^2 - \text{dot}^2 &= 0.000189\\
+\sqrt{0.000189} &= 0.013748\\
+\theta &= \operatorname{atan2}(0.013748,\ 0.147) = \arctan(0.013748/0.147)\\
+&= \arctan(0.093524) = 0.09325
+\end{align*}
+The same angle as arccos gave, with a safe derivative. (The $\varepsilon = 10^{-8}$ under the
+root changes the sine term only in the seventh decimal place here.)
+
+\textbf{A perfect reconstruction.} With $\xhat = \vect{x} = (0.1, 0.2, 0.3)$, $N = \norm{\vect{x}}^2
+= 0.14$ and $N^2 - \text{dot}^2 = 0$, so the sine term is $\sqrt{0 + 10^{-8}} = 10^{-4}$ and
+\[
+\theta = \operatorname{atan2}(10^{-4},\ 0.14) = \arctan(0.000714) = 0.000714 \text{ rad}.
+\]
+The loss never quite reaches zero: guard 3 sets a floor. The real \code{SAMLoss} returns
+$0.00084$ here \tagC{} (the floor plus float32 rounding) and a finite gradient; for
+$(0.2,0.2,0.2)$ and $(0.25,0.5,0.125)$, the two vectors that broke the naive formula in
+\cref{we:losses:nan}, it returns finite angles below $0.001$ rad and finite gradients \tagC.
+\end{worked}
+
+\paragraph{A side effect: the floor depends on brightness.} The floor is
+$\arctan\!\big(10^{-4}/\norm{\vect{x}}^2\big)$. For a real 165-band pixel at reflectance about
+0.2 \tagA{} (an assumed typical level), $\norm{\vect{x}}^2 \approx 165 \times 0.2^2 = 6.6$ and the
+floor is $10^{-4}/6.6 = 1.5 \times 10^{-5}$ rad, a thousandth of the 0.02--0.05 rad a good model
+reaches. A very dark pixel has a higher floor. This is a tiny breach of scale invariance,
+irrelevant to training, and the price of the guard.
+
+\subsection{Masking and averaging the angle}
+
+\begin{lstlisting}
+spatial_mask = mask[:, 0:1, :, :]                         # (B, 1, H, W)
+num_valid    = spatial_mask.sum().clamp(min=1)            # number of graded pixels, at least 1
+sam_loss     = (angles * spatial_mask).sum() / num_valid  # ()  mean angle over graded pixels
+\end{lstlisting}
+So the spectral-angle term is
+\begin{equation}\label{eq:losses:samloss}
+L_{\SAM} = \frac{1}{\abs{M}}\sum_{p \in M} \theta_p,
+\end{equation}
+the mean angle over the graded pixels. Unlike L1 it keeps the spatial shape and divides by an
+explicit count, which \code{clamp(min=1)} keeps from being zero.
+
+\subsection{Where arccos is fine}
+
+Two other places compute the spectral angle with plain arccos: the inferencer's
+\code{compute_anomaly_scores} and \code{_sam()} in
+\file{app/utils/anomaly_detection/scoring.py} (lines 118--128), the numpy version the product
+calls. Both run at inference, where no gradient is taken, so the infinite derivative never
+arises; only the domain clamp \code{np.clip(cos, -1, 1)} is needed. Numerical-stability
+requirements differ between the forward pass and the backward pass. The rounding floor near
+$u = 1$ still applies to those scores: an angle below about $2.4 \times 10^{-4}$ rad reads as 0
+in float32.
+
+\section{The combined loss and the ramp}\label{sec:losses:ramp}
+
+\subsection{The objective}
+
+\begin{definition}[Combined reconstruction loss]\index{combined loss}
+\begin{equation}\label{eq:losses:total}
+L(t) = L_1 + \lambda(t)\, L_{\SAM},
+\end{equation}
+with $L_1$ from \cref{eq:losses:l1}, $L_{\SAM}$ from \cref{eq:losses:samloss}, both over the
+same loss mask, and $\lambda(t)$ the \emph{SAM weight} at epoch index $t$
+(\code{sam_weight} in the code).
+\end{definition}
+
+Its gradient is the sum of the two gradients, the second scaled by $\lambda(t)$, because
+differentiation is linear: $\partial L/\partial\hat{x} = \partial L_1/\partial\hat{x} +
+\lambda(t)\,\partial L_{\SAM}/\partial\hat{x}$.
+
+\subsection{The ramp}
+
+$\lambda$ is not constant. From
+\file{app/foundation_models/trainers/hyperspectral_segformer_mae_trainer.py}, lines 197--204:
+\begin{lstlisting}
+def _get_sam_weight(self, epoch: int) -> float:
+    sam_max     = cfg.sam_weight
+    ramp_epochs = cfg.sam_ramp_epochs
+    if ramp_epochs <= 0:
+        return sam_max
+    return sam_max * min(1.0, epoch / ramp_epochs)
+\end{lstlisting}
+\begin{definition}[Linear ramp]\index{ramp}\index{SAM weight}
+With final weight $\lambda_{\max}$ (\code{sam_weight}) and ramp length $R$
+(\code{sam_ramp_epochs}),
+\begin{equation}\label{eq:losses:ramp}
+\lambda(t) = \lambda_{\max}\cdot\min\!\left(1, \frac{t}{R}\right), \qquad t = 0, 1, 2, \dots
+\end{equation}
+and $\lambda(t) = \lambda_{\max}$ for all $t$ if $R \le 0$.
+\end{definition}
+A straight line from 0 to $\lambda_{\max}$ over $R$ epochs, then flat forever. Three details
+from the source matter.
+\begin{itemize}
+\item $t$ is the zero-based \emph{epoch index}. The trainer sets \code{self._current_epoch =
+epoch} at the start of each epoch (line 53) from \code{range(start_epoch, num_epochs)}, and the
+log line prints \code{epoch + 1}. So the logged ``Epoch 1'' trains with $\lambda = 0$, and full
+strength arrives at logged epoch $R + 1$.
+\item $\lambda$ is updated once per epoch, not per step. Within an epoch it is constant, so the
+ramp is really a staircase of $R$ steps (\cref{fig:losses:ramp}).
+\item The fine-tuning configurations set \code{sam_ramp_epochs} to 0 (FT02c onwards), so they
+run at $\lambda_{\max} = 0.5$ from the first epoch: a model that already reconstructs well does
+not need the ramp. (FT01, FT02 and FT02b still had $R = 10$.)\newline
+\tagM{research/experiments/indradhanu-finetune/FT04-final-joint/config.json}
+\end{itemize}
+
+\subsection{Why ramp at all}
+
+At epoch 0 the parameters are random and the reconstructions have random shape, so the angle
+is large, about 0.3--0.4 rad \tagM{configs/hyperspectral_segformer_exp_2.json}, and its gradient
+points in a direction that has little to do with the more basic job of getting the levels
+roughly right. Optimising both from a random start is unstable; one tends to sabotage the other.
+The ramp says: learn the easy thing first. Early, $\lambda \approx 0$ and L1 leads; later, the
+shape constraint tightens on a model that already produces sensible magnitudes.
+
+The configuration names the failure mode of turning shape on too fast:
+\begin{lstlisting}[language={}]
+"L1_increases_when_SAM_ramp_starts": "SAM weight too high (try sam_weight=0.5)"
+\end{lstlisting}
+If the shape penalty is too strong, the model sacrifices brightness accuracy to satisfy it
+and L1 goes \emph{up}.
+
+\subsection{The two shipped configurations}
+
+\begin{center}
+\begin{tabular}{lll}
+\toprule
+setting & v0.1.0 & v0.2.0 \\
+\midrule
+\code{sam_weight} ($\lambda_{\max}$) & 1.0 & 0.5 \\
+\code{sam_ramp_epochs} ($R$) & 20 & 10 \\
+\code{mask_ratio} & 0.50 & 0.65 \\
+\code{compressed_channels} ($D$) & 24 & 32 \\
+\code{drop_rate} & 0.3 & 0.4 \\
+\code{learning_rate} & $10^{-4}$ & $10^{-3}$ \\
+\code{num_epochs} & 500 & 200 \\
+\bottomrule
+\end{tabular}
+\end{center}
+Values from \file{configs/hyperspectral_segformer_exp_1.json} and
+\file{configs/hyperspectral_segformer_exp_2.json} \tagM{configs/hyperspectral_segformer_exp_2.json}.
+v0.2.0 halved both the final weight and the ramp length: it reaches full strength twice as
+fast, but full strength is half as strong.
+
+\begin{worked}[label={we:losses:ramp}]{The v0.2.0 ramp, epoch by epoch}
+With $\lambda_{\max} = 0.5$ and $R = 10$, $\lambda(t) = 0.5\min(1, t/10)$.
+\begin{center}
+\begin{tabular}{rrrrr}
+\toprule
+epoch index $t$ & logged epoch & $t/10$ & $\min(1, t/10)$ & $\lambda$\\
+\midrule
+0 & 1 & 0.0 & 0.0 & 0.00\\
+1 & 2 & 0.1 & 0.1 & 0.05\\
+2 & 3 & 0.2 & 0.2 & 0.10\\
+5 & 6 & 0.5 & 0.5 & 0.25\\
+9 & 10 & 0.9 & 0.9 & 0.45\\
+10 & 11 & 1.0 & 1.0 & 0.50\\
+50 & 51 & 5.0 & 1.0 & 0.50\\
+199 & 200 & 19.9 & 1.0 & 0.50\\
+\bottomrule
+\end{tabular}
+\end{center}
+Row $t = 5$ in full: $5/10 = 0.5$; $\min(1, 0.5) = 0.5$; $0.5 \times 0.5 = 0.25$.
+\end{worked}
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}
+\begin{axis}[width=0.9\linewidth, height=5.2cm, xmin=0, xmax=30, ymin=0, ymax=1.08,
+  xlabel={epoch index $t$}, ylabel={SAM weight $\lambda(t)$}, grid=major, grid style={gray!20},
+  legend pos=south east, legend style={font=\small}]
+\addplot[spec, very thick, const plot] coordinates {(0,0) (1,0.05) (2,0.10) (3,0.15) (4,0.20)
+  (5,0.25) (6,0.30) (7,0.35) (8,0.40) (9,0.45) (10,0.5) (30,0.5)};
+\addlegendentry{v0.2.0: $\lambda_{\max} = 0.5$, $R = 10$}
+\addplot[spat, very thick, dashed, const plot] coordinates {(0,0) (1,0.05) (2,0.10) (3,0.15)
+  (4,0.20) (5,0.25) (6,0.30) (7,0.35) (8,0.40) (9,0.45) (10,0.50) (11,0.55) (12,0.60) (13,0.65)
+  (14,0.70) (15,0.75) (16,0.80) (17,0.85) (18,0.90) (19,0.95) (20,1.0) (30,1.0)};
+\addlegendentry{v0.1.0: $\lambda_{\max} = 1.0$, $R = 20$}
+\addplot[loss, thin, domain=0:10] {0.05*x};
+\end{axis}
+\end{tikzpicture}
+\caption{The SAM-weight ramp of both shipped configurations, drawn to scale from
+\cref{eq:losses:ramp}. The weight is held for a whole epoch, so each ramp is a staircase; the
+thin amber line is the formula $\lambda = 0.05\,t$ that the stairs follow. Both configurations
+happen to rise at the same rate, 0.05 per epoch; v0.2.0 stops at half the height. After the
+ramp both stay flat for the rest of training (to $t = 199$ or 499).}
+\label{fig:losses:ramp}
+\end{figure}
+
+\coursefig[0.8\linewidth]{iw-25-ramp}{The course's drawing of the v0.2.0 ramp: the weight on the
+angle rises linearly from 0 at epoch index 0 to 0.5 at epoch index 10 and then stays flat, so
+L1 leads early training and the angle is phased in.}{fig:losses:courseramp}
+
+\subsection{After the ramp, the angle dominates}
+
+\begin{worked}[label={we:losses:combined}]{The combined loss at the configuration's epoch-100 baseline}
+The configuration's baseline at epoch 100 is about $L_1 = 0.010$ and $L_{\SAM} = 0.060$
+rad \tagM{configs/hyperspectral_segformer_exp_2.json} (midpoints of its ranges). At $t = 100$,
+$\lambda = 0.5$.
+\begin{align*}
+L &= 0.010 + 0.5 \times 0.060\\
+&= 0.010 + 0.030\\
+&= 0.040
+\end{align*}
+Shares: $0.010/0.040 = 25\%$ from L1, $0.030/0.040 = 75\%$ from the angle.
+\end{worked}
+
+So after the ramp the shape term carries three times the weight of the brightness term. The
+reason is units. L1 is in reflectance and a good value is about 0.01; the angle is in radians
+and a good value is about 0.06, six times larger. Multiplying by $\lambda = 0.5$ leaves it three
+times larger. $\lambda$ is doing unit conversion as much as weighting: for a hyperspectral model,
+spectral shape is meant to be the dominant signal, and it is.
+
+\subsection{Watch the components, not the sum}
+
+During the ramp, $\lambda$ grows, so the combined number can rise while both components fall.
+\begin{center}
+\begin{tabular}{rrrrl}
+\toprule
+$t$ & $L_1$ & $L_{\SAM}$ & $\lambda$ & combined\\
+\midrule
+0 & 0.090 & 0.35 & 0.00 & $0.090 + 0.00 \times 0.35 = 0.090$\\
+10 & 0.040 & 0.20 & 0.50 & $0.040 + 0.50 \times 0.20 = 0.040 + 0.100 = 0.140$\\
+\bottomrule
+\end{tabular}
+\end{center}
+These are illustrative values inside the configuration's baseline
+ranges \tagA. L1 more than halved, the angle nearly halved, and the combined loss rose by
+56\% ($0.140/0.090 = 1.56$). The trainer logs the components separately for this reason
+(\code{L1: ... | SAM: ... rad (... deg) | lambda: ...}, lines 65--68) and mirrors them to Weights
+and Biases as \code{train/l1_loss}, \code{train/sam_loss}, \code{train/sam_loss_deg} and
+\code{train/sam_weight}.
+
+\begin{drift}
+The configuration's baseline table for v0.1.0's schedule (from
+\file{configs/hyperspectral_segformer_exp_2.json}, \code{_loss_reference}; its $\lambda$ column
+reflects v0.1.0's 20-epoch ramp to 1.0) \tagM{configs/hyperspectral_segformer_exp_2.json}:
+
+\begin{center}
+\begin{tabular}{rlll}
+\toprule
+epoch & $L_1$ & angle & combined\\
+\midrule
+0 & 0.08--0.10 & 0.3--0.4 rad (20--25\textdegree) & 0.08--0.10\\
+10 & 0.03--0.05 & 0.15--0.25 rad (10--15\textdegree) & 0.10--0.15\\
+20 & 0.02--0.03 & 0.08--0.15 rad (5--8\textdegree) & 0.10--0.15\\
+100 & 0.005--0.015 & 0.04--0.08 rad (2--5\textdegree) & 0.04--0.08\\
+500 & 0.003--0.008 & 0.02--0.05 rad (1--3\textdegree) & 0.02--0.05\\
+\bottomrule
+\end{tabular}
+\end{center}
+The combined column rises from epoch 0 to epoch 10 and then falls: the ramp artefact, in the
+project's own documented baselines. The same file's red flags: L1 not below 0.05 by epoch 10
+(learning rate too low, or data loading); angle stuck above 0.3 after epoch 30 (bottleneck $D$
+too narrow, try 32); L1 rising when the ramp starts (\code{sam_weight} too high, try 0.5);
+training loss falling but validation not (overfitting). Two of these were hit and fixed between
+v0.1 and v0.2: $D$ went 24 to 32 and \code{sam_weight} 1.0 to 0.5.
+
+The v0.2.0 checkpoint chosen for the product had validation loss 0.04349, and the v0.1.0
+family's best validation L1 was 0.077 at epoch 92 \tagM{research/model_break_down/05_hyperspectral_segformer_mae.md}.
+\end{drift}
+
+\subsection{What \texttt{val\_loss} means, and why it cannot be compared across models}
+
+A checkpoint's \code{val_loss} of 0.04349 is $L_1 + 0.5\,L_{\SAM}$ on the validation patches. It
+is not an accuracy, not a percentage and not an L1. A thermal model's \code{val_loss} (Chakshu)
+is pure L1 on one band in degrees Celsius: different terms, different units. Comparing the two
+numbers is meaningless; models are compared on detection scores (\cref{ch:measures}).
+
+\subsection{Validation grades every pixel exactly once}
+
+Training hides a random 65\% of the valid tokens, so the training loss depends on which tokens
+happened to be hidden. Validation removes that luck: \code{compute_validation_loss} (lines
+286--342) draws one random half-split of the tokens and runs the model twice, hiding each half
+once:
+\begin{lstlisting}
+rand_mask   = (torch.rand(1, N, device=self.device) > 0.5).float()   # (1, N)
+pred_mask_1 = token_validity * (1.0 - rand_mask)    # hide where rand_mask = 0
+pred_mask_2 = token_validity * rand_mask            # hide the exact complement
+x_hat = x_hat_1 * pass1_pixels + x_hat_2 * pass2_pixels   # each pixel from the pass that hid it
+\end{lstlisting}
+Every valid pixel is then graded once, from a prediction that did not see it, over the eroded
+mask alone (no prediction-mask factor). The number is comparable across epochs, which is what
+choosing a checkpoint requires.
+
+\begin{sourcenote}[: the ramped weight in validation]
+In \file{app/foundation_models/trainers/hyperspectral_segformer_mae_trainer.py} (line 337), the
+validation loss also uses the \emph{ramped} weight $\lambda(t)$. That makes validation numbers
+from different epochs of the ramp incomparable for the same reason the training sum is: at $t =
+0$ the score is pure L1 and looks best of all. For v0.2.0 the ramp ends at $t = 10$, long
+before the chosen checkpoint, so it did not bite. In the SpectralEarth trainer, whose validation
+score drives early stopping and \code{best.pt}, it did bite, and that trainer now scores
+validation at the full weight from the first epoch
+(\file{app/foundation_models/trainers/spectral_stem_mae_trainer.py}, lines 337--341). The story
+is told in \cref{ch:pretrain}.
+\end{sourcenote}
+
+\begin{keypoint}
+A loss is a marking scheme: L1 marks levels, the angle marks shape, and $\lambda(t)$ both
+schedules when shape starts to count and converts radians into the same currency as
+reflectance.
+\end{keypoint}
+
+\begin{confusions}
+\confusion{Why average bands first and then pixels? Is averaging an average not wrong?}{It
+would be wrong if the groups had different sizes. Every pixel has the same 165 bands, so the
+mean of per-pixel means equals the overall mean (\cref{sec:losses:l1}). It is done this way so
+that a per-pixel value exists for the mask to select.}
+\confusion{Does the loss include pixels the model could see?}{No. The pixel prediction mask
+excludes them; grading them would reward copying the input.}
+\confusion{Is the spectral angle a distance?}{Not in the usual sense. It is an angle, bounded in
+$[0, \pi]$, and two spectra that differ enormously in level can have angle 0
+(\cref{we:losses:double}).}
+\confusion{The derivative of arccos is infinite at 1. Does the angle's gradient really blow up?}{In
+exact arithmetic, no: the gradient has length $1/\norm{\xhat}$ at every nonzero angle
+(\cref{sec:losses:samgrad}). The trouble is computing it as a product of an exploding factor
+and a vanishing factor in float32, where $u$ near 1 is rounding noise (\cref{we:losses:nan}).}
+\confusion{Would normalising each spectrum and then taking L1 give the same thing as the
+angle?}{Close, but not identical, and you would lose the brightness information entirely.
+Keeping two terms lets you weight them separately.}
+\confusion{Why radians and not degrees?}{Radians are what the trigonometric functions produce.
+The trainer converts to degrees only when it logs.}
+\confusion{Is a lower combined loss always better?}{Only between epochs with the same $\lambda$.
+During the ramp the weighting changes, so the combined number is not comparable epoch to
+epoch.}
+\confusion{Is the L1 loss the same as the L1 anomaly score?}{Same formula, different job. Here it
+is averaged into one number to train with; at scoring time it is kept per pixel as a map
+(\cref{ch:inference}).}
+\end{confusions}
+
+\begin{checkyourself}
+\item\label{ex:losses:1} By hand: compute the masked L1 for two graded pixels with two bands
+each, $\vect{x}_A = (0.10, 0.20)$, $\xhat_A = (0.13, 0.16)$ and $\vect{x}_B = (0.30, 0.05)$,
+$\xhat_B = (0.30, 0.09)$, and give the gradient $\partial L_1/\partial\xhat$ for all four
+entries.
+\item\label{ex:losses:2} By hand: compute the spectral angle between $\vect{x} = (1, 0)$ and
+$\xhat = (1, 1)$ in radians and degrees, then compute $\partial\theta/\partial\xhat$ from
+\cref{eq:losses:dtheta}, and check that it is perpendicular to $\xhat$ and has length
+$1/\norm{\xhat}$.
+\item\label{ex:losses:3} Explain why the derivative of arccos near $u = 1$ matters
+\emph{more} as training succeeds, and why, nonetheless, the true gradient of the angle does not
+blow up. What does go wrong in float32, and which guard in \code{SAMLoss} prevents it?
+\item\label{ex:losses:4} For v0.2.0 ($\lambda_{\max} = 0.5$, $R = 10$): compute $\lambda$ at
+epoch index 4, and the combined loss at epoch index 50 if $L_1 = 0.02$ and $L_{\SAM} = 0.12$.
+Which term contributes more, and by what factor?
+\item\label{ex:losses:5} The five observations $(0.10, 0.11, 0.12, 0.13, 0.90)$ of
+\cref{we:losses:median}: compute $S_1(c)$ and $S_2(c)$ at $c = 0.12$ and at $c = 0.272$, and
+say which $c$ each loss prefers.
+\item\label{ex:losses:6} Why must the token-to-pixel upsampling of the prediction mask be
+nearest-neighbour? What exactly goes wrong with bilinear?
+\end{checkyourself}
+
+\nextchapter{ch:trainloop}
+\par\endgroup

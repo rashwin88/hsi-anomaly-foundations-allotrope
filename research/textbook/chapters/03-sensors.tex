@@ -1,0 +1,601 @@
+\chapter{Five sensors and the 165-band grid}\label{ch:sensors}
+
+\begin{onething}
+Five sensors hand you five incompatible things, and one decision fixes the worst of the
+mismatch: resample every hyperspectral sensor onto one list of wavelengths, $10$ nm apart from
+$460$ to $2{,}450$ nm with four atmospheric windows removed. That list has exactly $165$ entries,
+and you can derive the $165$ on paper.
+\end{onething}
+
+\section{Why this chapter exists}\label{sec:sensors:motivation}
+
+\Cref{ch:light} described a hyperspectral cube as if every sensor produced the same thing. They
+do not. The five sensors this product accepts disagree about file format, about the order of the
+axes in memory, about how stored integers become physical units, about which quality
+information is shipped, and, most damagingly, about \emph{which wavelengths} they measure.
+
+The last disagreement is the one that matters for a model. Band number $47$ of one sensor and band
+number $47$ of another sit at different wavelengths. A network has one set of learned weights per
+input position, so if you hand it both sensors unchanged, the weights for position $47$ have to
+learn two contradictory things. The fix is a shared list of wavelengths, the
+\textbf{common grid}, and the second half of this chapter derives it. The first half is the mess
+that the fix hides, because every awkward corner of the ingestion code exists to hide it.
+
+\section{The roster}\label{sec:sensors:roster}
+
+\begin{table}[htbp]\centering
+\caption{The five sensors. Band counts drift as products are reprocessed; the structural
+differences do not. Sources: module docstrings of the dataset builders and
+\texttt{docs/03-data-pipeline.md}.}\label{tab:sensors:roster}
+\small
+\begin{tabular}{@{}lllll@{}}\toprule
+Sensor & Kind & Bands & Upload & Units after onboarding\\\midrule
+PRISMA & hyperspectral & $239$ ($66 + 173$) & one \texttt{.he5} file & reflectance\\
+EnMAP & hyperspectral & $224$ & a folder & reflectance\\
+AVIRIS-NG & hyperspectral & about $425$ & a folder & reflectance\\
+Landsat 9 & thermal & $1$ (band B10) & one \texttt{.tif} file & degrees Celsius\\
+HotSat-1 & thermal & $1$ & a folder & raw DN\\\bottomrule
+\end{tabular}
+\end{table}
+
+VNIR and SWIR are the names of a hyperspectral sensor's two detectors: one array for the visible
+and near infrared, one for the shortwave infrared (\cref{tab:light:ranges}). PRISMA stores the
+two as separate datasets inside one file, and its builder stitches them into one cube. For
+AVIRIS-NG the fine-tuning shards use the $372$ bands its bad-band list marks good\tagM{docs/03-data-pipeline.md}.
+
+\emph{File shape.} PRISMA and Landsat are single files; EnMAP, AVIRIS-NG and HotSat-1 are folders
+in which the cube, the masks and the metadata are separate files. So ``the path to a scene''
+sometimes means a file and sometimes a directory, resolved per sensor in
+\file{backend/allotrope/sensors/source_path.py}.
+
+\section{Three ways to lay a cube out in memory}\label{sec:sensors:layouts}
+
+A computer's memory is one long line of numbers. A three-index array has to be flattened onto
+that line, and the order in which the three indices are flattened is called its
+\textbf{layout}\index{layout (array)}. Hyperspectral data uses three.
+
+\begin{table}[htbp]\centering
+\caption{The three cube layouts.}\label{tab:sensors:layouts}
+\small
+\begin{tabular}{@{}llp{0.22\linewidth}p{0.24\linewidth}@{}}\toprule
+Layout & Axes & Contiguous in memory & Who uses it\\\midrule
+BSQ, band-sequential & \shape{(C, H, W)} & one whole band image & EnMAP, Landsat, every model\\
+BIL, band-interleaved-by-line & \shape{(H, C, W)} & one image row of one band & PRISMA (native)\\
+BIP, band-interleaved-by-pixel & \shape{(H, W, C)} & one pixel's whole spectrum & visualisation, spectral matching\\\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Where an element lives: the offset formula}
+
+NumPy, PyTorch and this codebase store arrays in \textbf{row-major}\index{row-major order}
+order: the \emph{last} index changes fastest. For an array of shape \shape{(A, B, D)}, the
+element at index $(a, b, d)$ sits at position
+\begin{equation}\label{eq:sensors:offset}
+\text{offset}(a, b, d) = a \cdot (B \cdot D) + b \cdot D + d
+\end{equation}
+counted from $0$. Read it as a mileage count: to reach element $(a,b,d)$ you first skip $a$ whole
+blocks of size $B\cdot D$, then $b$ rows of size $D$, then $d$ single numbers. The three layouts
+are three choices of which cube index plays $a$, $b$ and $d$:
+\begin{align*}
+\text{BSQ } (C, H, W):\quad &\text{offset} = c\,HW + i\,W + j,\\
+\text{BIL } (H, C, W):\quad &\text{offset} = i\,CW + c\,W + j,\\
+\text{BIP } (H, W, C):\quad &\text{offset} = i\,WC + j\,C + c.
+\end{align*}
+
+\begin{worked}[label={we:sensors:offset}]{One element, three addresses}
+The cube of \cref{we:light:cube} has $C = 3$, $H = 2$, $W = 2$. Find where the element
+``band $c=1$, row $i=0$, column $j=1$'' (the value $0.30$) lives in each layout. Do it on paper.
+
+BSQ: $HW = 2 \times 2 = 4$, so
+\[ \text{offset} = 1 \times 4 + 0 \times 2 + 1 = 4 + 0 + 1 = 5. \]
+BIL: $CW = 3 \times 2 = 6$, so
+\[ \text{offset} = 0 \times 6 + 1 \times 2 + 1 = 0 + 2 + 1 = 3. \]
+BIP: $WC = 2 \times 3 = 6$, so
+\[ \text{offset} = 0 \times 6 + 1 \times 3 + 1 = 0 + 3 + 1 = 4. \]
+The same number lives at position $5$, $3$ or $4$ depending on the layout. Nothing in the file
+says which layout it is; the reader has to know.
+\end{worked}
+
+\begin{worked}[label={we:sensors:misread}]{Reading BIL as if it were BSQ}
+Write out the whole BIL memory line of that cube. BIL loops over rows $i$ (outer), then bands $c$,
+then columns $j$ (inner). Row $0$: band $0$ gives $0.03, 0.05$; band $1$ gives $0.20, 0.30$;
+band $2$ gives $0.14, 0.10$. Row $1$: $0.05, 0.03$; $0.30, 0.20$; $0.14, 0.10$. So memory holds
+\[ 0.03,\ 0.05,\ 0.20,\ 0.30,\ 0.14,\ 0.10,\ 0.05,\ 0.03,\ 0.30,\ 0.20,\ 0.14,\ 0.10. \]
+A reader who wrongly assumes BSQ takes the first $HW = 4$ numbers as band $0$:
+\[ \text{``band 0''} = \begin{pmatrix} 0.03 & 0.05\\ 0.20 & 0.30\end{pmatrix}. \]
+Its bottom row is really near-infrared data. Every ``band'' it builds is a mixture of rows of
+different bands, and on a real scene the result looks like plausible but wrong static. If a cube
+ever looks like structured noise, check the axis order before suspecting the data.
+\end{worked}
+
+The fix is a \textbf{transpose}\index{transpose (axes)}: reorder the axes without changing any
+value. BIL \shape{(H, C, W)} to BSQ \shape{(C, H, W)} swaps the first two axes, in NumPy
+\code{np.transpose(cube, (1, 0, 2))}. The codebase does it in
+\code{ImageCubeOperations.convert_cube}
+(\file{app/utils/image_transformation/image_cube_operations.py}) with a permutation of the axes.
+
+The layouts are not arbitrary. BIP puts one pixel's whole spectrum next to itself in memory, so a
+per-pixel spectral calculation is a fast linear walk; BSQ puts a whole band image together, so a
+spatial filter over one band is. Choosing the wrong one costs nothing in correctness and a great
+deal in speed.
+
+\section{From stored integers to physical units}\label{sec:sensors:calibration}
+
+Every sensor stores integers. There is no shared formula for turning them into physics.
+
+\paragraph{EnMAP.} One uniform gain for all $224$ bands, set as \code{GAIN: float = 0.0001} in
+the EnMAP reflectance transformer
+\tagM{enmap_l2a_dn_to_surface_reflectance_transformer.py}:
+\begin{equation}\label{eq:sensors:enmap}
+\rho = \mathrm{DN} \times 0.0001.
+\end{equation}
+
+\paragraph{PRISMA.} A per-detector linear map read from the file's own metadata
+(\file{app/utils/data_transformations/prs_l2d_dn_to_surface_reflectance_transformer.py}):
+\begin{equation}\label{eq:sensors:prisma}
+\rho = \frac{\mathrm{DN}}{65535}\,\bigl(\mathrm{L2ScaleMax} - \mathrm{L2ScaleMin}\bigr) + \mathrm{L2ScaleMin}.
+\end{equation}
+$65535 = 2^{16} - 1$ is the largest 16-bit unsigned integer, so $\mathrm{DN}/65535$ runs from $0$
+to $1$, and the two scale attributes stretch that onto the reflectance range the provider chose
+for this file.
+
+\paragraph{Landsat 9.} The straight line of \cref{eq:light:landsat}, to Celsius.
+
+\paragraph{HotSat-1.} No conversion: it ships raw 14-bit digital numbers around $5{,}000$ with a
+spread of about $400$\tagM{app/models/training/inference_config.py}. \Cref{ch:bandpipeline} shows
+what that does to a model fitted on other units.
+
+\begin{worked}[label={we:sensors:dn}]{Two reflectance conversions}
+\emph{EnMAP.} A pixel stores $\mathrm{DN} = 4{,}250$. By \cref{eq:sensors:enmap},
+\[ \rho = 4{,}250 \times 0.0001 = 0.425. \]
+That is $42.5\%$ reflectance, plausible for bright bare soil or a light roof; vegetation in red
+light would be far lower, around $0.05$.
+
+\emph{PRISMA.} Take $\mathrm{L2ScaleMin} = 0$ and $\mathrm{L2ScaleMax} = 0.7$ (illustrative
+values\tagA; each real file carries its own). A pixel stores $\mathrm{DN} = 20{,}000$. Step by step:
+\begin{align*}
+\mathrm{DN}/65535 &= 20{,}000/65{,}535 \approx 0.30518,\\
+\mathrm{L2ScaleMax} - \mathrm{L2ScaleMin} &= 0.7 - 0 = 0.7,\\
+0.30518 \times 0.7 &\approx 0.21363,\\
+\rho &= 0.21363 + 0 \approx 0.2136.
+\end{align*}
+\end{worked}
+
+\section{Quality information, and reading bits}\label{sec:sensors:quality}
+
+The sensors also disagree about which quality information they ship. EnMAP ships ready-made masks
+for cloud, cirrus, haze, cloud shadow and snow, one \shape{(H, W)} layer each. PRISMA's L2D
+product ships none. Landsat ships one integer layer, \code{QA_PIXEL}, in which each \emph{bit}
+is a separate yes/no flag. That asymmetry is why the band-filter setting
+\code{quality_masks_to_apply} exists and applies to EnMAP alone (\cref{ch:bandpipeline}).
+
+\begin{definition}[Bit flag]\index{bit flag}
+An integer written in base $2$ is a row of binary digits (bits), bit $k$ worth $2^k$. A
+\textbf{bit flag} uses bit $k$ as a separate yes/no answer. To read bit $k$ of a value $q$, shift
+$q$ right by $k$ places (divide by $2^k$ and drop the remainder) and keep the last bit (the
+remainder on division by $2$). In code: \code{(q >> k) & 1}.
+\end{definition}
+
+The Landsat builder (\file{app/utils/dataset_builder/landsat_dataset_builder.py}, lines
+187--207) marks a pixel unusable if any of bits $0$ (fill), $1$ (dilated cloud), $3$ (cloud),
+$4$ (cloud shadow) or $15$ (high bit of the cirrus confidence) is set.
+
+\begin{worked}[label={we:sensors:qa}]{Unpacking two QA values}
+Take two example values\tagA, $q = 21{,}824$ and $q = 22{,}280$. First write $21{,}824$ as a sum of
+powers of two, subtracting the largest power that fits each time:
+\begin{align*}
+21{,}824 - 16{,}384 &= 5{,}440 \quad (2^{14}),\\
+5{,}440 - 4{,}096 &= 1{,}344 \quad (2^{12}),\\
+1{,}344 - 1{,}024 &= 320 \quad (2^{10}),\\
+320 - 256 &= 64 \quad (2^{8}),\\
+64 - 64 &= 0 \quad (2^{6}).
+\end{align*}
+So bits $14, 12, 10, 8, 6$ are set. None of bits $0, 1, 3, 4, 15$ is set, so the pixel is
+\emph{valid}. (Bit $6$ is the ``clear'' flag.)
+
+Now $22{,}280$:
+\begin{align*}
+22{,}280 - 16{,}384 &= 5{,}896 \quad (2^{14}),\\
+5{,}896 - 4{,}096 &= 1{,}800 \quad (2^{12}),\\
+1{,}800 - 1{,}024 &= 776 \quad (2^{10}),\\
+776 - 512 &= 264 \quad (2^{9}),\\
+264 - 256 &= 8 \quad (2^{8}),\\
+8 - 8 &= 0 \quad (2^{3}).
+\end{align*}
+Bit $3$ (cloud) is set, so the pixel is \emph{flagged}. Check bit $3$ the way the code does:
+$22{,}280 \gg 3$ is $\lfloor 22{,}280/8 \rfloor = 2{,}785$, and $2{,}785$ is odd, so
+$2{,}785 \mathbin{\&} 1 = 1$.
+\end{worked}
+
+\section{How the code hides the differences}\label{sec:sensors:helpers}
+
+Two layers keep sensor-specific knowledge in one place.
+
+\begin{itemize}
+\item A \textbf{FileHelper}\index{FileHelper} wraps one physical file format and hands back raw
+arrays and metadata: \code{HE5Helper} (PRISMA), \code{TIFHelper} (Landsat), \code{EnmapHelper},
+\code{ENVIHelper} (AVIRIS-NG), \code{HotSatHelper}.
+\item A \textbf{template}\index{template (file)} is a dictionary telling a helper where each
+logical component lives inside the file, by one of three strategies
+(\file{app/models/hyperspectral_concepts/references.py}): \code{FILE_REFERENCE} (an internal path
+inside the container, such as PRISMA's SWIR cube dataset), \code{ROOT_METADATA_FIELD} (a root-level
+attribute, such as PRISMA's list of SWIR centre wavelengths) and \code{DIRECT_PROPERTY_DEFINITION}
+(a property on the opened dataset, such as rasterio's \code{crs}).
+\end{itemize}
+Templates are \emph{injected, not looked up}: the helper never contains a sensor-specific path,
+which is what lets one contract serve HDF5, GeoTIFF and ENVI files. Only PRISMA, Landsat and
+EnMAP have templates; AVIRIS-NG and HotSat-1 parse their own sidecar files, an inconsistency the
+source notes honestly.
+
+Three traps will each cost you an afternoon.
+\begin{itemize}
+\item \textbf{rasterio band indices start at 1.} Every other array in the codebase counts from
+$0$. Asking rasterio for band $0$ is an error.
+\item \textbf{PRISMA keeps its bad bands.} A band the sensor flagged unusable still occupies a
+slice of the cube, with $\mathrm{FWHM} = 0.0$. Filter on the validity flag before trusting
+anything about a band.
+\item \textbf{The AVIRIS-NG sample cubes are not in the repository.}
+\file{samples/aviris_samples/} holds the ENVI \code{.hdr} headers and \code{.sha256} checksums;
+the \code{.bin} data files are absent, so the AVIRIS-NG path cannot run locally without them.
+\end{itemize}
+
+\section{Sensors that do not agree on wavelengths}\label{sec:sensors:disagree}
+
+Now the disagreement that matters for a model. PRISMA, EnMAP and AVIRIS-NG all ``measure the
+spectrum'', but at different wavelengths, with different spacing and different totals. In made-up
+but representative numbers\tagA:
+\begin{center}
+\begin{tabular}{@{}ll@{}}
+PRISMA & \dots, $1{,}000$, $1{,}012$, $1{,}024$, \dots\ nm\\
+EnMAP & \dots, $1{,}003$, $1{,}011$, $1{,}019$, \dots\ nm\\
+AVIRIS-NG & \dots, $1{,}001$, $1{,}006$, $1{,}011$, \dots\ nm
+\end{tabular}
+\end{center}
+Training data is the bottleneck for a model. One model per sensor gives each model a third of the
+data, triples the work of training and maintenance, and makes every new sensor a new model. One
+model for all three gives it all the data, and lets a new sensor join without retraining, but only
+if position $c$ of the input means the same wavelength for every sensor.
+
+The fix is to agree, once, on a fixed list of wavelengths, and to \textbf{resample}%
+\index{resampling} every sensor onto it before anything else touches the data. Resampling means:
+``you measured at $1{,}001$ and $1{,}006$; I need a value at $1{,}000$; estimate one from your
+neighbours''. The estimating is interpolation, derived in \cref{ch:bandpipeline}. This chapter
+builds the list.
+
+\begin{analogy}
+Three weather stations log temperature at different times: one at 06:07, 06:19, 06:31; another at
+06:03, 06:11, 06:19; a third every five minutes. To put all three on one chart you agree on the
+times you will report (06:00, 06:10, 06:20, \dots) and estimate each station's temperature at
+those times from its nearest readings. Two decisions remain: how far apart the reporting times
+are (not finer than the slowest station's readings, or you invent detail), and which times to
+leave out entirely (say, the hour each night when a station is switched off, because any value
+reported there would be made up). The common grid makes exactly these two decisions for
+wavelengths.
+\end{analogy}
+
+\section{Building the grid}\label{sec:sensors:grid}
+
+The list is \code{DEFAULT_COMMON_WAVELENGTH_GRID} in \file{app/models/dataset/vendables.py},
+built by this function (lines 35--62, docstring trimmed):
+\begin{lstlisting}
+def build_common_wavelength_grid(start_nm=460.0, end_nm=2450.0,
+                                 spacing_nm=10.0, exclusion_ranges=None):
+    if exclusion_ranges is None:
+        exclusion_ranges = [
+            (0, 450),       # low SNR
+            (912, 978),     # water vapor
+            (1131, 1152),   # water vapor
+            (1350, 1450),   # water vapor absorption
+            (1800, 1950),   # water vapor + CO2
+        ]
+    full_grid = np.arange(start_nm, end_nm + spacing_nm / 2, spacing_nm)  # (200,)
+    mask = np.ones(len(full_grid), dtype=bool)
+    for lo, hi in exclusion_ranges:
+        mask &= ~((full_grid >= lo) & (full_grid <= hi))   # drop lo <= x <= hi
+    return full_grid[mask]                                 # (165,)
+\end{lstlisting}
+Two decisions, then: a ladder of evenly spaced wavelengths, and a list of ranges cut out of it.
+Each can be counted by hand.
+
+\subsection{Step 1: the ladder, and the fencepost formula}
+
+The ladder starts at $460$, steps by $10$, and stops at $2{,}450$:
+\[ 460,\ 470,\ 480,\ \dots,\ 2{,}440,\ 2{,}450. \]
+How many rungs? Number them: the rung at wavelength $x$ is rung number $k = (x - 460)/10$, so
+$460$ is rung $0$, $470$ is rung $1$, and $2{,}450$ is rung $(2{,}450 - 460)/10 = 199$. Rungs
+$0$ to $199$ are $200$ rungs. In general:
+\begin{equation}\label{eq:sensors:fencepost}
+\text{number of rungs} = \frac{\text{last} - \text{first}}{\text{step}} + 1.
+\end{equation}
+The ``$+1$'' is the \textbf{fencepost}\index{fencepost formula} correction: a fence $10$ metres long
+with a post every metre has $11$ posts, because the division counts gaps, not posts.
+\begin{align*}
+\frac{2{,}450 - 460}{10} + 1 &= \frac{1{,}990}{10} + 1\\
+&= 199 + 1\\
+&= 200 \text{ rungs.}
+\end{align*}
+
+\begin{sourcenote}[: the half-step in \texttt{np.arange}]
+\code{np.arange(start, stop, step)} stops \emph{before} \code{stop}, so
+\code{np.arange(460, 2450, 10)} would end at $2{,}440$ and have $199$ entries. Adding half a
+step makes the limit $2{,}455$, which includes $2{,}450$ without adding $2{,}460$. Verified:
+\code{len(np.arange(460.0, 2450.0, 10.0))} is $199$ and the code's ladder has $200$ entries
+(\file{research/textbook/tools/compute_sensors_output.txt}).
+\end{sourcenote}
+
+\subsection{Step 2: count the rungs inside each window}
+
+The atmosphere is not transparent. At some wavelengths water vapour and carbon dioxide absorb the
+light almost completely before it reaches the satellite; a band there measures noise, and noise
+whose strength changes with humidity, so it looks like structure. Five ranges are removed, each
+with both ends included (``$lo \le x \le hi$'', the last line of the loop).
+
+Every rung is a multiple of $10$. The multiples of $10$ inside $[lo, hi]$ run from the first
+multiple at or above $lo$ to the last at or below $hi$. Writing $\lceil y \rceil$ for ``round $y$
+up'' and $\lfloor y \rfloor$ for ``round $y$ down'', those are $10\lceil lo/10\rceil$ and
+$10\lfloor hi/10\rfloor$, and by \cref{eq:sensors:fencepost} with step $10$ (dividing through by
+$10$):
+\begin{equation}\label{eq:sensors:count}
+\text{rungs removed} = \left\lfloor \frac{hi}{10} \right\rfloor - \left\lceil \frac{lo}{10} \right\rceil + 1,
+\end{equation}
+provided the range lies on the ladder (a range entirely below $460$ removes nothing). Do each
+window on paper.
+
+\begin{worked}[label={we:sensors:windows}]{Counting the five windows}
+\emph{Window $(0, 450)$.} Every rung is at least $460 > 450$. Nothing removed: $0$.
+
+\emph{Window $(912, 978)$.}
+\begin{align*}
+\lceil 912/10 \rceil &= \lceil 91.2 \rceil = 92,\\
+\lfloor 978/10 \rfloor &= \lfloor 97.8 \rfloor = 97,\\
+97 - 92 + 1 &= 6.
+\end{align*}
+The six rungs are $920, 930, 940, 950, 960, 970$. Check the edges: $910 < 912$ is kept;
+$980 > 978$ is kept.
+
+\emph{Window $(1131, 1152)$.}
+\begin{align*}
+\lceil 113.1 \rceil &= 114, \qquad \lfloor 115.2 \rfloor = 115,\\
+115 - 114 + 1 &= 2 \quad (1{,}140 \text{ and } 1{,}150).
+\end{align*}
+
+\emph{Window $(1350, 1450)$.} Both ends land on rungs and both are included:
+\begin{align*}
+\lceil 135 \rceil &= 135, \qquad \lfloor 145 \rfloor = 145,\\
+145 - 135 + 1 &= 11 \quad (1{,}350, 1{,}360, \dots, 1{,}450).
+\end{align*}
+
+\emph{Window $(1800, 1950)$.}
+\begin{align*}
+180 \text{ and } 195: \quad 195 - 180 + 1 &= 16 \quad (1{,}800, \dots, 1{,}950).
+\end{align*}
+
+\emph{Total.}
+\begin{align*}
+\text{removed} &= 0 + 6 + 2 + 11 + 16 = 35,\\
+\text{remaining} &= 200 - 35 = 165.
+\end{align*}
+\end{worked}
+
+\begin{sourcenote}[: 165 checked against the source]
+Running the code's own mask over the ladder gives the same per-window counts $0, 6, 2, 11, 16$
+and \code{len(DEFAULT_COMMON_WAVELENGTH_GRID)} $= 165$, first value $460.0$, last $2{,}450.0$
+(\file{research/textbook/tools/compute_sensors.py} and its saved output)\tagC. Nothing about
+$165$ is chosen directly: it is a consequence of the ladder and the five windows.
+\end{sourcenote}
+
+\begin{keypoint}
+$165 = 200 - (0 + 6 + 2 + 11 + 16)$: a $10$ nm ladder from $460$ to $2{,}450$ nm minus the rungs
+the atmosphere ruins.
+\end{keypoint}
+
+\subsection{The five segments}
+
+The surviving rungs fall into five unbroken runs, $10$ nm apart within each run, with jumps
+between runs. Count each with \cref{eq:sensors:fencepost}:
+\begin{align*}
+460 \text{ to } 910:&\quad (910 - 460)/10 + 1 = 45 + 1 = 46,\\
+980 \text{ to } 1{,}130:&\quad (1{,}130 - 980)/10 + 1 = 15 + 1 = 16,\\
+1{,}160 \text{ to } 1{,}340:&\quad (1{,}340 - 1{,}160)/10 + 1 = 18 + 1 = 19,\\
+1{,}460 \text{ to } 1{,}790:&\quad (1{,}790 - 1{,}460)/10 + 1 = 33 + 1 = 34,\\
+1{,}960 \text{ to } 2{,}450:&\quad (2{,}450 - 1{,}960)/10 + 1 = 49 + 1 = 50.
+\end{align*}
+Check: $46 + 16 + 19 + 34 + 50 = 165$. The four jumps (from $910$ to $980$, $1{,}130$ to $1{,}160$,
+$1{,}340$ to $1{,}460$, $1{,}790$ to $1{,}960$) are the four windows that touch the ladder.
+\Cref{fig:sensors:grid} draws the whole grid to scale.
+
+\begin{figure}[htbp]\centering
+\begin{tikzpicture}[x=0.0066cm,y=1.5cm]
+  % windows, hatched, to scale
+  \foreach \lo/\hi in {912/978,1131/1152,1350/1450,1800/1950}{
+    \fill[pattern=north east lines,pattern color=maskgrey] (\lo,-0.05) rectangle (\hi,0.75);
+    \draw[maskgrey] (\lo,-0.05) rectangle (\hi,0.75);}
+  \fill[pattern=north east lines,pattern color=maskgrey] (400,-0.05) rectangle (450,0.75);
+  \draw[maskgrey] (400,-0.05) -- (450,-0.05) -- (450,0.75) -- (400,0.75);
+  % the 200 rungs
+  \foreach \w in {460,470,...,2450}{
+    \pgfmathtruncatemacro{\ex}{or(or(and(\w>=912,\w<=978),and(\w>=1131,\w<=1152)),or(and(\w>=1350,\w<=1450),and(\w>=1800,\w<=1950)))}
+    \ifnum\ex=1 \draw[maskgrey,line width=0.5pt] (\w,0.05) -- (\w,0.45);
+    \else \draw[spec,line width=0.6pt] (\w,0) -- (\w,0.6); \fi}
+  % axis
+  \draw[->] (400,-0.15) -- (2520,-0.15);
+  \foreach \t in {460,1000,1500,2000,2450}{\draw (\t,-0.15) -- (\t,-0.25) node[below,font=\scriptsize]{\t};}
+  \node[font=\scriptsize] at (1460,-0.75) {wavelength (nm)};
+  % family braces
+  \foreach \a/\b/\n in {460/910/46,980/1130/16,1160/1340/19,1460/1790/34,1960/2450/50}{
+    \draw[decorate,decoration={brace,amplitude=3pt},spec] (\a,0.68) -- (\b,0.68)
+      node[midway,above=2pt,font=\scriptsize,spec]{\n};}
+  % window labels
+  \foreach \lo/\hi/\n in {912/978/6,1131/1152/2,1350/1450/11,1800/1950/16}{
+    \node[font=\scriptsize,maskgrey!70!black] at ({(\lo+\hi)/2},1.25) {$-\n$};}
+  \node[font=\scriptsize,maskgrey!70!black,anchor=east] at (450,1.25) {$0{-}450$: $-0$};
+\end{tikzpicture}
+\caption{The common grid drawn to scale. Ticks are the $200$ ladder rungs from $460$ to
+$2{,}450$ nm; grey rungs fall inside the hatched atmospheric windows and are removed
+($6 + 2 + 11 + 16 = 35$), teal rungs are kept. Braces give the number of kept bands in each of the
+five segments ($46 + 16 + 19 + 34 + 50 = 165$). The window $0$--$450$ nm lies below the ladder and
+removes nothing.}\label{fig:sensors:grid}
+\end{figure}
+
+\coursefig[0.95\linewidth]{iw-03-grid}{The same grid as drawn in the Indradhanu course (part 3):
+a ladder of $200$ wavelengths loses $35$ rungs to four atmospheric windows, leaving $165$ bands in
+five segments of $46$, $16$, $19$, $34$ and $50$.}{fig:sensors:coursegrid}
+
+\begin{sourcenote}[: ``spectral families'' in the vendable]
+The Indradhanu course (part 3) calls the five segments ``spectral families'' and says the vendable
+records which of the five each band is in, in \code{spectral_family_order}. The source disagrees:
+\code{spectral_family_order} holds values of the enum \code{SpectralFamily}
+(\file{app/models/hyperspectral_concepts/spectral_family.py}), whose members are
+\code{VNIR}, \code{SWIR} and \code{PANCHROMATIC}. It records which \emph{detector} a band came
+from, not which of the five segments it lies in. On the common grid each band is labelled with
+the detector of its nearest native band (\code{_assign_families} in
+\file{app/utils/data_transformations/spectral_resampler.py}). The five segments have no name in
+the code; they exist only as the jumps in the grid. \Cref{ch:bandpipeline} reports a problem with
+that nearest-band labelling.
+\end{sourcenote}
+
+\subsection{From band index to wavelength and back}
+
+Because the segments are evenly spaced inside, the wavelength of grid band $c$ ($0 \le c \le 164$)
+is a piecewise formula. Inside a segment that starts at index $c_0$ and wavelength $\lambda_0$,
+each step of the index adds $10$ nm:
+\begin{equation}\label{eq:sensors:index}
+\lambda(c) = \lambda_0 + 10\,(c - c_0), \qquad
+(c_0, \lambda_0) \in \{(0, 460),\ (46, 980),\ (62, 1{,}160),\ (81, 1{,}460),\ (115, 1{,}960)\}.
+\end{equation}
+The segment starts are the running totals of the segment sizes: $0$, then $0 + 46 = 46$, then
+$46 + 16 = 62$, then $62 + 19 = 81$, then $81 + 34 = 115$.
+
+\begin{worked}[label={we:sensors:index}]{Which wavelength is band 43, and which band is 1,000 nm?}
+\emph{Band 43.} $43 < 46$, so it is in the first segment, $(c_0, \lambda_0) = (0, 460)$:
+\[ \lambda(43) = 460 + 10 \times (43 - 0) = 460 + 430 = 890 \text{ nm}. \]
+\emph{1,000 nm.} It lies in the second segment ($980$ to $1{,}130$). Invert
+\cref{eq:sensors:index}:
+\begin{align*}
+c &= c_0 + (\lambda - \lambda_0)/10\\
+  &= 46 + (1{,}000 - 980)/10\\
+  &= 46 + 2 = 48.
+\end{align*}
+\emph{Band 100.} $81 \le 100 < 115$, so $(c_0, \lambda_0) = (81, 1{,}460)$ and
+\[ \lambda(100) = 1{,}460 + 10 \times 19 = 1{,}650 \text{ nm}. \]
+All three agree with the code's array (\file{research/textbook/tools/compute_sensors_output.txt})\tagC.
+\end{worked}
+
+\begin{sourcenote}[: a numeric slip in the course]
+The Indradhanu course (part 3) illustrates the ``wire format'' warning below with the phrase
+``band 43 means 1000 nm''. On the real grid band $43$ is $890$ nm and $1{,}000$ nm is band $48$
+(\cref{we:sensors:index}). The warning itself is correct; the example pair is not a real pair.
+\end{sourcenote}
+
+\section{Two design questions}\label{sec:sensors:why}
+
+\subsection{Why 10 nm and not 5}
+
+The grid has to respect the \emph{coarsest} contributing sensor. PRISMA's bands are about $12$ nm
+wide (the code comment above \code{DEFAULT_COMMON_WAVELENGTH_GRID} says ``PRISMA \textasciitilde
+12nm''). A value every $5$ nm would claim detail PRISMA never measured: the interpolator would
+happily produce numbers, but they would be invented, and a model would learn to reproduce invented
+structure. $10$ nm is fine enough to be useful and coarse enough that every grid value is
+supported by real measurements.
+
+\subsection{Why cut the windows out of the grid, rather than interpolate and discard later}
+
+Suppose $1{,}350$ to $1{,}450$ nm were left in the grid. After band filtering there is no
+real sensor data between $1{,}340$ and $1{,}460$ (\cref{ch:bandpipeline} drops those bands first).
+An interpolator does not know that; asked for values at $1{,}350, 1{,}360, \dots, 1{,}450$, it
+draws a line or curve from the last real sample below to the first real sample above, and returns
+eleven values that were never measured. Those values would go into training, the model would learn
+to reproduce them, and at inference a genuine feature in that region would be compared against
+fiction. Removing the wavelengths from the grid means the interpolator is never asked the
+question: the problem is designed out rather than cleaned up afterwards.
+
+\begin{sourcenote}[: which interpolator resamples onto the grid]
+The Indradhanu course (part 3) says the resampling onto the grid uses PCHIP. The source says
+otherwise: \file{app/utils/data_transformations/spectral_resampler.py} uses \emph{linear}
+interpolation, and its docstring explains why (``the native bands are densely sampled (6-12nm
+apart) and the target grid is 10nm \dots\ PCHIP offers no practical quality gain but costs
+significantly more memory''). PCHIP is used one step earlier, to fill gaps in partly valid
+spectra (\file{spectral_interpolator.py}). The argument above holds for either interpolator: a
+straight line across a $120$ nm gap is as invented as a curve. \Cref{ch:bandpipeline} derives both.
+\end{sourcenote}
+
+\section{The grid is a wire format}\label{sec:sensors:wire}
+
+Nowhere in a saved model file does it say ``input position $48$ is $1{,}000$ nm''. The link is
+purely positional: input position $c$ means whatever the $(c+1)$-th entry of the grid is. Three
+things downstream are lined up with this exact list in this exact order:
+\begin{itemize}
+\item the model's input width, \code{in_channels: int = 165} in
+\code{HyperspectralSegFormerMAEConfig} (\file{app/models/training/training_config.py}, line 88);
+\item the $165$ means and $165$ standard deviations in \file{app/constants/hyperspectral.json}
+(\cref{ch:bandpipeline});
+\item every training shard, in which PRISMA and EnMAP patches are mixed and, at the tensor level,
+indistinguishable.
+\end{itemize}
+AVIRIS-NG was added later and needed no model change, because it comes out of the band pipeline as
+the same $165$-band cube; the resolver says so in a comment
+(\file{backend/allotrope/foundation_models/resolver.py}, near line 259).
+
+So if someone edited the exclusion ranges tomorrow, the model would still load (still $165$
+inputs), the normalisation statistics would still load (still $165$ numbers), and every band would
+silently refer to the wrong wavelength. No error, no warning, wrong answers. Treat the grid like a
+database schema: changing it invalidates everything already stored against it.
+
+\begin{drift}
+\emph{Dated 2026-10-29.} The $165$-band grid is what Indradhanu v0.2.0 consumes. The model shipped
+as Indradhanu V2 reads each sensor's \emph{native} bands instead: its resolver entry sets
+\code{band_grid="native"} (\file{backend/allotrope/foundation_models/resolver.py}), and the
+\code{band_filter_apply} option \code{use_common_wavelength_grid} is documented as ``Required by
+Indradhanu (v0.2.0); Indradhanu V2 needs it false (native bands)''
+(\file{backend/allotrope/action_types/band_filter_apply.py}). \Cref{ch:ceiling,ch:crossstem}
+explain the model that makes this possible. The grid remains the default band-filter output and
+the input of the classical detectors.
+\end{drift}
+
+\begin{sourcenote}[: two different default exclusion lists]
+Two default lists of windows exist. \code{BandFilterConfig.exclusion_ranges} and
+\code{build_common_wavelength_grid} use $(1350, 1450)$ and $(1800, 1950)$. The older
+\code{DEFAULT_EXCLUSION_RANGES} in \file{app/utils/data_transformations/spectral_band_filter.py}
+uses wider ones, $(1328, 1492)$ and $(1784, 1967)$, labelled ``Standard PRISMA exclusion
+ranges''. The wider list is used only when \code{SpectralBandFilter} is built with
+\code{exclusion_ranges=None}; every builder in this book passes
+\code{band_filter_config.exclusion_ranges} explicitly, so the product uses the narrower list.
+Separately, the description of \code{BandFilterConfig.common_wavelength_grid} in
+\file{app/models/dataset/vendables.py} still says ``(450--2450nm, 201 bands)''; the grid the code
+builds has $165$ bands starting at $460$ nm. The description is stale; the code wins.
+\end{sourcenote}
+
+\begin{confusions}
+\confusion{Are the 165 bands evenly spaced?}{Within each of the five segments, yes, $10$ nm apart.
+Across the whole list, no: there are four jumps. The list is ascending but not uniform.}
+\confusion{Does resampling lose information?}{A little, always. That is the price of
+comparability, and the grid is chosen (at $10$ nm) to keep the loss small.}
+\confusion{Could we feed each sensor's native bands and pad to a fixed length?}{Then position $c$
+would mean different wavelengths in different rows of one batch, which is exactly what stops one
+fixed-position model from serving three sensors. (A model that is told each band's wavelength can
+avoid this; \cref{ch:ceiling} builds one.)}
+\confusion{The window list starts with $(0, 450)$, yet nothing is removed by it. Why keep it?}{It
+guards the band \emph{filter}, which runs on native sensor bands, some of which lie below
+$450$ nm. On the grid, which starts at $460$, it has no effect.}
+\confusion{BIL, BSQ, BIP: is one of them correct?}{No. Each is fastest for a different access
+pattern. The models all expect BSQ \shape{(C, H, W)}.}
+\confusion{Are the two thermal sensors interchangeable?}{No. Landsat 9 arrives in degrees Celsius;
+HotSat-1 arrives as raw DN around $5{,}000$. A model normalised for one sees the other as wildly
+out of range (\cref{ch:bandpipeline}).}
+\end{confusions}
+
+\begin{checkyourself}
+\item\label{ex:sensors:1} How many rungs does a ladder from $400$ to $2{,}500$ nm in steps of
+$10$ nm have? How many in steps of $5$ nm? Use \cref{eq:sensors:fencepost} and show each line.
+\item\label{ex:sensors:2} Suppose the window $(1131, 1152)$ were widened to $(1125, 1160)$. Use
+\cref{eq:sensors:count} to count the rungs it removes, and give the new length of the grid.
+\item\label{ex:sensors:3} Using \cref{eq:sensors:index}, find the wavelength of grid band $70$ and
+of band $164$, and the index of $2{,}210$ nm.
+\item\label{ex:sensors:4} A cube has shape $C = 4$, $H = 3$, $W = 5$. Compute the memory offset of
+the element at band $2$, row $1$, column $3$ in BSQ, BIL and BIP layouts.
+\item\label{ex:sensors:5} A Landsat \code{QA_PIXEL} value is $q = 21{,}840$. Write it as a sum of
+powers of two and decide whether the builder marks the pixel valid. An EnMAP pixel stores
+$\mathrm{DN} = 1{,}830$: what is its reflectance?
+\end{checkyourself}
+
+\nextchapter{ch:product}

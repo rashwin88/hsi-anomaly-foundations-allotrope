@@ -1,4 +1,8 @@
-"""Action type: `scene_segmentation` — spectral indices + class masks.
+"""Action type: `scene_segmentation` — class masks and the keep_mask.
+
+Two methods (config `method`): "indices", below, and "indradhanu_v2" - Indradhanu
+V2's segmentation head, implemented in `_scene_segmentation_run.py`
+(docs/lld/segmentation-v2.md). A config without `method` is "indices".
 
 Lifts § 9 of `benchmarking/hyperspectral/segformer_mae_benchmark.ipynb`
 into a worker-side Action: compute NDVI, NDWI, and VNIR brightness from
@@ -13,7 +17,7 @@ Step 12b ships META + config schema + `validate_config`. The
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -113,6 +117,45 @@ class SceneSegmentationConfig(BaseModel):
         ),
     )
 
+    # --- Method (2026-11-01) ---
+    #
+    # "indices" is the original NDVI / NDWI / brightness thresholding above; a config with no
+    # `method` (every action stored before 2026-11-01) is that. "indradhanu_v2" runs Indradhanu
+    # V2's segmentation head instead (docs/lld/segmentation-v2.md) and ignores bands /
+    # thresholds / classes_to_mask; the three fields below are its own.
+
+    method: Literal["indices", "indradhanu_v2"] = Field(
+        default="indices",
+        description="indices = NDVI/NDWI/brightness thresholds; indradhanu_v2 = the model's segmentation head.",
+    )
+    exclude_classes: list[str] = Field(
+        default_factory=lambda: ["cloud"],
+        description=(
+            "indradhanu_v2 only: head classes left out of keep_mask, a subset of "
+            "{water, cloud, shadow, snow}. Default thick cloud only - water is kept because "
+            "vessels on water are in scope."
+        ),
+    )
+    thin_cloud_is_cloud: bool = Field(
+        default=False,
+        description="indradhanu_v2 only: count the head's thin-cloud output as cloud (it fires on haze).",
+    )
+    model_codename: str = Field(
+        default="Indradhanu V2",
+        description="indradhanu_v2 only: the model whose segmentation head runs.",
+    )
+    method_if_not_reflectance: Literal["indices"] | None = Field(
+        default=None,
+        description=(
+            "indradhanu_v2 only: run this method instead when the band-filtered scene is not "
+            "reflectance (a generic_hsi cube in DN / radiance). None = refuse, as V2 needs reflectance."
+        ),
+    )
+
+
+# The classes indradhanu_v2 may exclude: the head's CLASS_NAMES minus land.
+V2_EXCLUDABLE_CLASSES = ("water", "cloud", "shadow", "snow")
+
 
 _DEFAULT_PRISMA: dict[str, Any] = {
     "bands": SpectralIndexBands().model_dump(),
@@ -129,16 +172,29 @@ _DEFAULT_ENMAP: dict[str, Any] = dict(_DEFAULT_PRISMA)
 # index/threshold defaults carry over.
 _DEFAULT_AVIRIS_NG: dict[str, Any] = dict(_DEFAULT_PRISMA)
 
+# Tanager: index bands are picked by wavelength, so the defaults carry over too.
+_DEFAULT_TANAGER: dict[str, Any] = dict(_DEFAULT_PRISMA)
+
+# Since 2026-11-01 every hyperspectral template runs Indradhanu V2's head (it needs the native-band
+# filter, band_filter_apply's default). The index defaults above stay for method="indices".
+_DEFAULT_V2: dict[str, Any] = {
+    "method": "indradhanu_v2",
+    "exclude_classes": ["cloud"],
+    "thin_cloud_is_cloud": False,
+    "model_codename": "Indradhanu V2",
+}
+
+# Any other hyperspectral file: V2 on reflectance; on a scene its reader found not to be
+# reflectance (docs/lld/generic-hsi.md) the run falls back to the unit-light index method.
+_DEFAULT_GENERIC_HSI: dict[str, Any] = {**_DEFAULT_V2, "method_if_not_reflectance": "indices"}
+
 
 # --- META ---------------------------------------------------------------
 
 META = ActionTypeMeta(
     type=KIND,
     label="Scene segmentation",
-    short_description=(
-        "Compute NDVI / NDWI / brightness; derive water · cloud · shadow · "
-        "vegetation masks; emit a keep_mask for downstream scoring."
-    ),
+    short_description="Find cloud, water, shadow and snow, and mask out the ones you choose before scoring.",
     description=(
         "Anomaly scoring without scene segmentation gets dominated by "
         "*spectrally distinct but uninteresting* pixels — water (strong "
@@ -155,23 +211,22 @@ META = ActionTypeMeta(
         "Downstream HSI anomaly Actions consume `keep_mask.tif` as their "
         "scoring domain — anomaly score is computed only where keep_mask "
         "is 1. This is the second canonical preprocessing Action (after "
-        "band_filter_apply) for every PRISMA / EnMAP investigation."
+        "band_filter_apply) for every PRISMA / EnMAP investigation.\n\n"
+        "method = indradhanu_v2 (the hyperspectral default since 2026-11-01) "
+        "replaces the index thresholds with Indradhanu V2's segmentation head: "
+        "land · water · cloud · shadow · snow per pixel, written as class_map.tif, "
+        "and keep_mask = valid and not in exclude_classes (thick cloud by "
+        "default). An anomaly_scoring that runs Indradhanu V2 on this keep_mask "
+        "uses these classes instead of running the head again."
     ),
-    when_to_use=(
-        "Run after band_filter_apply on any HSI scene where you expect "
-        "non-target spectral classes (water bodies, cloud remnants, deep "
-        "shadow, dense vegetation) to confound anomaly scoring."
-    ),
+    when_to_use="",
     inputs=[
         # Scene is implicit — taken from the bound Project's scene_id
         # at submit time. The picker only asks for the upstream Action.
         ActionInputSpec(
             key="input_band_filter_output_id",
-            label="Filtered vendable",
-            description=(
-                "Output of a prior `band_filter_apply` Action in this "
-                "Project. Its filtered cube is the source for index math."
-            ),
+            label="Band filter result",
+            description="",
             ref_kind="action_output",
             producing_action_types=["band_filter_apply"],
             required=True,
@@ -184,6 +239,7 @@ META = ActionTypeMeta(
             description="(NIR − Red) / (NIR + Red), -1..1 float32 raster.",
             artifact_type="raster",
             filename="ndvi.tif",
+            always_present=False,   # method="indices" only
         ),
         ActionOutputSpec(
             key="ndwi",
@@ -191,6 +247,7 @@ META = ActionTypeMeta(
             description="(Green − NIR) / (Green + NIR), -1..1 float32 raster.",
             artifact_type="raster",
             filename="ndwi.tif",
+            always_present=False,   # method="indices" only
         ),
         ActionOutputSpec(
             key="brightness",
@@ -198,6 +255,7 @@ META = ActionTypeMeta(
             description="Mean VNIR reflectance, 0..1 float32 raster.",
             artifact_type="raster",
             filename="brightness.tif",
+            always_present=False,   # method="indices" only
         ),
         ActionOutputSpec(
             key="mask_water",
@@ -205,6 +263,7 @@ META = ActionTypeMeta(
             description="Binary uint8 raster, 1 = water.",
             artifact_type="raster",
             filename="mask_water.tif",
+            always_present=False,   # method="indices" only
         ),
         ActionOutputSpec(
             key="mask_cloud",
@@ -212,6 +271,7 @@ META = ActionTypeMeta(
             description="Binary uint8 raster, 1 = cloud.",
             artifact_type="raster",
             filename="mask_cloud.tif",
+            always_present=False,   # method="indices" only
         ),
         ActionOutputSpec(
             key="mask_shadow",
@@ -219,6 +279,7 @@ META = ActionTypeMeta(
             description="Binary uint8 raster, 1 = shadow.",
             artifact_type="raster",
             filename="mask_shadow.tif",
+            always_present=False,   # method="indices" only
         ),
         ActionOutputSpec(
             key="mask_vegetation",
@@ -226,6 +287,7 @@ META = ActionTypeMeta(
             description="Binary uint8 raster, 1 = dense vegetation.",
             artifact_type="raster",
             filename="mask_vegetation.tif",
+            always_present=False,   # method="indices" only
         ),
         ActionOutputSpec(
             key="keep_mask",
@@ -257,14 +319,49 @@ META = ActionTypeMeta(
             artifact_type="image",
             filename="preview.png",
         ),
+        # method="indradhanu_v2" only (_scene_segmentation_run.py).
+        ActionOutputSpec(
+            key="class_map",
+            label="Class map",
+            description="uint8 head classes: 0 land, 1 water, 2 cloud, 3 shadow, 4 snow; 255 outside valid.",
+            artifact_type="raster",
+            filename="class_map.tif",
+            always_present=False,
+        ),
+        ActionOutputSpec(
+            key="class_map_png",
+            label="Class map (colours)",
+            description="The class map in fixed per-class colours; transparent outside valid.",
+            artifact_type="image",
+            filename="class_map.png",
+            always_present=False,
+        ),
+        ActionOutputSpec(
+            key="class_map_overlay",
+            label="Class overlay",
+            description="Scene RGB with the class colours blended on top.",
+            artifact_type="image",
+            filename="class_map_overlay.png",
+            always_present=False,
+        ),
+        ActionOutputSpec(
+            key="rgb",
+            label="Scene RGB",
+            description="Full-resolution RGB the viewer draws the classes on.",
+            artifact_type="image",
+            filename="rgb.png",
+            always_present=False,
+        ),
     ],
     # Hyperspectral only — NDVI/NDWI/brightness math needs Red/Green/NIR
     # bands. Single-band thermal scenes don't have them.
-    accepted_sensor_types=["prisma", "enmap", "aviris_ng"],
+    accepted_sensor_types=["prisma", "enmap", "aviris_ng", "tanager", "generic_hsi"],
     default_config_per_sensor={
-        "prisma": _DEFAULT_PRISMA,
-        "enmap": _DEFAULT_ENMAP,
-        "aviris_ng": _DEFAULT_AVIRIS_NG,
+        "prisma": _DEFAULT_V2,
+        "enmap": _DEFAULT_V2,
+        "aviris_ng": _DEFAULT_V2,
+        "tanager": _DEFAULT_V2,
+        "generic_hsi": _DEFAULT_GENERIC_HSI,
     },
 )
 
@@ -286,6 +383,8 @@ def validate_config(raw_cfg: dict[str, Any], sensor_type: str) -> dict[str, Any]
             f"accepted: {META.accepted_sensor_types}"
         )
     parsed = SceneSegmentationConfig.model_validate(raw_cfg)
+    if parsed.method == "indradhanu_v2":
+        _validate_v2(parsed)
     # Validate classes_to_mask membership.
     allowed = {"water", "cloud", "shadow", "vegetation"}
     invalid = set(parsed.classes_to_mask) - allowed
@@ -295,6 +394,25 @@ def validate_config(raw_cfg: dict[str, Any], sensor_type: str) -> dict[str, Any]
             f"allowed: {sorted(allowed)}"
         )
     return parsed.model_dump(mode="json")
+
+
+def _validate_v2(parsed: SceneSegmentationConfig) -> None:
+    """exclude_classes are head classes, and model_codename is a catalog model with a segmentation
+    head (the spectral_stem_finetune architecture - Indradhanu V2)."""
+    from pathlib import Path
+
+    from ..config import settings
+    from ..foundation_models.resolver import list_catalog
+
+    invalid = set(parsed.exclude_classes) - set(V2_EXCLUDABLE_CLASSES)
+    if invalid:
+        raise ValueError(f"unknown classes in exclude_classes: {sorted(invalid)}; "
+                         f"allowed: {list(V2_EXCLUDABLE_CLASSES)}")
+    heads = {m.codename.lower(): m.codename for m in list_catalog(Path(settings.models_dir))
+             if m.architecture == "spectral_stem_finetune"}
+    if parsed.model_codename.strip().lower() not in heads:
+        raise ValueError(f"model {parsed.model_codename!r} has no segmentation head; "
+                         f"available: {sorted(heads.values())}")
 
 
 # --- Worker-side run (Step 12d) -----------------------------------------
@@ -333,7 +451,14 @@ def _save_raster(arr: Any, path: Any, dtype: str) -> None:
 
 def run(ctx: Any) -> None:
     """Compute indices + class masks via `app.utils.spectral_indices`,
-    write them as GeoTIFF rasters under `ctx.output_dir`."""
+    write them as GeoTIFF rasters under `ctx.output_dir`. method="indradhanu_v2"
+    runs the model's segmentation head instead (`_scene_segmentation_run.py`)."""
+    if ctx.configuration.get("method", "indices") == "indradhanu_v2":
+        from ._scene_segmentation_run import run as _run_v2, upstream_not_reflectance
+
+        if not (upstream_not_reflectance(ctx) and ctx.configuration.get("method_if_not_reflectance") == "indices"):
+            return _run_v2(ctx)
+        ctx.on_step("not_reflectance: method indices instead of indradhanu_v2")
     import json
     import pickle
 
@@ -472,7 +597,11 @@ def summarize(ctx: Any, output_dir: Any) -> dict[str, Any]:
 
 def preview(ctx: Any, output_dir: Any) -> Any:
     """Render a 2x2 montage: NDVI · NDWI · brightness · keep_mask overlay
-    on a base RGB composite. Decorative — failure is non-fatal."""
+    on a base RGB composite. Decorative — failure is non-fatal. The V2 method
+    renders its own preview inside run."""
+    if ctx.configuration.get("method", "indices") == "indradhanu_v2":
+        p = output_dir / _PREVIEW_FILENAME
+        return p if p.exists() else None
     import pickle
 
     import matplotlib

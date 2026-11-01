@@ -1,0 +1,21 @@
+\glossentry{Cross-attention compressor}{SpectralCrossAttentionCompressor: 32 learned queries attend over a pixel's band tokens and each answer becomes one of the 32 output channels; 5,345 parameters at d = D = 32, whatever the band count.}
+\glossentry{Pixels as a batch}{Treating each pixel of a patch as an independent row (16,384 rows per 128 x 128 patch) because nothing in the spectral stem moves information between pixels.}
+\glossentry{Head}{One of several parallel attention computations, each on its own slice of the key, query and value vectors; the stem uses 4 heads of 8 numbers.}
+\glossentry{View}{A tensor operation that reinterprets the shape of stored numbers without copying them, used to split 32 numbers into 4 heads of 8.}
+\glossentry{To-channel layer}{The Linear(32, 1) shared by all 32 answers that turns each answer vector into one output channel.}
+\glossentry{Data-dependent weights}{Mixing weights computed from the input itself, here a softmax of query-key scores, as opposed to the fixed weights of a convolution.}
+\glossentry{Masked softmax}{A softmax in which invalid positions have their scores set to minus infinity, giving them weight exactly 0 and renormalising the rest.}
+\glossentry{Renormalisation}{The rescaling of surviving softmax weights so they again sum to 1 after some positions are masked; ratios between survivors are unchanged.}
+\glossentry{Attention mask}{A boolean tensor passed to PyTorch's fused attention function; True means attention is allowed, False means the score becomes minus infinity.}
+\glossentry{Band validity mask}{The tensor \texttt{band\_valid}: one boolean per band per pixel, False for a dead or missing band.}
+\glossentry{Padding}{Dummy tokens added to shorter rows so a batch is rectangular; masked out so they receive weight 0.}
+\glossentry{NaN}{Not a number: the floating-point result of 0/0, produced by a softmax over all-masked scores unless guarded against.}
+\glossentry{Multiply-add (MAC)}{One multiplication followed by one addition, the unit of a dot product; a matrix-vector product with an m x n matrix costs mn of them.}
+\glossentry{fp32 and bf16}{32-bit floating point (4 bytes per number) and 16-bit bfloat16 (2 bytes per number).}
+\glossentry{Mebibyte (MiB)}{2 to the power 20 = 1,048,576 bytes; a gibibyte (GiB) is 1,073,741,824 bytes.}
+\glossentry{Fused attention}{One GPU routine that computes scores, softmax and the weighted sum tile by tile, never storing the full weight matrix; exact, not approximate.}
+\glossentry{Band grouping}{Making one token from several adjacent bands to cut the token count (202 to 51), at the cost of mixing fine spectral detail early.}
+\glossentry{Activation memory}{Memory held by intermediate tensors of the forward pass that the backward pass needs; for the per-band stem about 19 tensors of 202 MiB per patch in bf16.}
+\glossentry{Memory wall}{The point at which memory, not arithmetic or parameters, limits the batch size and speed of training.}
+\glossentry{SDPA row chunking}{Splitting the pixel rows of a fused-attention call into chunks of at most 32,768 to stay under CUDA's 65,535 launch-grid limit; exact because pixels are independent.}
+\glossentry{Pixel with no valid band}{A pixel whose every band is masked; the code lets it attend to everything and then sets its output to exactly 0.}

@@ -1,0 +1,26 @@
+\glossentry{Fine-tuning}{Continuing to train a pretrained model on new data or a new task, starting from its learned weights.}
+\glossentry{Curriculum}{A sequence of training stages, each changing one thing and each judged before the next starts: probe, adapt, joint.}
+\glossentry{Gate}{A pass criterion written in a run's README before launch and never moved; the next stage starts only if it is met.}
+\glossentry{Bench}{The mean ROC-AUC on the four labelled PRISMA scenes under residual Mahalanobis, the detection measure every fine-tuning gate reads.}
+\glossentry{Probe}{Training only a small head on frozen features, to measure what the features already know.}
+\glossentry{Adapt stage}{Fine-tuning reconstruction only, on all three sensors at their own bands, at a low learning rate.}
+\glossentry{Joint stage}{Training reconstruction and segmentation together: loss = reconstruction + seg weight x segmentation.}
+\glossentry{Parameter}{A tensor the optimiser changes through gradients; the flag requires\_grad controls whether it is trained.}
+\glossentry{Buffer}{A tensor a model keeps and may change itself without gradients, such as BatchNorm's running statistics or the trained-wavelength record.}
+\glossentry{Batch normalisation}{A layer that normalises each channel by the batch's mean and variance in training mode and by stored running statistics in evaluation mode.}
+\glossentry{Running mean}{BatchNorm's stored estimate of a channel's mean, updated in training mode as 0.9 x old + 0.1 x batch mean.}
+\glossentry{Exponential moving average}{An average in which each older value's weight is multiplied by a constant factor; the last K of BatchNorm's batches carry $1 - 0.9^K$ of the weight.}
+\glossentry{Training mode}{The state set by model.train(): BatchNorm uses and records batch statistics, dropout is active.}
+\glossentry{Evaluation mode}{The state set by model.eval(): BatchNorm uses its stored statistics and records nothing, dropout is off.}
+\glossentry{See-saw}{FT02's per-sensor validation swinging between epochs, one sensor improving while others worsen, consistent with BatchNorm drift under sensor-pure batches.}
+\glossentry{AdaBN}{Adaptive batch normalisation: replacing BatchNorm's stored statistics with statistics measured on the data being scored.}
+\glossentry{Gradient accumulation}{Adding the gradients of several micro-batches before one optimiser step; it mixes gradients but not BatchNorm statistics.}
+\glossentry{Micro-batch}{The batch of one forward pass (8 tiles here); BatchNorm statistics are computed per micro-batch.}
+\glossentry{Sensor share}{The fixed probability (or sub-batch fraction) with which each sensor is drawn: EnMAP 0.40, PRISMA 0.35, AVIRIS-NG 0.25.}
+\glossentry{Mixed batch}{A micro-batch holding tiles from every sensor, each sensor's sub-batch passed through the stem alone and then concatenated.}
+\glossentry{forward\_mixed}{The model method that runs one stem pass per band list, then one BatchNorm, encoder and decoder pass over the concatenated batch, and splits the output by sensor.}
+\glossentry{segment\_mixed}{The segmentation counterpart of forward\_mixed: one unmasked pass over the whole mixed batch, so BatchNorm sees every sensor.}
+\glossentry{Trained-wavelength record}{The buffer trained\_wl listing every wavelength the model has trained on; it grows during fine-tuning and decides which bands are accepted at load time.}
+\glossentry{Segmentation weight}{The factor seg\_weight multiplying the segmentation loss in joint training; 0.1 in FT03.}
+\glossentry{Warm start}{Initialising a component from previously trained weights rather than at random, as FT03's head from FT01's probe.}
+\glossentry{Law of total variance}{Total variance equals the mean of the within-class variances plus the variance of the class means.}

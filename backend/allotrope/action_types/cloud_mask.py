@@ -75,10 +75,7 @@ _DEFAULT_LANDSAT9: dict[str, Any] = {
 META = ActionTypeMeta(
     type=KIND,
     label="Cloud mask",
-    short_description=(
-        "Adaptive GMM cloud detection on Landsat 9 B10. Emits a "
-        "binary cloud raster + a keep_mask for downstream scoring."
-    ),
+    short_description="Find clouds in a Landsat 9 scene so scoring skips them.",
     description=(
         "Anomaly scoring on thermal scenes is dominated by cold cloud "
         "pixels — they reconstruct as well as the warm land they "
@@ -103,11 +100,7 @@ META = ActionTypeMeta(
         "they consume `scene_segmentation`'s keep_mask on the HSI side. "
         "Re-run with a different `sampling_ratio` to tune fit stability."
     ),
-    when_to_use=(
-        "Run on any Landsat 9 scene before `anomaly_scoring`, "
-        "especially over regions with frequent cloud cover. Skip if "
-        "the scene is known to be cloud-free."
-    ),
+    when_to_use="",
     inputs=[
         # Scene is implicit — taken from the bound Project's scene_id at
         # submit time. The masker reads the onboarding vendable directly,

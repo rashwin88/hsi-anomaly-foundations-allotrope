@@ -127,6 +127,9 @@ SpectralStemInferencer.segment_full_scene(cube, valid, thin_cloud=True) -> (clas
   checkpoint's `stats.*` curve.
 - `anomaly_scoring` scores on the upstream keep mask, then zeros `exclude_classes` from the head's class map - not
   the other way round (zeroing first would change the whitening fit; the benchmark measured this order).
+  Since 2026-11-01 the head can run as its own step (`scene_segmentation` method `indradhanu_v2`); with that one
+  upstream, V2 scores over spatial validity, zeros the upstream's excluded classes and does not run the head again
+  ([`segmentation-v2.md`](segmentation-v2.md)).
 - **Thick-cloud rule.** "cloud" in `exclude_classes` means thick cloud only for V2: the resolver's
   `thin_cloud_is_cloud=False` reaches `segment_full_scene(..., thin_cloud=False)`, and a pixel that is only thin
   cloud falls to the next class by priority (snow > shadow > water > land). Heavy's thin-cloud output fires on haze -

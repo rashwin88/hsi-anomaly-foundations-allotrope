@@ -104,6 +104,8 @@ def test_family_step_writes_the_viewer_and_export_contract(scene, tmp_path, monk
     ids = [e["id"] for e in legend["library"]]
     assert set(t.best_entry[t.scored]) <= set(ids)
     assert lib["refl"].shape == (len(ids), scene.cube.shape[0])
+    # the object card picks the nearest entry within the namer class, so each row carries one
+    assert "concrete_asphalt" in {e["cls"] for e in legend["library"]}
     for png in ("family_map.png", "family_map_overlay.png"):
         assert (tmp_path / png).stat().st_size > 0
 

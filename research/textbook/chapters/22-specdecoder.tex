@@ -1,0 +1,849 @@
+\chapter{The spectral decoder, the traps, per-pixel gating and spectral reduction}\label{ch:specdecoder}
+
+\begin{onething}
+Reconstruction runs the cross-attention idea backwards: each wavelength you want back becomes a query, so one set of weights rebuilds any sensor's bands; the design is only safe if it hides pixels (not bands), normalises by wavelength, and is tested against a cheap per-pixel gate; and because per-band attention hits a memory wall, the shipped stem attends over 40\,nm wavelength bins while three per-band paths keep the detail a bin average would lose.
+\end{onething}
+
+\Cref{ch:crossstem} built the way \emph{in}: 32 learned queries read a pixel's band tokens and hand the SegFormer a 32-channel image. This chapter builds the way \emph{out}, and then follows the design from paper to production. It has four movements.
+
+\begin{enumerate}
+\item \Cref{sec:specdecoder:decoder}: the cross-attention decoder, whose queries are \emph{target wavelengths}, counted by hand (6,401 parameters).
+\item \Cref{sec:specdecoder:traps}: one pixel traced from file to loss, and the three traps the design must avoid.
+\item \Cref{sec:specdecoder:gate}: the cheap rival, a per-pixel sigmoid gate (13,162 parameters), and what it can and cannot do.
+\item \Cref{sec:specdecoder:reduced}: spectral reduction, the stem that actually trains, with its bin arithmetic, its three per-band fixes, its parameter counts (14,721 and 4,257) and the measured throughput that justified it.
+\end{enumerate}
+
+%=============================================================================
+\section{The way back out: a decoder that answers for any wavelength}\label{sec:specdecoder:decoder}
+
+\subsection{What has to come back out}
+
+The model's job (\cref{ch:recon}) is to redraw its input and compare. So whatever went in must come back out at the \emph{same wavelengths}: a SpectralEarth pixel's 202 bands, a PRISMA pixel's 239. Today's \code{SpectralDecompressor} (\cref{ch:compressor}) is \code{Conv2d(32, 165, kernel_size=1)}: one fixed recipe per output band, exactly 165 of them, with
+\begin{align*}
+  32\times165 + 165 = 5{,}280 + 165 = 5{,}445 \text{ parameters.}
+\end{align*}
+It has the three problems \cref{ch:ceiling} found in the compressor, mirrored: one recipe for every pixel, no notion of a band that should not be produced, and exactly 165 output \emph{positions}. It cannot produce a 202nd band, or any band not on the grid, because its weight matrix has exactly 165 rows.
+
+\subsection{Turn it around: the wavelength asks the question}
+
+In the compressor, 32 learned questions read many band tokens. In the decoder the roles swap:
+\begin{center}
+\begin{tabular}{llll}\toprule
+ & queries & keys and values & answers\\\midrule
+compressor & 32 learned questions & $N$ band tokens & 32 channels\\
+decoder & $N$ wavelength questions & 32 channel tokens & $N$ reflectances\\\bottomrule
+\end{tabular}
+\end{center}
+Each output band is one question, built from its wavelength alone: ``given everything this pixel's 32 channels say, what is the reflectance at 1650\,nm?'' Ask 202 questions, get 202 answers; ask 239, get 239. \Cref{ch:ceiling} called this kind of query ``computed from something else''.
+
+\begin{analogy}
+The compressor is a reporter who interviews 202 witnesses and files a fixed 32-point summary. The decoder is a reader of that summary who may ask it any question that has a date on it, and gets an answer for any date, not only the dates the original witnesses covered. The answers are only as good as the summary: a question about a date nobody witnessed gets a confident-sounding guess, which is the extrapolation trap of \cref{sec:specdecoder:extrap}.
+\end{analogy}
+
+\subsection{The pieces}
+
+Per pixel, after the SegFormer encoder and decoder (\cref{ch:encoder,ch:decoder}) hand back 32 channels $\vect{z}\in\R^{32}$:
+\begin{itemize}
+\item \emph{Channel tokens.} Each channel value $z_c$ is stretched by \code{Linear(1, 32)} and added to a \emph{learned} identity vector $\vect{\iota}_c$ for that channel, giving $\vect{s}_c = z_c\vect{w}' + \vect{\beta}' + \vect{\iota}_c$. Why learned, when band tokens used a computed wavelength tag? \textbf{Channels have no wavelength.} Channel 7 is ``whatever the compressor's 7th query measured''; its meaning is whatever training made it, so its tag must be learned too. The source says the same (\code{spectral_attention.py}, lines 110--112).
+\item \emph{Wavelength queries.} For each requested wavelength, the \cref{ch:ceiling} tag $\vect{e}(\lambda)$ passes through \code{Linear(32, 32)}, then through the Q projection.
+\item \emph{Attention.} Q, K, V and output projections, 4 heads: $N$ queries against 32 keys.
+\item \emph{To reflectance.} \code{Linear(32, 1)} per answer.
+\end{itemize}
+
+\coursefig[0.95\linewidth]{iw-37-spec-decoder}{The decoder turned around. The pixel's 32 latent channels, each stretched and given a learned identity, supply keys and values; every requested wavelength becomes a query through its tag. Attention and a final Linear(32, 1) produce one reflectance per requested wavelength, so the same 6,401 parameters reconstruct any band list.}{fig:specdecoder:decoder}
+
+The forward pass, trimmed from \code{SpectralCrossAttentionDecoder.forward} (lines 116--130):
+\begin{lstlisting}
+rows = z.permute(0, 2, 3, 1).reshape(p, self.D, 1)                                  # (P, 32, 1)
+tokens = self.channel_value_embed(rows) + self.channel_identity                     # (P, 32, d)
+k = self.k(tokens).view(p, self.D, self.heads, hd).transpose(1, 2)                  # (P, 4, 32, 8)
+v = self.v(tokens).view(p, self.D, self.heads, hd).transpose(1, 2)
+q = self.q(self.query_from_wavelength(wavelength_encoding(wl, self.d)))             # (N, d)
+q = q.view(-1, n, self.heads, hd).transpose(1, 2).expand(p, -1, -1, -1)              # (P, 4, N, 8)
+out = _attend(q, k, v)                                                              # (P, 4, N, 8)
+out = self.to_value(self.o(out.transpose(1, 2).reshape(p, n, self.d)))              # (P, N, 1)
+\end{lstlisting}
+Note what is absent: no mask. The decoder's keys are the 32 channels, which are never dead; dead input bands are handled at the compressor (\cref{ch:crossstem}) and in the loss (\cref{sec:specdecoder:loss}).
+
+\subsection{Predict the parameter count}
+
+\begin{worked}[label={we:specdecoder:params}]{The cross-attention decoder's parameters by hand}
+Use $n_{\text{out}}\times n_{\text{in}} + n_{\text{out}}$ for each linear layer and rows $\times$ columns for a table, with $d = D = 32$. Do it on paper.
+\begin{align*}
+  \text{query from wavelength, Linear(32, 32)}:&\quad 32\times32 + 32 = 1{,}056\\
+  \text{channel value stretch, Linear(1, 32)}:&\quad 1\times32 + 32 = 64\\
+  \text{channel identities, table (32, 32)}:&\quad 32\times32 = 1{,}024\\
+  \text{Q, K, V, O, }4\times\text{Linear(32, 32)}:&\quad 4\times1{,}056 = 4{,}224\\
+  \text{to reflectance, Linear(32, 1)}:&\quad 32 + 1 = 33
+\end{align*}
+Total:
+\begin{align*}
+  1{,}056 + 64 + 1{,}024 + 4{,}224 + 33 &= 1{,}120 + 1{,}024 + 4{,}224 + 33\\
+  &= 2{,}144 + 4{,}224 + 33\\
+  &= 6{,}368 + 33\\
+  &= 6{,}401 .
+\end{align*}
+\end{worked}
+
+{\sloppy The real module, instantiated on a CPU, reports 6,401 parameters\tagC{}: 1,024 in \code{channel_identity}, 1,056 in \code{query_from_wavelength} (weight 1,024 + bias 32), 64 in \code{channel_value_embed}, 1,056 in each of \code{q}, \code{k}, \code{v}, \code{o}, and 33 in \code{to_value} (\file{research/textbook/tools/compute_specdecoder_output.txt}). The docstring says ``Parameters at D = d = 32: 6,401, whatever N is'', and \code{docs/lld/spectral-stem.md} invariant 5 pins it in a test.\par}
+
+In symbols, the count is
+\begin{align}
+  (d^2 + d) + 2d + Dd + 4(d^2 + d) + (d + 1) &= 5d^2 + Dd + 8d + 1, \label{eq:specdecoder:decparams}
+\end{align}
+and at $d = D = 32$: $5{,}120 + 1{,}024 + 256 + 1 = 6{,}401$. Again \textbf{no band count appears}: today's decompressor (5,445) has one row per output band; this decoder has none.
+
+\subsection{One set of weights, any sensor}
+
+The same trained decoder, asked for four wavelength lists:
+\begin{center}
+\begin{tabular}{llr}\toprule
+sensor & requested wavelengths & output shape\\\midrule
+SpectralEarth & 202 & \shape{(pixels, 202)}\\
+EnMAP & 224 & \shape{(pixels, 224)}\\
+PRISMA & 239 & \shape{(pixels, 239)}\\
+AVIRIS-NG & 425 & \shape{(pixels, 425)}\\\bottomrule
+\end{tabular}
+\end{center}
+\textbf{This is the property that makes ``pretrain on SpectralEarth, fine-tune on PRISMA'' work without resampling.} The model never has a weight tied to a band position, on the way in or the way out. In \code{SpectralStemSegFormerMAE.forward} the requested list can even differ from the input list (\code{out_wavelengths_nm}), which band-list augmentation uses: read a random subset of bands, reconstruct all of them (\code{docs/lld/spectral-stem.md}, ``Band-list robustness'').
+
+\subsection{The cost, with roles swapped}
+
+The score matrix is $N$ queries against 32 keys, the same $32\times N$ size per head as the compressor's. But keys and values are now 32 per pixel instead of $N$, which is lighter. Counting the decoder's multiply-adds per pixel for $N = 202$, line by line:
+\begin{align*}
+  \text{channel tokens}:&\quad 32\times32 = 1{,}024\\
+  \text{K, V}:&\quad 2\times32\times1{,}024 = 65{,}536\\
+  \text{scores}:&\quad 202\times32\times32 = 206{,}848\\
+  \text{weighted values}:&\quad 202\times32\times32 = 206{,}848\\
+  \text{output projection}:&\quad 202\times1{,}024 = 206{,}848\\
+  \text{to reflectance}:&\quad 202\times32 = 6{,}464\\
+  \text{total}:&\quad 693{,}568 .
+\end{align*}
+(The wavelength queries are the same for every pixel and are computed once.) The output projection now runs once per \emph{band}, not once per channel, so the decoder is nearly as expensive as the compressor's 861,184: per-band attention costs on both sides, a fact \cref{sec:specdecoder:reduced} will exploit.
+
+\subsection{The loss, on native bands}\label{sec:specdecoder:loss}
+
+\Cref{ch:losses} built the loss as $L_1 + \lambda\,\SAM$, computed per pixel over the bands. With native bands nothing about that changes except which bands count:
+\begin{itemize}
+\item compare each reconstructed band with the measured band at the \textbf{same wavelength}; there is no grid in between;
+\item \textbf{skip dead and padded bands}: there is no truth to compare against;
+\item the spectral angle is computed over the bands that remain.
+\end{itemize}
+
+\begin{worked}[label={we:specdecoder:maskedl1}]{A per-pixel L1 over valid bands only}
+Four bands, truth $[0.20, 0.30, \text{dead}, 0.10]$, reconstruction $[0.22, 0.27, 0.90, 0.10]$. Do it on paper.
+
+Absolute errors on the valid bands only:
+\begin{align*}
+  \abs{0.22 - 0.20} &= 0.02,\\
+  \abs{0.27 - 0.30} &= 0.03,\\
+  \abs{0.10 - 0.10} &= 0.00 .
+\end{align*}
+Sum and divide by the number of \emph{valid} bands, 3:
+\begin{align*}
+  (0.02 + 0.03 + 0.00)/3 &= 0.05/3 = 0.0167 .
+\end{align*}
+The reconstruction's $0.90$ in the dead band never enters. Dividing by 4 instead would wrongly report $0.05/4 = 0.0125$, rewarding a pixel for having a dead band.
+\end{worked}
+
+The source does exactly this: invariant 3 of \code{docs/lld/spectral-stem.md} reads ``A dead band never enters the loss -- zeroed in prediction and target before SAM, and excluded from the per-pixel L1 mean.'' Zeroing both prediction and target in a band adds $0\times0$ to every dot product and every norm of the SAM formula, so the angle is computed over the remaining bands.
+
+The spatial masking of \cref{ch:masking} is untouched: which \emph{pixels} are hidden and must be predicted from neighbours is the encoder's business, and still decides where the loss is taken.
+
+\subsection{Asking for wavelengths nobody measured}\label{sec:specdecoder:extrap}
+
+Any wavelength can be turned into a question, so the decoder will produce numbers for 2600\,nm or for the middle of a water-vapour gap. Whether those numbers mean anything depends on whether training ever saw that region. Asking SpectralEarth-trained weights for 1400\,nm is extrapolation, not measurement.
+
+\begin{sourcenote}[: the guard against untrained wavelengths]
+The code turns this caution into a rule. \code{SpectralStemSegFormerMAE.trained_band_mask} (\code{spectral_stem_seg_former_mae.py}, lines 126--131) keeps a band only if it lies within 15\,nm of a wavelength the model has trained on (the buffer \code{trained_wl}, which starts as the pretraining list and grows as fine-tuning reads other sensors). The evaluator and the product's inferencer drop the rest; for PRISMA set1 this removes 20 of 185 bands, those inside SpectralEarth's water-vapour gaps and past 2445\,nm \tagM{docs/lld/spectral-stem.md}.
+\end{sourcenote}
+
+%=============================================================================
+\section{One pixel start to finish, and the three traps}\label{sec:specdecoder:traps}
+
+\subsection{The trace}
+
+Shapes are for one patch ($B = 1$); the pixel we follow is one of its 16,384.
+
+\begin{table}[htbp]\centering
+\caption{One SpectralEarth patch through the model with a wavelength stem. Rows 8--10 are the unchanged spatial model.}\label{tab:specdecoder:trace}
+\begin{tabular}{rlll}\toprule
+ & step & shape & where\\\midrule
+1 & raw patch file & \shape{(202, 128, 128)} int16 & shard sample\\
+2 & reflectance, validity & \shape{(202, 128, 128)} float & $\times0.0001$; $-32768\to$ invalid\\
+3 & normalise by wavelength & \shape{(202, 128, 128)} & trap 2\\
+4 & pixels as rows & \shape{(16384, 202)} & \\
+5 & band tokens & \shape{(16384, 202, 32)} & \cref{ch:ceiling}\\
+6 & 32 queries read them & \shape{(16384, 32)} & \cref{ch:crossstem}\\
+7 & back to an image, BatchNorm & \shape{(32, 128, 128)} & same as today\\\midrule
+8 & hide about 65\% of tokens & & \cref{ch:masking}\\
+9 & SegFormer encoder & four stages & \cref{ch:encoder}\\
+10 & SegFormer decoder & \shape{(32, 128, 128)} & \cref{ch:decoder}\\\midrule
+11 & pixels as rows & \shape{(16384, 32)} & \\
+12 & 202 wavelength queries & \shape{(16384, 202)} & \cref{sec:specdecoder:decoder}\\
+13 & back to an image, denormalise & \shape{(202, 128, 128)} & native bands\\
+14 & loss & $L_1 + \lambda\SAM$ & hidden pixels, valid bands\\\bottomrule
+\end{tabular}
+\end{table}
+
+\textbf{The new parts run strictly inside each pixel; everything that moves information between pixels is the old, tested machinery.} That separation is what makes the first trap answerable.
+
+\coursefig[0.95\linewidth]{iw-38-trace}{The trace in one row. The new spectral parts (plum) and wavelength normalisation work strictly inside each pixel; hiding, encoder and decoder are the unchanged spatial model; the loss counts valid bands only. Because hidden pixels are removed before any spatial attention, a pixel cannot rebuild its own spectrum.}{fig:specdecoder:trace}
+
+\subsection{Trap 1: a pixel must never rebuild its own spectrum}
+
+\Cref{ch:recon} and \cref{ch:masking} rest on one rule: a hidden pixel is reconstructed from its neighbours, never from itself. Does spectral attention break it?
+
+Not as designed. The compressor (step 6) mixes bands \emph{within} a pixel and nothing between pixels. A pixel hidden at step 8 has its token removed before any spatial attention runs, so its compressed channels cannot reach any other pixel's reconstruction, and its own reconstruction (step 12) is built from what the encoder inferred from its neighbours. The rule holds.
+
+It would break under a second, tempting kind of masking: hiding some \emph{bands} of a visible pixel and asking the model to fill them from that pixel's other bands. That trains \index{spectral self-completion}\emph{spectral self-completion}. A model good at it can reconstruct an anomalous spectrum from the anomalous spectrum itself: the painter of \cref{ch:problem} who has never seen a crashed aeroplane, painting it back in because half of it is still on the canvas. \textbf{Hide pixels, not bands.} Decision 7 of \code{docs/proposals/spectral-attention-bottleneck.md} states it, and the design LLD lists band masking for pretraining under ``Rejected''.
+
+\begin{sourcenote}[: band-list augmentation is not trap 1]
+The code does train on random band subsets (\code{band_augment_prob}, \code{sample_band_subset}): a batch reads, say, 60\% of its bands and reconstructs all of them. \code{docs/lld/spectral-stem.md} explains why this is not self-completion: ``The loss is taken only on pixels hidden by the token mask \ldots{} and a hidden pixel's own bands are never an input; it is rebuilt from its neighbours' band subsets. Scoring never augments.'' The pixel whose bands are being predicted contributes nothing to its own prediction. The LLD adds the condition under which this would stop being true: if the loss is ever extended to visible pixels, augmentation must be switched off for it.
+\end{sourcenote}
+
+\subsection{Trap 2: normalise by wavelength, never by scene}
+
+\Cref{ch:bandpipeline} z-scores each of the 165 bands with a mean and standard deviation per band \emph{position}. With native bands there are no fixed positions. The fix is statistics as a \emph{function of wavelength}: one mean curve and one standard-deviation curve, measured once over SpectralEarth's training split, read off at any sensor's own wavelengths by \index{linear interpolation}linear interpolation.
+
+Linear interpolation between two known points $(\lambda_0, m_0)$ and $(\lambda_1, m_1)$ estimates the value at $\lambda$ between them as
+\begin{equation}\label{eq:specdecoder:lerp}
+  m(\lambda) = m_0 + t\,(m_1 - m_0),\qquad t = \frac{\lambda - \lambda_0}{\lambda_1 - \lambda_0}\in[0, 1].
+\end{equation}
+$t$ is the fraction of the way from $\lambda_0$ to $\lambda_1$.
+
+\begin{worked}[label={we:specdecoder:lerp}]{Reading the mean curve at 864\,nm}
+The curve has mean 0.20 at 860\,nm and 0.24 at 870\,nm (illustrative numbers\tagA). A sensor has a band at 864\,nm. Do it on paper.
+\begin{align*}
+  t &= \frac{864 - 860}{870 - 860} = \frac{4}{10} = 0.4,\\
+  m(864) &= 0.20 + 0.4\times(0.24 - 0.20)\\
+  &= 0.20 + 0.4\times0.04\\
+  &= 0.20 + 0.016\\
+  &= 0.216 .
+\end{align*}
+The standard deviation is read off the same way, and the band is normalised as $(r - 0.216)/\sigma(864)$.
+\end{worked}
+
+\begin{sourcenote}[: \texttt{WavelengthStats}, as built]
+\code{app/foundation_models/components/pixel_normalization.py}, lines 44--81. Three details the course leaves out:
+\begin{itemize}
+\item The curve is \emph{sorted} at load (lines 56--60), because SpectralEarth's band order is not monotonic in wavelength (the two EnMAP detectors overlap near 900--1000\,nm) and interpolation needs a sorted curve.
+\item Outside the measured range the end values are held (\code{clamp}, line 64): a band at 2480\,nm reads the curve's value at 2445.3\,nm.
+\item The interpolation is \code{torch.lerp(mean[lo], mean[hi], t)}, exactly \cref{eq:specdecoder:lerp}.
+\end{itemize}
+Invariant 6 of \code{docs/lld/spectral-stem.md}: the curve is fixed at pretraining and travels inside the checkpoint; fine-tuning and inference never recompute it, because changing it would shift every input the pretrained weights learned to read.
+\end{sourcenote}
+
+The tempting shortcut is to normalise each scene by its own minimum and maximum. Don't. It erases absolute reflectance, and absolute reflectance is what spectral library matching against USGS splib07 depends on (\cref{ch:material}, and the companion volume on spectral matching). An external model reviewed for this project, HyperSL, does exactly that per-scene min-max scaling, and it is the reason its outputs cannot be matched against the library.
+
+\subsection{Trap 3: ``more sophisticated'' is not evidence}
+
+\Cref{ch:ceiling,ch:crossstem} make a strong case. None of it shows that the new model finds anomalies better, and a harder-to-optimise bottleneck can lose to a simple one. So the design was judged by a controlled comparison, written down before any run: same SpectralEarth subset, same training budget, same spatial model, same normalisation.
+
+\begin{table}[htbp]\centering
+\caption{The three variants of the stem experiment, from the design proposal on the spectral attention bottleneck.}\label{tab:specdecoder:variants}
+\begin{tabular}{lp{0.48\linewidth}p{0.3\linewidth}}\toprule
+variant & spectral stem & input bands\\\midrule
+A & today's 1$\times$1 convolution, in and out & 202 bands as fixed positions\\
+B & per-pixel gate, then A (\cref{sec:specdecoder:gate}) & 202 bands as fixed positions\\
+C & cross-attention compressor and decoder (later C$'$, the reduced stem of \cref{sec:specdecoder:reduced}) & 202 wavelength tokens\\\bottomrule
+\end{tabular}
+\end{table}
+
+Two scores per variant: reconstruction on the held-out SpectralEarth sites (L1 and SAM), and anomaly detection on the labelled PRISMA scenes, the job the model exists for. The decision rule was fixed in advance: C proceeds only if it beats A on detection in mean ROC-AUC across the four scenes; if B matches C within the seed spread of A, B is preferred on cost; if neither beats A, the spectral stem is not what limits detection. \Cref{ch:pretrain} tells what the runs found.
+
+%=============================================================================
+\section{Per-pixel gating: the cheap rival}\label{sec:specdecoder:gate}
+
+\subsection{Why a rival at all}
+
+If variant C beats A, you still do not know \emph{why}, because two different things changed at once:
+\begin{enumerate}
+\item \textbf{adaptivity}: each pixel gets its own recipe instead of one for all;
+\item \textbf{wavelength awareness and masking}: bands become tokens that know their wavelength, and dead bands are skipped exactly.
+\end{enumerate}
+Variant B adds only the first. If B gets most of C's gain, the gain came from adaptivity, and B delivers it for a fraction of the cost. In the mixing-desk picture of \cref{ch:ceiling}, B keeps the glued desk and adds a row of faders in front of it that each song sets for itself.
+
+\subsection{A new function: the sigmoid}
+
+\begin{definition}[Sigmoid]\index{sigmoid}
+The \emph{sigmoid} squashes any real number into the open interval $(0, 1)$:
+\begin{equation}\label{eq:specdecoder:sigmoid}
+  \sigma(z) = \frac{1}{1 + e^{-z}} .
+\end{equation}
+\end{definition}
+
+\begin{worked}[label={we:specdecoder:sigmoid}]{Four values of the sigmoid}
+Do each on paper.
+\begin{align*}
+  z = 0:&\quad e^{0} = 1, & \sigma &= 1/(1 + 1) = 0.5,\\
+  z = 2:&\quad e^{-2} = 0.1353, & \sigma &= 1/(1 + 0.1353) = 1/1.1353 = 0.8808,\\
+  z = -2:&\quad e^{2} = 7.3891, & \sigma &= 1/(1 + 7.3891) = 1/8.3891 = 0.1192,\\
+  z = 5:&\quad e^{-5} = 0.0067, & \sigma &= 1/(1 + 0.0067) = 1/1.0067 = 0.9933 .
+\end{align*}
+\end{worked}
+
+Large positive inputs land near 1, large negative ones near 0, zero lands at exactly 0.5. Notice that $\sigma(2) + \sigma(-2) = 0.8808 + 0.1192 = 1$. That is general: multiply the numerator and denominator of $\sigma(-z) = 1/(1 + e^{z})$ by $e^{-z}$ to get $e^{-z}/(e^{-z} + 1)$, and add $\sigma(z) = 1/(1 + e^{-z})$:
+\begin{align*}
+  \sigma(z) + \sigma(-z) = \frac{1 + e^{-z}}{1 + e^{-z}} = 1 .
+\end{align*}
+\textbf{The sigmoid never reaches 0 or 1 exactly}: $e^{-z}$ is positive for every finite $z$, so the denominator in \cref{eq:specdecoder:sigmoid} is always strictly greater than 1 (giving $\sigma < 1$) and always finite (giving $\sigma > 0$). Keep that in mind; it matters in \cref{sec:specdecoder:gatelimits}.
+
+\subsection{The gate}
+
+Today (\cref{ch:compressor}), one recipe $\mat{W}$ for every pixel: $\vect{y} = \mat{W}\vect{x}$. With a gate, each pixel first computes a volume setting per band from \emph{its own spectrum}:
+\begin{align}
+  \vect{s} &= \mat{W}_2\,\GELU(\mat{W}_1\vect{x} + \vect{b}_1) + \vect{b}_2, & &\vect{s}\in\R^{N}\ \text{(one score per band)} \nonumber\\
+  \vect{g} &= \sigma(\vect{s}), & &\text{each } g_b\in(0, 1) \nonumber\\
+  \vect{x}' &= \vect{g}\odot\vect{x}, & &\text{each band scaled by its gate} \nonumber\\
+  \vect{y} &= \mat{W}\vect{x}', & &\text{today's compressor, unchanged.}\label{eq:specdecoder:gate}
+\end{align}
+Here $\odot$ is element-by-element multiplication, $\mat{W}_1$ is $32\times N$ and $\mat{W}_2$ is $N\times32$, and GELU is the smooth activation of \cref{ch:block}. The small network in front squeezes the spectrum to 32 numbers and expands it back to one score per band: the ``MLP'' in $\sigma(\text{MLP}(\vect{x}))$.
+
+\begin{sourcenote}[: the gate is built from 1$\times$1 convolutions]
+\code{app/foundation_models/components/spectral_gate.py}, lines 26--32, builds the network as \code{nn.Conv2d(bands, hidden, kernel_size=1), nn.GELU(), nn.Conv2d(hidden, bands, kernel_size=1)} and returns \code{x * torch.sigmoid(self.score(x))}. A 1$\times$1 convolution is the same linear map at every pixel, so this is \cref{eq:specdecoder:gate} applied pixel by pixel, with exactly the parameters of two \code{Linear} layers. In the model, the gate stem is \code{nn.Sequential(SpectralGate(bands, gate_hidden), Conv2d(bands, D, 1))} followed by the shared BatchNorm (\code{spectral_stem_seg_former_mae.py}, line 71).
+\end{sourcenote}
+
+\paragraph{Why sigmoid and not softmax?} A softmax over the bands would make the gates compete: they would sum to 1, so with 202 bands the average gate would be $1/202 = 0.005$, and turning one band up would force the others down. Compare the two on scores $[2, 2, -2, -2]$. The sigmoid gives $[0.8808, 0.8808, 0.1192, 0.1192]$, each band its own volume. The softmax: exponentials $7.3891, 7.3891, 0.1353, 0.1353$, sum $15.0488$, weights $[0.4910, 0.4910, 0.0090, 0.0090]$, a share of a fixed total. A volume knob should not flip a band's sign, should not amplify it without limit, and should not depend on how many other knobs exist: the sigmoid satisfies all three.
+
+\begin{worked}[label={we:specdecoder:gatework}]{Gating the toy pixel}
+The toy pixel and recipe of \cref{ch:ceiling}: $\vect{x} = [1.2, 1.0, -0.4, -0.6]$, $\mat{W}$ with rows $[0.5, 0.5, 0, 0]$ and $[0, 0, 0.5, 0.5]$, so today $\vect{y} = [1.1, -0.5]$. Suppose the gate network decides that the first two bands are unreliable (a shadowed pixel, say) and outputs scores $\vect{s} = [-2, -2, 2, 2]$. Do it on paper.
+
+Gates, from \cref{we:specdecoder:sigmoid}, rounded to two places:
+\begin{align*}
+  \vect{g} = [\sigma(-2), \sigma(-2), \sigma(2), \sigma(2)] = [0.12, 0.12, 0.88, 0.88].
+\end{align*}
+Scale each band:
+\begin{align*}
+  \vect{x}' &= [0.12\times1.2,\ 0.12\times1.0,\ 0.88\times(-0.4),\ 0.88\times(-0.6)]\\
+  &= [0.144,\ 0.120,\ -0.352,\ -0.528].
+\end{align*}
+Compress:
+\begin{align*}
+  y_0 &= 0.5\times0.144 + 0.5\times0.120 = 0.072 + 0.060 = 0.132,\\
+  y_1 &= 0.5\times(-0.352) + 0.5\times(-0.528) = -0.176 - 0.264 = -0.440 .
+\end{align*}
+$y_0$ fell from 1.1 to 0.132: for this pixel, the first output barely listens to bands 0 and 1.
+\end{worked}
+
+\subsection{Every pixel gets W times a diagonal}
+
+Look at the gate the other way. Write $\diag(\vect{g})$ for the square matrix with $\vect{g}$ on its diagonal and zeros elsewhere; multiplying a vector by it scales each component, so $\vect{g}\odot\vect{x} = \diag(\vect{g})\vect{x}$. Then
+\begin{align*}
+  \vect{y} = \mat{W}(\diag(\vect{g})\vect{x}) = (\mat{W}\diag(\vect{g}))\,\vect{x},
+\end{align*}
+by associativity of the matrix product. Multiplying $\mat{W}$ on the right by a diagonal matrix scales its \emph{columns}: entry $(c, b)$ of $\mat{W}\diag(\vect{g})$ is $\sum_k W_{ck}\,[\diag(\vect{g})]_{kb} = W_{cb}\,g_b$, since only $k = b$ survives. For the toy pixel:
+\begin{align*}
+  \mat{W}\diag(\vect{g}) = \begin{bmatrix}0.5\times0.12 & 0.5\times0.12 & 0 & 0\\ 0 & 0 & 0.5\times0.88 & 0.5\times0.88\end{bmatrix}
+  = \begin{bmatrix}0.06 & 0.06 & 0 & 0\\ 0 & 0 & 0.44 & 0.44\end{bmatrix}.
+\end{align*}
+\textbf{Every pixel gets its own recipe, but every recipe is today's $\mat{W}$ with its columns rescaled.} That sentence is both B's strength and its limit: the gate can turn a band down for all 32 outputs at once, but it cannot make band 3 matter more to output 0 than to output 1 in one pixel and the reverse in the next. Cross-attention's recipe, $\kappa_h a^{(h)}_{cb}$ in \cref{ch:crossstem}, has a separate weight per (channel, band) pair for every pixel.
+
+\coursefig[0.95\linewidth]{iw-39-gate}{Variant B. A small network reads each pixel's own spectrum and emits one score per band; sigmoid turns the scores into gates between 0 and 1, the bands are scaled by them, and today's fixed 1$\times$1 compressor mixes the result. Each pixel therefore gets the recipe $\mathbf{W}\operatorname{diag}(\mathbf{g})$, today's $\mathbf{W}$ with rescaled columns, at three times today's arithmetic.}{fig:specdecoder:gate}
+
+\subsection{Predict the parameter count}
+
+\begin{worked}[label={we:specdecoder:gateparams}]{The gate's parameters at 202 bands}
+Hidden width 32, $N = 202$. Do it on paper.
+\begin{align*}
+  \text{first layer, }202\to32:&\quad 202\times32 + 32 = 6{,}464 + 32 = 6{,}496\\
+  \text{GELU}:&\quad 0\\
+  \text{second layer, }32\to202:&\quad 32\times202 + 202 = 6{,}464 + 202 = 6{,}666\\
+  \text{gate total}:&\quad 6{,}496 + 6{,}666 = 13{,}162 .
+\end{align*}
+\end{worked}
+
+The real module reports 13,162 (6,464 + 32 in the first layer's weight and bias, 6,464 + 202 in the second's)\tagC{}, matching the docstring of \code{SpectralGate} and invariant 5 of the LLD; at 165 bands it reports 10,757. Variant A's compressor on 202 bands is $202\times32 + 32 = 6{,}496$, plus the BatchNorm's 64, so B's stem has $13{,}162 + 6{,}496 + 64 = 19{,}722$ parameters, against C's 5,345. \textbf{B is the bigger model and the cheaper one}: parameters and arithmetic are different things, as \cref{ch:crossstem} showed.
+
+\subsection{What it costs}
+
+Multiply-adds per pixel, 202 bands:
+\begin{align*}
+  \text{A, compressor}:&\quad 202\times32 = 6{,}464\\
+  \text{B, gate}:&\quad 2\times202\times32 = 12{,}928, \text{ plus the compressor } 6{,}464,\\
+  &\quad 12{,}928+6{,}464 = 19{,}392\\
+  \text{C, cross-attention (\cref{ch:crossstem})}:&\quad 861{,}184
+\end{align*}
+Ratios: $19{,}392/6{,}464 = 3.0$, so B costs three times A; $861{,}184/19{,}392 = 44.4$, so C costs 44 times B. (The 163 of \cref{ch:crossstem} compared C with the shipped 165-band compressor, 5,280.)
+
+\subsection{What a gate cannot do}\label{sec:specdecoder:gatelimits}
+
+\begin{table}[htbp]\centering
+\caption{Gate against cross-attention.}\label{tab:specdecoder:gatevsc}
+\begin{tabular}{p{0.32\linewidth}p{0.3\linewidth}p{0.3\linewidth}}\toprule
+ & B: gate & C: cross-attention\\\midrule
+each pixel its own recipe & yes, $\mat{W}\diag(\vect{g})$ & yes\\
+bands influence each other & through one 32-number squeeze, and only by setting volumes & yes, each output channel is its own weighted mix\\
+exact skip of a dead band & no: the gate never reaches 0 & yes: $-\infty$ gives weight exactly 0\\
+knows a band's wavelength & no: it knows ``input 87'' & yes\\
+works on another band list & no: retrain the input layers & yes: pass the new wavelengths\\\bottomrule
+\end{tabular}
+\end{table}
+
+The dead-band row deserves arithmetic. A dead band holding the value 99 (the 99 test of \cref{ch:crossstem}) and gated as hard as $z = -5$ still leaks
+\begin{align*}
+  \sigma(-5)\times99 = 0.0067\times99 = 0.66
+\end{align*}
+into the mix, more than most real normalised values. Even $z = -10$, $\sigma(-10) = 1/(1 + 22{,}026) = 0.0000454$, leaks $0.0000454\times99 = 0.0045$. In the full model the problem is softened because \code{_stem} sets dead voxels to 0 before any stem sees them (\cref{ch:crossstem}), but a zero is still a claim, not an absence.
+
+How to read the experiment's outcome:
+\begin{center}
+\begin{tabular}{p{0.42\linewidth}p{0.48\linewidth}}\toprule
+outcome & conclusion\\\midrule
+B about equal to C, both beat A & adaptivity was the win; prefer B on cost\\
+C beats B by a margin, B beats A & adaptivity helps, and wavelength awareness and masking add more\\
+neither beats A & the spectral stem is not what limits detection\\\bottomrule
+\end{tabular}
+\end{center}
+
+%=============================================================================
+\section{Spectral reduction: attention over wavelength bins}\label{sec:specdecoder:reduced}
+
+\subsection{Why: the per-band stem hits the memory wall}
+
+{\sloppy\Cref{ch:crossstem} measured about 3.7\,GiB of training memory per $128\times128$ patch for the per-band stem: about 19 kept tensors of shape (16,384 pixels, 202 bands, 32), 202\,MiB each in bf16. A 48\,GB card fits only a handful of patches per step, and the measured speed was 13.5 patches per second. A pretraining run of tens of thousands of patches per epoch for dozens of epochs becomes days per variant. On 2026-10-14 the experiment moved its attention variant from \code{cross_attention} to \code{reduced_attention}, the stem of this section (\code{docs/proposals/spectral-attention-bottleneck.md}, status line).\par}
+
+\begin{table}[htbp]\centering
+\caption{The spectral modules as they exist in \texttt{app/foundation\_models/components/}.}\label{tab:specdecoder:files}
+\begin{tabular}{ll}\toprule
+what & file\\\midrule
+per-band cross-attention compressor and decoder & \texttt{spectral\_attention.py}\\
+wavelength encoding & \texttt{spectral\_tokens.py}\\
+per-pixel gate & \texttt{spectral\_gate.py}\\
+\textbf{reduced stem (this section)} & \texttt{spectral\_reduced.py}\\
+the model that swaps between them & \texttt{spectral\_stem\_seg\_former\_mae.py}\\\bottomrule
+\end{tabular}
+\end{table}
+
+The model's \code{stem} argument takes four values: \code{linear} (A), \code{gate} (B), \code{cross_attention} (C, \cref{ch:crossstem} and \cref{sec:specdecoder:decoder}) and \code{reduced_attention} (C$'$).
+
+\subsection{The spatial trick, turned sideways}
+
+\Cref{ch:esa} met the same kind of wall in space. Attention over the 1,024 tokens of a $32\times32$ grid would compare every token with every token, so SegFormer's efficient self-attention \citep{xie2021segformer} \emph{shrinks the keys and values} to a small summary grid before attending, and keeps the queries at full detail. The reduced stem does the same along the wavelength axis:
+
+\begin{table}[htbp]\centering
+\caption{Spatial reduction (\cref{ch:esa}) and spectral reduction side by side.}\label{tab:specdecoder:sideways}
+\begin{tabular}{p{0.22\linewidth}p{0.33\linewidth}p{0.35\linewidth}}\toprule
+ & spatial reduction & spectral reduction\\\midrule
+what is too many & 1,024 tokens on a $32\times32$ grid & 202 band tokens per pixel\\
+how it shrinks & strided convolution, $R\times R$ tokens $\to$ 1 & fixed 40\,nm bins, the bands inside $\to$ 1\\
+what attention reads & 16 summary tokens & about 42 bin tokens\\
+who asks & every full-resolution token & the 32 learned queries\\\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{The bins}
+
+The bins are a fixed grid, the same for every sensor, starting at 400\,nm. From \code{spectral_reduced.py}, lines 38, 78 and 87:
+\begin{lstlisting}
+BIN_ORIGIN_NM, BIN_END_NM = 400.0, 2500.0
+self.n_bins = int(math.ceil((BIN_END_NM - BIN_ORIGIN_NM) / bin_nm))      # bin_nm = 40
+return ((wavelengths_nm - BIN_ORIGIN_NM) / self.bin_nm).floor().long().clamp(0, self.n_bins - 1)
+\end{lstlisting}
+Two functions appear. The \index{floor}\emph{floor} $\lfloor u\rfloor$ is the largest whole number not above $u$ ($\lfloor 11.6\rfloor = 11$); the \index{ceiling function}\emph{ceiling} $\lceil u\rceil$ is the smallest whole number not below $u$ ($\lceil 52.5\rceil = 53$). The bin of a wavelength $\lambda$ is
+\begin{equation}\label{eq:specdecoder:bin}
+  g(\lambda) = \left\lfloor\frac{\lambda - 400}{40}\right\rfloor, \quad\text{clamped to } 0, \ldots, G - 1,\qquad G = \left\lceil\frac{2500 - 400}{40}\right\rceil .
+\end{equation}
+
+\begin{worked}[label={we:specdecoder:bins}]{Counting the bins and placing three bands}
+\emph{How many bins?} Do it on paper.
+\begin{align*}
+  \frac{2500 - 400}{40} &= \frac{2100}{40} = 52.5,\\
+  \lceil 52.5\rceil &= 53 \text{ bins}.
+\end{align*}
+The last bin, number 52, covers 2480--2500\,nm, only half the usual width, because 2100 is not a whole multiple of 40.
+
+\emph{Place three real SpectralEarth bands} (\code{app/constants/spectralearth_bands.json}):
+\begin{align*}
+  418.416\text{ nm}:&\quad (418.416 - 400)/40 = 18.416/40 = 0.46, & \lfloor0.46\rfloor &= 0 & &\text{(400--440 nm)}\\
+  864\text{ nm}:&\quad (864 - 400)/40 = 464/40 = 11.6, & \lfloor11.6\rfloor &= 11 & &\text{(840--880 nm)}\\
+  2445.3\text{ nm}:&\quad (2445.3 - 400)/40 = 2045.3/40 = 51.13, & \lfloor51.13\rfloor &= 51 & &\text{(2440--2480 nm)}
+\end{align*}
+Bin $g$ covers $400 + 40g$ to $400 + 40(g + 1)$\,nm, and its centre, used for its tag below, is $400 + 40(g + 0.5)$: 420, 460, \ldots, 2500\,nm.
+\end{worked}
+
+Doing that for all 202 bands (\file{research/textbook/tools/compute_specdecoder.py}) gives:
+\begin{itemize}
+\item bins holding at least one band: 42 of 53\tagC;
+\item bands per occupied bin: 1 to 9, average $202/42 = 4.8$;
+\item empty bins: 23--26 (1320--1480\,nm), 33--38 (1720--1960\,nm) and 52 (2480--2500\,nm)\tagC.
+\end{itemize}
+The empty bins sit in the water-vapour gaps SpectralEarth already removed (EnMAP bands 127--141 and 161--167, \cref{ch:sensors}) and past its last band at 2445.3\,nm. An empty bin is masked out of attention exactly as \cref{ch:crossstem} masked a dead band, so attention effectively reads 42 tokens. \textbf{Because the grid starts at 400\,nm on every sensor, bin 11 means 840--880\,nm on SpectralEarth, EnMAP, PRISMA and AVIRIS-NG alike.} A bin is a wavelength range, not a slot.
+
+\begin{figure}[htbp]\centering
+\begin{tikzpicture}
+\begin{axis}[ybar,width=0.95\linewidth,height=5.2cm,bar width=30,xmin=390,xmax=2530,ymin=0,ymax=10,
+  xlabel={bin centre (nm)},ylabel={bands in bin},xtick={420,620,820,1020,1220,1420,1620,1820,2020,2220,2420},
+  tick label style={font=\footnotesize},label style={font=\small},ytick={0,3,6,9},grid=major,grid style={gray!15}]
+\addplot[fill=spec!55,draw=spec] coordinates {(420,5) (460,8) (500,8) (540,8) (580,8) (620,6) (660,7) (700,5) (740,6) (780,5) (820,6) (860,5) (900,6) (940,9) (980,9) (1020,4) (1060,3) (1100,4) (1140,3) (1180,4) (1220,3) (1260,3) (1300,1) (1340,0) (1380,0) (1420,0) (1460,0) (1500,1) (1540,3) (1580,4) (1620,3) (1660,4) (1700,4) (1740,0) (1780,0) (1820,0) (1860,0) (1900,0) (1940,0) (1980,3) (2020,4) (2060,5) (2100,4) (2140,5) (2180,5) (2220,4) (2260,5) (2300,5) (2340,5) (2380,5) (2420,6) (2460,1) (2500,0)};
+\addplot[only marks,mark=x,mark size=3pt,maskgrey,thick] coordinates {(1340,0.3) (1380,0.3) (1420,0.3) (1460,0.3) (1740,0.3) (1780,0.3) (1820,0.3) (1860,0.3) (1900,0.3) (1940,0.3) (2500,0.3)};
+\end{axis}
+\end{tikzpicture}
+\caption{SpectralEarth's 202 bands counted into the 53 fixed 40\,nm bins, to scale, from the real wavelength table (this book's script). Grey crosses mark the 11 empty bins, masked out of attention. The two bins of 9 (920--1000\,nm) are where EnMAP's two detectors overlap.}\label{fig:specdecoder:binhist}
+\end{figure}
+
+\coursefig[0.95\linewidth]{iw-40-bins}{The fixed bin grid as the course draws it. The 400 to 2500\,nm axis is cut into 53 bins of 40\,nm (top); each tick below is one of SpectralEarth's 202 band centres, and the bar height is the number of bands in that bin (1 to 9). 42 bins hold at least one band; the 11 empty bins (hatched) fall in the two water-vapour gaps and at the long end.}{fig:specdecoder:bins}
+
+\subsection{Why a plain bin average would lose detail}
+
+The obvious way to make one token per bin is to average the bin's band tokens. Use the per-band stem's tokens, $\vect{t}_b = v_b\vect{w} + \vect{\beta} + \vect{e}(\lambda_b)$, where $\vect{w}, \vect{\beta}$ are the shared \code{Linear(1, 32)} of \cref{ch:ceiling}. Sum two bands of one bin:
+\begin{align*}
+  \vect{t}_1 + \vect{t}_2 &= v_1\vect{w} + \vect{\beta} + \vect{e}(\lambda_1) + v_2\vect{w} + \vect{\beta} + \vect{e}(\lambda_2)\\
+  &= (v_1 + v_2)\,\vect{w} + 2\vect{\beta} + \vect{e}(\lambda_1) + \vect{e}(\lambda_2).
+\end{align*}
+The only part that depends on the measurements is $(v_1 + v_2)\vect{w}$. \textbf{Everything about the individual values is gone except their sum.}
+
+\begin{worked}[label={we:specdecoder:sumloss}]{A dip and its mirror image collide}
+Spectrum A has a dip then its shoulder in one bin, $\vect{v} = [0.2, 0.6]$; spectrum B the reverse, $[0.6, 0.2]$.
+\begin{align*}
+  \text{sum A} &= 0.2 + 0.6 = 0.8,\\
+  \text{sum B} &= 0.6 + 0.2 = 0.8 .
+\end{align*}
+Identical, so the averaged tokens are identical. A narrow absorption dip and its mirror image become indistinguishable, and narrow dips are exactly what mineral and gas signatures look like.
+\end{worked}
+
+\subsection{Fix 1: every band gets its own weight vector inside its bin}
+
+Instead of the shared $\vect{w}$, each band's value is multiplied by a vector \emph{computed from its wavelength}, $\vect{k}(\lambda_b)\in\R^{32}$, and the bin token is the mean over the bin's valid bands:
+\begin{equation}\label{eq:specdecoder:fix1}
+  \vect{\tau}_g = \frac{1}{n_g}\sum_{b\in g,\ b\text{ valid}} v_b\,\vect{k}(\lambda_b),
+\end{equation}
+where $n_g$ is the number of valid bands in bin $g$. The function $\vect{k}$ is a small network, \code{_hyper} in the source, applied to the \cref{ch:ceiling} wavelength tag:
+\begin{lstlisting}
+def _hyper(out_dim, enc_dim=32, hidden=64):          # spectral_reduced.py, lines 56-58
+    return nn.Sequential(nn.Linear(enc_dim, hidden), nn.GELU(), nn.Linear(hidden, out_dim))
+\end{lstlisting}
+A network that outputs the weights of another computation is called a \index{hypernetwork}\emph{hypernetwork}, hence the name.
+
+\begin{worked}[label={we:specdecoder:fix1}]{Fix 1 separates the dip from its mirror}
+Use two-number tokens and suppose training gave $\vect{k}(\lambda_1) = [1, 0]$ and $\vect{k}(\lambda_2) = [0, 1]$. Do it on paper.
+
+Spectrum A, $[0.2, 0.6]$:
+\begin{align*}
+  \tfrac{1}{2}\bigl(0.2\times[1, 0] + 0.6\times[0, 1]\bigr) &= \tfrac{1}{2}\bigl([0.2, 0] + [0, 0.6]\bigr)\\
+  &= \tfrac{1}{2}[0.2, 0.6] = [0.1, 0.3].
+\end{align*}
+Spectrum B, $[0.6, 0.2]$:
+\begin{align*}
+  \tfrac{1}{2}\bigl(0.6\times[1, 0] + 0.2\times[0, 1]\bigr) &= \tfrac{1}{2}\bigl([0.6, 0] + [0, 0.2]\bigr)\\
+  &= \tfrac{1}{2}[0.6, 0.2] = [0.3, 0.1].
+\end{align*}
+$[0.1, 0.3]$ and $[0.3, 0.1]$: different tokens.
+\end{worked}
+
+Why does this work in general? \Cref{eq:specdecoder:fix1} is a linear map from the bin's $n_g$ values to $\R^{32}$, with matrix columns $\vect{k}(\lambda_b)/n_g$. A linear map is one-to-one exactly when its columns are linearly independent (if two inputs gave the same output, their difference would be a non-zero vector sent to zero, a null-space vector in the sense of \cref{ch:ceiling}). A bin holds at most 9 bands and the token has 32 numbers, so 9 or fewer columns in $\R^{32}$ \emph{can} be independent. \textbf{Nothing forces two in-bin spectra to collide}, while the shared $\vect{w}$ of the plain average gives every column the same direction, rank 1, and a null space of dimension $n_g - 1$.
+
+The token then gets a second term saying where the bin sits, \code{bin_bias}, a \code{Linear(32, 32)} of the tag of the bin's centre wavelength (line 108):
+\begin{lstlisting}
+tok = tok + self.bin_bias(wavelength_encoding(centres, self.d))[None]   # centres: 420, 460, ... nm
+\end{lstlisting}
+
+\subsection{Attention over the bins}
+
+From here it is \cref{ch:crossstem}'s compressor with bin tokens in place of band tokens: the 32 learned queries are projected to Q, the bin tokens to K and V, 4 heads attend with empty bins masked, and the output projection and \code{Linear(32, 1)} turn each of the 32 answers into one channel.
+\begin{center}
+\begin{tabular}{lll}\toprule
+tensor & shape & note\\\midrule
+bin tokens & \shape{(P, 53, 32)} & 53 slots, the empty ones masked\\
+K, V & \shape{(P, 4, 53, 8)} & 4 heads $\times$ 8 = 32\\
+Q & \shape{(P, 4, 32, 8)} & the same 32 learned queries for every pixel\\
+mask & \shape{(P, 1, 1, 53)} & count $>0$: bin has a valid band\\
+channels & \shape{(P, 32)} & the attention half of $\vect{z}$\\\bottomrule
+\end{tabular}
+\end{center}
+Attention still decides, per pixel, how much each region of the spectrum matters: the first requirement of \cref{ch:ceiling}. What it no longer does is choose between individual bands; that choice is now made at bin granularity.
+
+\subsection{Fix 2: a per-band skip path straight to the channels}
+
+Attention over bins adds adaptivity, but it is a narrow route. So every valid band also reaches the 32 channels directly:
+\begin{equation}\label{eq:specdecoder:skip}
+  \text{skip} = \frac{1}{n}\sum_{b\text{ valid}} v_b\,\vect{W}(\lambda_b),\qquad \vect{z} = \text{attention output} + \text{skip},
+\end{equation}
+where $\vect{W}(\lambda)\in\R^{32}$ comes from a second \code{_hyper} and $n$ is the number of valid bands of the pixel. Look at what that is. The 1$\times$1 compressor was $\vect{y} = \mat{W}\vect{x} = \sum_b x_b\,\vect{w}_{:,b}$: each band's value times its column of $\mat{W}$, summed. Here each band's column is \emph{computed from its wavelength} instead of stored per slot, and the sum is divided by the band count. \textbf{The skip path is today's 1$\times$1 compressor, made to work for any band list.}
+
+\begin{worked}[label={we:specdecoder:skip}]{The skip path on the toy pixel}
+Take the computed columns to be the toy compressor's columns (two channels instead of 32):
+$\vect{W}(\lambda_0) = [0.5, 0]$, $\vect{W}(\lambda_1) = [0.5, 0]$, $\vect{W}(\lambda_2) = [0, 0.5]$, $\vect{W}(\lambda_3) = [0, 0.5]$, and $\vect{x} = [1.2, 1.0, -0.4, -0.6]$. Do it on paper.
+\begin{align*}
+  \text{sum} &= 1.2[0.5, 0] + 1.0[0.5, 0] + (-0.4)[0, 0.5] + (-0.6)[0, 0.5]\\
+  &= [0.6, 0] + [0.5, 0] + [0, -0.2] + [0, -0.3]\\
+  &= [1.1, -0.5] \qquad\text{(the toy compressor's }\vect{y}\text{, as promised)},\\
+  \text{mean} &= [1.1, -0.5]/4 = [0.275, -0.125].
+\end{align*}
+\end{worked}
+
+Why divide by the count? Without it, a 239-band PRISMA pixel would sum more terms than a 202-band SpectralEarth pixel and land on a bigger scale. The mean keeps the scale independent of the sensor; the BatchNorm after the stem absorbs the remaining constant factor.
+
+\subsection{Dead bands drop out of every mean exactly}
+
+The source multiplies by validity \emph{before} anything is summed, and counts only valid bands (lines 97--103):
+\begin{lstlisting}
+valid    = torch.ones_like(x) if band_valid is None else band_valid.to(x.dtype)
+vals     = _rows(x * valid)          # (P, N), a dead band becomes 0
+cnt_band = _rows(valid)              # (P, N), 1 per valid band
+onehot   = F.one_hot(self.bin_index(wl), G).to(x.dtype)   # (N, G) which bin each band is in
+cnt      = cnt_band @ onehot         # (P, G) valid bands per bin
+\end{lstlisting}
+
+\begin{worked}[label={we:specdecoder:skipdead}]{The skip path with a dead band holding 99}
+Redo \cref{we:specdecoder:skip} with band 2 dead and holding the garbage value 99.
+\begin{align*}
+  \text{vals} &= [1.2,\ 1.0,\ 99\times0,\ -0.6] = [1.2,\ 1.0,\ 0,\ -0.6],\\
+  \text{sum} &= [0.6 + 0.5,\ 0 + (-0.3)] = [1.1,\ -0.3],\\
+  \text{mean} &= [1.1, -0.3]/3 = [0.3667, -0.1] \qquad\text{(3 valid bands, not 4).}
+\end{align*}
+The 99 never appears.
+\end{worked}
+
+The 99 test of \cref{ch:crossstem} on the real reduced module (202 SpectralEarth wavelengths, band 100 dead, its value changed to 99.0) gives a largest output change of 0.0, both in the course's run and in this book's (\file{research/textbook/tools/compute_specdecoder_output.txt})\tagC. The bin tokens get the same treatment through \code{cnt}, and a bin whose count falls to 0 is masked out of attention.
+
+\begin{sourcenote}[: \texttt{band\_weighting = "width"}, a later fix the course does not show]
+\code{SpectralReducedCompressor} takes a \code{band_weighting} argument, \code{"count"} (the default, everything above) or \code{"width"} (\code{spectral_reduced.py}, lines 69--99). With \code{"width"}, each band counts by the nanometres of spectrum it stands for, computed by \code{band_widths} (lines 43--53): half the gap to each neighbour, the single gap at either end, gaps capped at \code{MAX_GAP_NM = 20}. Worked for wavelengths $[400, 410, 430, 470]$: the gaps are $10, 20, 40$, capped to $10, 20, 20$; the widths are
+\begin{align*}
+  [10,\ (10 + 20)/2,\ (20 + 20)/2,\ 20] = [10,\ 15,\ 20,\ 20].
+\end{align*}
+The validity mask is multiplied by these widths, so every ``mean'' above becomes a width-weighted mean, an approximate integral over wavelength. On an evenly spaced list all widths are equal and the result equals \code{"count"} exactly. The fix was adopted on 2026-10-14 after E004 read PRISMA's native bands badly: with a plain $1/n$ mean every band has one vote, so a sensor's band \emph{density} changed the mix (\code{docs/lld/spectral-stem.md}, ``Band-list robustness'').
+\end{sourcenote}
+
+\coursefig[0.95\linewidth]{iw-40-reduced-stem}{The reduced compressor for one pixel. Left: band values (teal) are masked by validity (grey hatching marks a dead band) and multiplied by a per-band weight vector $k(\lambda)$ computed from each band's wavelength; the products are averaged within each 40\,nm bin and given the bin centre's tag, giving about 42 bin tokens. Centre: 32 learned queries attend over the bin tokens (plum), empty bins masked, and each answer becomes one channel. Bottom: the skip path multiplies every valid band by $W(\lambda)$ and averages, the 1$\times$1 compressor with wavelength-computed columns. The two halves add into the 32-channel latent $z$.}{fig:specdecoder:reducedstem}
+
+\subsection{Fix 3: a per-band decoder without attention}
+
+On the way out there is no attention at all. Each requested wavelength computes its own output weights:
+\begin{equation}\label{eq:specdecoder:fix3}
+  \hat{x}_n = \vect{U}(\lambda_n)\cdot\vect{z} + c(\lambda_n),\qquad \vect{U}(\lambda)\in\R^{32},\ c(\lambda)\in\R .
+\end{equation}
+{\sloppy One \code{_hyper} network with 33 outputs produces both: the first 32 are $\vect{U}$, the last is $c$ (\code{WavelengthLinearDecoder}, lines 122--136). That is the 1$\times$1 decompressor with each output row computed from its wavelength, so it reconstructs 202, 224 or 239 bands from the same weights, like the attention decoder of \cref{sec:specdecoder:decoder}.\par}
+
+\begin{worked}[label={we:specdecoder:fix3}]{Decoding one band}
+Two channels, one wavelength. Take $\vect{z} = [1.1, -0.5]$, and suppose the network gives $\vect{U}(660) = [0.8, 0.1]$ and $c(660) = 0.05$. Do it on paper.
+\begin{align*}
+  \hat{x} &= 0.8\times1.1 + 0.1\times(-0.5) + 0.05\\
+  &= 0.88 + (-0.05) + 0.05\\
+  &= 0.88 .
+\end{align*}
+\end{worked}
+
+\coursefig[0.85\linewidth]{iw-40-decoder}{The wavelength-linear decoder. Each requested wavelength (any list: 202 SpectralEarth, 224 EnMAP, 239 PRISMA bands) passes through one small network that emits a 32-number weight row $U(\lambda)$ and a bias $c(\lambda)$; the band's value is the dot product of that row with the pixel's latent $z$, plus the bias. No attention and no per-band stored weights: the same 4,257 parameters serve every band list.}{fig:specdecoder:lindecoder}
+
+\subsection{Nothing of shape (pixels, bands, 32) is stored}
+
+Fix 1 reads as ``multiply every band by a 32-number vector'', which sounds like it builds the very \shape{(P, 202, 32)} tensor the stem exists to avoid. It does not. The per-band vectors $\vect{k}(\lambda_b)$ do not depend on the pixel, so the source folds them into one matrix first (lines 105--106):
+\begin{lstlisting}
+kmat = (onehot[:, :, None] * self.band_weight(enc)[:, None, :]).reshape(n, G * self.d)
+tok  = (vals @ kmat).view(p, G, self.d) / cnt.clamp(min=1)[..., None]
+\end{lstlisting}
+
+\begin{table}[htbp]\centering
+\caption{The tensors of the folded computation, 202 bands, 53 bins.}\label{tab:specdecoder:kmat}
+\begin{tabular}{lll}\toprule
+tensor & shape & pixel axis?\\\midrule
+\texttt{onehot}: bin of each band & \shape{(202, 53)} & no\\
+\texttt{band\_weight(enc)}: $\vect{k}(\lambda_b)$ per band & \shape{(202, 32)} & no\\
+\texttt{kmat}: $\vect{k}(\lambda_b)$ in its bin's slot & \shape{(202, 1696)} & no\\
+\texttt{vals} & \shape{(P, 202)} & yes, 1 number per band\\
+\texttt{vals @ kmat} & \shape{(P, 1696)} $\to$ \shape{(P, 53, 32)} & yes, but 53 slots, not 202\\\bottomrule
+\end{tabular}
+\end{table}
+
+Row $b$ of \code{kmat} is zero everywhere except the 32 entries of bin $g(\lambda_b)$'s slot, which hold $\vect{k}(\lambda_b)$; $53\times32 = 1{,}696$. So entry $(p, g, j)$ of \code{vals @ kmat} is $\sum_b v_{pb}\,[g(\lambda_b) = g]\,k_j(\lambda_b)$: exactly the sum in \cref{eq:specdecoder:fix1}. One matrix product over the band axis does the multiply, the placement into bins and the sum, in one step. The largest per-pixel tensor is now \shape{(P, 53, 32)}. For one patch in bf16:
+\begin{align*}
+  16{,}384\times53\times32\times2 &= 55{,}574{,}528 \text{ bytes},\\
+  55{,}574{,}528/1{,}048{,}576 &= 53 \text{ MiB},
+\end{align*}
+against 202\,MiB for one \shape{(P, 202, 32)} tensor. The skip path is \code{vals @ W} with \code{W} of shape \shape{(202, 32)}, and the decoder is one \code{einsum} against $\vect{U}$ of shape \shape{(202, 32)}: neither has a band axis and a 32 axis on the same pixel.
+
+\subsection{Predict the parameter counts}
+
+\begin{worked}[label={we:specdecoder:redparams}]{The reduced compressor, 14,721 parameters}
+Start with \code{_hyper(32)}, the network behind $\vect{k}$ and $\vect{W}$. Do it on paper.
+\begin{align*}
+  \text{Linear(32, 64)}:&\quad 64\times32 + 64 = 2{,}048 + 64 = 2{,}112\\
+  \text{GELU}:&\quad 0\\
+  \text{Linear(64, 32)}:&\quad 32\times64 + 32 = 2{,}048 + 32 = 2{,}080\\
+  \texttt{\_hyper(32)}:&\quad 2{,}112 + 2{,}080 = 4{,}192 .
+\end{align*}
+Now the compressor, line by line:
+\begin{align*}
+  \texttt{band\_weight} = \texttt{\_hyper(32)}, \ \vect{k}(\lambda):&\quad 4{,}192\\
+  \texttt{skip\_weight} = \texttt{\_hyper(32)}, \ \vect{W}(\lambda):&\quad 4{,}192\\
+  \texttt{bin\_bias}, \text{ Linear(32, 32)}:&\quad 32\times32 + 32 = 1{,}056\\
+  \text{queries, table (32, 32)}:&\quad 1{,}024\\
+  \text{q, k, v, o}, 4\times\text{Linear(32, 32)}:&\quad 4\times1{,}056 = 4{,}224\\
+  \texttt{to\_channel}, \text{ Linear(32, 1)}:&\quad 33
+\end{align*}
+Total:
+\begin{align*}
+  4{,}192 + 4{,}192 + 1{,}056 + 1{,}024 + 4{,}224 + 33 &= 8{,}384 + 1{,}056 + 1{,}024 + 4{,}224 + 33\\
+  &= 9{,}440 + 1{,}024 + 4{,}224 + 33\\
+  &= 10{,}464 + 4{,}224 + 33\\
+  &= 14{,}688 + 33\\
+  &= 14{,}721 .
+\end{align*}
+\end{worked}
+
+\begin{worked}[label={we:specdecoder:wldparams}]{The wavelength-linear decoder, 4,257 parameters}
+It is one \code{_hyper} with 33 outputs.
+\begin{align*}
+  \text{Linear(32, 64)}:&\quad 64\times32 + 64 = 2{,}112\\
+  \text{Linear(64, 33)}:&\quad 33\times64 + 33 = 2{,}112 + 33 = 2{,}145\\
+  \text{decoder}:&\quad 2{,}112 + 2{,}145 = 4{,}257 .
+\end{align*}
+\end{worked}
+
+The real modules report 14,721 and 4,257, with every line as above (\code{band_weight} $2{,}048 + 64 + 2{,}048 + 32$; in the decoder's last layer a weight of 2,112 numbers and a bias of 33; and so on)\tagC. As in \cref{ch:crossstem}, \textbf{202 appears nowhere in either count}.
+
+\begin{table}[htbp]\centering
+\caption{Parameters of the four stems' spectral parts, all counted by hand in this Part and confirmed by instantiation.}\label{tab:specdecoder:stemparams}
+\begin{tabular}{lrrl}\toprule
+stem & compressor & decoder & depends on band count?\\\midrule
+linear (A), 202 bands & 6,496 & 6,666 & yes\\
+gate (B), 202 bands & $13{,}162 + 6{,}496$ & 6,666 & yes\\
+per-band cross-attention (C) & 5,345 & 6,401 & no\\
+reduced attention (C$'$) & 14,721 & 4,257 & no\\\bottomrule
+\end{tabular}
+\end{table}
+(The linear row: \code{Conv2d(202, 32, 1)} has $202\times32 + 32 = 6{,}496$ and \code{Conv2d(32, 202, 1)} has $32\times202 + 202 = 6{,}666$. All four share one \code{BatchNorm2d(32)}, 64 more, not shown.)
+
+\subsection{Where the saving did not come from}
+
+You might guess the reduced stem is faster because it does less arithmetic. Count it, per pixel, 202 bands, $d = D = 32$, 53 bin slots (the dense matrix product computes all 53, empty or not):
+\begin{align*}
+  \text{per-band stem:}\quad & 861{,}184 \text{ (compressor)} + 693{,}568 \text{ (decoder)} = 1{,}554{,}752,\\[4pt]
+  \text{reduced stem:}\quad & \text{bin tokens, \texttt{vals @ kmat}}: 202\times1{,}696 = 342{,}592\\
+  & \text{K, V}: 2\times53\times1{,}024 = 108{,}544\\
+  & \text{scores}: 32\times53\times32 = 54{,}272\\
+  & \text{weighted values}: 32\times53\times32 = 54{,}272\\
+  & \text{output + to channel}: 32{,}768 + 1{,}024 = 33{,}792\\
+  & \text{skip path}: 202\times32 = 6{,}464\\
+  & \text{decoder}: 202\times32 = 6{,}464\\
+  & \text{total}: 606{,}400 .
+\end{align*}
+Add the reduced stem's lines in pairs to check: $342{,}592 + 108{,}544 = 451{,}136$; $+\,54{,}272 + 54{,}272 = 559{,}680$; $+\,33{,}792 = 593{,}472$; $+\,6{,}464 + 6{,}464 = 606{,}400$. The ratio is
+\begin{align*}
+  1{,}554{,}752/606{,}400 = 2.56:
+\end{align*}
+less arithmetic, but not six times less. Most of \code{vals @ kmat} is multiplying by zero (each row of \code{kmat} has 32 non-zeros out of 1,696), which the code accepts in exchange for one fast dense kernel and no per-band intermediate. \textbf{The speed-up comes mostly from what is no longer written to and read back from memory}, which is what \cref{ch:crossstem} said would bind first.
+
+\subsection{Measured on a real GPU}
+
+\begin{drift}
+\textbf{L40S, 2026-10-14.} One full training step (forward, backward, Adam update), bf16, the real Indradhanu encoder (embedding widths 32, 64, 160, 256), $128\times128$ patches. Patches per second, with peak memory in GiB \tagM{docs/lld/spectral-stem.md}:
+\begin{center}
+\begin{tabular}{lrrrr}\toprule
+stem & batch 4 & batch 8 & batch 16 & batch 32\\\midrule
+linear (A) & 140.8 (0.4) & 270.6 (0.8) & 506.7 (1.4) & 780.5 (2.8)\\
+gate (B) & 138.1 (0.5) & 260.2 (1.0) & 449.3 (1.9) & 612.2 (3.7)\\
+per-band cross-attention (C) & 13.5 (11.3) & 12.2 (18.3) & 10.2 (32.4) & out of memory\\
+reduced attention (C$'$) & 70.6 (3.8) & \textbf{80.0} (5.4) & 69.9 (8.5) & 48.6 (14.6)\\\bottomrule
+\end{tabular}
+\end{center}
+In a full epoch (E004, batch 8, 6 loader workers, two-pass validation) the reduced stem ran at about 55 patches/s, 9.2 minutes per 30,000 patches \tagM{docs/lld/spectral-stem.md}.
+\end{drift}
+
+\begin{sourcenote}[: the gate row]
+The course's table (IW40) shows the gate only at batches 8 and 32, with dashes at 4 and 16. The design record \code{docs/lld/spectral-stem.md}, section ``The reduced stem (C$'$)'', has all four: 138.1 (0.5\,GiB) at batch 4 and 449.3 (1.9\,GiB) at batch 16. This book uses the fuller record. The E004 README (\code{research/experiments/indradhanu-se-pretrain/E004-reduced-attention/README.md}, line 23) quotes the same probe as 2.8\,GiB per patch for the per-band stem and 0.68\,GiB for the reduced stem, which are $11.3/4$ and $5.4/8$ from this table.
+\end{sourcenote}
+
+\begin{figure}[htbp]\centering
+\begin{tikzpicture}
+\begin{groupplot}[group style={group size=2 by 1,horizontal sep=1.6cm},
+  ybar,width=0.5\linewidth,height=6cm,
+  symbolic x coords={4,8,16,32},xtick=data,xlabel={batch (patches)},
+  enlarge x limits=0.18,/pgf/bar width=5pt,
+  tick label style={font=\footnotesize},label style={font=\small},
+  legend style={font=\footnotesize,at={(1.12,-0.28)},anchor=north,legend columns=4,draw=none}]
+\nextgroupplot[ylabel={patches per second},ymin=0,ymax=850]
+\addplot[fill=spec!80,draw=spec] coordinates {(4,140.8) (8,270.6) (16,506.7) (32,780.5)};
+\addplot[fill=spec!30,draw=spec] coordinates {(4,138.1) (8,260.2) (16,449.3) (32,612.2)};
+\addplot[fill=attn!30,draw=attn] coordinates {(4,13.5) (8,12.2) (16,10.2) (32,0)};
+\addplot[fill=attn!85,draw=attn] coordinates {(4,70.6) (8,80.0) (16,69.9) (32,48.6)};
+\node[font=\scriptsize,attn,rotate=90,anchor=west] at (axis cs:32,30) [xshift=1.5pt] {OOM};
+\legend{linear (A), gate (B), per-band cross-attention (C), reduced attention (C$'$)}
+\nextgroupplot[ylabel={peak memory (GiB)},ymin=0,ymax=36]
+\addplot[fill=spec!80,draw=spec] coordinates {(4,0.4) (8,0.8) (16,1.4) (32,2.8)};
+\addplot[fill=spec!30,draw=spec] coordinates {(4,0.5) (8,1.0) (16,1.9) (32,3.7)};
+\addplot[fill=attn!30,draw=attn] coordinates {(4,11.3) (8,18.3) (16,32.4) (32,0)};
+\addplot[fill=attn!85,draw=attn] coordinates {(4,3.8) (8,5.4) (16,8.5) (32,14.6)};
+\node[font=\scriptsize,attn,rotate=90,anchor=west] at (axis cs:32,1.5) [xshift=1.5pt] {OOM};
+\end{groupplot}
+\end{tikzpicture}
+\caption{The L40S measurements of the drift box, as bars on linear axes (to scale). Left: training throughput; the per-band stem is the short plum bars, the reduced stem the dark plum. Right: peak memory. ``OOM'': the per-band stem ran out of memory at batch 32.}\label{fig:specdecoder:measuredbars}
+\end{figure}
+
+\coursefig[0.95\linewidth]{iw-40-measured}{The same measurements as the course draws them. Left: patches per second against batch size (log scale). Right: peak memory. The per-band cross-attention stem runs out of memory at batch 32; the reduced stem is about six times faster at each stem's best batch and needs about a quarter of the memory per added patch.}{fig:specdecoder:measured}
+
+Read the table with arithmetic, not by eye.
+
+\begin{worked}[label={we:specdecoder:readtable}]{Reading the throughput table}
+\emph{Speed at each stem's best batch.}
+\begin{align*}
+  \text{reduced best}&: 80.0 \text{ patches/s (batch 8)},\\
+  \text{per-band best}&: 13.5 \text{ patches/s (batch 4)},\\
+  80.0/13.5 &= 5.93 \quad\text{(about 6 times faster)}.
+\end{align*}
+\emph{Memory per patch at batch 16, where both run.}
+\begin{align*}
+  \text{per-band}&: 32.4/16 = 2.03 \text{ GiB per patch},\\
+  \text{reduced}&: 8.5/16 = 0.53 \text{ GiB per patch},\\
+  2.03/0.53 &= 3.8 .
+\end{align*}
+\emph{Memory per extra patch.} The peak includes fixed costs (weights, optimiser state, the CUDA workspace) that do not grow with the batch. Remove them by asking what each \emph{extra} patch costs between batch 4 and batch 16:
+\begin{align*}
+  \text{per-band}&: (32.4 - 11.3)/(16 - 4) = 21.1/12 = 1.76 \text{ GiB per extra patch},\\
+  \text{reduced}&: (8.5 - 3.8)/(16 - 4) = 4.7/12 = 0.39 \text{ GiB per extra patch},\\
+  1.76/0.39 &= 4.5 .
+\end{align*}
+\end{worked}
+
+Three more honest observations. The reduced stem is still about ten times slower than the linear stem ($780.5/80.0 = 9.8$, each at its best batch): attention is not free. Its speed \emph{falls} at batch 32 (48.6 against 80.0 at batch 8); the cause was not investigated, so batch 8, the fastest measured, is its operating point. And the gate costs little more than the linear stem, as its 3$\times$ stem arithmetic, diluted by the shared SegFormer, predicted.
+
+\subsection{What the reduction gives up}
+
+This is a genuine trade-off, not a free win.
+
+\begin{table}[htbp]\centering
+\caption{Per-band against reduced stem.}\label{tab:specdecoder:tradeoff}
+\begin{tabular}{p{0.38\linewidth}p{0.25\linewidth}p{0.27\linewidth}}\toprule
+ & per-band stem & reduced stem\\\midrule
+per-pixel choice between individual bands & yes & no: between bins; within a bin the weights are fixed per wavelength\\
+narrow dip inside one bin preserved & yes & yes, through fix 1's one-to-one map and fix 2\\
+feature straddling a bin edge & one token per band & split across two bin tokens\\
+dead bands skipped exactly & yes & yes\\
+any band list & yes & yes\\
+different band lists inside one batch & yes, wavelengths \shape{(B, N)} & \textbf{no}: \shape{(N,)} only, else \texttt{ValueError}\\
+measured training speed (L40S, best batch) & 13.5 patches/s & 80.0 patches/s\\\bottomrule
+\end{tabular}
+\end{table}
+
+The structural row is worth remembering: the source rejects a per-sample wavelength table with a \code{ValueError} whose message reads ``reduced stem takes one band list per batch: wavelengths (N,)'' (line 92). SpectralEarth always has one band list, so pretraining is unaffected; mixed-sensor fine-tuning uses the group-wise \code{forward_mixed} of \cref{ch:crossstem}, one stem pass per band list.
+
+\begin{keypoint}
+The reduced stem attends over about 42 fixed wavelength bins instead of 202 bands, keeps per-band detail through a per-band weight inside each bin, a per-band skip path and a per-band decoder, and trains about six times faster because it never stores a pixels-by-bands-by-32 tensor.
+\end{keypoint}
+
+%=============================================================================
+\begin{confusions}
+\confusion{Can the decoder predict wavelengths the sensor never measured?}{It will produce numbers for any wavelength. Whether they mean anything depends on whether training saw that region; the code drops bands more than 15\,nm from any trained wavelength (\texttt{trained\_band\_mask}).}
+\confusion{Why not reuse the compressor's 32 queries in the decoder?}{They are questions about spectra; the decoder needs questions about wavelengths. Different jobs, different queries.}
+\confusion{Does each output band get its own weights in the decoder?}{No; that is exactly what was removed. Every band uses the same projections (or the same hypernetwork, in the reduced stem); only its wavelength differs.}
+\confusion{Does the spatial model need retraining for a new stem?}{Yes: its inputs change meaning, so the whole model is trained from scratch or from a SpectralEarth pretraining run. Its \emph{code} does not change.}
+\confusion{The gate starts at 0.5 everywhere. Doesn't that halve the signal?}{At the start of training the scores are near 0, so every band is scaled by about 0.5. The BatchNorm after the compressor rescales its output to a standard spread, so the encoder never sees the halving (\texttt{spectral\_gate.py}, docstring).}
+\confusion{Is the gate per patch or per pixel?}{Per pixel. A per-patch version (pool the patch to one spectrum, compute one gate) exists, squeeze-and-excitation \citep{hu2018squeeze}, but it gives a shadowed pixel and a bright pixel in the same patch the same recipe, which is the problem being fixed.}
+\confusion{Is a bin token a plain average of its bands?}{No. It is the mean of $v_b\,\mathbf{k}(\lambda_b)$, each band times its own 32-number vector. A plain average keeps only the bin's sum.}
+\confusion{Are the bins learned?}{No. They are a fixed 40\,nm grid from 400\,nm, the same on every sensor and every run. What is learned is $\mathbf{k}$, $\mathbf{W}$, $\mathbf{U}$, the bin bias, the queries and the projections.}
+\confusion{53 or 42 bin tokens?}{The tensor has 53 slots, because the grid has 53 bins. For SpectralEarth 11 are empty and masked, so attention effectively reads 42. Another sensor fills a different set.}
+\confusion{Does the skip path make the attention pointless?}{It makes it optional. The skip path alone is a wavelength-aware 1$\times$1 compressor, variant A that can read any sensor. Attention adds per-pixel adaptivity on top; whether that earns its time is what the experiment measures (trap 3).}
+\end{confusions}
+
+\begin{checkyourself}
+\item\label{ex:specdecoder:1} Recompute the cross-attention decoder's parameters for $d = 16$, $D = 32$, line by line, and check the total with \cref{eq:specdecoder:decparams}.
+\item\label{ex:specdecoder:2} Compute $\sigma(1)$ and $\sigma(-1)$, showing each step. Then, for the toy pixel with gate scores $\vect{s} = [2, 2, -2, -2]$ (gates rounded to 0.88 and 0.12), compute $y_0$ and $y_1$.
+\item\label{ex:specdecoder:3} Count the gate's parameters for the 165-band grid with hidden width 32. A dead band holds 50 and its gate score is $-4$: how much leaks into $\vect{x}'$, and how much would the cross-attention compressor let through?
+\item\label{ex:specdecoder:4} How many bins would the grid from 400 to 2500\,nm have with a bin width of 50\,nm? Which bin would 864\,nm fall in, and what range does that bin cover?
+\item\label{ex:specdecoder:5} A bin holds two bands. With $\vect{k}(\lambda_1) = [1, 0]$ and $\vect{k}(\lambda_2) = [1, 1]$, compute the bin tokens of the spectra $[0.3, 0.5]$ and $[0.5, 0.3]$ with \cref{eq:specdecoder:fix1}. Are they different? What would the plain average of \cref{we:specdecoder:sumloss} have said?
+\item\label{ex:specdecoder:6} Skip path, toy pixel and columns of \cref{we:specdecoder:skip}, band 0 dead (holding 99). Compute the skip output.
+\item\label{ex:specdecoder:7} From the measured table, what does each extra patch cost the linear stem in memory between batch 4 and batch 32? How many times less is that than the reduced stem's 0.39\,GiB?
+\end{checkyourself}
+
+\nextchapter{ch:losses}

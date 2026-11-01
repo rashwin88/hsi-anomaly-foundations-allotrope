@@ -21,6 +21,20 @@ There is **no Redis, Celery or RQ**. The `jobs` table *is* the queue.
 
 Four job types: `scene_onboard`, `annotation_attach`, `action_run`, `project_export`.
 
+**Worker status.** Besides the per-job heartbeat, each worker runs one more daemon thread
+(`allotrope_worker/status_sampler.py`) that every `WORKER_STATUS_INTERVAL_SEC` (5 s), idle or
+busy, samples `nvidia-smi` and the torch device its models use and upserts its row in
+`worker_status` (migration `20261101_10`). `GET /metrics/host` reports the api host's own
+nvidia-smi if it lists a GPU, else the freshest worker row (`source: "worker"`, `worker_id`,
+`age_seconds`, `torch_device`), and a row older than 60 s as unavailable. The reason: the GPU
+compose override gives the GPU to the worker only, so the api's own nvidia-smi always said "no
+GPU" (`allotrope/gpu_status.py`; docs/proposals/class-driven-flow.md addition E).
+
+**Plain failures.** An action that raises `PlainActionError` (`action_types/_meta.py`) gets its
+message as `failure_reason` with no `ValueError:` prefix, so the card's first line is the
+sentence the user acts on. Used for the 165-grid band filter under Indradhanu V2 and for
+`exclude_classes` without a V2 segmentation.
+
 **Handler rule:** handlers may `add`/`flush`/`execute` but **must not commit or rollback**.
 The runner owns the commit. (`action_run` breaks this deliberately twice — an early
 `queued→running` commit so the UI updates, and one in the except branch to save
@@ -44,6 +58,15 @@ TERMINAL_STATUS = "complete"        # optional; anomaly_detection_prep uses "nee
 Register it in `action_types/__init__.py`. `META` is the single source of truth — the
 frontend action picker is generated from it, so you do not touch frontend code to add one.
 
+Keep the UI text short (user request, 2026-11-01): `label` a few words, `short_description`
+one plain sentence, `when_to_use` one short sentence or empty, input labels / descriptions a
+few words. The UI shows `short_description`, not `description`; the long explanation belongs
+in the module docstring and the LLD. `NewActionDialog` renders every `default_config` key
+that is not an input behind a collapsed **Advanced** disclosure, pre-filled with the default,
+unless the dialog's `BASIC_FIELDS` lists it as a visible switch or `OWNED_FIELDS` gives it to
+a type-specific block. `seed-action-templates` matches system templates by type and the
+" · default · <sensor>" suffix, so relabelling renames them in place.
+
 The six shipped kinds: `band_filter_apply`, `scene_segmentation`, `cloud_mask`,
 `anomaly_scoring`, `anomaly_detection_prep`, `spectral_library_match`.
 
@@ -61,6 +84,60 @@ Follow the pattern.
 `on_step(msg)` for progress, and `resolve_action_output(wire_id)` to read an upstream
 Action's output — that last one is how the DAG is wired.
 
+## Adding a sensor
+
+There is no sensor registry: a sensor is a `sensor_type` string (plain `Text`, no migration)
+that a dozen places switch on. This is the list Tanager touched on 2026-11-01
+([`lld/tanager.md`](lld/tanager.md)); grep an existing slug (`aviris_ng`) to check nothing new
+has joined it.
+
+**`app/`**
+- a `FileHelper` (`app/utils/files/`) and, if it needs typed metadata, a model in
+  `app/models/file_processing/` — every class and enum it imports must exist; a missing one
+  killed the worker before;
+- a `DatasetBuilder` (`app/utils/dataset_builder/`) returning a vendable with ascending
+  `band_cw_order`, FWHM > 0 (splib07 silently skips the cache otherwise) and NaN counted
+  invalid;
+- `FileSourceConfig.infer_file_category` (`app/models/file_processing/sources.py`) must
+  accept the path, or every builder construction fails validation;
+- a branch in `app/georef/from_scene_file.py`, or exports 422 with `crs_missing`;
+- `_guess_sensor` in `app/utils/visualization/hyperspectral_visualizer.py` if band count
+  would mislabel it.
+
+A second file format for a sensor that already exists is not a new slug: it goes behind
+the sensor's helper, which picks the reader from what was uploaded. Tanager reads Planet's
+HDF5 or an ENVI `.hdr` + data this way (`app/utils/files/tanager_envi.py`); the switch
+points are the helper, `FileSourceConfig`, the sensor's file picker (shared by
+`source_path`, `_filename_for_id` and the georef branch) and `_SENSOR_FILE_HINTS`.
+
+**`backend/`**
+- `api/scenes.py` `_SUPPORTED_SENSORS`; `cli.py` `sensor_labels` (template names);
+- `foundation_models/resolver.py` `_SCENE_SENSOR_FAMILY`;
+- `sensors/source_path.py` `resolve_source_path`;
+- `allotrope_worker/scene_onboard.py`: `_SENSOR_FILE_HINTS`, `_filename_for_id` (must equal
+  the builder's `stac_item.id`), `_build`, `_cloud_cover_pct`, `_native_projection`, and the
+  hyperspectral tuple that builds the splib07 cache;
+- `allotrope_worker/visualizations.py` hyperspectral tuple;
+- each action type's `accepted_sensor_types` + `default_config_per_sensor`
+  (`band_filter_apply` also needs its `run()` builder branch), then
+  `python -m allotrope.cli seed-action-templates`.
+
+**`frontend/src/`** — `types.ts` `SensorType`; `IngestPanel` options and `accept`;
+`NewActionDialog`'s sensor → model-family map (without it the model picker is empty); the
+sensor label maps in `NewProjectDialog`, `OnboardingDrawer`, `ScenesPage`,
+`SceneDetailPage` (and its `isHyperspectral`), `ProjectWorkspacePage`, `ProjectsPage`.
+
+**Tests** — add the helper and builder to `SENSOR_MODULES` in
+`tests/test_backend/test_imports.py`.
+
+**Before adding a slug, check `generic_hsi` does not already cover it.** It reads any GeoTIFF,
+ENVI or HDF5 / NetCDF cube with its band table wherever it lives, decides FWHM, scale, no-data
+and georef, and reports every decision ([`lld/generic-hsi.md`](lld/generic-hsi.md)). A native
+slug earns its place when the provider ships quality masks or a grid the generic reader cannot
+see (Tanager's cloud masks, PRISMA's swath). `generic_hsi` sits in every list above; two of its
+switch points are data-driven rather than per-sensor: a vendable with `units="not_reflectance"`
+makes `anomaly_scoring` skip foundation models, and `spectral_library_match` adds a warning.
+
 ## Conventions you will trip over
 
 **Wire IDs are prefixed, never bare UUIDs.** `scene_<uuid>`, `project_<uuid>`,
@@ -77,6 +154,32 @@ worth of `async` — the DB session is sync and will block the loop.
 **Status columns are `Text`, not enums**, deliberately — adding a type stays code-only with
 no migration.
 
+**The version lives in one place.** `allotrope/version.py` (`APP_NAME`, `__version__`, 1.0.0
+since 2026-11-01). Every export MANIFEST's `software_version` is `allotrope/<version>`;
+`GET /version` (unauthenticated) returns `{name, version}`; `frontend/src/version.ts` and
+`frontend/package.json` mirror it by hand.
+
+## Exports
+
+`POST /actions/{id}/export` runs synchronously in the api (`api/action_export.py`):
+
+| action | params | bundle |
+|---|---|---|
+| `anomaly_detection_prep` (committed) | — | thermal / prep bundle, unchanged |
+| `spectral_library_match` | none, or `subset=all` | the full bundle, schema `/1`, `/2` or `/3` (lld/spectral-namer-in-product.md) |
+| `spectral_library_match` | `subset=manmade\|natural` | the namer's man-made / natural objects, boolean mask |
+| `spectral_library_match` | `classes=<list>`, `confident_only`, `manmade_p` | the class-driven pack (`api/action_class_pack.py`, `app/spectral_match/class_pack.py`) |
+
+`classes` is a comma list of `natural`, `manmade` and the man-made material keys of
+`app/spectral_match/namer/classes.py` `MANMADE_CLASSES` (read per request, so a new class is a
+token with no api change). `confident_only` (default false) drops tentative man-made objects.
+`manmade_p` (0-1, default the action's 0.5) re-decides every object's call on its mean
+P(man-made). An unknown token, `classes` with `subset`, `confident_only` / `manmade_p` without
+`classes`, or an action without namer results is a 422 that says which.
+`GET /actions/{id}/spectral_library_match/selection_counts` takes the same three params and
+returns `{objects, pixels, per_class, manmade_p, slug}` from the same selection code, so the
+match screen's "Export oil + plastic (64 objects)" is the count the zip holds.
+
 ## Auth
 
 Stateless HS256 JWT in an HttpOnly, `SameSite=Strict` cookie. argon2 passwords.
@@ -91,7 +194,7 @@ Two things to know:
 
 ## Database
 
-Postgres 16, SQLAlchemy 2.0 + psycopg v3, **sync**. 12 entities. Alembic, linear migrations.
+Postgres 16, SQLAlchemy 2.0 + psycopg v3, **sync**. 13 entities. Alembic, linear migrations.
 
 `database_url` is assembled in Python from the discrete `POSTGRES_*` variables — there is no
 real `DATABASE_URL` env var, so special characters in the password are encoded correctly.
@@ -108,6 +211,7 @@ Paths are always stored **relative**; two volumes hold the bytes.
 /data       scenes/<id>/raw|vendable|annotations/ , staging/<job_id>/
 /artifacts  scenes/<id>/thumbnail.png
             projects/<pid>/actions/<aid>/output/
+            projects/<pid>/actions/<aid>/story/   story GIF cache, never exported (lld/story-gif.md)
             projects/<pid>/visualizations|exports/
 ```
 

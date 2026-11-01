@@ -1,0 +1,15 @@
+\glossentry{Hierarchical encoder}{An encoder made of stages at successively coarser resolutions, each returning its own feature map, as opposed to a plain Vision Transformer that keeps one token grid throughout.}
+\glossentry{Feature pyramid}{A set of feature maps of the same ground at falling resolution and rising channel width; here F1 to F4 at 1/4 to 1/32 of the patch side.}
+\glossentry{Stage}{One level of the encoder: a patch embedding, a number of transformer blocks and a LayerNorm, at one grid size and width.}
+\glossentry{Feature map}{The output of one encoder stage reshaped to (B, C, H, W): one C-number vector per grid position.}
+\glossentry{Embedding width}{The number of features each token carries at a stage; 32, 64, 160 and 256 for stages 1 to 4.}
+\glossentry{Output-size formula}{For a convolution with kernel k, stride s and padding p, an input side H becomes floor((H + 2p - k)/s) + 1.}
+\glossentry{Receptive field}{The window of input pixels that can affect one output value through the convolutions that built it; 4, 12, 28 and 60 pixels for the patch embeddings of stages 1 to 4.}
+\glossentry{Jump}{The distance, in input pixels, between neighbouring outputs of a layer; 4, 8, 16 and 32 for the four stages.}
+\glossentry{Head dimension}{The width of one attention head: the stage width divided by the number of heads.}
+\glossentry{Key count}{The number of keys efficient self-attention uses, N divided by R squared; 16 at every stage of a 128-pixel patch.}
+\glossentry{Full-attention fallback}{What efficient self-attention does when tokens have been removed: it cannot rebuild the grid, so it uses all kept tokens as keys.}
+\glossentry{Empty token}{A stage-2 token whose whole window of stage-1 tokens was hidden; about 7 of 256 at a 65 percent hiding rate.}
+\glossentry{Linearity of expectation}{The expected value of a sum equals the sum of the expected values, whether or not the terms are independent.}
+\glossentry{Mask token}{In the original masked autoencoder, a learned vector placed at hidden positions; this encoder uses zeros instead.}
+\glossentry{SegFormer-B0}{The smallest published SegFormer configuration, with stage widths 32, 64, 160 and 256, which this encoder follows.}

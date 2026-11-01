@@ -1,0 +1,24 @@
+\glossentry{Spectral decompressor}{The shipped Indradhanu's Conv2d(32, 165, 1) that maps 32 latent channels back to 165 bands; 5,445 parameters, one fixed row per output band.}
+\glossentry{Cross-attention decoder}{SpectralCrossAttentionDecoder: each requested wavelength becomes a query against the pixel's 32 channel tokens; 6,401 parameters at d = D = 32, for any band list.}
+\glossentry{Channel identity}{A learned 32-number vector per latent channel, added to its stretched value, because channels have no wavelength to encode.}
+\glossentry{Wavelength query}{A decoder query built from the wavelength encoding of a band to be reconstructed, through a Linear(32, 32).}
+\glossentry{Valid-band loss}{A reconstruction loss computed only over bands that were measured; dead and padded bands are excluded from the L1 mean and zeroed before SAM.}
+\glossentry{Trained-band mask}{The rule that keeps only bands within 15 nm of a wavelength the model has trained on, guarding against extrapolation.}
+\glossentry{Spectral self-completion}{Training a pixel to fill its own hidden bands from its other bands; rejected because an anomaly could then rebuild itself.}
+\glossentry{Band-list augmentation}{Training on a random subset of a batch's bands while reconstructing all of them; safe because the loss is taken only on hidden pixels.}
+\glossentry{Wavelength statistics}{WavelengthStats: mean and standard deviation curves over wavelength, measured once on SpectralEarth and read at any band by linear interpolation.}
+\glossentry{Linear interpolation}{Estimating a value between two known points as m0 + t (m1 - m0), where t is the fractional position between them.}
+\glossentry{Per-scene min-max normalisation}{Rescaling each scene by its own minimum and maximum; avoided because it destroys absolute reflectance.}
+\glossentry{Sigmoid}{The function 1 / (1 + exp(-z)), which maps any number into (0, 1) and never reaches either end.}
+\glossentry{Per-pixel gate}{SpectralGate: a small network computes one sigmoid volume per band from the pixel's own spectrum before the fixed 1x1 compressor; 13,162 parameters at 202 bands.}
+\glossentry{Squeeze-and-excitation}{A per-image (here per-patch) channel gate computed from a pooled summary; it gives every pixel of the patch the same recipe.}
+\glossentry{Reduced stem}{The reduced-attention stem: attention over fixed 40 nm wavelength bins plus three per-band paths; 14,721 compressor and 4,257 decoder parameters.}
+\glossentry{Wavelength bin}{One cell of the fixed grid of 40 nm bins from 400 nm; 53 bins up to 2500 nm, the same on every sensor.}
+\glossentry{Floor and ceiling}{The floor of u is the largest whole number not above u; the ceiling is the smallest whole number not below u.}
+\glossentry{Hypernetwork}{A small network whose outputs are weights for another computation; here a two-layer network maps a wavelength encoding to k, W or U.}
+\glossentry{Bin token}{The mean over a bin's valid bands of each band value times its own wavelength-computed vector k(lambda), plus a bias from the bin centre's tag.}
+\glossentry{Skip path}{The reduced stem's per-band route, the mean over valid bands of each value times W(lambda), straight to the 32 channels: a 1x1 compressor whose columns are computed from wavelength.}
+\glossentry{Wavelength-linear decoder}{WavelengthLinearDecoder: each requested band is U(lambda) . z + c(lambda), with U and c from one hypernetwork.}
+\glossentry{Band weighting by width}{An option of the reduced stem in which each band counts by the nanometres of spectrum it covers, making its means approximate integrals over wavelength.}
+\glossentry{kmat}{The matrix of shape (bands, bins x 32) that places each band's k(lambda) in its bin's slot, so one matrix product forms all bin tokens without a per-band tensor.}
+\glossentry{Memory per extra patch}{The slope of peak memory against batch size; it removes fixed costs such as weights and optimiser state from a per-patch comparison.}

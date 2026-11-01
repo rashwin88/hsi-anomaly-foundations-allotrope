@@ -1,0 +1,21 @@
+numpy 2.5.2
+ascending : [1.  1.  1.5 2.  3.  4.  4. ]
+descending: [4. 4. 1. 1. 1. 1. 1.]
+order [2 1 0]
+M_old
+ [[0. 0. 1.]
+ [0. 0. 1.]] 
+ -> pixel [1. 1.]
+M_new
+ [[0.  0.5 0.5]
+ [0.5 0.5 0. ]] 
+ -> pixel [1.5 3. ]
+signature correct: [-0.01   0.02   0.045]
+signature garbled: [-0.02 -0.02 -0.02]
+host bands 234 first 977.3654174804688 last 943.35791015625
+host: columns used by old rows [np.int64(0), np.int64(233)] [977.37, 943.36]
+host: grid bands <= last listed 46 of 165
+bench set1 bands 185 first 2477.054931640625 last 453.38946533203125 columns used [np.int64(184)]
+top1% lost 258.156 top0.1% lost 77.26499999999999
+se 0.22749999999999998 8.07596734114306e-05 0.00898663860469701 gap/se 0.667657871193797
+se p=0.34 0.008925200946061805 2.0/se 2.24084590597648 2.4/se 2.689015087171776

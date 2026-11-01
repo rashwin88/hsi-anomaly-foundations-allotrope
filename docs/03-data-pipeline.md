@@ -9,7 +9,7 @@ validity masks. Everything downstream consumes one.
 
 | Type | Sensors | Cube |
 |---|---|---|
-| `VendableHyperspectralDataset` | PRISMA, AVIRIS-NG | reflectance |
+| `VendableHyperspectralDataset` | PRISMA, AVIRIS-NG, Tanager | reflectance (Tanager's cloud / cirrus masks fold into validity) |
 | `VendableEnmapHyperspectralDataset` | EnMAP | reflectance + 5 quality masks |
 | `VendableThermalDataset` | Landsat 9, HotSat-1 | °C |
 
@@ -36,7 +36,7 @@ check you haven't mixed up an axis order.
 Two layers, so one code path serves wildly different containers:
 
 - **`FileHelper`** — wraps the physical file (`HE5Helper`, `TIFHelper`, `EnmapHelper`,
-  `ENVIHelper`, `HotSatHelper`).
+  `ENVIHelper`, `HotSatHelper`, `TanagerHelper`).
 - **Templates** (`app/templates/`) — a dict mapping *logical component* → *where it
   physically lives*, via three reference kinds: `FILE_REFERENCE` (an internal path, e.g. an
   HDF-EOS dataset), `ROOT_METADATA_FIELD` (a root attribute), and
@@ -45,7 +45,8 @@ Two layers, so one code path serves wildly different containers:
 Templates are **injected, not looked up**, which is what keeps the helpers sensor-agnostic.
 
 > Only PRISMA, Landsat and EnMAP have templates. AVIRIS-NG and HotSat bypass the system and
-> parse their own sidecars.
+> parse their own sidecars; Tanager's one fixed HDF-EOS5 grid needs no template either
+> (`docs/lld/tanager.md`).
 
 **Two known traps:** rasterio band indices are **1-based**; and PRISMA's cube contains a
 slice for every wavelength *including invalid ones*, which carry `FWHM = 0.0`.
@@ -106,7 +107,7 @@ boundary artefacts then dominate the anomaly ranking and crowd out genuine detec
 
 The fix uses a distance transform to replace each invalid pixel with its **nearest valid
 neighbour's real measurement** — never an interpolation. Masks are not modified, so the loss
-still excludes those pixels. On by default for PRISMA / EnMAP / AVIRIS-NG.
+still excludes those pixels. On by default for PRISMA / EnMAP / AVIRIS-NG / Tanager.
 
 ## Patches and shards (training only)
 

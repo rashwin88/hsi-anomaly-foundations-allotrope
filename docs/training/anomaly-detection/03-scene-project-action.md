@@ -159,4 +159,4 @@ imports.
 
 ---
 
-Next: [part 4](04-the-sensors.md) - the five sensors and what each hands you.
+Next: [part 4](04-the-sensors.md) - the six sensors and what each hands you.

@@ -1,0 +1,24 @@
+\glossentry{Scorer}{An evaluation function that turns a cube and its reconstruction into an anomaly score map; changing the scorer leaves the model fixed.}
+\glossentry{Matched filter}{The linear filter w = Sigma-inverse t / (t-transpose Sigma-inverse t) that maximises signal-to-noise for a known signal shape t in noise of covariance Sigma.}
+\glossentry{Signal-to-noise ratio (SNR)}{The filtered signal divided by the spread of the filtered noise, w-transpose t over the square root of w-transpose Sigma w.}
+\glossentry{Lagrange multiplier}{A number lambda added to turn a constrained minimisation into an unconstrained one: minimise the function minus lambda times the constraint.}
+\glossentry{Spatial matched filter}{A blur shaped like a target's point-spread footprint, applied to the residual before whitening (scoring-gains idea A1).}
+\glossentry{Normalised convolution}{Blurring data with nodata set to 0 and dividing by the blurred validity mask, so missing pixels do not drag values down.}
+\glossentry{Pixel measure}{A detection measure that counts target pixels, such as pAUC or TPR; a large object weighs more than a one-pixel target.}
+\glossentry{Object measure}{A detection measure that counts each object once, such as objects caught at the top 1 percent.}
+\glossentry{Rank map}{A score map converted to the fraction of valid pixels scoring at or below each pixel, so scorers with different scales can be combined.}
+\glossentry{Rank fusion}{Combining several rank maps pixel by pixel by their mean (needs agreement) or their maximum (lets either scorer's false alarms through).}
+\glossentry{Gaussian mixture}{A density made of K weighted Gaussian components, each modelling one background type.}
+\glossentry{Responsibility}{The probability that a pixel came from one mixture component, given the pixel, by Bayes' rule.}
+\glossentry{Responsibility-weighted Mahalanobis distance}{The sum over components of each responsibility times the pixel's squared Mahalanobis distance to that component.}
+\glossentry{k-means}{Lloyd's clustering recipe: assign each point to its nearest centre, move each centre to the mean of its points, repeat; the hard-assignment limit of a mixture.}
+\glossentry{Class-aware residual Mahalanobis}{Residual Mahalanobis run separately per class or type, each with its own whitening and a ring of same-type neighbours.}
+\glossentry{Placement bias}{A benchmark bias in which synthetic targets are placed on surfaces where real targets do not occur, so a scorer can win on the benchmark and lose on real scenes.}
+\glossentry{float16}{A 16-bit floating-point format whose largest finite value is 65,504.}
+\glossentry{GT-HAD}{A gated-transformer hyperspectral anomaly detector trained from scratch on the scene it scores, with gating and early stopping as defences against learning the anomalies.}
+\glossentry{Gating}{Leaving pixels that already look anomalous out of what a network learns from.}
+\glossentry{Early stopping}{Ending training before a network has learned the rare things, here the anomalies.}
+\glossentry{Scene adaptation}{Briefly retraining a pretrained model on the scene being scored, then restoring its weights.}
+\glossentry{Cross-validation}{Estimating how a setting chosen on some data will do on new data by holding data out of the choice.}
+\glossentry{Leave-one-scene-out}{Cross-validation with scenes as units: each scene is reported at the setting chosen on the other scenes only.}
+\glossentry{Eval mode}{PyTorch's model.eval(): BatchNorm uses its stored statistics and dropout is off; gradients and weight updates still work.}

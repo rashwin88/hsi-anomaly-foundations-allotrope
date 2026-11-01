@@ -1,0 +1,26 @@
+\glossentry{HAD100}{A public hyperspectral anomaly benchmark of 100 AVIRIS-NG scenes in at-sensor radiance, published with AETNet (2023).}
+\glossentry{ABU}{The Airport-Beach-Urban benchmark of 13 small scenes (2017); radiance of unknown gain and no published wavelengths.}
+\glossentry{Radiance}{Light arriving at the sensor per unit area, wavelength and solid angle, atmosphere and sun included.}
+\glossentry{Reflectance}{The fraction of incoming sunlight a surface sends back, with sun and atmosphere removed; what the models read.}
+\glossentry{Top-of-atmosphere reflectance}{pi L / (E0 cos of the solar zenith): a crude conversion of radiance that removes the sun but not the atmosphere.}
+\glossentry{Leakage}{A benchmark scene overlapping or neighbouring training data, so a model can score by memory.}
+\glossentry{Implant bench}{A benchmark made by adding synthetic objects of known position and difficulty to real held-out scenes.}
+\glossentry{Host}{A real held-out scene that receives implanted objects.}
+\glossentry{Manhattan distance}{Rows apart plus columns apart; the number of 4-neighbour steps between two pixels.}
+\glossentry{Ring}{The valid pixels at Manhattan distance 2 or 3 from an object (20 for a one-pixel object), used as its local background.}
+\glossentry{Contrast z}{Mean over bands of the absolute object-minus-ring difference, divided by the mean over bands of the ring's standard deviation.}
+\glossentry{Tier}{Subtle, medium or easy: contrast z below 0.502, up to 0.934, or above; the terciles of the 909 real objects.}
+\glossentry{Linear mixing model}{A pixel covering fraction a of material t and 1 - a of background b reads (1 - a) b + a t.}
+\glossentry{Abundance}{The fraction of a pixel's footprint covered by a material; the a of the linear mixing model.}
+\glossentry{Mixing line}{The straight segment in spectral space from the background spectrum to the material spectrum, on which every two-part mixture lies.}
+\glossentry{Signature implant}{An additive implant x + a d, with d a real object's difference from its ring.}
+\glossentry{Strength}{The single number (a, f or s) that scales an implant; solved so the realised contrast hits its target.}
+\glossentry{Realised contrast}{The contrast z measured on the object after implanting, including the spot's own natural difference from its ring.}
+\glossentry{Background subspace}{The span of a scene's top ten principal directions.}
+\glossentry{Foreign fraction}{The share of an object's squared difference from its ring that lies outside the background subspace.}
+\glossentry{Halo}{The valid pixels touching an object (Manhattan distance 1).}
+\glossentry{Halo ratio}{The halo's contrast z over the object's; 0 for a hard edge.}
+\glossentry{Point-spread function (PSF)}{The image of a single bright point; here a Gaussian of standard deviation 1.4 pixels.}
+\glossentry{Shrink}{One minus the ring's mean PSF weight (0.676 for a one-pixel object at sigma 1.4): the share of an implant's signal that survives as contrast against the ring.}
+\glossentry{Ordering test}{Acceptance of a benchmark only if it reproduces a ranking the real labels already showed: fine-tuned models above a model-free PCA-RX.}
+\glossentry{bench-v1, bench-v2, bench-v2.1}{The implant bench before foreignness and halo were matched; after (accepted 2026-10-17); and rebuilt after the descending-wavelength fix with a tighter foreignness tolerance (2026-10-18).}

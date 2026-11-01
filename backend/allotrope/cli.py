@@ -19,7 +19,7 @@ from . import action_types as action_types_registry
 from .auth.password import hash_password
 from .config import settings
 from .db import SessionLocal
-from .models import ActionTemplate, User
+from .models import Action, ActionTemplate, User
 
 app = typer.Typer(no_args_is_help=True, add_completion=False)
 
@@ -93,7 +93,13 @@ def seed_action_templates() -> None:
 
     Naming convention:
         "<META.label> · default · <SENSOR_LABEL>"
-    e.g. "Apply spectral band filter · default · PRISMA"
+    e.g. "Band filter · default · PRISMA"
+
+    A system row is found by type and its " · default · <SENSOR_LABEL>" suffix, not by the
+    full name, so a shorter META.label renames the existing row in place instead of adding a
+    second one beside it. Actions do not reference templates by name, so a rename never
+    touches existing projects. Stale system duplicates from earlier relabels are deleted
+    when no Action references them.
 
     Exit codes:
         0  one or more rows upserted (or no work to do)
@@ -101,7 +107,7 @@ def seed_action_templates() -> None:
 
     Sequence diagram: final design/diagrams/cli-seed-action-templates.drawio
     """
-    sensor_labels = {"prisma": "PRISMA", "enmap": "EnMAP", "landsat9": "Landsat 9", "aviris_ng": "AVIRIS-NG", "hotsat1": "HotSAT-1"}
+    sensor_labels = {"prisma": "PRISMA", "enmap": "EnMAP", "landsat9": "Landsat 9", "aviris_ng": "AVIRIS-NG", "hotsat1": "HotSAT-1", "tanager": "Tanager", "generic_hsi": "Other hyperspectral"}
 
     if not action_types_registry.REGISTRY:
         typer.secho(
@@ -114,6 +120,7 @@ def seed_action_templates() -> None:
     inserted = 0
     updated = 0
     unchanged = 0
+    removed = 0
 
     with SessionLocal() as session:
         for kind, spec in sorted(action_types_registry.REGISTRY.items()):
@@ -124,16 +131,33 @@ def seed_action_templates() -> None:
                 sensor_pretty = sensor_labels.get(sensor, sensor)
                 name = f"{meta.label} · default · {sensor_pretty}"
 
-                # Identity for upsert: (type, name, is_system=True). Two
-                # system templates may not share a name; user templates
-                # are scoped separately.
-                existing = session.scalar(
-                    select(ActionTemplate).where(
-                        ActionTemplate.type == kind,
-                        ActionTemplate.name == name,
-                        ActionTemplate.is_system.is_(True),
-                    )
+                # Identity for upsert: (type, " · default · <sensor>" suffix,
+                # is_system=True), so a relabel renames in place. Keep the row that
+                # already has the name, else the oldest; earlier relabels (before this
+                # matching) left stale duplicates, removed here unless an Action
+                # still points at one. User templates are never matched.
+                suffix = f" · default · {sensor_pretty}"
+                rows = sorted(
+                    session.scalars(
+                        select(ActionTemplate).where(
+                            ActionTemplate.type == kind,
+                            ActionTemplate.name.endswith(suffix),
+                            ActionTemplate.is_system.is_(True),
+                        )
+                    ),
+                    key=lambda t: (t.name != name, t.created_at),
                 )
+                existing = rows[0] if rows else None
+                for stale in rows[1:]:
+                    in_use = session.scalar(
+                        select(Action.id).where(Action.action_template_id == stale.id).limit(1)
+                    )
+                    if in_use is None:
+                        session.delete(stale)
+                        removed += 1
+                        typer.secho(f"  - {kind:25s} · {sensor_pretty:9s} → {stale.id} "
+                                    f"(stale duplicate '{stale.name}')", fg=typer.colors.YELLOW)
+                session.flush()
 
                 description = (
                     f"System default for {sensor_pretty} scenes. "
@@ -158,11 +182,13 @@ def seed_action_templates() -> None:
                 elif (
                     existing.configuration != default_cfg
                     or existing.description != description
+                    or existing.name != name
                 ):
                     existing.configuration = default_cfg
                     existing.description = description
+                    existing.name = name
                     typer.secho(
-                        f"  ~ {kind:25s} · {sensor_pretty:9s} → {existing.id} (config or description drift)",
+                        f"  ~ {kind:25s} · {sensor_pretty:9s} → {existing.id} (config, name or description drift)",
                         fg=typer.colors.YELLOW,
                     )
                     updated += 1
@@ -176,7 +202,8 @@ def seed_action_templates() -> None:
         session.commit()
 
     typer.secho(
-        f"Seeded action templates: {inserted} new · {updated} updated · {unchanged} unchanged",
+        f"Seeded action templates: {inserted} new · {updated} updated · {unchanged} unchanged"
+        f" · {removed} stale removed",
         fg=typer.colors.GREEN,
     )
 

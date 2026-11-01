@@ -1,0 +1,15 @@
+stage 1: Conv2d(32, 32, kernel_size=(4, 4), stride=(4, 4))  conv 16416  LayerNorm 64  total 16480
+stage 2: Conv2d(32, 64, kernel_size=(3, 3), stride=(2, 2), padding=(1, 1))  conv 18496  LayerNorm 128  total 18624
+stage 3: Conv2d(64, 160, kernel_size=(3, 3), stride=(2, 2), padding=(1, 1))  conv 92320  LayerNorm 320  total 92640
+stage 4: Conv2d(160, 256, kernel_size=(3, 3), stride=(2, 2), padding=(1, 1))  conv 368896  LayerNorm 512  total 369408
+all four patch embeddings: 497152  fraction of model: 0.09028245774320369
+stage-final LayerNorms: [64, 128, 320, 512]
+stage 1 without compressor (165->32, k4) conv + LN: 84576
+attention pairs, pixel tokens vs stage-1 tokens: 268435456 1048576
+tiny tokens (B, N, C): [[[2.5, -2.0], [0.5, 0.0], [0.5, 0.0], [2.0, 0.0]]]
+LN([2,4,4,6]): [-1.4142, 0.0, 0.0, 1.4142]
+LN with gamma=(1,1,2,2), beta=(0,0,0,1): [-1.4142, 0.0, 0.0, 3.8284]
+LN on tiny tokens: [[1.0, -1.0], [0.99992, -0.99992], [0.99992, -0.99992], [0.99999, -0.99999]]
+cover k4 s4 p0 (16 px): [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]
+cover k7 s4 p3 (16 px): [1, 2, 2, 2, 1, 2, 2, 2, 1, 2, 2, 2, 1, 1, 1, 1]
+cover k3 s2 p1 (16 px): [1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 1]

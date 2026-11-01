@@ -1,0 +1,155 @@
+
+=== toy spectra ===
+t.g 0.21 |t| 0.5196152422706632 |g| 0.5196152422706632 cos 0.7777777777777776 angle 38.942441268981405
+angle(2t, t) 1.2074182697257333e-06 angle(s, g) 22.20765429859653 angle(s,t) 22.20765429859653 s.g 0.18 |s| 0.37416573867739417
+a=0.1: x=[0.12 0.12 0.48], angle(x,g)=3.678, angle(x,t)=35.264, formula angle(x,g)=3.678, x.g=0.2640 x.t=0.2160 |x|^2=0.2592 |x|=0.50912
+a=0.2: x=[0.14 0.14 0.46], angle(x,g)=7.494, angle(x,t)=31.448, formula angle(x,g)=7.494, x.g=0.2580 x.t=0.2220 |x|^2=0.2508 |x|=0.50080
+a=0.5: x=[0.2 0.2 0.4], angle(x,g)=19.471, angle(x,t)=19.471, formula angle(x,g)=19.471, x.g=0.2400 x.t=0.2400 |x|^2=0.2400 |x|=0.48990
+a=0.8: x=[0.26 0.26 0.34], angle(x,g)=31.448, angle(x,t)=7.494, formula angle(x,g)=31.448, x.g=0.2220 x.t=0.2580 |x|^2=0.2508 |x|=0.50080
+
+=== 2-band covariance ===
+S (divide by n) [[2.5, 2.0], [2.0, 2.5]] S (n-1) [[3.3333333333333335, 2.6666666666666665], [2.6666666666666665, 3.3333333333333335]]
+eig [0.5 4.5] [[-0.70710678  0.70710678]
+ [ 0.70710678  0.70710678]]
+S^-1 [[ 1.11111111 -0.88888889]
+ [-0.88888889  1.11111111]] x9 [[10. -8.]
+ [-8. 10.]] det 2.2499999999999996
+W S W^T [[1. 0.]
+ [0. 1.]] W^T W [[ 1.11111111 -0.88888889]
+ [-0.88888889  1.11111111]]
+whitened data [[ 1.  1.]
+ [-1. -1.]
+ [ 1. -1.]
+ [-1.  1.]]
+r [ 1. -1.] Mahalanobis^2 4.0 Euclid^2 2.0 Wr [0. 2.]
+r [1. 1.] Mahalanobis^2 0.4444444444444444 Euclid^2 2.0 Wr [0.66666667 0.        ]
+r [2. 1.] Mahalanobis^2 2.0 Euclid^2 5.0 Wr [1. 1.]
+r [3. 0.] Mahalanobis^2 10.0 Euclid^2 9.0 Wr [1. 3.]
+
+=== projections ===
+proj (3,1) on (1,1): [2. 2.] rem [ 1. -1.]
+H^T H [[2. 1.]
+ [1. 2.]] inv x3 [[ 2. -1.]
+ [-1.  2.]] H^T r [3. 5.] theta [0.33333333 2.33333333] proj [0.33333333 2.66666667 2.33333333] rem [ 0.66666667 -0.66666667  0.66666667] |proj|^2 12.666666666666668 |rem|^2 1.3333333333333337 cos^2 0.9047619047619049 angle 17.97528380980889
+P x9 [[ 6.  3. -3.]
+ [ 3.  6.  3.]
+ [-3.  3.  6.]] P^2-P max 1.1102230246251565e-16
+
+=== normal table ===
+z=0.0: Phi=0.50000  Q=0.500000
+z=0.5: Phi=0.69146  Q=0.308538
+z=1.0: Phi=0.84134  Q=0.158655
+z=1.28: Phi=0.89973  Q=0.100273
+z=1.645: Phi=0.95002  Q=0.049985
+z=1.96: Phi=0.97500  Q=0.024998
+z=2.0: Phi=0.97725  Q=0.022750
+z=2.326: Phi=0.98999  Q=0.010009
+z=2.5: Phi=0.99379  Q=0.006210
+z=3.0: Phi=0.99865  Q=0.001350
+z=3.09: Phi=0.99900  Q=0.001001
+z=3.29: Phi=0.99950  Q=0.000501
+Q^-1(1e-3) 3.090232306167813 Q^-1(0.005) 2.575829303548901 required SNR (Pd 0.5) 9.54953570608324 Q^-1(0.9) -1.2815515655446004 SNR Pd 0.9 19.112494220964777
+density at 0 0.3989422804014327 at 1 0.24197072451914337 at 2 0.05399096651318806
+sqrt(2/pi) 0.7978845608028654 sqrt(pi/2) 1.2533141373155001
+chi2 q=1: threshold 10.828; noncentrality Pd 0.5 10.828; mean 1
+chi2 q=2: threshold 13.816; noncentrality Pd 0.5 12.802; mean 2
+chi2 q=3: threshold 16.266; noncentrality Pd 0.5 14.243; mean 3
+chi2 q=30: threshold 59.703; noncentrality Pd 0.5 30.595; mean 30
+chi2_2 threshold = -2 ln 1e-3 = 13.815510557964274
+t_3 unit-var 1e-3 threshold 5.897
+t_5 unit-var 1e-3 threshold 4.565
+likelihood of [0.9 1.1 1.3] at mean 1.0, sd 0.2: 2.00671 log 0.69650
+likelihood of [0.9 1.1 1.3] at mean 1.1, sd 0.2: 2.91975 log 1.07150
+likelihood of [0.9 1.1 1.3] at mean 1.2, sd 0.2: 2.00671 log 0.69650
+
+=== 3-band fill / MF / ACE ===
+d'S^-1 r 190.0 d'S^-1 d 900.0 a_hat 0.2111111111111111 sd 0.03333333333333333 T_MF 6.333333333333333 r'S^-1 r 43.0 ACE 0.9328165374677002 cos 0.9658242787731629 angle 15.022463535166436 plain LS 0.2333333333333333
+  a=0.15: weighted SSE 6.2500
+  a=0.2: weighted SSE 3.0000
+  a=0.25: weighted SSE 4.2500
+  a=0.2111: weighted SSE 2.8889
+SNR at a=0.2 36.0 sqrt 6.0 Pd 0.9981915125478545
+a_min 0.10300774353892711
+whitened d [ 20.  20. -10.] whitened r [ 5.  3. -3.]
+sigma0^2 14.333333333333334 sigma1^2 0.9629629629629619 GLR 57.42571689457367 1/(1-ACE) 14.884615384615374
+ACE at 10x r 0.9328165374677002
+kappa=0.0: bias in sd units 0.3989
+kappa=0.5: bias in sd units 0.1978
+kappa=1.0: bias in sd units 0.0833
+kappa=2.0: bias in sd units 0.0085
+mismatch: d'S^-1 dt -160.0 ratio -0.17777777777777778 E a_hat at a=0.2 0.16444444444444445
+
+=== MSD toy (white noise) ===
+P_J^perp r [-1.00000000e+00  2.77555756e-16  1.00000000e+00] h_perp [ 0.66666667 -0.33333333 -0.33333333] h_perp.r -1.0 |h_perp|^2 0.6666666666666667 num 1.4999999999999998 den 0.5000000000000002 T 2.9999999999999982
+gain/offset identity lhs [ 0.012  0.042 -0.028] rhs [ 0.012  0.042 -0.028]
+
+=== a_min hand check (mean|e|=0.10, phi=0.006) ===
+sigma 0.12533141373155002 sigma^2 0.015707963267948963 lam_in 0.23326325452904212 lam_out 0.001672138025297793 in-part 3852.623088083132 out-part 3244.1101858406255 sum 7096.733273923757 a_min 0.036682873570583155 sd(a_hat) 0.011870547729070495
+reality check set1 0.2104162541250081 /2.18 0.09652121748853583
+price of direction 30.59/14.24 2.148174157303371 sqrt 1.4656650904293829
+noise: 0.15/354 0.000423728813559322 /0.077 0.00550297160466652 0.15/260 0.0005769230769230769 /0.077 0.007492507492507492
+
+=== SAM galvanised metal over grass/soil: lengths ===
+usgs_s07_ASD_GalvanizedSheetMetal_GDS334_ASDFRa_AREF.txt usgs_s07_ASD_Cheatgrass_ANP92-11A_BECKa_AREF.txt ecostress_soil.alfisol.haploxeralf.none.all.87p313.jhu.becknic.spectrum.txt
+|t| 1.3067 |b| 3.5957 ratio 0.3634 t.b 4.3107 cos 0.91746 angle 23.443 sin 0.39783
+mean t 0.0988 mean b 0.2652
+a=0.1: num 0.0520 den 3.3560 tan 0.01549 angle(x,b) 0.887 angle(x,t) 22.555 direct angle(x,t) 22.555 small-a approx 0.828
+a=0.2: num 0.1040 den 3.1163 tan 0.03336 angle(x,b) 1.911 angle(x,t) 21.532 direct angle(x,t) 21.532 small-a approx 1.657
+a=0.3: num 0.1560 den 2.8767 tan 0.05421 angle(x,b) 3.103 angle(x,t) 20.339 direct angle(x,t) 20.339 small-a approx 2.485
+a=0.5: num 0.2599 den 2.3973 tan 0.10842 angle(x,b) 6.188 angle(x,t) 17.254 direct angle(x,t) 17.254 small-a approx 4.142
+a=0.85: num 0.4419 den 1.5584 tan 0.28354 angle(x,b) 15.830 angle(x,t) 7.612 direct angle(x,t) 7.612 small-a approx 7.041
+
+=== PSF halo, point source at pixel centre (hand version) ===
+1-px window centred: Phi(0.5/1.4) 0.6395075690491646 fraction 0.27901513809832923 squared 0.07784944728802973
+c=0.5: z-values own (-0.3571,2.5000) own 0.6333 left 0.3598 right 0.0062 Phi((4-c)/s) 0.9938 Phi((0-c)/s) 0.3605 Phi((-4-c)/s) 0.0007 Phi((8-c)/s) 1.0000
+c=1.5: z-values own (-1.0714,1.7857) own 0.8209 left 0.1419 right 0.0371 Phi((4-c)/s) 0.9629 Phi((0-c)/s) 0.1420 Phi((-4-c)/s) 0.0000 Phi((8-c)/s) 1.0000
+c=2.5: z-values own (-1.7857,1.0714) own 0.8209 left 0.0371 right 0.1419 Phi((4-c)/s) 0.8580 Phi((0-c)/s) 0.0371 Phi((-4-c)/s) 0.0000 Phi((8-c)/s) 1.0000
+c=3.5: z-values own (-2.5000,0.3571) own 0.6333 left 0.0062 right 0.3598 Phi((4-c)/s) 0.6395 Phi((0-c)/s) 0.0062 Phi((-4-c)/s) 0.0000 Phi((8-c)/s) 0.9993
+mean own (1D) 0.7271; mean side (1D) 0.2725
+2D own token = 0.7271^2 = 0.5287; 2D edge tokens = 2 x 0.7271 x 0.2725 = 0.3963
+edge-token share per position: min 0.294 max 0.464
+ring/halo: psf_weights numbers are quoted from compute_numbers_output.txt
+
+=== gain rotation ===
+kappa 1.02: sqrt 1.00995 bound cos 0.999951 angle 0.567; brute-force worst 2-band angle 0.567
+kappa 1.05: sqrt 1.02470 bound cos 0.999703 angle 1.398; brute-force worst 2-band angle 1.398
+kappa 1.1: sqrt 1.04881 bound cos 0.998866 angle 2.729; brute-force worst 2-band angle 2.729
+kappa 1.2: sqrt 1.09545 bound cos 0.995859 angle 5.216; brute-force worst 2-band angle 5.216
+worst d [1.04880885 1.        ] Gd [1.04880885 1.1       ] d.Gd 2.2 |d|^2 2.1 |Gd|^2 2.3100000000000005 cos 0.9988655696858586
+MAE 0.015 / 0.155 0.0967741935483871
+
+=== leakage ===
+l=0.3 a=0.2: SNR x0.4900; a_hat -> 0.1489 (ratio 0.7447)
+l=0.1 a=0.2: SNR x0.8100; a_hat -> 0.1837 (ratio 0.9184)
+l=0.22 a=0.05: SNR x0.6084; a_hat -> 0.0394 (ratio 0.7887)
+l=0.5 a=0.2: SNR x0.2500; a_hat -> 0.1111 (ratio 0.5556)
+l8 = 0.22*0.24/0.40 0.13199999999999998 (0.87/0.78)^2 1.2440828402366864
+toy leak r [ 0.28  0.28 -0.28] d [ 1.88  1.88 -1.88] a_hat 0.14893617021276595
+
+=== calibration and sample size ===
+p* = 0.995 exceedances 50.0 sd 0.0007053367989832942 rel 0.14106735979665885
+bound alpha + F/N0 0.051000000000000004
+z975 1.959963984540054 z80 0.8416212335729143 sum 2.8015852181129683 sum^2 7.848879734349088
+n for disc 0.2, delta 0.1: 157.0
+n for disc 0.1, delta 0.1: 78.5
+n for disc 0.3, delta 0.1: 235.5
+n=30: MDE 0.2287, half-width p=0.5 0.1789
+n=100: MDE 0.1253, half-width p=0.5 0.0980
+n=300: MDE 0.0723, half-width p=0.5 0.0566
+implied discordance 0.08541987713452728
+design effect m=20 rho=0.1 2.9000000000000004
+label noise: eps 0.1, K 10: Acc 0.6 -> 0.55 Acc 0.5 -> 0.46
+q=0.5: expected CE 0.69315
+q=0.6: expected CE 0.63247
+q=0.7: expected CE 0.61086
+q=0.8: expected CE 0.63903
+q=0.9: expected CE 0.76453
+label shift: unnormalised [0.392 0.024 0.008] sum 0.42400000000000004 posterior [0.9245283  0.05660377 0.01886792]
+contamination 1/(1-0.02) 1.0204081632653061
+toy objects acc A 0.6666666666666666 acc B 0.5 diff 0.16666666666666663 discordant 0.5
+bootstrap 2.5/97.5 pct [-0.33333333  0.66666667]
+
+=== toy ROC (H0 N(0,1), H1 N(mu,1)) ===
+mu=2.0: TPR at FPR 0.001 0.1378, at 0.01 0.3721; pAUC(<=1%) 0.2635
+mu=3.09: TPR at FPR 0.001 0.4999, at 0.01 0.7775; pAUC(<=1%) 0.6599
+random ROC pAUC(<=1%): 0.005

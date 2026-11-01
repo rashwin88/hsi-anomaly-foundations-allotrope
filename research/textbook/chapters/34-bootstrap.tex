@@ -1,0 +1,513 @@
+\chapter{How small a difference can we see: the paired object bootstrap}\label{ch:bootstrap}
+
+\begin{onething}
+The real PRISMA bench is 4 scenes and 909 objects, so a difference of 0.005 pAUC between two scorers can be luck in which
+objects happen to be on it; the paired object bootstrap redraws the objects with replacement, the same draw for both
+scorers, thousands of times, and since 2026-10-21 a gain counts only if the 95\% interval of that difference clears zero.
+\end{onething}
+
+\section{The problem: 909 objects is not many}\label{sec:bootstrap:problem}
+
+By October 2026 every verdict on a new model or score leaned on gaps like 0.170 against 0.163 pAUC
+(\cref{ch:measures} for pAUC). Nobody had asked how big a gap the bench can tell apart from noise. On 2026-10-21 that
+question got its own small experiment and tool:
+
+\begin{center}
+\small
+\begin{tabular}{p{5.6cm}p{7.0cm}}
+\toprule
+file & what it holds \\
+\midrule
+\file{research/experiments/bench-resolution/README.md} & the question, the method, the results, the new rule \\
+\file{app/evaluation/significance.py} & \code{object_pauc_parts} and \code{paired_bootstrap}: the method in 63 lines \\
+\file{scripts/compare_scorers.py} & the command line: two (model, scorer) pairs from a finished run \\
+\file{tests/test_evaluation/test_significance.py} & two tests: parts reproduce pAUC; identical scorers differ by 0 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+The gains being chased were about 0.005 to 0.01 pAUC. FT04's real-bench pAUC with cloud excluded is
+0.170\hfil\penalty50\hfilneg\tagM{research/experiments/bench-resolution/README.md}, so a gain of 0.005 is a change of
+$0.005 / 0.170 = 0.029$, about 3\%. Would a bench of the same kind, with different objects on it, show the same 3\%?
+You cannot collect another bench. You can ask the bench you have.
+
+\begin{analogy}
+Two teachers each mark the same class of 30 essays, and teacher B's average is 0.4 marks higher. Is B more generous, or
+did a few essays happen to suit B? You cannot hire a new class, but you can ask ``if the class had been a slightly
+different 30 essays, drawn from the same kind of students, would B still come out ahead?'' You redraw the class from the
+30 you have, many times, and look at B minus A each time. Crucially, both teachers mark the \emph{same} redrawn class
+each time; otherwise you would compare one teacher's easy class with the other's hard one.
+\end{analogy}
+
+\section{Sampling variation and the standard error}\label{sec:bootstrap:se}
+
+Any number computed from data - a mean, a pAUC - would come out differently on different data of the same kind. The
+spread of those hypothetical values is the number's \index{sampling distribution}\emph{sampling distribution}, and its
+standard deviation is the \index{standard error}\emph{standard error}. For a plain mean there is a formula. You need two
+rules, each shown on a tiny example first.
+
+\paragraph{Rule 1: the variance of a sum.} For two random quantities $X$ and $Y$ with means $\mu_X$, $\mu_Y$, the
+\index{covariance}\emph{covariance} is $\mathrm{Cov}(X,Y) = \E[(X - \mu_X)(Y - \mu_Y)]$: positive when they tend to
+rise together. Then
+\begin{align*}
+\mathrm{Var}(X + Y) &= \E\big[(X + Y - \mu_X - \mu_Y)^2\big] && \text{definition of variance}\\
+&= \E\big[((X - \mu_X) + (Y - \mu_Y))^2\big] && \text{regroup}\\
+&= \E[(X - \mu_X)^2] + 2\,\E[(X - \mu_X)(Y - \mu_Y)] + \E[(Y - \mu_Y)^2] && \text{expand the square}\\
+&= \mathrm{Var}\,X + 2\,\mathrm{Cov}(X, Y) + \mathrm{Var}\,Y.
+\end{align*}
+\emph{Tiny check}: let $X$ be a fair coin worth 0 or 1 and $Y = X$. Then $X + Y$ is 0 or 2 with equal chance, mean 1,
+variance $\frac12(0-1)^2 + \frac12(2-1)^2 = 1$. The rule: $\mathrm{Var}\,X = \frac14$, $\mathrm{Cov}(X, X) = \frac14$,
+so $\frac14 + 2 \times \frac14 + \frac14 = 1$. Agreed. If $X$ and $Y$ are \emph{independent}, the covariance is 0 and
+the variances add.
+
+\paragraph{Rule 2: the variance of a mean.} Take $n$ independent values, each of variance $\sigma^2$. Their mean is the
+sum divided by $n$, and multiplying a quantity by $c$ multiplies its variance by $c^2$:
+\begin{align*}
+\mathrm{Var}\Big(\tfrac1n \textstyle\sum_i X_i\Big) &= \tfrac{1}{n^2}\,\mathrm{Var}\Big(\textstyle\sum_i X_i\Big)
+  && \text{pull out } c = 1/n\\
+&= \tfrac{1}{n^2} \cdot n\sigma^2 && \text{rule 1, independent: variances add}\\
+&= \frac{\sigma^2}{n}, \qquad \text{standard error } = \frac{\sigma}{\sqrt n}.
+\end{align*}
+
+For a pAUC built from thousands of correlated pixels there is no such clean formula. The bootstrap gets the standard
+error without one.
+
+\section{The bootstrap idea, by hand}\label{sec:bootstrap:idea}
+
+\begin{definition}[Bootstrap]
+A \index{bootstrap}\emph{bootstrap} \citep{efron1979bootstrap} estimates the sampling distribution of a number using
+only the data you have. From the $n$ data items, draw $n$ items \emph{with replacement} - each draw picks any item, so
+some appear twice and some not at all - recompute the number on that \emph{bootstrap sample}, and repeat many times. The
+spread of the recomputed numbers stands in for the spread you would have seen across fresh data.
+\end{definition}
+
+The logic: the data are your best picture of the population they came from. Drawing from the data with replacement is
+drawing from that picture, so it mimics collecting a new dataset.
+
+\begin{worked}[label={we:bootstrap:five}]{Bootstrapping the mean of five numbers}
+Do this on paper. The data are $x = (2, 4, 5, 7, 12)$, with mean $(2 + 4 + 5 + 7 + 12)/5 = 30/5 = 6$. Six bootstrap
+draws are given\tagA{} as positions 1--5 (a random number generator would supply them):
+\begin{center}
+\begin{tabular}{lccc}
+\toprule
+draw & positions & values & mean \\
+\midrule
+1 & 4, 1, 5, 5, 2 & 7, 2, 12, 12, 4 & $37/5 = 7.4$ \\
+2 & 2, 2, 3, 1, 4 & 4, 4, 5, 2, 7 & $22/5 = 4.4$ \\
+3 & 3, 5, 1, 3, 2 & 5, 12, 2, 5, 4 & $28/5 = 5.6$ \\
+4 & 1, 1, 2, 4, 3 & 2, 2, 4, 7, 5 & $20/5 = 4.0$ \\
+5 & 5, 4, 3, 2, 5 & 12, 7, 5, 4, 12 & $40/5 = 8.0$ \\
+6 & 2, 3, 4, 4, 1 & 4, 5, 7, 7, 2 & $25/5 = 5.0$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+Draw 1 contains 12 twice and 5 not at all: that is ``with replacement''. The mean of the six bootstrap means:
+\begin{align*}
+(7.4 + 4.4 + 5.6 + 4.0 + 8.0 + 5.0)/6 = 34.4/6 = 5.733.
+\end{align*}
+Their spread (population standard deviation): deviations from 5.733 are $1.667, -1.333, -0.133, -1.733, 2.267, -0.733$;
+squares $2.778, 1.778, 0.018, 3.004, 5.138, 0.538$; sum $13.253$; divided by 6, $2.209$; square root
+\[
+\text{bootstrap standard error} \approx 1.486.
+\]
+Compare rule 2: the data's population standard deviation is $\sqrt{(16 + 4 + 1 + 1 + 36)/5} = \sqrt{58/5} =
+\sqrt{11.6} = 3.406$, so $\sigma/\sqrt5 = 3.406/2.236 = 1.523$. Six draws already land near it; with 100,000 draws the
+book's script gets 1.522\tagC{}.
+\end{worked}
+
+\section{The percentile interval}\label{sec:bootstrap:percentile}
+
+\begin{definition}[Percentile 95\% interval]
+The \index{percentile interval}\emph{percentile 95\% interval} from a bootstrap is the 2.5th and 97.5th percentiles of
+the recomputed numbers: the range holding the middle 95\% of them.
+\end{definition}
+
+\code{paired_bootstrap} uses \code{np.percentile(..., [2.5, 97.5])}, which interpolates linearly. With $n$ values sorted
+from smallest (position 0) to largest (position $n - 1$), the $q$-th percentile sits at position $(n - 1)\,q/100$; if
+that falls between two positions, it takes the matching share of the gap.
+
+\begin{worked}[label={we:bootstrap:pct}]{Percentiles of the six bootstrap means}
+Sorted: $4.0, 4.4, 5.0, 5.6, 7.4, 8.0$ at positions 0--5.
+\begin{align*}
+\text{2.5th: position } (6 - 1) \times 0.025 &= 0.125 && \text{between positions 0 and 1}\\
+4.0 + 0.125 \times (4.4 - 4.0) &= 4.0 + 0.05 = 4.05\\
+\text{97.5th: position } 5 \times 0.975 &= 4.875 && \text{between positions 4 and 5}\\
+7.4 + 0.875 \times (8.0 - 7.4) &= 7.4 + 0.525 = 7.925.
+\end{align*}
+The interval from six draws is $[4.05, 7.925]$; \code{np.percentile} returns the same\tagC{}. Six draws are far too
+few to trust; 100,000 give $[3.4, 9.2]$\tagC{}. With 1,000 draws the 2.5th percentile sits at position
+$999 \times 0.025 = 24.975$ (between the 25th and 26th smallest) and the 97.5th at $974.025$; with 2,000 at $49.975$
+and $1{,}949.025$.
+\end{worked}
+
+\paragraph{The whole bootstrap distribution, exactly.} Five items drawn five times with replacement give
+$5^5 = 5 \times 5 \times 5 \times 5 \times 5 = 3{,}125$ equally likely ordered draws, few enough to list them all. The
+book's script does, and \cref{fig:bootstrap:exact} plots how often each bootstrap mean occurs. Its standard deviation is
+1.5232, exactly $\sigma/\sqrt5$, and its 2.5th and 97.5th percentiles are 3.4 and 9.2\tagC{}: the 100,000 random draws
+of \cref{we:bootstrap:pct} had already found the exact answer. Real benches have far too many objects to enumerate, which
+is why the code draws at random, 1,000 or 2,000 times.
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}
+\begin{axis}[width=12cm,height=5.6cm,ybar,bar width=4pt,xmin=1.6,xmax=12.4,ymin=0,ymax=230,
+  xlabel={bootstrap mean of $(2, 4, 5, 7, 12)$},ylabel={draws out of 3,125},
+  xtick={2,3,4,5,6,7,8,9,10,11,12},tick label style={font=\small}]
+\fill[spec!12] (axis cs:3.4,0) rectangle (axis cs:9.2,230);
+\addplot[fill=spat!60,draw=spat] coordinates {(2,1) (2.4,5) (2.6,5) (2.8,10) (3,25) (3.2,20) (3.4,50) (3.6,55)
+ (3.8,60) (4,106) (4.2,75) (4.4,125) (4.6,125) (4.8,105) (5,181) (5.2,110) (5.4,175) (5.6,175) (5.8,120) (6,215)
+ (6.2,110) (6.4,160) (6.6,155) (6.8,80) (7,171) (7.2,70) (7.4,110) (7.6,110) (7.8,40) (8,105) (8.2,30) (8.4,50)
+ (8.6,50) (8.8,10) (9,50) (9.2,10) (9.4,20) (9.6,20) (10,15) (10.4,5) (10.6,5) (11,5) (12,1)};
+\draw[loss,thick,dashed] (axis cs:6,0) -- (axis cs:6,230);
+\node[font=\small,text=loss,anchor=west] at (axis cs:6.05,218) {data mean 6};
+\node[font=\small,text=spec!70!black,anchor=west,align=left] at (axis cs:9.9,150) {95\% interval\\$[3.4, 9.2]$};
+\end{axis}
+\end{tikzpicture}
+\caption{The exact bootstrap distribution of the mean of five numbers: every one of the $5^5 = 3{,}125$ draws with
+replacement, counted by the mean it gives (computed by \texttt{research/textbook/tools/compute\_bootstrap.py}). The teal
+band is the percentile 95\% interval. The distribution is lumpy because only 43 distinct means are possible, and skewed
+right because one value (12) is far from the rest.}
+\label{fig:bootstrap:exact}
+\end{figure}
+
+\section{Why resample objects, not pixels}\label{sec:bootstrap:objects}
+
+pAUC averages over target pixels, but target pixels are not independent pieces of evidence. The pixels of one object rise
+and fall together: if the model reconstructs a rooftop well, all its pixels score low at once. Swap a dozen hard objects
+for a dozen easy ones and pAUC moves; swap a dozen pixels inside one object and it barely does.
+
+\paragraph{How much dependence costs, derived.} Model $n$ objects of $m$ pixels each. Each pixel's value (think of its
+contribution $c$ below) has variance $\sigma^2$; two pixels of the same object have correlation $\rho$, so covariance
+$\rho\sigma^2$; pixels of different objects are independent. Apply rule 1 to one object's $m$ pixels: $m$ variance
+terms and $m(m-1)$ ordered pairs of distinct pixels, each a covariance:
+\begin{align*}
+\mathrm{Var}(\text{object sum}) &= m\sigma^2 + m(m-1)\rho\sigma^2 = m\sigma^2\,[1 + (m-1)\rho].\\
+\intertext{Objects are independent, so their sums' variances add, and the mean over all $nm$ pixels divides by $nm$:}
+\mathrm{Var}(\text{pixel mean}) &= \frac{n \cdot m\sigma^2\,[1 + (m-1)\rho]}{(nm)^2}
+  = \frac{\sigma^2}{nm}\,[1 + (m-1)\rho].
+\end{align*}
+Compare rule 2 for $N$ independent pixels, $\sigma^2/N$. The two agree when
+\begin{equation}\label{eq:bootstrap:neff}
+N_{\text{eff}} = \frac{nm}{1 + (m-1)\rho},
+\end{equation}
+the \index{effective sample size}\emph{effective sample size}; the bracket $1 + (m-1)\rho$ is the \emph{design effect}.
+At $\rho = 0$ every pixel counts; at $\rho = 1$, $N_{\text{eff}} = nm/m = n$: you have as much evidence as you have
+\emph{objects}.
+
+\begin{worked}[label={we:bootstrap:neff}]{An effective sample size}
+Suppose\tagA{} 909 objects of 4 pixels each ($909 \times 4 = 3{,}636$ target pixels) with within-object correlation
+$\rho = 0.8$.
+\begin{align*}
+\text{design effect} &= 1 + (4 - 1) \times 0.8 = 1 + 2.4 = 3.4\\
+N_{\text{eff}} &= 3{,}636 / 3.4 = 1{,}069.4\\
+\text{standard error ratio} &= \sqrt{3.4} = 1.84.
+\end{align*}
+3,636 pixels carry the evidence of about 1,069 independent ones. A pixel bootstrap, which treats them as independent,
+would report a standard error $1.84$ times too small.
+\end{worked}
+
+The book's script checks this by simulation\tagA{}: 300 objects of sizes 1--10 (967 pixels), each object's pixels
+sharing one value plus small noise. Resampling objects gave a standard error of 0.0235, resampling pixels 0.0098: the
+pixel bootstrap was 2.4 times too confident\tagC{}. That is the reason in \file{significance.py}'s module docstring for
+drawing ``each scene's objects with replacement''.
+
+\begin{keypoint}
+More numbers is not more evidence: resample the unit that varies independently, here the object.
+\end{keypoint}
+
+\paragraph{The background is held fixed.} Each scene's background pixels are not resampled. The docstring's reason:
+``there are millions; their sampling error is small next to the objects'''. Only the target side of the measure is
+redrawn.
+
+\section{pAUC rebuilt from per-pixel contributions}\label{sec:bootstrap:cp}
+
+To redraw objects you need pAUC as a sum over objects. The docstring of \file{app/evaluation/significance.py} gives the
+rearrangement.
+
+\begin{definition}[Per-pixel contribution]
+For a target pixel $p$, let $\mathrm{FPR}(p)$ be the share of the scene's background pixels scoring \emph{at or above}
+it. With limit $m$ (\code{max_fpr}, default 0.01), its \index{per-pixel contribution}\emph{contribution} is
+\begin{equation}\label{eq:bootstrap:c}
+c(p) = \frac{\max(0,\ m - \mathrm{FPR}(p))}{m},
+\end{equation}
+and the scene's pAUC is the mean of $c$ over its $P$ target pixels:
+$\mathrm{pAUC}_m = \frac1P\sum_p c(p)$.
+\end{definition}
+
+Read $c(p)$ as ``the share of the first $m$ of false alarms for which this pixel is caught''. A target pixel above every
+background pixel has $\mathrm{FPR} = 0$ and $c = 1$; one that beats the bottom 99.5\% has $\mathrm{FPR} = 0.005$ and is
+caught over the second half of the range, $c = 0.5$; one at or below the top 1\% of background has $c = 0$.
+
+\paragraph{Proof that the mean of $c$ is the pAUC (no ties).} In the ROC walk of \cref{ch:measures}, target $p$ is
+passed when the false-alarm rate reaches $\mathrm{FPR}(p)$, and from then on it counts in the TPR. So at false-alarm
+rate $f$,
+\[
+\mathrm{TPR}(f) = \frac1P \sum_p \mathbf{1}[\mathrm{FPR}(p) \le f].
+\]
+Put this into the definition of pAUC (\cref{eq:measures:pauc}):
+\begin{align*}
+\mathrm{pAUC}_m &= \frac1m \int_0^m \frac1P \sum_p \mathbf{1}[\mathrm{FPR}(p) \le f]\,df && \text{substitute TPR}\\
+&= \frac1P \sum_p \frac1m \int_0^m \mathbf{1}[\mathrm{FPR}(p) \le f]\,df && \text{swap the sum and the integral}\\
+&= \frac1P \sum_p \frac{\max(0,\ m - \mathrm{FPR}(p))}{m} && \text{the indicator is 1 on } [\mathrm{FPR}(p), m]\\
+&= \frac1P \sum_p c(p).
+\end{align*}
+The third line: the indicator is 1 for $f$ from $\mathrm{FPR}(p)$ up to $m$, an interval of length
+$m - \mathrm{FPR}(p)$, or of length 0 if $\mathrm{FPR}(p) \ge m$. With tied scores \code{exact_roc} draws a diagonal
+segment while $c(p)$ treats every pixel as its own step, so the two agree ``up to ties''; with millions of distinct float
+scores the gap is negligible, and the README reports the bootstrap's point values reproducing the evaluator's (0.1621 and
+0.1695).
+
+So an object needs only two numbers: the \emph{sum of $c$ over its pixels} and its \emph{pixel count}.
+\code{object_pauc_parts} returns them:
+\begin{lstlisting}[basicstyle=\ttfamily\footnotesize]
+bg = np.sort(score[valid & (objects == 0)])                      # (N,) bg scores, ascending
+t = valid & (objects > 0)                                         # (H, W) target pixels
+fpr = 1.0 - np.searchsorted(bg, score[t], side="left") / max(len(bg), 1)   # share of bg >= score
+c = np.maximum(0.0, max_fpr - fpr) / max_fpr                      # (P,) eq. c
+ids = objects[t]
+sums, counts = np.bincount(ids, weights=c), np.bincount(ids)      # per object: sum of c, count
+\end{lstlisting}
+\code{searchsorted(..., side="left")} counts the background scores strictly below each target score, so one minus that
+share is the share at or above it. A bootstrap draw adds up the drawn objects' pairs and divides; no score map is touched
+again, which is why thousands of draws are cheap.
+
+\begin{worked}[label={we:bootstrap:tiny}]{A tiny scene, both ways}
+One scene, 1,000 background pixels, three objects, four target pixels\tagA{}:
+\begin{align*}
+\text{obj 1, pixel a: } & 2 \text{ bg above}, & \mathrm{FPR} &= 0.002, & c &= (0.01 - 0.002)/0.01 = 0.8\\
+\text{obj 1, pixel b: } & 6 \text{ bg above}, & \mathrm{FPR} &= 0.006, & c &= (0.01 - 0.006)/0.01 = 0.4\\
+\text{obj 2, pixel c: } & 0 \text{ bg above}, & \mathrm{FPR} &= 0.000, & c &= 0.01/0.01 = 1.0\\
+\text{obj 3, pixel d: } & 30 \text{ bg above}, & \mathrm{FPR} &= 0.030, & c &= \max(0, -0.02)/0.01 = 0
+\end{align*}
+Object parts: object 1 $(0.8 + 0.4, 2) = (1.2, 2)$; object 2 $(1.0, 1)$; object 3 $(0.0, 1)$.
+\[
+\mathrm{pAUC} = \frac{1.2 + 1.0 + 0.0}{2 + 1 + 1} = \frac{2.2}{4} = 0.55.
+\]
+Now the ROC area. Sort the target pixels by FPR: TPR is $\frac14$ from FPR 0, $\frac24$ from 0.002, $\frac34$ from
+0.006, and pixel d never arrives before 0.01:
+\begin{align*}
+0 \text{ to } 0.002: &\quad 0.002 \times 0.25 = 0.0005\\
+0.002 \text{ to } 0.006: &\quad 0.004 \times 0.50 = 0.0020\\
+0.006 \text{ to } 0.010: &\quad 0.004 \times 0.75 = 0.0030\\
+\text{area} &= 0.0005 + 0.0020 + 0.0030 = 0.0055, \qquad 0.0055 / 0.01 = 0.55.
+\end{align*}
+The same 0.55. The book's script builds this scene and gets 0.55 from \code{object_pauc_parts} and from
+\code{exact_roc} plus \code{pauc}\tagC{}.
+\end{worked}
+
+\section{The paired design}\label{sec:bootstrap:paired}
+
+To compare scorers A and B, you want the interval of the \emph{difference} $\mathrm{pAUC}_B - \mathrm{pAUC}_A$. You could
+bootstrap A and B separately, each with its own draws. That throws away the most useful fact: both scorers are judged on
+the same objects, and an object that is hard for A is usually hard for B.
+
+\paragraph{The variance of a difference, derived.} Apply rule 1 with $Y$ replaced by $-B$ (and
+$\mathrm{Var}(-B) = \mathrm{Var}\,B$, $\mathrm{Cov}(A, -B) = -\mathrm{Cov}(A, B)$), or directly:
+\begin{align*}
+\mathrm{Var}(A - B) &= \E\big[((A - B) - (\mu_A - \mu_B))^2\big] && \text{definition}\\
+&= \E\big[((A - \mu_A) - (B - \mu_B))^2\big] && \text{regroup}\\
+&= \E[(A - \mu_A)^2] - 2\,\E[(A - \mu_A)(B - \mu_B)] + \E[(B - \mu_B)^2] && \text{expand the square}\\
+&= \mathrm{Var}\,A + \mathrm{Var}\,B - 2\,\mathrm{Cov}(A, B).
+\end{align*}
+When A and B rise and fall together, the covariance is large and positive, and it cancels most of the variance. Drawing
+independently sets that covariance to zero by construction, and you get $\mathrm{Var}\,A + \mathrm{Var}\,B$.
+
+\begin{worked}[label={we:bootstrap:var}]{Five objects, paired and unpaired}
+Per-object scores\tagA{} for two scorers on the same five objects:
+$A = (0.9, 0.2, 0.6, 0.1, 0.7)$, $B = (0.95, 0.25, 0.6, 0.15, 0.75)$.
+\begin{align*}
+\mu_A &= (0.9 + 0.2 + 0.6 + 0.1 + 0.7)/5 = 2.5/5 = 0.50\\
+A - \mu_A &= (0.40, -0.30, 0.10, -0.40, 0.20)\\
+\mathrm{Var}\,A &= (0.16 + 0.09 + 0.01 + 0.16 + 0.04)/5 = 0.46/5 = 0.0920\\
+\mu_B &= (0.95 + 0.25 + 0.6 + 0.15 + 0.75)/5 = 2.7/5 = 0.54\\
+B - \mu_B &= (0.41, -0.29, 0.06, -0.39, 0.21)\\
+\mathrm{Var}\,B &= (0.1681 + 0.0841 + 0.0036 + 0.1521 + 0.0441)/5 = 0.452/5 = 0.0904\\
+\mathrm{Cov}(A,B) &= (0.164 + 0.087 + 0.006 + 0.156 + 0.042)/5 = 0.455/5 = 0.0910\\
+\mathrm{Var}(A - B) &= 0.0920 + 0.0904 - 2 \times 0.0910 = 0.1824 - 0.1820 = 0.0004.
+\end{align*}
+Check directly: $A - B = (-0.05, -0.05, 0, -0.05, -0.05)$, mean $-0.04$, deviations
+$(-0.01, -0.01, 0.04, -0.01, -0.01)$, variance $(4 \times 0.0001 + 0.0016)/5 = 0.002/5 = 0.0004$. Agreed. Unpaired, the
+variance would be $0.0920 + 0.0904 = 0.1824$, $456$ times larger\tagC{}: B's consistent $+0.05$ edge would vanish in the
+noise of which objects were drawn.
+\end{worked}
+
+\code{paired_bootstrap} therefore draws one set of object positions per scene and applies it to both scorers.
+
+\begin{worked}[label={we:bootstrap:draws}]{Two paired draws on the tiny scene}
+Give scorer B its own parts on the same objects of \cref{we:bootstrap:tiny}: object 1 $(1.0, 2)$, object 2 $(0.9, 1)$,
+object 3 $(0.2, 1)$. Point values: $A = 2.2/4 = 0.550$, $B = (1.0 + 0.9 + 0.2)/4 = 2.1/4 = 0.525$, $B - A = -0.025$.
+
+Draw objects 1, 1, 3 (with replacement), the same for both:
+\begin{align*}
+A &= (1.2 + 1.2 + 0.0)/(2 + 2 + 1) = 2.4/5 = 0.48\\
+B &= (1.0 + 1.0 + 0.2)/(2 + 2 + 1) = 2.2/5 = 0.44, \qquad B - A = -0.04.
+\end{align*}
+Draw objects 2, 2, 2:
+\begin{align*}
+A &= (1.0 + 1.0 + 1.0)/3 = 1.00, \qquad B = (0.9 + 0.9 + 0.9)/3 = 0.90, \qquad B - A = -0.10.
+\end{align*}
+A swung from 0.48 to 1.00 between the two draws; $B - A$ moved only from $-0.04$ to $-0.10$. The draw moves both scorers
+together, and the difference cancels most of it.
+
+With only three objects the interval is still wide: \code{paired_bootstrap} with 1,000 draws on this toy gives
+$[-0.10, +0.20]$ and $P(B > A) = 0.28$\tagC{}. (A draw of object 3 three times gives $B - A = 0.2 - 0 = +0.2$.) Few
+objects, wide interval: that is the whole problem in miniature.
+\end{worked}
+
+\paragraph{Scenes and the two measures.} On the real bench each scene's objects are drawn separately, with
+\code{rng.integers(len(ids[s]), size=len(ids[s]))} per scene; each scene's pAUC is computed from its drawn parts, and
+the four are averaged - the same ``mean over scenes'' as the evaluator. If per-object hits are given (1 if caught at a
+cut-off, from the run's \file{per_object.csv}, column \code{hit_0.1} by default), objects caught is resampled too, but
+\emph{pooled} across scenes: all caught drawn objects over all drawn objects. The function also returns
+$P(B > A)$, the share of draws in which B's pAUC beat A's.
+
+\section{What it does not cover: only four scenes}\label{sec:bootstrap:scenes}
+
+The bootstrap redraws objects \emph{inside} each scene and never redraws the scenes. A model can be lucky in the scenes
+too. Why not bootstrap scenes as well? Count the distinct ways to draw 4 scenes from 4 with replacement, order not
+mattering. That is choosing 4 items from 4 kinds with repetition, $\binom{4 + 4 - 1}{4}$:
+\begin{align*}
+\binom{7}{4} &= \frac{7 \times 6 \times 5 \times 4}{4 \times 3 \times 2 \times 1} = \frac{840}{24} = 35.
+\end{align*}
+Thirty-five possible draws, one of which is ``scene 2 four times'': too few and too lumpy for an interval worth trusting.
+The README says it plainly: ``Scene-level uncertainty (4 scenes) is not covered and is larger: this interval is a lower
+bound on the real uncertainty.'' Nor does it cover checkpoint-to-checkpoint variation: FT09c, five more epochs of the
+same run as FT09b, moved by as much as FT09b's resolved gain (\cref{tab:bootstrap:results}).
+
+\section{The rule, and the intervals so far}\label{sec:bootstrap:rule}
+
+\begin{keypoint}
+A gain counts only if its paired-bootstrap 95\% interval clears zero (rule adopted 2026-10-21).
+\end{keypoint}
+
+Run it on a finished evaluation:
+\begin{lstlisting}[basicstyle=\ttfamily\footnotesize,language={}]
+python scripts/compare_scorers.py configs/eval/scene_adapt.json "FT04_ep10|RM, cloud excluded" \
+    "adapt50|RM, cloud excluded" [--top 0.1] [--boot 2000]
+\end{lstlisting}
+Each side is \texttt{<model name>|<scorer label>} as in the run's \file{per_scene.csv} (\texttt{-} as the model name for
+a model-free scorer). It reads the cached score maps and \file{per_object.csv} of the \emph{finished} run, only for
+\code{prisma_bench} scenes, recomputes nothing, and prints both point values, $B - A$, the 95\% interval and $P(B>A)$.
+
+\begin{sourcenote}[: how many draws]
+The README states its results used 1,000 draws. The code's defaults are 2,000: \code{paired_bootstrap(..., n=2000,
+seed=0)} in \file{app/evaluation/significance.py} (line 32) and \texttt{-{}-boot 2000} in
+\file{scripts/compare_scorers.py} (line 37). So the README's runs passed \texttt{-{}-boot 1000}; re-running with the
+defaults will give slightly different interval ends. The generator is seeded (\code{seed=0}), so a given $n$ is
+reproducible.
+\end{sourcenote}
+
+\begin{drift}
+Paired object bootstrap on the real PRISMA bench, pAUC $\le$ 1\%, $B - A$ [95\% interval]. Rows 1--3 from
+\file{research/experiments/bench-resolution/README.md} (2026-10-21, 1,000 draws); rows 4--6 from the run table of
+\file{docs/lld/evaluation.md} (2026-10-22/23). FT04c is FT04 with cloud excluded; gated adaptation is $N = 50$.
+\begin{center}
+\small
+\begin{tabular}{clcc}
+\toprule
+ & A $\to$ B & pAUC $B - A$ [95\%] & caught 0.1\%, pts [95\%] \\
+\midrule
+1 & FT04 $\to$ + cloud excl. & $+0.0074$ [$+0.0047$, $+0.0101$] & $+1.0$ [$+0.4$, $+1.7$] \\
+2 & FT04c $\to$ gated adapt. & $-0.0091$ [$-0.0176$, $-0.0028$] & $-0.7$ [$-1.7$, $+0.2$] \\
+3 & FT04c $\to$ FT06 $/\sqrt{b}$ & $-0.0067$ [$-0.0174$, $+0.0037$] & $+0.8$ [$-0.4$, $+2.0$] \\
+4 & FT04c $\to$ FT09b & $+0.0060$ [$+0.0002$, $+0.0118$] & unresolved \\
+5 & FT04c $\to$ FT09c & $+0.0020$ [$-0.0026$, $+0.0064$] & - \\
+6 & FT09b $\to$ FT09c & $-0.0040$ [$-0.0076$, $-0.0010$] & - \\
+\bottomrule
+\end{tabular}
+\captionof{table}{Paired-bootstrap intervals on the real PRISMA bench.}\label{tab:bootstrap:results}
+\end{center}
+\end{drift}
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}
+\begin{axis}[width=12cm,height=7.2cm,xmin=-0.02,xmax=0.015,ymin=0.4,ymax=6.6,
+  xlabel={pAUC difference $B - A$ (95\% interval)},
+  ytick={1,2,3,4,5,6},
+  yticklabels={{FT09b $\rightarrow$ FT09c},{FT04 $\rightarrow$ FT09c},{FT04 $\rightarrow$ FT09b},{FT04 $\rightarrow$ FT06 $\sqrt{b}$},{FT04 $\rightarrow$ gated adapt.},{FT04 $\rightarrow$ + cloud excl.}},
+  yticklabel style={font=\small},xticklabel style={font=\small,/pgf/number format/fixed,/pgf/number format/precision=3},
+  scaled x ticks=false,xtick={-0.02,-0.015,-0.01,-0.005,0,0.005,0.01,0.015},grid=major,grid style={gray!15}]
+\draw[black,thick] (axis cs:0,0.4) -- (axis cs:0,6.6);
+% row 6: cloud exclusion, resolved gain
+\draw[spec,line width=2pt] (axis cs:0.0047,6) -- (axis cs:0.0101,6);
+\addplot[only marks,mark=*,spec,mark size=2.5pt] coordinates {(0.0074,6)};
+% row 5: gated adaptation, resolved loss
+\draw[loss,line width=2pt] (axis cs:-0.0176,5) -- (axis cs:-0.0028,5);
+\addplot[only marks,mark=*,loss,mark size=2.5pt] coordinates {(-0.0091,5)};
+% row 4: FT06 sqrt b, tie
+\draw[maskgrey,line width=2pt] (axis cs:-0.0174,4) -- (axis cs:0.0037,4);
+\addplot[only marks,mark=*,maskgrey,mark size=2.5pt] coordinates {(-0.0067,4)};
+% row 3: FT09b, resolved gain
+\draw[spec,line width=2pt] (axis cs:0.0002,3) -- (axis cs:0.0118,3);
+\addplot[only marks,mark=*,spec,mark size=2.5pt] coordinates {(0.0060,3)};
+% row 2: FT09c vs FT04, tie
+\draw[maskgrey,line width=2pt] (axis cs:-0.0026,2) -- (axis cs:0.0064,2);
+\addplot[only marks,mark=*,maskgrey,mark size=2.5pt] coordinates {(0.0020,2)};
+% row 1: FT09c vs FT09b, resolved loss
+\draw[loss,line width=2pt] (axis cs:-0.0076,1) -- (axis cs:-0.0010,1);
+\addplot[only marks,mark=*,loss,mark size=2.5pt] coordinates {(-0.0040,1)};
+\end{axis}
+\end{tikzpicture}
+\caption{The paired-bootstrap intervals of \cref{tab:bootstrap:results}, drawn to scale: point value (dot) and 95\%
+interval (bar) of the pAUC difference $B - A$. Teal: interval wholly above zero (a resolved gain); amber: wholly below
+zero (a resolved loss); grey: crosses zero (a tie). FT09b's interval clears zero by 0.0002.}
+\label{fig:bootstrap:intervals}
+\end{figure}
+
+\paragraph{Reading the rows.}
+\begin{itemize}
+\item \textbf{Cloud exclusion is a real gain} on both measures (row 1): the one change adopted since FT04 at the time.
+Its interval is the narrowest, half-width $(0.0101 - 0.0047)/2 = 0.0027$. A likely reason, from the method rather than
+the README: excluding cloud leaves most objects' scores untouched, so most per-object differences are exactly zero and the
+paired difference barely wobbles - \cref{we:bootstrap:var}'s covariance at its largest.
+\item \textbf{Gated per-scene adaptation's loss is real} on pAUC (row 2), though its objects-caught interval straddles
+zero. Read each measure's interval on its own.
+\item \textbf{FT06's square-root variant is a tie} (row 3): both of its intervals cross zero, whatever the point values say.
+\item \textbf{FT09b was the first resolved gain since cloud exclusion} (row 4), by the narrowest of margins; and FT09c,
+five epochs later, is a tie with FT04 and a resolved loss against FT09b (rows 5, 6). The object bootstrap does not cover
+that checkpoint-to-checkpoint variation.
+\end{itemize}
+
+The README summarises the bench's resolution as interval half-widths of about $\pm 0.005$ to $\pm 0.01$ pAUC and $\pm 1$ to
+$\pm 1.5$ points of objects caught at the top 0.1\%. So an old pass criterion of ``+0.005 pAUC'' sits at the edge of what
+this bench can resolve: a run that clears it on its point value may still be a tie.
+
+\begin{confusions}
+\confusion{The interval says there is a 95\% chance the true gain lies inside it?}{It says how far the difference wobbles
+when the \emph{objects} are redrawn, scenes and checkpoints held fixed. Scene luck is extra, so the real uncertainty is
+wider: treat the interval as a lower bound.}
+\confusion{Resampling pixels would be more precise, since there are far more of them?}{More numbers, not more evidence.
+An object's pixels move together; counting them separately manufactures confidence (a design effect of 3.4 makes the
+standard error 1.84 times too small).}
+\confusion{Why not bootstrap A and B separately and see if their intervals overlap?}{Because the draw moves both together.
+Separate intervals would overlap almost always, and you would call real differences ties
+(\cref{we:bootstrap:var}: variance 0.1824 unpaired against 0.0004 paired).}
+\confusion{pAUC from $c(p)$ is an approximation of the real thing?}{It is the same area, rearranged so each target pixel's
+share can be added up. It differs from the evaluator only at tied scores.}
+\confusion{Objects caught is averaged per scene, like pAUC?}{Not in the bootstrap: pAUC is a mean over the four scenes;
+objects caught is pooled over all drawn objects.}
+\confusion{The gated adaptation loss straddles zero, so it is a tie?}{On objects caught, yes. On pAUC its interval
+$[-0.0176, -0.0028]$ is wholly below zero, so the pAUC loss is real.}
+\end{confusions}
+
+\begin{checkyourself}
+\item\label{ex:bootstrap:1} In \cref{we:bootstrap:tiny}, pixel d's score rises until 5 background pixels score at or above
+it. What is its $c$, and the scene's pAUC for A?
+\item\label{ex:bootstrap:2} Bootstrap the mean of $(1, 3, 8)$ by hand with the four given draws (positions)
+$(1,1,2)$, $(3,2,3)$, $(2,2,1)$, $(3,3,3)$. Give the four means, their mean, and the percentile interval
+\code{np.percentile} would return for $[2.5, 97.5]$.
+\item\label{ex:bootstrap:3} A result reads $+0.006$ [$-0.001$, $+0.013$]. Does it count as a gain under the rule? What is
+its half-width?
+\item\label{ex:bootstrap:4} Two scorers on four objects: $A = (0.8, 0.3, 0.5, 0.4)$, $B = (0.9, 0.3, 0.6, 0.6)$. Compute
+$\mathrm{Var}\,A$, $\mathrm{Var}\,B$, $\mathrm{Cov}(A,B)$ and $\mathrm{Var}(A - B)$ by the formula, and check
+$\mathrm{Var}(A - B)$ directly.
+\item\label{ex:bootstrap:5} 909 objects average 2 pixels each with within-object correlation 0.9. What are the design
+effect and the effective sample size? By what factor would a pixel bootstrap understate the standard error?
+\item\label{ex:bootstrap:6} In the paired example, draw objects 1, 2, 3 (each once). Compute A, B and $B - A$. Why is
+this the point value?
+\item\label{ex:bootstrap:7} With 2,000 bootstrap draws, at which 0-based positions do the 2.5th and 97.5th percentiles
+sit, and between which sorted draws (counting from 1) do they interpolate?
+\end{checkyourself}
+
+\nextchapter{ch:sortbug}

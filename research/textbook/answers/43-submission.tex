@@ -1,0 +1,47 @@
+\answersfor{ch:submission}
+
+\begin{solution}{ex:submission:1}
+\begin{align*}
+\text{span} &= 429{,}985-400{,}015 = 29{,}970\text{ m},\\
+\Delta x &= 29{,}970/(1000-1) = 29{,}970/999 = 30.0\text{ m},\\
+c &= 400{,}015-15 = 400{,}000 .
+\end{align*}
+Dividing by $W$: $29{,}970/1000=29.97$\,m. If the UL value is also taken as the image's left edge ($c=400{,}015$), the
+last column's centre lands at
+\begin{align*}
+400{,}015+999.5\times29.97 = 400{,}015+29{,}955.015 = 429{,}970.015,
+\end{align*}
+against the attribute's 429,985: $14.985$\,m, half a pixel, off. The first column's centre,
+$400{,}015+0.5\times29.97=400{,}029.985$, is off by the same amount: the whole grid slides half a pixel.
+\end{solution}
+
+\begin{solution}{ex:submission:2}
+The centre is at $j=20.5$, $i=10.5$:
+\begin{align*}
+X &= 30\times20.5+545{,}007.75 = 615+545{,}007.75 = 545{,}622.75,\\
+Y &= -30\times10.5+2{,}501{,}437.5 = -315+2{,}501{,}437.5 = 2{,}501{,}122.5,
+\end{align*}
+in EPSG:32642.
+\end{solution}
+
+\begin{solution}{ex:submission:3}
+The omitted field takes the pydantic default \code{True}, so the vendable is on the 165-band grid. v0.2.0 could run on
+it, but the worker checks the models in list order, so V2 comes first and \code{_check_band_grid} refuses it
+(``reads native bands: run band\_filter\_apply with use\_common\_wavelength\_grid=false''): the action fails. Fix: a band filter with the field
+\code{false}, which is what the UI's defaults give.
+\end{solution}
+
+\begin{solution}{ex:submission:4}
+8-connected: the centre pixel touches all four corners, so all five pixels form \textbf{1} object. 4-connected: no two
+pixels share an edge, so there are \textbf{5} objects.
+\end{solution}
+
+\begin{solution}{ex:submission:5}
+$0.03\times10000=300\to300$. $-1.2\times10000=-12{,}000\to-9998$ (the lower clip, so it cannot be read as nodata).
+$3.5\times10000=35{,}000\to32{,}767$ (int16's largest value).
+\end{solution}
+
+\begin{solution}{ex:submission:6}
+A commit overwrites the prep's \file{anomaly_mask.tif}, so result~1 would be lost, and the export names the zip by the
+action's short id, so two results from one action would not be told apart. Three results need three prep actions.
+\end{solution}

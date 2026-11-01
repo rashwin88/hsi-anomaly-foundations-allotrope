@@ -14,6 +14,7 @@ import { type Location, useLocation, useNavigate } from "react-router-dom";
 import { ApiError } from "../api/client";
 import { useAuth } from "../auth/useAuth";
 import { ThemeToggle } from "../components/ThemeToggle";
+import { APP_VERSION } from "../version";
 
 export function LoginPage() {
   const { login } = useAuth();
@@ -58,8 +59,7 @@ export function LoginPage() {
         <div className="login__strip" aria-hidden="true" />
 
         <header className="login__brand">
-          <span className="brand__name">ALLOTROPE</span>
-          <span className="brand__version">v0.0.1</span>
+          <span className="brand__name">Allotrope</span>
         </header>
 
         <form onSubmit={onSubmit} className="login__form">
@@ -101,6 +101,7 @@ export function LoginPage() {
             {submitting ? "Signing in…" : "Sign in"}
           </button>
         </form>
+        <p className="login__version">Allotrope v{APP_VERSION}</p>
       </div>
     </div>
   );

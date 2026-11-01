@@ -1,0 +1,9 @@
+compressor params 5345
+{'queries': 1024, 'value_embed.weight': 32, 'value_embed.bias': 32, 'q.weight': 1024, 'q.bias': 32, 'k.weight': 1024, 'k.bias': 32, 'v.weight': 1024, 'v.bias': 32, 'o.weight': 1024, 'o.bias': 32, 'to_channel.weight': 32, 'to_channel.bias': 1}
+d=16,D=32 params 1649
+99-test masked max change 0.0
+99-test unmasked max change 2.1322100162506104
+softmax [2.0, 1.0, 0.0, -1.0] [0.6439, 0.2369, 0.0871, 0.0321] exps [7.3891, 2.7183, 1.0, 0.3679]
+softmax [2.0, 1.0, -inf, -1.0] [0.7054, 0.2595, 0.0, 0.0351] exps [7.3891, 2.7183, 0.0, 0.3679]
+MACs/pixel 861184 ratio vs 5280 163.1 vs 6464 133.23 per patch 14109638656 batch128 1806033747968
+attn weights fp32 MiB 1616.0 K+V fp32 MiB 808.0 self weights GiB 9.9619140625 K+V 51 tok MiB 204.0 one (P,202,32) bf16 MiB 202.0

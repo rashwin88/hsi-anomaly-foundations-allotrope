@@ -1,0 +1,69 @@
+\answersfor{ch:decoderwork}
+
+\begin{solution}{ex:decoderwork:1}
+Quantile level $0.99$; position $0.99\times(200-1)=197.01$, so the cut lies 1\% of the way from $x_{(197)}$ to
+$x_{(198)}$ (counting from 0). The values at or above it are $x_{(198)}$ and $x_{(199)}$: 2 pixels, 1\% of 200.
+With \texttt{gate\_halo = 1} the kernel is $2\times1+1=3$, so each becomes a $3\times3$ square of 9 pixels:
+$9+9=18$ loss pixels removed at most. Under L1 every loss pixel carries a gradient of the same size, so the
+share of gradient terms removed is $18/200=0.09$, 9\%.
+\end{solution}
+
+\begin{solution}{ex:decoderwork:2}
+Tokens per side $256/4=64$, tokens $64\times64=4{,}096$. Blocks per side $64/2=32$, blocks $32\times32=1{,}024$.
+Hidden blocks $1{,}024\times0.65=665.6\to665$; hidden tokens $665\times4=2{,}660$, a share
+$2{,}660/4{,}096=0.649$.
+
+Blocks: given our block is hidden, the other $1{,}023$ blocks contain $1{,}024-665=359$ visible ones. Five outside
+neighbours: $5\times359/1{,}023=5\times0.3509=1.755$.
+
+Single tokens: hidden $4{,}096\times0.65=2{,}662.4\to2{,}662$, visible $4{,}096-2{,}662=1{,}434$. Given ours is
+hidden, the other $4{,}095$ contain $1{,}434$ visible: $8\times1{,}434/4{,}095=8\times0.3502=2.801$.
+The ratio $1.755/2.801=0.63$, as for the 128\,px tile.
+\end{solution}
+
+\begin{solution}{ex:decoderwork:3}
+$\vect{x}\cdot\vect{u}=4+1+1=6$, $\vect{u}\cdot\vect{u}=3$, $a^\star=6/3=2$, projection $(2,2,2)$. Floor
+$(4-2,1-2,1-2)=(2,-1,-1)$, energy $4+1+1=6$. Residual for $(3,3,3)$: $(3-4,3-1,3-1)=(-1,2,2)$, energy
+$1+4+4=9$. Share $6/9=0.67$. Pythagoras: the in-span part is $(3,3,3)-(2,2,2)=(1,1,1)$, energy $1+1+1=3$, and
+$3+6=9$. \checkmark
+\end{solution}
+
+\begin{solution}{ex:decoderwork:4}
+\begin{align*}
+\texttt{up\_half}\ 1 &: 288\times160\times9+160 = 414{,}720+160 = 414{,}880\\
+\texttt{up\_half}\ 2 &: 160\times160\times9+160 = 230{,}400+160 = 230{,}560\\
+\texttt{up\_full}\ 1 &: (160+32)\times96\times9+96 = 192\times864+96 = 165{,}888+96 = 165{,}984
+\end{align*}
+Unchanged: projections 132,096, fuse 262,400, \texttt{up\_full} 2 83,040, head 3,104. Total:
+\begin{align*}
+132{,}096+262{,}400 &= 394{,}496\\
+394{,}496+414{,}880 &= 809{,}376\\
+809{,}376+230{,}560 &= 1{,}039{,}936\\
+1{,}039{,}936+165{,}984 &= 1{,}205{,}920\\
+1{,}205{,}920+83{,}040 &= 1{,}288{,}960\\
+1{,}288{,}960+3{,}104 &= 1{,}292{,}064
+\end{align*}
+\end{solution}
+
+\begin{solution}{ex:decoderwork:5}
+Per token: $4\times4\times32=512$ numbers in, 64 out, $512/64=8$ to 1 (4 numbers per pixel). Stage 1 now delivers
+$32\times32\times64=65{,}536$; the total is $65{,}536+16{,}384+10{,}240+4{,}096=96{,}256$, and
+$96{,}256/16{,}384=5.875$ numbers per pixel, against 3.875 before and 32 to produce.
+\end{solution}
+
+\begin{solution}{ex:decoderwork:6}
+Background: $0.139-0.110=0.029$, $0.029/0.139=0.209$ (20.9\%). Targets: $0.191-0.162=0.029$,
+$0.029/0.191=0.152$ (15.2\%). Ratio $0.162/0.110=1.47$.
+
+FT09b's interval cleared zero by only $0.0002$, the bootstrap resamples objects and not scenes or checkpoints, the
+top-0.1\% count fell by 4 objects, and criterion 5 failed as written. Then FT09c, five more epochs of the same
+training, lost the gain (a resolved $-0.0040$ against FT09b), showing it was a favourable checkpoint.
+\end{solution}
+
+\begin{solution}{ex:decoderwork:7}
+Blocks per side $6/2=3$, blocks $3\times3=9$. In each block $h$ is the same for all 4 tokens and $s$ takes each
+value twice, so 2 tokens leak per block: $9\times2=18$ of $6\times6=36$ tokens, $18/36=0.5$. Swapping which pass
+hides which blocks flips $h$ in every block from 0 to 1 or back; $s$ still takes each value on 2 of the 4 tokens,
+so still 2 agree and 2 disagree. Only the positions of the leaks move, not their number.
+\end{solution}
+

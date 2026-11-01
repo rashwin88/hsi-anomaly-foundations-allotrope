@@ -10,6 +10,12 @@ is the answer; SAM still runs alongside with its outputs unchanged, until the fa
 has been checked on more product scenes. See
 [Integrating into the pipeline](#7-integrating-into-the-pipeline).
 
+**Since 2026-11-01** the spectral namer runs before both matchers and family matching sees
+only the pixels of objects the namer called man-made; the namer's natural pixels are code
+`-3` ("Natural (spectral namer), not matched") in `family_map.tif` and the legend. The ring
+background and calibration sample still exclude the whole anomaly mask. See
+[`spectral-namer-in-product.md`](spectral-namer-in-product.md).
+
 | What | Where |
 |---|---|
 | Matching | `app/spectral_match/family_match.py` |

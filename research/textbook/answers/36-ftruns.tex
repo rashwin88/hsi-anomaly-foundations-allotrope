@@ -1,0 +1,87 @@
+\answersfor{ch:ftruns}
+
+\begin{solution}{ex:ftruns:1}
+Same four layers, with width 64 and stage channels 16, 32, 80, 128.
+\begin{enumerate}
+\item Projections: weights $64 \times (16 + 32 + 80 + 128) = 64 \times 256 = 16{,}384$; biases $4 \times 64 = 256$;
+  total $16{,}384 + 256 = 16{,}640$.
+\item Fuse, $1 \times 1$ from $4 \times 64 = 256$ channels to 64: $64 \times 256 + 64 = 16{,}384 + 64 = 16{,}448$.
+\item Refine, $3 \times 3$, 64 to 64: $64 \times 64 \times 9 + 64 = 36{,}864 + 64 = 36{,}928$.
+\item Output, $3 \times 3$, 64 to $5 \times 16 = 80$: $80 \times 64 \times 9 + 80 = 46{,}080 + 80 = 46{,}160$.
+\end{enumerate}
+Sum: $16{,}640 + 16{,}448 = 33{,}088$; $33{,}088 + 36{,}928 = 70{,}016$; $70{,}016 + 46{,}160 = 116{,}176$ parameters.
+\end{solution}
+
+\begin{solution}{ex:ftruns:2}
+\emph{Edge strength.} Differences to the neighbours inside the patch:
+\begin{align*}
+\abs{0.30 - 0.30} &= 0.00 \quad\text{(up)}\\
+\abs{0.30 - 0.31} &= 0.01 \quad\text{(down)}\\
+\abs{0.30 - 0.12} &= 0.18 \quad\text{(left)}
+\end{align*}
+Maximum: $e = 0.18$.
+
+\emph{Central differences.} With the missing right neighbour taken equal to the pixel (0.30):
+\begin{align*}
+g_x &= (0.30 - 0.12) / 2 = 0.18 / 2 = 0.09\\
+g_y &= (0.31 - 0.30) / 2 = 0.01 / 2 = 0.005\\
+\abs{\nabla f} &= \sqrt{0.09^2 + 0.005^2} = \sqrt{0.0081 + 0.000025} = \sqrt{0.008125} = 0.0901
+\end{align*}
+Both measures call the pixel next to the boundary an edge; the one-sided maximum reports the full step (0.18), the
+central difference half of it spread over two pixels.
+\end{solution}
+
+\begin{solution}{ex:ftruns:3}
+Input $0.10, 0.10, 0.50, 0.50$; reconstruction $0.10, 0.10, 0.45, 0.50$.
+
+\emph{Value L1.} Differences $0, 0, 0.05, 0$; sum $0.05$; mean $0.05 / 4 = 0.0125$.
+
+\emph{Gradient L1.} Input differences $0, 0.40, 0$. Reconstruction differences $0.10 - 0.10 = 0$,
+$0.45 - 0.10 = 0.35$, $0.50 - 0.45 = 0.05$. Mismatches $\abs{0 - 0} = 0$, $\abs{0.35 - 0.40} = 0.05$,
+$\abs{0.05 - 0} = 0.05$; sum $0.10$; mean $0.10 / 3 = 0.033$.
+
+A sharper reconstruction (most of the step in one pixel) cuts the gradient loss from 0.133 to 0.033.
+\end{solution}
+
+\begin{solution}{ex:ftruns:4}
+Hidden near pixels: $n = 0.65 \times 32 = 20.8$. With weight 5:
+\begin{align*}
+w\,n &= 5 \times 20.8 = 104\\
+(N - n) + w\,n &= 10{,}650 - 20.8 + 104 = 10{,}733.2\\
+\text{share} &= 104 / 10{,}733.2 = 0.0097 \quad (\text{about } 1.0\%)
+\end{align*}
+\emph{Weight for a 2\% share.} Set $\frac{w n}{(N - n) + w n} = 0.02$. Multiply out: $w n = 0.02 (N - n) + 0.02\,w n$.
+Collect: $0.98\,w n = 0.02 (N - n)$. Divide:
+\[
+w = \frac{0.02 \times (10{,}650 - 20.8)}{0.98 \times 20.8} = \frac{0.02 \times 10{,}629.2}{20.384}
+  = \frac{212.58}{20.384} = 10.4 .
+\]
+\end{solution}
+
+\begin{solution}{ex:ftruns:5}
+\begin{itemize}
+\item 199: $199 / 255 = 0.780$, between 0.1 and 0.9: unknown (no loss).
+\item 231: $231 / 255 = 0.906 > 0.9$: known, target 1 - but its NIR is $0.18 > 0.15$, so the guard sets the target to
+  0: a known not-water.
+\item 24: $24 / 255 = 0.094 < 0.1$: known, target 0.
+\item 26: $26 / 255 = 0.102$, not below 0.1 and not above 0.9: unknown.
+\end{itemize}
+In bytes: ``yes'' needs 230 or more, ``no'' 25 or less, so 24 is known and 26 is not.
+\end{solution}
+
+\begin{solution}{ex:ftruns:6}
+\begin{align*}
+\text{unweighted:}\quad & (0.2 + 0.2 + 0.4 + 0.6) / 4 = 1.4 / 4 = 0.35\\
+\text{weighted:}\quad & (0.2 + 0.2 + 0.4 + 3 \times 0.6) / (1 + 1 + 1 + 3) = (0.8 + 1.8) / 6 = 2.6 / 6 = 0.433
+\end{align*}
+Shadow's share of the gradient is $w_\text{shadow} / \sum w$: $1/4 = 0.25$ unweighted, $3/6 = 0.50$ weighted.
+\end{solution}
+
+\begin{solution}{ex:ftruns:7}
+From \eqref{eq:ftruns:halflife}'s derivation the gap after $n$ steps is $0.999^n$ times the starting gap. Closing 90\%
+leaves 10\%: $0.999^n = 0.1$. Take natural logarithms: $n \ln 0.999 = \ln 0.1$. Since $\ln 0.999 = -0.0010005$ and $\ln
+0.1 = -2.3026$,
+\[
+n = \frac{-2.3026}{-0.0010005} = 2{,}301 \text{ steps.}
+\]
+\end{solution}

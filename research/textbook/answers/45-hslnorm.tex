@@ -1,0 +1,46 @@
+\answersfor{ch:hslnorm}
+
+\begin{solution}{ex:hslnorm:1}
+Band 1 holds 0.15, 0.20, 0.25: $m_1=0.15$, $M_1-m_1=0.10$. Band 2 holds 0.25, 0.50, 0.55: $m_2=0.25$, $M_2-m_2=0.30$.
+\begin{align*}
+x'_1 &= (0.20-0.15)/0.10 = 0.05/0.10 = 0.5,\\
+x'_2 &= (0.50-0.25)/0.30 = 0.25/0.30 = 0.8333 .
+\end{align*}
+A third input for the same spectrum: $(0.5,1.0)$ in $S_1$, $(0.4286,0.75)$ in $S_2$, $(0.5,0.8333)$ in $S_3$.
+\end{solution}
+
+\begin{solution}{ex:hslnorm:2}
+Still $(0,0)$: $\vect{p}_1$ holds the minimum of both bands, and the bright pixel changed only the maxima, so
+$x'_b=(m_b-m_b)/(M_b-m_b)=0$ whatever $M_b$ is.
+\end{solution}
+
+\begin{solution}{ex:hslnorm:3}
+\begin{align*}
+\vect{u}' &= (0.20/0.20,\ 0.50/0.10)=(1,\ 5),\\
+\vect{v}' &= (0.30/0.20,\ 0.40/0.10)=(1.5,\ 4),\\
+\vect{u}'\cdot\vect{v}' &= 1\times1.5+5\times4 = 1.5+20 = 21.5,\\
+\norm{\vect{u}'} &= \sqrt{1+25} = \sqrt{26} = 5.0990, \qquad \norm{\vect{v}'} = \sqrt{2.25+16} = \sqrt{18.25} = 4.2720,\\
+\cos\theta' &= 21.5/(5.0990\times4.2720) = 21.5/21.783 = 0.9870, \qquad \theta' = 9.25^\circ .
+\end{align*}
+\end{solution}
+
+\begin{solution}{ex:hslnorm:4}
+\begin{align*}
+\cos\theta' &= \frac{25u_1v_1+25u_2v_2}{\sqrt{25u_1^2+25u_2^2}\sqrt{25v_1^2+25v_2^2}}
+ = \frac{25(u_1v_1+u_2v_2)}{5\sqrt{u_1^2+u_2^2}\cdot5\sqrt{v_1^2+v_2^2}} = \cos\theta .
+\end{align*}
+\end{solution}
+
+\begin{solution}{ex:hslnorm:5}
+Around 1780\,nm the grid runs 1760, 1770, 1780, 1790, then 1960 (the next band after the gap). The 5-band window centred
+on 1780 is 1760, 1770, 1780, 1790, 1960: span $1960-1760=200$\,nm. The 13-band window centred on 1740 runs from
+$1740-6\times10=1680$ up to 1790 (five steps) and then 1960: span $1960-1680=280$\,nm. Both match the table's maxima.
+\end{solution}
+
+\begin{solution}{ex:hslnorm:6}
+\begin{align*}
+z_1 &= (0.70-0.25)/0.10 = 0.45/0.10 = 4.5,\\
+z_2 &= (0.20-0.35)/0.12 = -0.15/0.12 = -1.25 .
+\end{align*}
+No: the mean and spread come from the checkpoint's fixed curve, so the answer is the same against every scene.
+\end{solution}

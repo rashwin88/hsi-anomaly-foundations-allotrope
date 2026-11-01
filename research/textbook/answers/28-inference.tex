@@ -1,0 +1,85 @@
+\answersfor{ch:inference}
+
+\begin{solution}{ex:inference:1}
+One pass with a $50\%$ mask hides only half the tokens, so only half the pixels get a prediction made
+without seeing themselves; the other half were visible and their predictions may be copies, so they have no
+honest prediction at all. One pass with no mask is worse: every pixel is visible, the model can copy every
+one of them, and the residual is near zero everywhere, including at the anomalies you are looking for.
+\end{solution}
+
+\begin{solution}{ex:inference:2}
+Rows, $W=1200$:
+\begin{align*}
+W-P &= 1200-128 = 1072,\\
+\frac{1072}{32} &= 33.5,\\
+\lceil 33.5\rceil+1 &= 34+1 = 35.
+\end{align*}
+Columns, $W=900$:
+\begin{align*}
+W-P &= 900-128 = 772,\\
+\frac{772}{32} &= 24.125,\\
+\lceil 24.125\rceil+1 &= 25+1 = 26.
+\end{align*}
+Neither quotient is a whole number, so no duplicate tile arises. Tiles:
+\begin{align*}
+35\times26 &= 910.
+\end{align*}
+Batches of 8:
+\begin{align*}
+\frac{910}{8} &= 113.75,\\
+\lceil113.75\rceil &= 114 \text{ batches (the last holds } 910-113\times8 = 910-904 = 6 \text{ tiles)}.
+\end{align*}
+Forward passes, two per batch:
+\begin{align*}
+114\times2 &= 228.
+\end{align*}
+The book's script gives the same: 910 tiles, 114 batches, 228 forward passes.
+\end{solution}
+
+\begin{solution}{ex:inference:3}
+With \code{cell_size = 2}, rows and columns $0,1,2,3$ become $0,0,1,1$ after integer division by 2. The sum
+table is
+\[
+\begin{pmatrix}0&0&1&1\\0&0&1&1\\1&1&2&2\\1&1&2&2\end{pmatrix},
+\qquad\text{and modulo 2:}\qquad
+\text{grid}=\begin{pmatrix}0&0&1&1\\0&0&1&1\\1&1&0&0\\1&1&0&0\end{pmatrix}.
+\]
+In the grid $1$ is visible and $0$ hidden. Pass~1 hides the $0$ entries: the top-left and bottom-right
+$2\times2$ blocks. Pass~2 uses $1-\text{grid}$ and hides the top-right and bottom-left blocks. Together they
+hide every token exactly once.
+\end{solution}
+
+\begin{solution}{ex:inference:4}
+Weighted sum and count:
+\begin{align*}
+\text{sum} &= 1\times0.31 + 1\times0.29 + 1\times0.30 + 0\times0.70\\
+&= 0.31+0.29+0.30+0\\
+&= 0.90,\\
+\text{count} &= 1+1+1+0 = 3,\\
+\hat{x} &= \frac{0.90}{3} = 0.30.
+\end{align*}
+Residual:
+\begin{align*}
+r &= x-\hat{x} = 0.36-0.30 = 0.06.
+\end{align*}
+If all four weights were $0$, the count would be $0$, the code would set $\hat{x}=x=0.36$, and the residual
+would be $0.36-0.36=0$: the pixel could never be flagged.
+\end{solution}
+
+\begin{solution}{ex:inference:5}
+Fitting starts satisfy $32k\le600-128=472$, so $k\le472/32=14.75$, $k\le14$, and the last fitting start is
+$14\times32=448$. It covers $448,\dots,575$, leaving $576,\dots,599$ uncovered, so the snapped start
+$600-128=472$ is added. The last three starts are $416$, $448$, $472$.
+
+Column $500$ lies in a tile starting at $s$ when $s\le500\le s+127$, that is $373\le s\le500$. The starts in
+that range are $384$ ($=12\times32$), $416$, $448$ and $472$. Coverage: 4 tiles.
+\end{solution}
+
+\begin{solution}{ex:inference:6}
+A checkpoint holds numbers, not an architecture. \code{load_state_dict} copies each saved tensor into the
+slot of the same name in a model you have already built, and by default it insists that every slot exists
+with exactly the same shape. The spectral compressor's weights have shapes that depend on $D$ (for example
+$165\times D$ entries in its first layer), so a model built with $D=24$ has slots of the wrong shape for a
+$D=32$ checkpoint, and loading stops at once with a shape-mismatch error. That loud failure is better than
+a silently wrong score.
+\end{solution}

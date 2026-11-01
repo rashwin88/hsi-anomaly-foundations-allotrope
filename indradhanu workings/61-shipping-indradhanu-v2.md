@@ -7,6 +7,19 @@
 > told which wavelengths it is reading, cloud zeroed *after* scoring because that is the order the
 > benchmark measured, and a parity run that proves the product path gives the evaluator's numbers.
 
+> **Update 2026-10-31: the band-grid half of this part has changed.** Every hyperspectral
+> `band_filter_apply` sensor default now keeps native bands (`"use_common_wavelength_grid": False`,
+> commented "V2 reads them; 165-grid models resample at scoring"), and `anomaly_scoring` resamples a
+> native cube to the 165-band grid for a `common165` model (`_to_common_grid` in
+> `_anomaly_scoring_run.py`). The `common165` refusal shown in section 3 was removed - a comment in its
+> place says common165 on native bands "is not an error" - so only V2 on a 165-grid band filter is still
+> refused, and one scoring action can run v0.2.0 and V2 together on a native band filter. The pydantic
+> field default is still `true`, so an API call that omits the field still gets the grid. Section 7's
+> "What did not change" is therefore out of date for the band filter (the scoring codename default is
+> still v0.2.0). The anomaly-detection course's parts 23 and 28 teach the new behaviour; the rationale is
+> `docs/lld/spectral-stem.md`, "One inference method: native bands", and
+> `docs/proposals/aigc-evaluation-submission.md` (C3).
+
 ## Where we are
 
 Part 60 ended on "next is product wiring". On 2026-10-19 that happened: FT04 is served in

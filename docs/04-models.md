@@ -147,12 +147,16 @@ Reconstruction → anomaly map is then handled by the shared scoring module, cov
 [5. Detectors](05-detectors.md#scoring--turning-residuals-into-a-heatmap).
 
 **Native-band models (Indradhanu V2).** `SpectralStemInferencer` reads each sensor's own bands,
-so it needs `band_filter_apply` run with `use_common_wavelength_grid=false`; `anomaly_scoring`
-refuses the wrong grid for either kind of model. Before predicting it calls `read_bands`, which
+so it needs `band_filter_apply` run with `use_common_wavelength_grid=false` - the sensor defaults since
+2026-10-31. `anomaly_scoring` refuses V2 on the 165-band grid, and resamples a native-band cube to the grid for a
+165-grid model (`_to_common_grid`). Before predicting it calls `read_bands`, which
 keeps only the bands the model has trained on and sets their wavelengths. Its segmentation head
 runs through `segment_full_scene` (128 px windows, stride 64; classes land, water, cloud, shadow,
 snow), and the scoring action zeros the model's `exclude_classes` (cloud) **after** scoring, the
-semantics the evaluator measured. For V2 "cloud" means thick cloud only (`thin_cloud_is_cloud=False` in the
+semantics the evaluator measured. Since 2026-11-01 the head is also a step of its own: `scene_segmentation` with
+`method: "indradhanu_v2"` (the hyperspectral template default) writes `class_map.tif` and a `keep_mask.tif` without
+the chosen `exclude_classes` (default thick cloud only), and an `anomaly_scoring` given that output uses its classes
+instead of running the head again ([`lld/segmentation-v2.md`](lld/segmentation-v2.md)). For V2 "cloud" means thick cloud only (`thin_cloud_is_cloud=False` in the
 resolver, `segment_full_scene(..., thin_cloud=False)`): Heavy's thin-cloud output fires on haze, see
 [9. Known issues](09-known-issues.md#spectral-stem-models--open-gaps). The evaluator (`app/evaluation/models.py`) calls the same two
 methods, so product and benchmark numbers come from one implementation. Its manifest embeds the

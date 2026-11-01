@@ -1,0 +1,22 @@
+\glossentry{Positive (target)}{A valid pixel the ground truth marks as anomalous.}
+\glossentry{Negative (background)}{A valid pixel the ground truth does not mark as anomalous.}
+\glossentry{Threshold}{A score value; pixels scoring at or above it are flagged.}
+\glossentry{Confusion matrix}{The two-by-two table of true positives, false positives, false negatives and true negatives at one threshold.}
+\glossentry{True-positive rate (TPR)}{The share of targets flagged at a threshold; also called the detection rate.}
+\glossentry{False-positive rate (FPR)}{The share of background pixels flagged at a threshold; also called the false-alarm rate.}
+\glossentry{ROC curve}{The path of (FPR, TPR) points as the threshold slides from the top score to the bottom score.}
+\glossentry{AUC}{The area under the ROC curve; 1 is perfect, 0.5 is random. Equal to the probability that a random target outscores a random background pixel, ties counting half.}
+\glossentry{Mann-Whitney count}{The number of (target, background) pairs in which the target scores higher, ties counting half; divided by the number of pairs it equals the AUC.}
+\glossentry{Trapezoid rule}{Area of a straight segment as width times the average of its two heights; summed over segments it gives the area under a piecewise-linear curve.}
+\glossentry{Exact ROC}{The ROC built from every distinct score as a threshold, one point at the end of each run of tied scores (exact\_roc).}
+\glossentry{Sampled ROC}{The product's ROC from evenly spaced percentiles of the scores, at most 256 of them (compute\_roc).}
+\glossentry{Partial AUC (pAUC)}{The area under the ROC from FPR 0 to a limit, here divided by the limit so that perfect is 1 and random is half the limit (0.005 at 1\%).}
+\glossentry{McClish standardisation}{A rescaling of the raw partial area that maps random to 0.5 and perfect to 1; not used by this repository.}
+\glossentry{TPR at a fixed FPR}{The best detection rate at any exact ROC point whose false-alarm rate is at most the given value.}
+\glossentry{Object}{A 4-connected component of the ground-truth mask.}
+\glossentry{4-connectivity}{Pixels are neighbours only if they share an edge (up, down, left, right), not a corner.}
+\glossentry{Binary dilation}{Growing a set of pixels by adding every 4-neighbour of its members.}
+\glossentry{1-pixel tolerance}{The rule that a flagged pixel adjacent to an object also catches it, allowing for ground truth about one pixel off the grid.}
+\glossentry{Objects caught}{The share of objects with a pixel within one pixel of the top q percent of valid scores.}
+\glossentry{Chance level}{What a random scorer would get on a measure: 0.5 for AUC, half the limit for pAUC, the FPR itself for TPR at FPR, and 1 - (1 - q)\^{}m per object for objects caught.}
+\glossentry{3D ROC}{Plots of detection and false-alarm rates against a min-max normalised threshold; its areas reduce to mean normalised scores and are degenerate for heavy-tailed scores.}

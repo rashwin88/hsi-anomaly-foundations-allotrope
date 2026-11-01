@@ -1,0 +1,95 @@
+/* SegmentationViewer (scene_segmentation, method indradhanu_v2). The map itself is MatchMap,
+   whose .smv-map styles live in index.css; this file only lays out the map and its side panel. */
+
+.segv__body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 260px;
+  gap: 0.75rem;
+  align-items: start;
+}
+.segv__map {
+  height: 560px;
+  min-width: 0;
+}
+.segv__map .smv-map {
+  height: 100%;
+}
+.segv__side {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  font-size: var(--fs-sm);
+}
+.segv__classes {
+  width: 100%;
+  border-collapse: collapse;
+}
+.segv__classes th,
+.segv__classes td {
+  padding: 0.25rem 0.35rem;
+  border-bottom: 1px solid var(--rule);
+  text-align: left;
+}
+.segv__classes th {
+  font-size: var(--fs-xs);
+  color: var(--fg-dim);
+  font-weight: 600;
+}
+.segv__classes .num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.segv__swatch {
+  display: inline-block;
+  width: 0.8rem;
+  height: 0.8rem;
+  margin-right: 0.4rem;
+  border-radius: 2px;
+  border: 1px solid rgba(0, 0, 0, 0.25);
+  vertical-align: -1px;
+}
+.segv__row--excluded td {
+  font-weight: 600;
+}
+.segv__tag {
+  margin-left: 0.4rem;
+  padding: 0 0.35rem;
+  border-radius: var(--radius-sm);
+  font-size: var(--fs-xs);
+  background: var(--error-bg);
+  color: var(--error);
+}
+.segv__opacity {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.segv__opacity input {
+  flex: 1 1 auto;
+}
+.segv__facts {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.2rem 0.6rem;
+  margin: 0;
+}
+.segv__facts dt {
+  color: var(--fg-dim);
+}
+.segv__facts dd {
+  margin: 0;
+}
+.segv__hint {
+  margin: 0;
+  color: var(--fg-dim);
+  font-size: var(--fs-xs);
+}
+
+@media (max-width: 900px) {
+  .segv__body {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .segv__map {
+    height: 420px;
+  }
+}

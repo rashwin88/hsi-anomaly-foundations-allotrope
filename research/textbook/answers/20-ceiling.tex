@@ -1,0 +1,93 @@
+\answersfor{ch:ceiling}
+
+\begin{solution}{ex:ceiling:1}
+The broken pixel is $\vect{x}_{\text{broken}} = [1.2, 1.0, -0.4, 0.0]$. Row 1 of $\mat{W}$ is $[0, 0, 0.5, 0.5]$, so directly
+\begin{align*}
+  z_1 &= 0\times1.2 + 0\times1.0 + 0.5\times(-0.4) + 0.5\times0.0\\
+      &= 0 + 0 - 0.20 + 0\\
+      &= -0.20 .
+\end{align*}
+With \cref{eq:ceiling:contam}: the fill is $f = 0.0$ and the true value $x_3 = -0.6$, so $f - x_3 = 0.0 - (-0.6) = 0.6$. Column 3 of $\mat{W}$ is $[0, 0.5]$. The output error is
+\begin{align*}
+  0.6\times[0, 0.5] = [0, 0.30],
+\end{align*}
+so $z_1$ moves from $-0.50$ to $-0.50 + 0.30 = -0.20$, as computed directly. As a share of the true value:
+\begin{align*}
+  \frac{0.30}{\abs{-0.50}} = 0.60 = 60\% .
+\end{align*}
+Output $z_0$ is unchanged because column 3 has a zero in row 0.
+\end{solution}
+
+\begin{solution}{ex:ceiling:2}
+The convolution has one weight per (output, input) pair plus one bias per output:
+\begin{align*}
+  165\times32 + 32 &= 5{,}280 + 32 = 5{,}312 .
+\end{align*}
+BatchNorm has a scale and a shift per channel:
+\begin{align*}
+  2\times32 &= 64 .
+\end{align*}
+Total: $5{,}312 + 64 = 5{,}376$.
+
+The weight matrix is $32\times165$, so its rank is at most 32. By rank--nullity, the null space has dimension $165 - \operatorname{rank} \geq 165 - 32 = 133$. At $D = 24$ the rank is at most 24 and the bound becomes $165 - 24 = 141$.
+\end{solution}
+
+\begin{solution}{ex:ceiling:3}
+Raw dot products with $\vect{q} = [0, 1]$:
+\begin{align*}
+  \vect{q}\cdot\vect{k}_1 &= 0\times2 + 1\times0 = 0,\\
+  \vect{q}\cdot\vect{k}_2 &= 0\times0 + 1\times1 = 1,\\
+  \vect{q}\cdot\vect{k}_3 &= 0\times1 + 1\times1 = 1.
+\end{align*}
+Scaled by $0.7071$: $0$, $0.7071$, $0.7071$. Exponentials:
+\begin{align*}
+  e^{0} &= 1.0000, & e^{0.7071} &= 2.0281, & e^{0.7071} &= 2.0281 .
+\end{align*}
+Sum: $1.0000 + 2.0281 + 2.0281 = 5.0562$. Weights:
+\begin{align*}
+  1.0000/5.0562 &= 0.1978,\\
+  2.0281/5.0562 &= 0.4011,\\
+  2.0281/5.0562 &= 0.4011 .
+\end{align*}
+Check: $0.1978 + 0.4011 + 0.4011 = 1.0000$. Answer:
+\begin{align*}
+  0.1978\times10 &= 1.978,\\
+  0.4011\times20 &= 8.022,\\
+  0.4011\times30 &= 12.033,\\
+  1.978 + 8.022 + 12.033 &= 22.033 .
+\end{align*}
+The query now asks about feature 1, which tokens 2 and 3 have equally and token 1 lacks, so tokens 2 and 3 share most of the weight. PyTorch gives $22.0334$.
+\end{solution}
+
+\begin{solution}{ex:ceiling:4}
+Value part:
+\begin{align*}
+  0.6\times0.5 + 0.1 &= 0.30 + 0.10 = 0.40,\\
+  0.6\times(-1.0) + 0.2 &= -0.60 + 0.20 = -0.40 .
+\end{align*}
+So the value part is $[0.40, -0.40]$. Tag at period 1000\,nm: $\theta = 2\pi\times500/1000 = \pi$, and $\sin\pi = 0$, $\cos\pi = -1$, so the tag is $[0, -1]$. The token is
+\begin{align*}
+  [0.40 + 0,\ -0.40 + (-1)] = [0.40,\ -1.40] .
+\end{align*}
+\end{solution}
+
+\begin{solution}{ex:ceiling:5}
+Every term of the sum in \cref{eq:ceiling:cossim} is a cosine, and a cosine is at most 1. Sixteen terms each at most 1 sum to at most 16, and dividing by 16 gives at most 1. Equality needs every cosine to equal 1 at once, which happens at $\Delta = 0$.
+
+For $\Delta = 10{,}000$\,nm, look at each period. At $P_0 = 10$ the angle is $2\pi\times1000$, a whole number of turns, so the cosine is 1. The same happens at $P_5 = 100$ (100 turns), $P_{10} = 1000$ (10 turns) and $P_{15} = 10{,}000$ (one turn). But the other twelve periods are not whole divisors of 10,000 (for example $10{,}000/15.85 = 631.0$ is close to whole, while $10{,}000/63.10 = 158.5$ is half-way, giving a cosine near $-1$). Those terms scatter between $-1$ and $1$. The book's script gives a sum of $6.4063$, so $s(10{,}000) = 6.4063/16 = 0.4004$: far from 1. Even the longest period completing one full turn does not make the tags alike, because the other periods have not.
+\end{solution}
+
+\begin{solution}{ex:ceiling:6}
+Cross-attention returns one answer per query: 32 answers. The score matrix is queries by keys:
+\begin{align*}
+  32\times224 = 7{,}168 \text{ scores per head}.
+\end{align*}
+For 425 bands, self-attention compares every band with every band:
+\begin{align*}
+  425\times425 = 180{,}625,
+\end{align*}
+and cross-attention with 32 queries:
+\begin{align*}
+  32\times425 = 13{,}600 .
+\end{align*}
+\end{solution}

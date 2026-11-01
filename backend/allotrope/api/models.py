@@ -87,6 +87,9 @@ class ModelSummary(BaseModel):
     default_stride: int | None = None
     default_batch_size: int | None = None
     valid_patch_sizes: list[int] = []
+    # "native" (reads the scene's own bands: Indradhanu V2) or "common165"; the dialog greys out
+    # 165-grid band filters for a native model (class-driven flow, addition C).
+    band_grid: str = "common165"
 
 
 class ModelDetail(BaseModel):
@@ -128,8 +131,13 @@ def _list_architectures() -> list[str]:
     root = _models_root()
     if not root.exists():
         return []
+    # The spectral namer's manifest sits beside the reconstruction models' but is not one: no
+    # val_loss or scoring methods, read by spectral_library_match (resolver.resolve_spectral_namer).
+    from ..foundation_models.resolver import NAMER_ARCHITECTURE  # local import
+
     return sorted(
-        p.name for p in root.iterdir() if p.is_dir() and (p / "current.json").exists()
+        p.name for p in root.iterdir()
+        if p.is_dir() and (p / "current.json").exists() and p.name != NAMER_ARCHITECTURE
     )
 
 
@@ -160,6 +168,7 @@ def _summary_from_manifest(m: dict[str, Any]) -> ModelSummary:
         default_stride=caps.default_stride if caps else None,
         default_batch_size=caps.default_batch_size if caps else None,
         valid_patch_sizes=list(caps.valid_patch_sizes) if caps else [],
+        band_grid=caps.band_grid if caps else "common165",
     )
 
 

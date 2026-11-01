@@ -1,0 +1,24 @@
+\glossentry{BandFilterConfig}{The configuration object that drives the eight-stage band pipeline: exclusion windows, edge trimming, coverage threshold, voxel-fraction threshold, quality masks and target grid.}
+\glossentry{Band pipeline}{The eight stages that turn a sensor's native bands into a complete spectrum per valid pixel on the 165-band common grid.}
+\glossentry{Edge band trimming}{Dropping the first and last bands (default 3) of each detector, counted on the full list of the detector's band indices.}
+\glossentry{Coverage pruning}{Dropping bands valid in fewer than min\_valid\_pixel\_pct (default 20) percent of pixels.}
+\glossentry{Max invalid voxel fraction}{The stage-6 threshold (default 0.4): a pixel invalid in more than this fraction of the surviving bands is invalidated in every band.}
+\glossentry{Binary validity}{The state after stage 7 in which every pixel is valid in all bands or in none.}
+\glossentry{Slope}{Rise divided by run of a straight line: (y1 - y0)/(x1 - x0).}
+\glossentry{Linear interpolation}{Estimating a value between two samples on the straight line through them: y = (1 - t) y0 + t y1 with t the fraction of the way.}
+\glossentry{Two-point form}{The equation of a line through two known points: y = y0 + slope times (x - x0).}
+\glossentry{Constant extrapolation}{Filling values beyond the last sample by repeating the nearest end value.}
+\glossentry{Binary search}{Finding a value's position in a sorted list by repeated halving; requires ascending order, which is why wavelengths must be sorted before np.interp or np.searchsorted.}
+\glossentry{Cubic spline}{A smooth curve of joined cubic pieces through samples; can overshoot and invent dips or bumps.}
+\glossentry{PCHIP}{Piecewise cubic Hermite interpolating polynomial: cubic pieces with shape-preserving slopes, never creating an extremum absent from the data; used for stage-7 gap filling.}
+\glossentry{Overshoot}{An interpolated curve passing below the lowest or above the highest nearby sample.}
+\glossentry{z-score}{A value expressed as standard deviations from its band's mean: z = (x - mean)/std.}
+\glossentry{Per-band normalisation}{Rescaling each band by its own corpus mean and standard deviation (PixelNormalize), done inside the model.}
+\glossentry{Denormalisation}{The inverse map x = std times z + mean (PixelDenormalize), returning model output to reflectance.}
+\glossentry{Inverse map}{A map that undoes another: D(N(x)) = x and N(D(z)) = z.}
+\glossentry{Broadcasting}{Repeating an array along axes of size 1 so that arrays of shapes such as (B, 165, H, W) and (1, 165, 1, 1) combine element by element.}
+\glossentry{Buffer (PyTorch)}{A tensor registered on a module that is saved in the checkpoint and moved with the model but never trained; how the normalisation statistics are stored.}
+\glossentry{PixelStatsOverride}{Per-scene replacement normalisation statistics for sensors whose units differ from the model's training data; makes scores scene-relative.}
+\glossentry{Catastrophic cancellation}{Loss of precision when subtracting two large, nearly equal floating-point numbers, as in E[x squared] minus (E[x]) squared.}
+\glossentry{Nearest-valid fill}{Replacing each invalid pixel's values with those of the nearest valid pixel by Euclidean distance, leaving the validity masks unchanged.}
+\glossentry{WavelengthStats}{The normalisation of Indradhanu V2: mean and spread stored as curves over wavelength and read at each sensor's own band wavelengths.}

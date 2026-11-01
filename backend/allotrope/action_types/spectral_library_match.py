@@ -1,6 +1,13 @@
-"""Action type: ``spectral_library_match`` — material family + USGS splib07 SAM.
+"""Action type: ``spectral_library_match`` — spectral namer, material family + USGS splib07 SAM.
 
-Names the material of each anomaly pixel two ways:
+First the **spectral namer** (``namer=True``, the default) calls each anomaly object natural or
+man-made and gives a man-made one its closest known material class, flagged confident or
+tentative (``app/spectral_match/namer``, ``docs/lld/spectral-namer-in-product.md``). Its
+checkpoint comes from ``<models_dir>/spectral_namer/current.json``. When it ran, only the pixels
+of man-made objects go on to the two matchers below; natural ones are recorded and skipped. A
+namer failure is recorded in summary.json and every anomaly pixel is matched, as before.
+
+Names the material of each (man-made) anomaly pixel two ways:
 
 * **Family matching (the answer).** Calibrated Simplex ACE against the family library
   (``data/family_library``, baked into the worker image at ``/srv/family_library``) names a
@@ -152,6 +159,28 @@ class SpectralLibraryMatchConfig(BaseModel):
         ),
     )
 
+    namer: bool = Field(
+        default=True,
+        description=(
+            "Run the spectral namer first: natural vs man-made per anomaly object, then the "
+            "closest known material class. SAM and family matching then run on man-made "
+            "objects' pixels only. Ignored in ``mode='all_kept'``."
+        ),
+    )
+
+    # Calibrated on run N002 (research/experiments/spectral-namer/N002/README.md): the
+    # P(class) threshold keeping 90 % of known-class man-made calls at fill 0.25 was 0.50-0.61
+    # across EnMAP / PRISMA / AVIRIS-NG, and the classes it keeps are 0.80-0.84 accurate.
+    namer_confident_p: float = Field(
+        default=0.55,
+        ge=0.0,
+        le=1.0,
+        description=(
+            "An object's class is 'confident' when its mean P(class | man-made) is at or "
+            "above this, else 'tentative'."
+        ),
+    )
+
 
 # --- Sensor-keyed defaults -------------------------------------------------
 
@@ -165,6 +194,8 @@ _DEFAULT_HSI: dict[str, Any] = {
     "sg_polyorder": 2,
     "mode": "anomaly_pixels",
     "family_alpha": 0.05,
+    "namer": True,
+    "namer_confident_p": 0.55,
 }
 
 
@@ -173,12 +204,16 @@ _DEFAULT_HSI: dict[str, Any] = {
 
 META = ActionTypeMeta(
     type=KIND,
-    label="Spectral match (material family + USGS splib07)",
-    short_description=(
-        "Name the likely material family of each anomaly pixel (calibrated "
-        "Simplex ACE), with SAM against USGS splib07 alongside."
-    ),
+    label="Spectral match",
+    short_description="Call each anomaly man-made or natural and name its closest material.",
     description=(
+        "**Spectral namer (first).** Each object of the committed mask (8-connected "
+        "pixels) is called natural or man-made by a trained spectral model, and a "
+        "man-made object gets its *closest known class* among oil/fuel, plastic, "
+        "textile, wood/paper, paint, metal and concrete/asphalt — confident when its "
+        "P(class | man-made) reaches ``namer_confident_p``, tentative otherwise. An "
+        "unseen material still gets the nearest known class, so read a tentative "
+        "class as a hint. Natural objects are not matched below.\n\n"
         "**Material family.** Each anomaly pixel is compared with the ring of "
         "ordinary pixels around it, in whitened space, against a family library "
         "(metal, plastic, roofing, paint, …). A family is named only when its "
@@ -207,20 +242,12 @@ META = ActionTypeMeta(
         "mask, producing a full-scene material map — minutes of compute "
         "but useful for context."
     ),
-    when_to_use=(
-        "After ``anomaly_detection_prep`` has been committed (a binary "
-        "anomaly mask exists). Hyperspectral only — thermal sensors "
-        "don't have the spectral resolution for splib07 matching."
-    ),
+    when_to_use="Needs a committed anomaly detection.",
     inputs=[
         ActionInputSpec(
             key="input_anomaly_detection_output_id",
-            label="Anomaly detection (committed)",
-            description=(
-                "A committed ``anomaly_detection_prep`` Output. The "
-                "binary anomaly mask from this output picks which "
-                "pixels get matched in default mode."
-            ),
+            label="Anomaly detection result",
+            description="Must be committed.",
             ref_kind="action_output",
             producing_action_types=["anomaly_detection_prep"],
             required=True,
@@ -377,12 +404,75 @@ META = ActionTypeMeta(
             filename="family_library_refl.npz",
         ),
         ActionOutputSpec(
+            key="namer_objects",
+            label="Namer objects (parquet)",
+            description=(
+                "One row per anomaly object: obj_id, n_px, row, col (centroid), bbox, "
+                "p_manmade, call, cls, p_cls, confident, fill."
+            ),
+            artifact_type="pickle",
+            filename="namer_objects.parquet",
+        ),
+        ActionOutputSpec(
+            key="namer_pixels",
+            label="Namer pixels (parquet)",
+            description="One row per anomaly pixel: row, col, p_manmade, cls, p_cls, fill, obj_id.",
+            artifact_type="pickle",
+            filename="namer_pixels.parquet",
+        ),
+        ActionOutputSpec(
+            key="namer_level1_map",
+            label="Man-made vs natural (raster)",
+            description="Int8 raster: -1 outside the mask, 0 natural object, 1 man-made object.",
+            artifact_type="raster",
+            filename="namer_level1_map.tif",
+        ),
+        ActionOutputSpec(
+            key="namer_level1_preview",
+            label="Man-made vs natural preview",
+            description="Orange man-made, teal natural, on a dark background.",
+            artifact_type="image",
+            filename="namer_level1_map.png",
+        ),
+        ActionOutputSpec(
+            key="namer_level1_overlay",
+            label="Man-made vs natural overlay (transparent)",
+            description="Same colours, transparent off the mask, for compositing on rgb.png.",
+            artifact_type="image",
+            filename="namer_level1_overlay.png",
+        ),
+        ActionOutputSpec(
+            key="namer_class_map",
+            label="Closest known class (raster)",
+            description=(
+                "Int8 raster: -1 outside the mask, 0 natural, 1..7 a confident class, "
+                "11..17 the same class tentative. ``namer_legend.json`` maps the codes."
+            ),
+            artifact_type="raster",
+            filename="namer_class_map.tif",
+        ),
+        ActionOutputSpec(
+            key="namer_class_overlay",
+            label="Closest known class overlay (transparent)",
+            description="Class colours on man-made objects, tentative ones faded.",
+            artifact_type="image",
+            filename="namer_class_overlay.png",
+        ),
+        ActionOutputSpec(
+            key="namer_legend",
+            label="Namer legend",
+            description="JSON: level-1 and class codes → label, colour; the checkpoint used.",
+            artifact_type="json",
+            filename="namer_legend.json",
+        ),
+        ActionOutputSpec(
             key="summary",
             label="Summary",
             description=(
                 "Cache used, sensor settings, pixel counts, match "
                 "counts, timing breakdown, settings echo. A ``family`` "
-                "block carries alpha, p*, family counts, or the error."
+                "block carries alpha, p*, family counts, or the error; a "
+                "``namer`` block the object and pixel counts, or the error."
             ),
             artifact_type="json",
             filename="summary.json",
@@ -390,11 +480,13 @@ META = ActionTypeMeta(
     ],
     # Hyperspectral only. Thermal sensors don't have the spectral
     # resolution for SAM against splib07.
-    accepted_sensor_types=["prisma", "enmap", "aviris_ng"],
+    accepted_sensor_types=["prisma", "enmap", "aviris_ng", "tanager", "generic_hsi"],
     default_config_per_sensor={
         "prisma": _DEFAULT_HSI,
         "enmap": _DEFAULT_HSI,
         "aviris_ng": _DEFAULT_HSI,
+        "tanager": _DEFAULT_HSI,
+        "generic_hsi": _DEFAULT_HSI,
     },
 )
 

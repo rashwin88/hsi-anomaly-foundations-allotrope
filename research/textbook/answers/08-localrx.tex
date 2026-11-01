@@ -1,0 +1,92 @@
+\answersfor{ch:localrx}
+
+\begin{solution}{ex:localrx:1}
+Directly:
+\begin{align*}
+\text{outer} &= (2\times15 + 1)^2 = 31^2 = 961\\
+\text{guard} &= (2\times3 + 1)^2 = 7^2 = 49\\
+n_{\text{ring}} &= 961 - 49 = 912 .
+\end{align*}
+With \cref{eq:localrx:ring}: $4\times(15 - 3)\times(15 + 3 + 1) = 4\times12\times19 = 912$.
+At a corner only rows and columns $0$ to $15$ of the outer window lie inside the image, a
+$16\times16 = 256$ square, and the guard keeps rows and columns $0$ to $3$, $4\times4 = 16$. The corner
+ring has $256 - 16 = 240$ pixels, about a quarter of 912.
+\end{solution}
+
+\begin{solution}{ex:localrx:2}
+With $i = 0$ the ring is all 24 pixels except the centre: the 16 border pixels (eight 20s, eight 22s)
+and the 8 inner neighbours (four 20s, four 22s), so twelve 20s and twelve 22s.
+\begin{align*}
+\mu &= \frac{12\times20 + 12\times22}{24} = \frac{240 + 264}{24} = \frac{504}{24} = 21\\
+\textstyle\sum(x - \mu)^2 &= 12\times1 + 12\times1 = 24\\
+\sigma^2 &= 24/23 = 1.0435\\
+\text{RX} &= \frac{(25 - 21)^2}{1.0435} = \frac{16}{1.0435} = 15.33 .
+\end{align*}
+A one-pixel target scores as high without a guard as \cref{we:localrx:guard}'s target did with one
+(slightly higher, because 24 background pixels estimate the variance a little better than 16). The
+guard is needed when the target, or the blur around it, extends beyond the pixel under test; its size
+should match the largest target you expect.
+\end{solution}
+
+\begin{solution}{ex:localrx:3}
+Sum of the real values: $0.20 + 0.22 + 0.24 = 0.66$. Correct mean $0.66/3 = 0.22$; dividing by the
+padded length gives $0.66/6 = 0.11$, exactly half, because half the slots are padding.
+
+Variance with divisor $n - 1 = 2$: deviations $-0.02, 0, 0.02$; squares $0.0004, 0, 0.0004$; sum
+$0.0008$; $\sigma^2 = 0.0008/2 = 0.0004$. Score of $0.30$:
+\[
+\frac{(0.30 - 0.22)^2}{0.0004} = \frac{0.0064}{0.0004} = 16 .
+\]
+(With the wrong mean 0.11 the score would be $(0.19)^2/\sigma^2_{\text{wrong}}$ with a variance also
+corrupted by the padded zeros: a meaningless number at exactly the pixels near edges.)
+\end{solution}
+
+\begin{solution}{ex:localrx:4}
+$\mat{W}_n = \diag(1/\sqrt2, 1/\sqrt{0.5}) = \diag(0.7071, 1.4142)$. Entry $(i,j)$ of
+$\mat{W}_n\Cov\mat{W}_n$ is $\Sigma_{ij}$ times the $i$-th and $j$-th diagonal entries:
+\begin{align*}
+(1,1):&\quad 3\times0.7071\times0.7071 = 3\times0.5 = 1.5\\
+(1,2):&\quad 1\times0.7071\times1.4142 = 1\\
+(2,2):&\quad 1.5\times1.4142\times1.4142 = 1.5\times2 = 3 .
+\end{align*}
+Trace $4.5$, determinant $1.5\times3 - 1 = 3.5$; $\lambda^2 - 4.5\lambda + 3.5 = 0$ gives
+$\lambda = (4.5 \pm \sqrt{20.25 - 14})/2 = (4.5 \pm 2.5)/2$, so $\lambda_1 = 3.5$ and $\lambda_2 = 1$.
+The first MNF component has $1 + \text{SNR} = 3.5$, SNR $= 2.5$; the second is pure noise.
+
+Eigenvector for 3.5: $(1.5 - 3.5)v_1 + v_2 = 0$, so $v_2 = 2v_1$, $\vect{v}_1 = (1, 2)/\sqrt5$. In band
+space $\vect{a}_1 = \mat{W}_n\vect{v}_1 = (0.7071, 2.8284)/\sqrt5 = (0.316, 1.265)$: band 2, the cleaner
+band (noise variance 0.5 against 2), is weighted four times as heavily. Check: the signal covariance is
+$\Cov - \Cov_n = \begin{psmallmatrix} 1 & 1\\ 1 & 1\end{psmallmatrix}$, so
+$\vect{a}_1\T\Cov_s\vect{a}_1 = (0.316 + 1.265)^2 = 1.581^2 = 2.5$, and the noise variance is
+$2\times0.316^2 + 0.5\times1.265^2 = 2\times0.1 + 0.5\times1.6 = 0.2 + 0.8 = 1$: SNR $2.5$.
+\end{solution}
+
+\begin{solution}{ex:localrx:5}
+Let $\vect{d} = \vect{x} - \muv$ and $\vect{y} = \mat{A}\vect{d}$. The mean of $\vect{y}$ is
+$\mat{A}\times\vect{0} = \vect{0}$ and its covariance is $\mat{A}\Cov\mat{A}\T$. Its Mahalanobis distance is
+\begin{align*}
+\vect{y}\T(\mat{A}\Cov\mat{A}\T)\inv\vect{y}
+&= \vect{d}\T\mat{A}\T\,(\mat{A}\T)\inv\Cov\inv\mat{A}\inv\,\mat{A}\vect{d}
+  && (\mat{A}\vect{d})\T = \vect{d}\T\mat{A}\T;\ (\mat{P}\mat{Q}\mat{R})\inv = \mat{R}\inv\mat{Q}\inv\mat{P}\inv\\
+&= \vect{d}\T\Cov\inv\vect{d}
+  && \mat{A}\T(\mat{A}\T)\inv = \mat{I},\ \mat{A}\inv\mat{A} = \mat{I}.
+\end{align*}
+The full MNF transform is such an $\mat{A}$ (rows $\vect{a}_k\T = \vect{v}_k\T\mat{W}_n$, a product of an
+orthogonal matrix and an invertible whitening matrix), so full MNF-RX equals plain RX.
+
+MNF-RX helps because it keeps only the first 10 components. (1) Numerically, the discarded directions
+include those whose estimates are dominated by noise and rounding; the 10 kept have eigenvalues
+$1 + \text{SNR}$ well above the noise level, so the $10\times10$ covariance is well conditioned and well
+estimated. (2) Statistically, each discarded near-noise component would add a $\chi^2_1$ term to every
+score and nothing to a target's, so dropping them shrinks the background spread $\sqrt{2C}$ against which
+a target must stand out.
+\end{solution}
+
+\begin{solution}{ex:localrx:6}
+A symmetric $30\times30$ matrix has $30$ diagonal entries and $(30\times30 - 30)/2 = 435$ distinct
+off-diagonal ones: $30 + 435 = 465 = 30\times31/2$ numbers. The global sample of 200,000 pixels gives
+$200{,}000/465 = 430$ pixels per number. A local covariance from a 3280-pixel ring would have
+$3280/465 = 7.1$ pixels per number, far fewer, and every pixel would need its own $30\times30$ solve.
+That is one reason PCA-RX and the residual score take only the \emph{mean} from the ring and keep one
+global covariance.
+\end{solution}

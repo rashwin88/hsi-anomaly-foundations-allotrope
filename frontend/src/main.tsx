@@ -7,6 +7,8 @@ import App from "./App";
 import "@fontsource-variable/inter";
 
 import "./index.css";
+// Tufte visual layer (tokens, ET Book, overrides) — must load after index.css.
+import "./tufte.css";
 
 const rootEl = document.getElementById("root");
 if (!rootEl) throw new Error("missing #root in index.html");

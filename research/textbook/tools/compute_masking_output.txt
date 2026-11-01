@@ -1,0 +1,37 @@
+ps r2 C2: tensor([[[0., 1.],
+         [2., 3.]],
+
+        [[4., 5.],
+         [6., 7.]]])
+bilinear 2->4: tensor([[1.0000, 1.5000, 2.5000, 3.0000],
+        [2.0000, 2.5000, 3.5000, 4.0000],
+        [4.0000, 4.5000, 5.5000, 6.0000],
+        [5.0000, 5.5000, 6.5000, 7.0000]])
+1d 2->4: tensor([[0., 1., 3., 4.]])
+avgpool (book 4x4 example): tensor([[[[1.0000, 0.2500],
+          [0.5000, 1.0000]]]])
+argsort desc of [0,1,0,1,0,1]: tensor([[1, 3, 5, 0, 2, 4]])
+argsort desc of [1,0,1,1,0,1] (docstring): tensor([[0, 2, 3, 5, 1, 4]])
+even kernel 4 erosion output shape on 8x8: torch.Size([1, 1, 9, 9])
+exercise: n_hide tensor([3]) pi tensor([[5, 2, 1, 4, 0, 3]]) q tensor([[0., 1., 1., 0., 0., 1.]]) inverse tensor([[4, 2, 1, 5, 3, 0]]) gather tensor([0., 1., 1., 0., 0., 1.])
+fig token validity: [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.0, 1.0, 1.0, 1.0, 0.0]
+graded no erosion: 138.0  graded k3: 130.0
+int(6*.65) 3 tensor([3])
+int(1024*.65) tensor([665])
+argsort desc tensor([[1, 2, 3, 5, 0, 4]])
+argsort desc2 tensor([[0, 2, 3, 1]])
+argsort noise tensor([[2, 4, 0, 5, 3, 1]]) tensor([[2, 5, 0, 4, 1, 3]])
+eroded k3: tensor([[[[0., 0., 0., 0., 0.],
+          [0., 0., 0., 0., 0.],
+          [1., 0., 0., 0., 1.],
+          [1., 0., 0., 0., 1.],
+          [1., 1., 1., 1., 1.]]]])
+all-valid k3: tensor([[[[1., 1., 1., 1.],
+          [1., 1., 1., 1.],
+          [1., 1., 1., 1.],
+          [1., 1., 1., 1.]]]])
+window 4: indep 0.178506  exact 0.177300
+window 6: indep 0.075419  exact 0.074418
+window 9: indep 0.020712  exact 0.020156
+expected empty stage-2 tokens: indep 7.1013 exact 6.9448
+rows for h=0: [0, 1]  h=15: [29, 30, 31]

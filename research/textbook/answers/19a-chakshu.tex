@@ -1,0 +1,68 @@
+\answersfor{ch:chakshu}
+
+\begin{solution}{ex:chakshu:1}
+With $E=2$, \cref{eq:chakshu:block} has coefficients $4+2\times2+16=24$ and $12+11\times2=34$:
+\begin{align*}
+24\times32^2+34\times32 &= 24\times1{,}024+1{,}088 = 24{,}576+1{,}088 = 25{,}664 \\
+\intertext{With $E=4$ the coefficients are $4+8+16=28$ and $12+44=56$:}
+28\times1{,}024+56\times32 &= 28{,}672+1{,}792 = 30{,}464 .
+\end{align*}
+Doubling the expansion adds $30{,}464-25{,}664=4{,}800$. Raising $E$ by $\Delta E=2$ adds $2\Delta E\,C^2+11\Delta E\,C
+=4\times1{,}024+22\times32=4{,}096+704=4{,}800$. The $C^2$ part is $2\Delta E\,C^2$ because two layers, fc1 and fc2, each
+hold $E C^2$ weights; the linear part collects fc1's $EC$ biases and the depthwise convolution's $10EC$.
+\end{solution}
+
+\begin{solution}{ex:chakshu:2}
+The stage-1 grid is $128/4=32$, then 16, 8 and 4. Tokens: $32^2=1{,}024$, $16^2=256$, $8^2=64$, $4^2=16$. Keys:
+$(32/8)^2=4^2=16$, $(16/4)^2=16$, $(8/2)^2=16$, and at stage~4 all 16 tokens: 16 keys at every stage. A training pass
+hides $\lfloor1{,}024\times0.7\rfloor=\lfloor716.8\rfloor=716$ and keeps $1{,}024-716=308$. The parameter count does not
+change: no layer's size depends on $H$ or $W$ (\cref{ch:shapes}). That is why the product can offer 64, 128 and 256.
+\end{solution}
+
+\begin{solution}{ex:chakshu:3}
+\begin{align*}
+0.00341802\times48{,}000 &= 164.06496\\
+164.06496+149.0 &= 313.06496\ \text{K}\\
+313.06496-273.15 &= 39.91\ \text{°C}\\
+z &= (39.9150-24.5756)/13.5744 = 15.3394/13.5744 = 1.1300 .
+\end{align*}
+\end{solution}
+
+\begin{solution}{ex:chakshu:4}
+Sum: three 0.1s make 0.3, three 0.2s make 0.6, two 0.3s make 0.6, then 0.4 and 5.0:
+$0.3+0.6+0.6+0.4+5.0=6.9$; plain mean $6.9/10=0.69$. At $\tau=0.05$ the code keeps
+$\lfloor10\times0.95\rfloor=\lfloor9.5\rfloor=9$, dropping the 5.0: $(6.9-5.0)/9=1.9/9=0.2111$. At $\tau=0.1$ it keeps
+$\lfloor9.0\rfloor=9$, the same 0.2111. With only ten numbers the floor turns a 5\% trim into a 10\% one: it cannot
+drop half a number, so it drops one. On a real batch of millions of pixels the rounding is negligible.
+\end{solution}
+
+\begin{solution}{ex:chakshu:5}
+Rows: $(1{,}000-256)/128=5.8125$, $\lceil5.8125\rceil+1=7$ (\cref{we:chakshu:tiles}). Columns:
+$(600-256)/128=344/128=2.6875$, $\lceil2.6875\rceil+1=3+1=4$, starting at 0, 128, 256 and the snapped $600-256=344$.
+Tiles: $7\times4=28$; forward passes: $2\times28=56$.
+\end{solution}
+
+\begin{solution}{ex:chakshu:6}
+Baked: $(4{,}600-24.5756)/13.5744=4{,}575.4244/13.5744=337.06$. Override: $(4{,}600-5{,}000)/400=-400/400=-1$.
+The product uses the baked statistics, for two reasons (\cref{sec:chakshu:hotsat}): the vendable loses its
+\code{units} field, so the override is never built; and if it were, loading the checkpoint would write the baked
+buffers back over it.
+\end{solution}
+
+\begin{solution}{ex:chakshu:7}
+Pixel 127 lies in token row (and column) $\lfloor127/4\rfloor=31$, pixel 128 in $\lfloor128/4\rfloor=32$. The spot
+touches tokens $(31,31)$, $(31,32)$, $(32,31)$ and $(32,32)$, one hot pixel each, with colours $62\bmod2=0$,
+$63\bmod2=1$, $1$ and $0$. In each pass two of its four hot pixels are visible, diagonally next to the two hidden
+ones, so expect a residual nearer the straddling $3\times3$ spot's than the one-token spot's. This case was not run;
+the expectation follows from the mechanism of \cref{sec:chakshu:straddle}, and you could check it by adding it to
+\file{tools/compute_chakshu.py}.
+\end{solution}
+
+\begin{solution}{ex:chakshu:8}
+\code{encoder_dims} sets the four widths and \code{decoder_dim} the decoder width; everything else is fixed in
+\code{_model_config_from_manifest}. A two-blocks-per-stage checkpoint would be rebuilt with one block per stage, so its
+\code{state_dict} would hold keys such as \code{encoder.blocks.0.1.norm1.weight} that the model lacks. The strict
+\code{load_state_dict} in \code{FoundationInferencer._load_weights} would raise, and the scoring action would fail at
+its \code{load_checkpoint} step. The fix belongs in the manifest (embed the full \code{model_config}, as the
+spectral-stem models already do) or in the resolver.
+\end{solution}

@@ -47,6 +47,8 @@ const SENSOR_LABELS: Record<string, string> = {
   enmap: "EnMAP",
   aviris_ng: "AVIRIS-NG",
   hotsat1: "HotSAT-1",
+  tanager: "Tanager",
+  generic_hsi: "Other hyperspectral",
 };
 
 // Scroll a target element into view + apply a short highlight pulse.

@@ -1,0 +1,76 @@
+\answersfor{ch:benchmarks}
+
+\begin{solution}{ex:benchmarks:1}
+The ring is everything within 3 steps of the object minus everything within 1 step. Put the object in row 0, columns 0
+and 1, and count the cells within 3 steps of either object pixel, row by row. In row $\Delta y$ a cell is within 3 steps
+when its column is within $3 - |\Delta y|$ of column 0 or of column 1:
+\begin{align*}
+\text{row } \pm3&: \text{ columns } 0 \text{ to } 1 \to 2 \text{ cells each}\\
+\text{row } \pm2&: \text{ columns } -1 \text{ to } 2 \to 4 \text{ cells each}\\
+\text{row } \pm1&: \text{ columns } -2 \text{ to } 3 \to 6 \text{ cells each}\\
+\text{row } 0&: \text{ columns } -3 \text{ to } 4 \to 8 \text{ cells}\\
+\text{within 3 steps} &= 2 + 4 + 6 + 8 + 6 + 4 + 2 = 32.
+\end{align*}
+Within 1 step: the 2 object pixels plus their 6 neighbours (1 left, 1 right, 2 above, 2 below) $= 8$.
+Ring $= 32 - 8 = 24$. The book's script confirms 24.
+\end{solution}
+
+\begin{solution}{ex:benchmarks:2}
+\begin{align*}
+|0.36 - 0.30| &= 0.06, \quad |0.27 - 0.30| = 0.03\\
+\text{mean } |o - r| &= (0.06 + 0.03)/2 = 0.09/2 = 0.045\\
+\bar\sigma &= (0.06 + 0.06)/2 = 0.06\\
+z &= 0.045 / 0.06 = 0.75.
+\end{align*}
+$0.502 \le 0.75 < 0.934$: medium.
+\end{solution}
+
+\begin{solution}{ex:benchmarks:3}
+$o_0 - r = 0.43 - 0.40 = 0.03$, so $z(s) = |0.03 - 0.20\,s| / 0.10$.
+\begin{align*}
+z(0) &= 0.03 / 0.10 = 0.3 < 1.5 && \text{solvable}\\
+\text{minimum} &: 0.03 - 0.20\,s = 0 \Rightarrow s = 0.15\\
+\text{rising branch} &: 0.03 - 0.20\,s = -1.5 \times 0.10 = -0.15\\
+0.20\,s &= 0.18 \Rightarrow s = 0.9\\
+\text{check} &: |0.03 - 0.18| / 0.10 = 0.15 / 0.10 = 1.5.
+\end{align*}
+Simple formula: $s = 1.5 \times 0.10 / 0.20 = 0.75$; realised $z = |0.03 - 0.15| / 0.10 = 0.12 / 0.10 = 1.2$, still
+easy but short of the target. \code{solve_strength} returns $s = 0.9$.
+\end{solution}
+
+\begin{solution}{ex:benchmarks:4}
+$\vect{d}_{\text{in}} = (3, 0, 0)$, $A = 9$; $\vect{d}_{\text{out}} = (0, 0, 3)$, $C = 9$.
+\begin{align*}
+\beta^2 &= \frac{0.1}{0.9} \times \frac{9}{9} = 0.1111, \quad \beta = 0.3333\\
+\vect{d}' &= (3, 0, 0) + 0.3333 \times (0, 0, 3) = (3, 0, 1)\\
+\phi(\vect{d}') &= \frac{1^2}{3^2 + 1^2} = \frac{1}{10} = 0.1.
+\end{align*}
+\end{solution}
+
+\begin{solution}{ex:benchmarks:5}
+With $\sigma = 1$, $2\sigma^2 = 2$, so $w(\Delta y, \Delta x) = \exp(-(\Delta y^2 + \Delta x^2)/2)$.
+\begin{align*}
+w(2,0) &= e^{-4/2} = e^{-2} = 0.1353\\
+w(1,1) &= e^{-2/2} = e^{-1} = 0.3679\\
+w(3,0) &= e^{-9/2} = e^{-4.5} = 0.0111\\
+w(2,1) &= e^{-5/2} = e^{-2.5} = 0.0821\\
+\text{ring sum} &= 4 \times 0.1353 + 4 \times 0.3679 + 4 \times 0.0111 + 8 \times 0.0821\\
+&= 0.5413 + 1.4715 + 0.0444 + 0.6567 = 2.7139\\
+\bar w_{\text{ring}} &= 2.7139 / 20 = 0.1357\\
+w_{\text{halo}} &= w(1,0) = e^{-1/2} = 0.6065\\
+\text{halo ratio} &= \frac{0.6065 - 0.1357}{1 - 0.1357} = \frac{0.4708}{0.8643} = 0.545.
+\end{align*}
+The blur is sharper than the build's $\sigma = 1.4$: less light reaches the halo (0.6065 against 0.7748), so the
+flat-ground halo ratio falls from 0.667 to 0.545, below the real median of 0.643. The script gives 0.1357, 0.6065 and
+0.5448.
+\end{solution}
+
+\begin{solution}{ex:benchmarks:6}
+\begin{align*}
+\text{realised} &= (0.00 + 0.06,\ 0.02 + 0.00) = (0.06, 0.02)\\
+\norm{\cdot}^2 &= 0.0036 + 0.0004 = 0.0040, \quad \text{outside } 0.0004\\
+\phi &= 0.0004 / 0.0040 = 0.10.
+\end{align*}
+The signal alone, $(0.06, 0)$, lies wholly inside: foreignness 0. Matching the signal would report 0 while the evaluator
+sees 0.10, fourteen times the real median of 0.0071.
+\end{solution}

@@ -1,0 +1,675 @@
+\chapter{Mix-FFN, LayerNorm, residuals and the transformer block}\label{ch:block}
+
+\begin{onething}
+A SegFormer block is two sublayers, attention and Mix-FFN, each wrapped the same way: normalise
+the input with LayerNorm, transform it, drop a random part of the result during training, and add
+it back to what came in. Two lines of code, and every piece has a reason you can calculate.
+\end{onething}
+
+\Cref{ch:attention,ch:esa} built the attention half of the block. This chapter builds the other
+half, the Mix-FFN, and the three pieces of wiring that hold the two together: LayerNorm, the
+residual connection and dropout. It ends by counting the parameters of a whole block by hand and
+matching the real model's number exactly. The code is
+\file{app/foundation_models/components/mix_ffn.py} and
+\file{app/foundation_models/components/segformer_block.py}; the numbers are printed by
+\file{research/textbook/tools/compute_13-15.py}.
+
+\section{Why attention alone is not enough}\label{sec:block:why}
+
+Three problems remain after \cref{ch:esa}.
+
+\paragraph{1. Attention gathers but hardly computes.} Look at what attention does to the values:
+it multiplies them by the weights matrix $\mat{A}$ and then by $\mat{W}_O$. If the weights were
+held fixed, the output $\mat{A}\mat{X}\mat{W}_V\mat{W}_O$ would be a \emph{linear} function of the
+input: doubling every token would double every output. The only nonlinearity is the softmax, and
+it acts on the weights, deciding \emph{who} is listened to, not on the content that is passed
+along. A stack of linear maps is still a linear map ($\mat{W}_1\mat{W}_2$ is one matrix), and a
+linear map cannot represent ``bright in band 40 \emph{and} dark in band 90''. Each token needs some
+private, nonlinear processing. That is the feed-forward network.
+
+\paragraph{2. Deep stacks are hard to train.} The encoder has eight blocks, each with two
+sublayers. Training sends an error signal backwards through all of them, and every sublayer
+multiplies it by its own derivative. Sixteen multiplications can shrink the signal to nothing or
+blow it up. The residual connection fixes this.
+
+\paragraph{3. Scales drift.} Each sublayer adds its output to the stream of tokens, so the typical
+size of a token's numbers changes from block to block. \Cref{sec:attention:scale} chose the divisor
+$\sqrt d$ assuming unit-variance inputs; if the inputs drift, the softmax saturates after all.
+LayerNorm puts every token back on a standard scale before each sublayer sees it.
+
+\begin{analogy}
+Think of a document passed around an editorial office. Each editor receives a clean photocopy
+(LayerNorm: everyone works from a standardised copy, whatever state the original is in), writes
+suggested changes in the margin (the sublayer), and some suggestions are struck out at random
+during training so that nobody relies on one editor (dropout). The suggestions are then applied to
+the \emph{original} (the residual addition): the document is never replaced by an editor's
+rewrite, only amended. Even if one editor does nothing useful, the document reaches the next desk
+intact.
+\end{analogy}
+
+\section{LayerNorm}\label{sec:block:ln}
+
+\subsection{The derivation}
+
+LayerNorm\index{LayerNorm} \citep{ba2016layer} standardises each token on its own, across its $C$
+features. Take one token $\vect{x} = (x_1, \dots, x_C)$.
+
+\emph{Step 1, the mean} of its features:
+\begin{equation}\label{eq:block:mu}
+  \mu = \frac{1}{C}\sum_{i=1}^{C} x_i .
+\end{equation}
+\emph{Step 2, the variance}, the average squared distance from that mean (divided by $C$, not
+$C-1$: PyTorch's LayerNorm uses this ``biased'' form):
+\begin{equation}\label{eq:block:var}
+  \sigma^2 = \frac{1}{C}\sum_{i=1}^{C} (x_i - \mu)^2 .
+\end{equation}
+\emph{Step 3, normalise:} subtract the mean, so the features centre on zero, and divide by the
+standard deviation, so their spread becomes one. A small $\epsilon$ (PyTorch's default is
+$10^{-5}$) prevents division by zero when all features are equal:
+\begin{equation}\label{eq:block:norm}
+  \hat x_i = \frac{x_i - \mu}{\sqrt{\sigma^2 + \epsilon}} .
+\end{equation}
+\emph{Step 4, the learned affine map.} Forcing every token to mean 0 and spread 1 may throw away
+something useful, so each feature gets a learned scale $\gamma_i$ and shift $\beta_i$:
+\begin{equation}\label{eq:block:ln}
+  \LN(\vect{x})_i = \gamma_i\,\hat x_i + \beta_i .
+\end{equation}
+The vectors $\boldsymbol{\gamma}$ and $\boldsymbol{\beta}$ are the only parameters, $C$ each, so
+\begin{equation}\label{eq:block:lnparams}
+  \text{LayerNorm}(C) \text{ has } 2C \text{ parameters}.
+\end{equation}
+They start at $\gamma_i = 1$, $\beta_i = 0$, which makes LayerNorm a pure standardisation at
+initialisation.
+
+\begin{worked}[label={we:block:ln}]{LayerNorm of a 4-number token}
+Take $\vect{x} = (1.0, 2.0, 3.0, 4.0)$ with $\boldsymbol\gamma = (1,1,1,1)$ and
+$\boldsymbol\beta = (0,0,0,0)$. Do it on paper.
+
+\emph{Mean.}
+\[
+  \mu = \frac{1.0 + 2.0 + 3.0 + 4.0}{4} = \frac{10.0}{4} = 2.5 .
+\]
+\emph{Deviations and their squares.}
+\begin{align*}
+  1.0 - 2.5 &= -1.5, & (-1.5)^2 &= 2.25\\
+  2.0 - 2.5 &= -0.5, & (-0.5)^2 &= 0.25\\
+  3.0 - 2.5 &= \phantom{-}0.5, & (0.5)^2 &= 0.25\\
+  4.0 - 2.5 &= \phantom{-}1.5, & (1.5)^2 &= 2.25
+\end{align*}
+\emph{Variance.} Sum $2.25 + 0.25 + 0.25 + 2.25 = 5.00$; divide by 4: $\sigma^2 = 1.25$.
+
+\emph{Standard deviation.} $\sqrt{1.25} = 1.1180$. (With $\epsilon$:
+$\sqrt{1.25 + 0.00001} = 1.118038$ against $1.118034$; the difference is in the sixth digit.)
+
+\emph{Normalise.}
+\begin{align*}
+  -1.5/1.1180 &= -1.3416\\
+  -0.5/1.1180 &= -0.4472\\
+  \phantom{-}0.5/1.1180 &= \phantom{-}0.4472\\
+  \phantom{-}1.5/1.1180 &= \phantom{-}1.3416
+\end{align*}
+So $\LN(\vect{x}) = (-1.3416, -0.4472, 0.4472, 1.3416)$, which is what PyTorch's
+\code{nn.LayerNorm(4)} returns\tagC. The pattern (evenly spaced, increasing) is kept; the level
+and the spread are standardised. Check: the outputs sum to 0, and their squares,
+$1.8 + 0.2 + 0.2 + 1.8 = 4.0$, average to 1.
+
+\emph{Now with an affine map}, $\boldsymbol\gamma = (2, 1, 1, 0.5)$ and
+$\boldsymbol\beta = (0, 0, 1, 0)$:
+\begin{align*}
+  2\times(-1.3416) + 0 &= -2.6833\\
+  1\times(-0.4472) + 0 &= -0.4472\\
+  1\times0.4472 + 1 &= \phantom{-}1.4472\\
+  0.5\times1.3416 + 0 &= \phantom{-}0.6708
+\end{align*}
+(using the unrounded $-1.34164$ for the first line). Training can stretch, shrink and shift each
+feature after the standardisation.
+\end{worked}
+
+\subsection{What LayerNorm forgets}
+
+\begin{keypoint}
+LayerNorm is blind to the overall level and overall scale of a token: $\LN(a\vect{x} + b) =
+\LN(\vect{x})$ for any number $a > 0$ and any number $b$.
+\end{keypoint}
+
+\emph{Proof} (ignoring the tiny $\epsilon$). Let $\vect{y} = a\vect{x} + b$, meaning
+$y_i = a x_i + b$ for every $i$.
+\begin{align*}
+  \mu_y &= \frac{1}{C}\sum_i (a x_i + b) = a\,\frac{1}{C}\sum_i x_i + b = a\mu_x + b && \text{the mean follows the map}\\
+  y_i - \mu_y &= a x_i + b - a\mu_x - b = a(x_i - \mu_x) && \text{the shift } b \text{ cancels}\\
+  \sigma_y^2 &= \frac{1}{C}\sum_i a^2(x_i - \mu_x)^2 = a^2\sigma_x^2 && \text{square the line above}\\
+  \hat y_i &= \frac{a(x_i - \mu_x)}{\sqrt{a^2\sigma_x^2}} = \frac{a(x_i - \mu_x)}{a\,\sigma_x} = \hat x_i && \sqrt{a^2} = a \text{ since } a > 0. \qquad\blacksquare
+\end{align*}
+The script confirms it: for the token of \cref{we:block:ln},
+\[
+  \LN(3\vect{x} + 10) = (-1.3416, -0.4472, 0.4472, 1.3416) = \LN(\vect{x})\tagC .
+\] Whatever a previous block did to the level and scale
+of a token, the next sublayer sees a standardised copy. (The same proof with $C = 1$ shows that a
+single number is always mapped to $\beta$; \cref{ex:esa:5}.)
+
+\subsection{LayerNorm against BatchNorm}
+
+\Cref{ch:compressor} met BatchNorm\index{BatchNorm}, which normalises each channel using
+statistics gathered over the whole batch. The difference is which numbers are averaged.
+
+\begin{center}
+\begin{tabular}{p{0.34\linewidth}p{0.27\linewidth}p{0.27\linewidth}}
+\toprule
+ & LayerNorm & BatchNorm\\
+\midrule
+averages over & one token's $C$ features & one channel, across the batch and positions\\
+depends on other patches in the batch? & no & yes\\
+same in training and evaluation? & yes & no (running statistics)\\
+suits token sequences? & yes & poorly\\
+\bottomrule
+\end{tabular}
+\end{center}
+With BatchNorm a token's output would depend on which other patches happened to share its batch,
+and small batches would give noisy statistics. LayerNorm keeps every token self-contained.
+(\Cref{ch:finetune} tells what BatchNorm's batch dependence cost this project in fine-tuning.)
+
+\section{Residual connections}\label{sec:block:residual}
+
+\subsection{The chain rule, on a tiny example}
+
+Training needs the derivative of the loss with respect to every parameter (\cref{ch:trainloop}).
+When functions are composed, $y = g(f(x))$, the derivative is the \emph{chain
+rule}\index{chain rule}: multiply the derivatives along the way,
+\begin{equation}\label{eq:block:chain}
+  \frac{dy}{dx} = g'(f(x))\cdot f'(x).
+\end{equation}
+\emph{Check it on numbers.} Let $f(x) = 3x$ and $g(u) = u^2$, so $y = (3x)^2 = 9x^2$ and directly
+$dy/dx = 18x$, which is 36 at $x = 2$. By the chain rule: $f(2) = 6$, $g'(u) = 2u$ so
+$g'(6) = 12$, $f'(x) = 3$; then $12\times3 = 36$. The same.
+
+For a stack of $L$ layers $x_\ell = f_\ell(x_{\ell-1})$, the chain rule multiplies $L$ factors:
+\begin{equation}\label{eq:block:plainchain}
+  \frac{d x_L}{d x_0} = f_L'\cdot f_{L-1}'\cdots f_1' .
+\end{equation}
+
+\subsection{What the residual changes}
+
+A \emph{residual connection}\index{residual connection} (or skip connection) computes
+\begin{equation}\label{eq:block:res}
+  x_\ell = x_{\ell-1} + f_\ell(x_{\ell-1})
+\end{equation}
+instead of $x_\ell = f_\ell(x_{\ell-1})$ \citep{he2016deep}. Differentiate: the derivative of
+$x$ with respect to itself is 1, and the derivative of $f_\ell(x)$ is $f_\ell'$, so
+\begin{equation}\label{eq:block:resgrad}
+  \frac{d x_\ell}{d x_{\ell-1}} = 1 + f_\ell' .
+\end{equation}
+Chained over $L$ layers:
+\begin{equation}\label{eq:block:reschain}
+  \frac{d x_L}{d x_0} = (1 + f_L')(1 + f_{L-1}')\cdots(1 + f_1') .
+\end{equation}
+Multiply out the brackets and the first term is $1\cdot1\cdots1 = 1$: there is always a path
+along which the signal passes untouched, whatever the layers do. (For vectors the 1 becomes the
+identity matrix $\mat{I}$ and $f'$ becomes the matrix of partial derivatives, the
+\emph{Jacobian}; the conclusion is the same.)
+
+\begin{worked}[label={we:block:resnumbers}]{Twenty layers with and without residuals}
+Suppose every layer's derivative is the same number and there are 20 layers.
+
+\emph{Without residuals}, \cref{eq:block:plainchain} gives $(f')^{20}$:
+\begin{align*}
+  f' = 0.9:&\quad 0.9^{20} = 0.1216\\
+  f' = 0.5:&\quad 0.5^{20} = 0.000\,000\,954 .
+\end{align*}
+Even a mild 0.9 per layer loses 88\% of the signal; 0.5 per layer loses all but one part in a
+million. This is the \emph{vanishing gradient}\index{vanishing gradient}.
+
+\emph{With residuals}, \cref{eq:block:reschain} gives $(1 + f')^{20}$. Sublayers start near zero
+output, so their derivatives start small:
+\begin{align*}
+  f' = +0.05:&\quad 1.05^{20} = 2.6533\\
+  f' = -0.05:&\quad 0.95^{20} = 0.3585 .
+\end{align*}
+Both are of order 1. The signal reaching the first layer is neither lost nor exploded.
+\end{worked}
+
+\paragraph{The ``learn a correction'' view.} Unroll \cref{eq:block:res} from the input:
+\begin{align*}
+  x_1 &= x_0 + f_1(x_0)\\
+  x_2 &= x_1 + f_2(x_1) = x_0 + f_1(x_0) + f_2(x_1)\\
+  &\ \,\vdots\\
+  x_L &= x_0 + \sum_{\ell=1}^{L} f_\ell(x_{\ell-1}) .
+\end{align*}
+The output is the input plus a sum of corrections. A sublayer that has nothing useful to add can
+learn $f_\ell = 0$ (all weights near zero), which is easy. Without the residual, ``do nothing''
+would mean learning to be exactly the identity function, which is surprisingly hard for a stack of
+matrices and nonlinearities.
+
+\section{Pre-norm, not post-norm}\label{sec:block:prenorm}
+
+Where the LayerNorm sits matters.
+
+\begin{center}
+\begin{tabular}{lll}
+\toprule
+ & post-norm (the original 2017 transformer) & pre-norm (this model)\\
+\midrule
+formula & $x \leftarrow \LN(x + f(x))$ & $x \leftarrow x + f(\LN(x))$\\
+the residual path & passes through a LayerNorm every sublayer & untouched\\
+\bottomrule
+\end{tabular}
+\end{center}
+\index{pre-norm}\index{post-norm}
+In post-norm the derivative of each step is $\LN'\cdot(1 + f')$: the clean ``1'' of
+\cref{eq:block:resgrad} is multiplied by LayerNorm's own derivative at every one of the 16
+sublayers, so the motorway passes through a toll booth every block. In pre-norm the step is
+$x + f(\LN(x))$, whose derivative is $1 + f'\cdot\LN'$: the 1 survives, and the unrolled sum above
+holds exactly. Modern transformers (GPT-2, ViT, SegFormer and this code) use pre-norm. The source
+says so in its docstring (\file{segformer_block.py}, lines 4--13).
+
+\section{Dropout}\label{sec:block:dropout}
+
+\subsection{What it does}
+
+\emph{Dropout}\index{dropout} \citep{srivastava2014dropout}, during training, sets each number of a
+tensor to zero independently with probability $p$, and multiplies the survivors by
+$1/(1-p)$. At evaluation it does nothing.
+
+\emph{Why the factor $1/(1-p)$.} Write the dropped value as $m\,x/(1-p)$ where $m$ is 1 with
+probability $1-p$ and 0 with probability $p$. Its expected value is
+\begin{align*}
+  \E\!\left[\frac{m\,x}{1-p}\right] = \frac{x}{1-p}\,\E[m] = \frac{x}{1-p}\,\big((1-p)\cdot1 + p\cdot0\big) = \frac{x}{1-p}(1-p) = x .
+\end{align*}
+On average the output equals the input, so switching dropout off at evaluation changes nothing on
+average.
+
+\begin{worked}[label={we:block:dropout}]{Dropout with $p = 0.4$}
+Scale factor $1/(1-0.4) = 1/0.6 = 1.6667$. Take $x = (0.5, -1.0, 2.0, 0.3, 1.2)$ and suppose the
+random draw keeps positions 1, 3 and 4 ($m = (1, 0, 1, 1, 0)$):
+\begin{align*}
+  0.5\times1\times1.6667 &= 0.8333\\
+  -1.0\times0 &= 0\\
+  2.0\times1\times1.6667 &= 3.3333\\
+  0.3\times1\times1.6667 &= 0.5000\\
+  1.2\times0 &= 0 .
+\end{align*}
+Two of five values vanished; the survivors grew by two thirds.
+\end{worked}
+
+\subsection{Where it sits}
+
+The block applies dropout to the sublayer's output \emph{before} the residual addition,
+\[
+  x + \operatorname{Dropout}\big(f(\LN(x))\big).
+\]
+Only the new contribution can be dropped; the information
+travelling along the skip connection is never touched. Dropping the residual stream itself would
+destroy accumulated information at random, which is damage, not regularisation.
+
+\begin{drift}
+Dropout rates (\code{drop_rate}): 0.3 in v0.1.0
+\tagM{configs/hyperspectral_segformer_exp_1.json} and 0.4 from v0.2.0 on
+\tagM{configs/hyperspectral_segformer_exp_2.json}, also 0.4 in FT04
+\tagM{research/experiments/indradhanu-finetune/FT04-final-joint/config.json}. At 0.4 nearly half of
+every sublayer's output is discarded in training; it was raised to fight overfitting. At inference
+dropout is off twice over: the model is built with \code{drop_rate=0.0} and put in
+\code{model.eval()} mode (IW15).
+\end{drift}
+
+\begin{sourcenote}[: one dropout module, and no drop path]
+\file{segformer_block.py} builds a single \code{self.drop = nn.Dropout(drop_ratio)} (line 79) and
+uses it after both sublayers (lines 96 and 103). That is harmless: dropout has no parameters and
+draws a fresh random mask on every call. The block has no \emph{drop path} (stochastic depth, which
+drops a whole sublayer's contribution for a whole sample and which many transformer implementations
+add): a search of \file{app/} for \code{DropPath} or \code{drop_path} finds nothing. The only
+regularising randomness inside the block is this element-wise dropout.
+\end{sourcenote}
+
+\section{Mix-FFN}\label{sec:block:mixffn}
+
+\subsection{The feed-forward network, and why it widens}
+
+The standard transformer feed-forward network\index{feed-forward network} processes each token on
+its own:
+\[
+  \operatorname{Linear}(C \to EC) \;\to\; \text{nonlinearity} \;\to\; \operatorname{Linear}(EC \to C),
+\]
+with an \emph{expansion ratio}\index{expansion ratio} $E = 4$ here
+\par\noindent\tagM{research/experiments/indradhanu-finetune/FT04-final-joint/config.json}.
+\par\noindent The middle is four times wider than the ends. A wider middle gives the nonlinearity more room: the token is unfolded
+into $4C$ numbers, each of which can be bent independently, and then folded back. Going from 32 to
+32 through one nonlinearity is far more restrictive than from 32 to 128 and back.
+
+\subsection{SegFormer's twist: a depthwise convolution in the middle}
+
+SegFormer's Mix-FFN\index{Mix-FFN} \citep{xie2021segformer} inserts a $3\times3$ convolution on the
+token grid between the expansion and the nonlinearity:
+\begin{align*}
+  (B, N, C) &\xrightarrow{\ \text{fc1: Linear}(C\to4C)\ } (B, N, 4C)
+  \xrightarrow{\ \text{transpose, reshape}\ } (B, 4C, H, W)\\
+  &\xrightarrow{\ \text{dwconv } 3\times3\ } (B, 4C, H, W)
+  \xrightarrow{\ \text{reshape, transpose}\ } (B, N, 4C)\\
+  &\xrightarrow{\ \GELU\ } (B, N, 4C)
+  \xrightarrow{\ \text{fc2: Linear}(4C\to C)\ } (B, N, C).
+\end{align*}
+The convolution has stride 1 and padding 1, so by \cref{eq:esa:outsize} the grid keeps its size:
+$\lfloor(H + 2 - 3)/1\rfloor + 1 = H$. \emph{Mix-FFN never changes the number of tokens.}
+
+\coursefig[0.95\linewidth]{iw-14-mixffn}{The feed-forward half of a block. Tokens are expanded
+fourfold, reshaped back to their grid, mixed with their eight neighbours by a depthwise
+$3\times3$ convolution (one private filter per channel), passed through GELU and projected back.
+The depthwise convolution is what gives the model a sense of position.}{fig:block:mixffn}
+
+\subsection{Depthwise convolution}
+
+\begin{definition}[Depthwise convolution]
+A convolution with \code{groups} equal to the number of channels: each channel has its own private
+$3\times3$ filter and never looks at any other channel,
+\begin{equation}\label{eq:block:dw}
+  y_{c,i,j} = b_c + \sum_{a=-1}^{1}\sum_{b=-1}^{1} w_{c,a,b}\; x_{c,\,i+a,\,j+b},
+\end{equation}
+with $x = 0$ outside the grid (zero padding).
+\end{definition}\index{depthwise convolution}\index{convolution!depthwise}
+In code (\file{mix_ffn.py}, line 79):
+\begin{lstlisting}
+self.dwconv = nn.Conv2d(hidden_dim, hidden_dim, kernel_size=3,
+                        padding=1, groups=hidden_dim)   # (B, 4C, H, W) -> (B, 4C, H, W)
+\end{lstlisting}
+\emph{Parameters.} An ordinary $3\times3$ convolution from $4C$ channels to $4C$ channels has
+$4C\cdot4C\cdot9 + 4C$; the depthwise one has 9 weights per channel and a bias:
+\begin{equation}\label{eq:block:dwparams}
+  \text{dwconv} = 4C\cdot9 + 4C = 40C .
+\end{equation}
+
+\begin{worked}[label={we:block:dwcount}]{Ordinary against depthwise at stage 1}
+Stage 1 has $C = 32$, so $4C = 128$ hidden channels.
+\begin{align*}
+  \text{ordinary: } 128\times128\times9 + 128 &= 16{,}384\times9 + 128 = 147{,}456 + 128 = 147{,}584\\
+  \text{depthwise: } 128\times9 + 128 &= 1{,}152 + 128 = 1{,}280 .
+\end{align*}
+$147{,}584/1{,}280 = 115$ times fewer. Nothing is lost, because \code{fc1} and \code{fc2} on either
+side already mix channels; the convolution's job is purely spatial.
+\end{worked}
+
+\subsection{Where position comes from}
+
+\Cref{sec:attention:perm} showed that attention cannot tell where a token is. A convolution can:
+its output at $(i, j)$ depends on the tokens at $(i\pm1, j\pm1)$, so ``next to'' is built into it.
+More than that, the zero padding makes the border different from the interior, and over several
+layers that difference spreads inward, so the network can tell how far a token is from the edge.
+SegFormer's authors argue that this $3\times3$ convolution provides enough positional information
+to do without positional encodings \citep{xie2021segformer}; this codebase has none.
+
+\begin{worked}[label={we:block:dwtoy}]{A depthwise filter sees the border}
+One channel on a $3\times3$ grid, values rising evenly:
+\[
+  \begin{pmatrix} 1 & 2 & 3\\ 4 & 5 & 6\\ 7 & 8 & 9 \end{pmatrix},
+  \qquad \text{filter } \begin{pmatrix} 0 & 1 & 0\\ 1 & -4 & 1\\ 0 & 1 & 0 \end{pmatrix},\ \text{bias } 0 .
+\]
+The filter adds the four direct neighbours and subtracts four times the centre.
+
+\emph{Centre $(2,2)$.} Neighbours 2 (above), 4 (left), 6 (right), 8 (below):
+\[
+  2 + 4 + 6 + 8 - 4\times5 = 20 - 20 = 0 .
+\]
+\emph{Top-left corner $(1,1)$.} Above and left are padding zeros; right is 2, below is 4:
+\[
+  0 + 0 + 2 + 4 - 4\times1 = 6 - 4 = 2 .
+\]
+\emph{Top-middle $(1,2)$.} Above is padding; left 1, right 3, below 5:
+\[
+  0 + 1 + 3 + 5 - 4\times2 = 9 - 8 = 1 .
+\]
+The whole output, from the script\tagC:
+\[
+  \begin{pmatrix} 2 & 1 & -4\\ -3 & 0 & -7\\ -16 & -11 & -22 \end{pmatrix}.
+\]
+On a perfectly even ramp the interior gives 0, but every border position gives something else,
+and each corner something different. The output carries a trace of \emph{where} each token is,
+which no amount of attention could produce.
+\end{worked}
+
+\subsection{GELU}
+
+The nonlinearity is the Gaussian Error Linear Unit\index{GELU} \citep{hendrycks2016gaussian}:
+\begin{equation}\label{eq:block:gelu}
+  \GELU(x) = x\,\Phi(x),\qquad \Phi(x) = \tfrac12\left(1 + \operatorname{erf}\!\left(\tfrac{x}{\sqrt2}\right)\right),
+\end{equation}
+where $\Phi(x)$ is the probability that a standard Gaussian random number is below $x$ (the
+Gaussian's cumulative distribution function; $\operatorname{erf}$ is the error function that
+computes it). Read it as ``let $x$ through in proportion to how likely a Gaussian is to be below
+it'': large positive $x$ passes almost whole ($\Phi \approx 1$), large negative $x$ is almost
+blocked ($\Phi\approx 0$), and in between it bends smoothly. PyTorch's \code{nn.GELU()} (used at
+\file{mix_ffn.py}, line 86) computes this exact form; a common approximation is
+$\tfrac12 x\big(1 + \tanh(\sqrt{2/\pi}\,(x + 0.044715x^3))\big)$.
+
+\begin{worked}[label={we:block:gelu}]{GELU at $-1$, 0 and 1}
+From tables of the Gaussian, $\Phi(1) = 0.8413$, and by symmetry $\Phi(-1) = 1 - 0.8413 =
+0.1587$; $\Phi(0) = 0.5$.
+\begin{align*}
+  \GELU(-1) &= -1\times0.1587 = -0.1587\\
+  \GELU(0) &= 0\times0.5 = 0\\
+  \GELU(1) &= 1\times0.8413 = 0.8413 .
+\end{align*}
+PyTorch gives $(-0.1587, 0, 0.8413)$\tagC; the tanh approximation gives
+$(-0.1588, 0, 0.8412)$.
+
+\emph{The slope.} By the product rule, $\GELU'(x) = \Phi(x) + x\,\varphi(x)$, where
+$\varphi(x) = e^{-x^2/2}/\sqrt{2\pi}$ is the Gaussian density and $\varphi(1) = \varphi(-1) =
+0.2420$:
+\begin{align*}
+  \GELU'(-1) &= 0.1587 + (-1)(0.2420) = -0.0833\\
+  \GELU'(0) &= 0.5 + 0 = 0.5\\
+  \GELU'(1) &= 0.8413 + 0.2420 = 1.0833 .
+\end{align*}
+Unlike ReLU, whose slope jumps from 0 to 1 at the origin, GELU's slope changes smoothly; it even
+dips slightly below zero for negative inputs, so GELU is not monotonic near $x = -0.75$.
+\end{worked}
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}
+\begin{axis}[width=0.55\linewidth, height=6cm, xmin=-3, xmax=3, ymin=-0.6, ymax=3,
+  axis lines=middle, xlabel={$x$}, ylabel={output},
+  legend style={font=\small, at={(1.04,0.5)}, anchor=west}, grid=major, grid style={gray!20}]
+\addplot[maskgrey, very thick, dashed, domain=-3:3, samples=61] {max(0,x)};
+\addplot[spat, very thick, domain=-3:3, samples=121] {0.5*x*(1+tanh(0.7978845608*(x+0.044715*x^3)))};
+\addplot[only marks, mark=*, attn] coordinates {(-1,-0.1587) (0,0) (1,0.8413)};
+\legend{{ReLU $\max(0,x)$}, GELU, {values of \cref{we:block:gelu}}}
+\end{axis}
+\end{tikzpicture}
+\caption{GELU against ReLU. GELU is a smooth ReLU: near zero for very negative inputs, a soft bend
+through the origin, near-linear for large inputs. The curve is drawn with the tanh approximation,
+which differs from the exact form by less than 0.001 on this range.}
+\label{fig:block:gelu}
+\end{figure}
+
+GELU sits \emph{after} the depthwise convolution and \emph{before} \code{fc2}, that is, in the wide
+$4C$-dimensional space, where the nonlinearity has the most numbers to bend.
+
+\subsection{The sparse fallback}
+
+Like the reduction of \cref{sec:esa:fallback}, the depthwise convolution needs a full grid,
+$N = H\cdot W$. When stage-1 tokens have been removed it is skipped (\file{mix_ffn.py}, line 119):
+\begin{lstlisting}
+if N == H * W:
+    ...                       # reshape to grid, dwconv, reshape back: (B, N, 4C)
+else:
+    sequence_x = expanded_x   # (B, N, 4C): no spatial mixing
+\end{lstlisting}
+In a masked pass, stage 1's Mix-FFN is a plain two-layer network with a GELU in the middle. The
+docstring calls this ``a minor quality tradeoff for correct handling of sparse token sets'', since
+the attention still supplies spatial context. As with the reduction convolution, the stage-1
+depthwise filters receive no gradient from a masked pass.
+
+\subsection{Mix-FFN parameter count}
+
+Three layers: \code{fc1} has $C\cdot4C + 4C$, \code{dwconv} has $40C$ (\cref{eq:block:dwparams}),
+\code{fc2} has $4C\cdot C + C$. In total
+\begin{equation}\label{eq:block:ffnparams}
+  \text{Mix-FFN}(C) = (4C^2 + 4C) + 40C + (4C^2 + C) = 8C^2 + 45C .
+\end{equation}
+
+\begin{worked}[label={we:block:ffn1}]{Mix-FFN at stage 1}
+$C = 32$, hidden width $4\times32 = 128$.
+\begin{align*}
+  \text{fc1: } 32\times128 + 128 &= 4{,}096 + 128 = 4{,}224\\
+  \text{dwconv: } 128\times9 + 128 &= 1{,}152 + 128 = 1{,}280\\
+  \text{fc2: } 128\times32 + 32 &= 4{,}096 + 32 = 4{,}128\\
+  \text{total: } 4{,}224 + 1{,}280 + 4{,}128 &= 9{,}632 .
+\end{align*}
+Check with \cref{eq:block:ffnparams}: $8\times32^2 + 45\times32 = 8\times1{,}024 + 1{,}440 =
+8{,}192 + 1{,}440 = 9{,}632$.
+\end{worked}
+
+\section{The block}\label{sec:block:block}
+
+\subsection{Two lines}
+
+Putting the pieces together (\file{segformer_block.py}, lines 95--104):
+\begin{align}
+  \vect{a} &= \vect{x} + \operatorname{Dropout}\big(\operatorname{ESA}(\LN_1(\vect{x}), H, W)\big), \label{eq:block:sub1}\\
+  \vect{y} &= \vect{a} + \operatorname{Dropout}\big(\operatorname{MixFFN}(\LN_2(\vect{a}), H, W)\big). \label{eq:block:sub2}
+\end{align}
+\index{SegFormer block}\index{transformer block}
+\begin{lstlisting}
+attn = self.drop(self.attn(self.norm1(x), H, W))   # (B, N, C)
+attn = x + attn                                    # (B, N, C) residual 1
+ffn  = self.drop(self.ffn(self.norm2(attn), H, W)) # (B, N, C)
+ffn  = attn + ffn                                  # (B, N, C) residual 2
+\end{lstlisting}
+Read it aloud: \emph{normalise, attend, maybe drop some, add it to what we had; then normalise,
+think, maybe drop some, add it to what we had.} The second residual adds to $\vect{a}$, the output
+of the first sublayer, not to the original $\vect{x}$; information accumulates through both. The
+shape \shape{(B, N, C)} never changes inside a block.
+
+\coursefig[0.95\linewidth]{iw-15-block}{One SegFormer block. Each of the two sublayers, efficient
+self-attention (plum) and Mix-FFN (indigo), normalises its input first (pre-norm), transforms it,
+applies dropout and adds the result back to its input through a residual connection. The shape
+$(B, N, C)$ is unchanged; each encoder stage stacks two blocks.}{fig:block:course}
+
+Each stage stacks \code{num_blocks} $= [2, 2, 2, 2]$ blocks, the SegFormer-B0 setting
+\par\noindent\tagM{research/experiments/indradhanu-finetune/FT04-final-joint/config.json}.
+\par\noindent Within a stage all blocks share $C$, $h$ and $R$; width and resolution change only at the
+patch embeddings between stages (\cref{ch:encoder}).
+
+\subsection{The parameter count, by hand}\label{sec:block:params}
+
+A block is two LayerNorms, one ESA and one Mix-FFN. With
+\cref{eq:esa:params,eq:block:lnparams,eq:block:ffnparams}:
+\begin{equation}\label{eq:block:blockparams}
+  \text{block}(C, R) = \underbrace{2\cdot2C}_{\text{norm1, norm2}} + \underbrace{4C^2 + 4C + [R > 1](C^2R^2 + 3C)}_{\text{ESA}} + \underbrace{8C^2 + 45C}_{\text{Mix-FFN}},
+\end{equation}
+where $[R > 1]$ is 1 if $R > 1$ and 0 otherwise.
+
+\begin{worked}[label={we:block:stage1}]{A stage-1 block: 79{,}616 parameters}
+$C = 32$, $R = 8$, $h = 2$ (the head count does not matter, \cref{sec:attention:heads}).
+\begin{align*}
+  \text{norm1: } 2\times32 &= 64\\
+  \text{q, k, v, proj: } 4\times(32\times32 + 32) = 4\times1{,}056 &= 4{,}224\\
+  \text{reduction conv: } 32\times32\times8\times8 + 32 = 65{,}536 + 32 &= 65{,}568\\
+  \text{reduction norm: } 2\times32 &= 64\\
+  \text{norm2: } 2\times32 &= 64\\
+  \text{fc1: } 32\times128 + 128 &= 4{,}224\\
+  \text{dwconv: } 128\times9 + 128 &= 1{,}280\\
+  \text{fc2: } 128\times32 + 32 &= 4{,}128
+\end{align*}
+Add, in groups: ESA $= 4{,}224 + 65{,}568 + 64 = 69{,}856$; Mix-FFN $= 4{,}224 + 1{,}280 + 4{,}128 =
+9{,}632$; the two block norms $= 64 + 64 = 128$. One block:
+\[
+  69{,}856 + 9{,}632 + 128 = 79{,}616 .
+\]
+Two blocks per stage: $2\times79{,}616 = 159{,}232$.
+
+\emph{Check against the real model.} The \code{torchinfo} summary of the hyperspectral SegFormer
+MAE lists stage 1's block list (\code{ModuleList: 3-2}) at 159{,}232 parameters
+\tagM{research/model_break_down/05_hyperspectral_segformer_mae.md}, and the course on Indradhanu
+Heavy quotes FT04's stage-1 block as 79{,}616 \tagM{indradhanu workings/68-indradhanu-heavy-pretraining.md}.
+Building \code{SegFormerBlock(32, 2, 8)} in the script gives 79{,}616 with exactly the
+eight per-layer counts above\tagC. You have predicted a number from a real model by adding up
+pieces derived by hand in three chapters.
+\end{worked}
+
+\begin{worked}[label={we:block:stage4}]{A stage-4 block: 800{,}000 parameters}
+$C = 256$, $R = 1$ (no reduction layers), hidden width $4\times256 = 1{,}024$.
+\begin{align*}
+  \text{norm1: } 2\times256 &= 512\\
+  \text{q, k, v, proj: } 4\times(256\times256 + 256) = 4\times(65{,}536 + 256) = 4\times65{,}792 &= 263{,}168\\
+  \text{norm2: } 2\times256 &= 512\\
+  \text{fc1: } 256\times1{,}024 + 1{,}024 = 262{,}144 + 1{,}024 &= 263{,}168\\
+  \text{dwconv: } 1{,}024\times9 + 1{,}024 = 9{,}216 + 1{,}024 &= 10{,}240\\
+  \text{fc2: } 1{,}024\times256 + 256 = 262{,}144 + 256 &= 262{,}400
+\end{align*}
+ESA $= 263{,}168$; Mix-FFN $= 263{,}168 + 10{,}240 + 262{,}400 = 535{,}808$; norms $= 512 + 512 =
+1{,}024$. One block:
+\[
+  263{,}168 + 535{,}808 + 1{,}024 = 800{,}000 .
+\]
+A round number by coincidence. Two blocks: 1{,}600{,}000, which is the \code{torchinfo} figure for
+stage 4's block list \tagM{research/model_break_down/05_hyperspectral_segformer_mae.md}, and the
+script's\tagC.
+\end{worked}
+
+All four stages, checked against the built blocks\tagC\ and the \code{torchinfo} table
+\par\noindent\tagM{research/model_break_down/05_hyperspectral_segformer_mae.md}:
+\begin{center}
+\begin{tabular}{crrrrrr}
+\toprule
+stage & $C$ & ESA & Mix-FFN & 2 LNs & one block & two blocks\\
+\midrule
+1 & 32 & 69{,}856 & 9{,}632 & 128 & 79{,}616 & 159{,}232\\
+2 & 64 & 82{,}368 & 35{,}648 & 256 & 118{,}272 & 236{,}544\\
+3 & 160 & 205{,}920 & 212{,}000 & 640 & 418{,}560 & 837{,}120\\
+4 & 256 & 263{,}168 & 535{,}808 & 1{,}024 & 800{,}000 & 1{,}600{,}000\\
+\midrule
+\multicolumn{6}{l}{all eight blocks} & 2{,}832{,}896\\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\paragraph{The balance flips.} At stage 1 attention is 88\% of the block ($69{,}856/79{,}616$),
+almost all of it the $8\times8$ reduction convolution. At stage 4 Mix-FFN is 67\%
+($535{,}808/800{,}000$): with no reduction and $C = 256$, the two $C\times4C$ matrices dominate.
+\Cref{ch:params} puts these blocks into the budget of the whole model.
+
+\begin{drift}
+Indradhanu Heavy (\cref{ch:heavy}) uses the same block with $C = 96$ at stage 1; its stage-1 block
+is 705{,}792 parameters \tagM{indradhanu workings/68-indradhanu-heavy-pretraining.md}, which the
+script reproduces\tagC. You count it in \cref{ex:block:5}.
+\end{drift}
+
+\begin{confusions}
+\confusion{Why two LayerNorms per block?}{One before attention, one before Mix-FFN. Each sublayer
+gets a freshly standardised copy of its input. The ESA's reduction has a third LayerNorm of its own,
+on the summary tokens.}
+\confusion{Is the plus sign ordinary addition?}{Yes: element-by-element addition of two tensors
+of the same shape \texttt{(B, N, C)}. Its power is in the derivative, $1 + f'$.}
+\confusion{Is Mix-FFN mixing tokens or channels?}{Both, in different places. \texttt{fc1} and
+\texttt{fc2} mix channels within each token; the depthwise convolution mixes neighbouring tokens
+within each channel. Between them everything is mixed, hence the name.}
+\confusion{Does Mix-FFN change the number of tokens?}{No. Stride 1 and padding 1 keep the grid
+size. Only the patch embeddings change the token count.}
+\confusion{LayerNorm or BatchNorm: which normalises over the batch?}{BatchNorm. LayerNorm uses one
+token's own $C$ features and nothing else, and so behaves the same in training and evaluation.}
+\confusion{Does dropout run at inference?}{No. \texttt{drop\_rate=0.0} and \texttt{model.eval()}
+both switch it off. Run-to-run variation at inference comes from the masking strategy
+(\cref{ch:inference}), not from dropout.}
+\confusion{Is GELU the same as ReLU?}{It is a smooth relative of ReLU. It equals ReLU far from zero, but
+it is curved near zero, its slope changes continuously, and it lets small negative values through
+(GELU$(-1) = -0.1587$).}
+\end{confusions}
+
+\begin{checkyourself}
+\item\label{ex:block:1} LayerNorm the token $(2.0, 4.0, 4.0, 6.0)$ with $\gamma = 1$, $\beta = 0$
+(ignore $\epsilon$). Show the mean, every deviation and square, the variance, the standard deviation
+and the four outputs. Then predict, without calculating, $\LN(10, 20, 20, 30)$.
+\item\label{ex:block:2} Compute $\GELU(2)$ and $\GELU(-2)$ given $\Phi(2) = 0.9772$. What fraction
+of the input does GELU pass at $x = 2$ and at $x = -2$?
+\item\label{ex:block:3} A stack of 16 sublayers (the encoder's eight blocks) each has derivative
+$f' = -0.1$. Compute the end-to-end derivative without residuals and with pre-norm residuals
+(assume LayerNorm's derivative is absorbed into $f'$). Which one still lets the first layer learn?
+\item\label{ex:block:4} Count the Mix-FFN parameters for stage 2 ($C = 64$) layer by layer, and
+check your answer with $8C^2 + 45C$.
+\item\label{ex:block:5} Indradhanu Heavy's stage-1 block has $C = 96$, $R = 8$, expansion 4. Count
+its parameters layer by layer and confirm 705{,}792. Why is it close to nine times FT04's 79{,}616
+but not exactly nine?
+\item\label{ex:block:6} With dropout probability $p = 0.4$, what is the expected output and the
+variance of the dropped value $m\,x/(1-p)$ for an input $x = 1$? (Use
+$\operatorname{Var} = \E[\cdot^2] - (\E[\cdot])^2$.)
+\end{checkyourself}
+
+\nextchapter{ch:encoder}

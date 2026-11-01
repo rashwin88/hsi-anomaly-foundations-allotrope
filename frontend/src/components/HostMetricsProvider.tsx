@@ -38,16 +38,8 @@ export const BIG_HISTORY = 1800;
 // Short-history sparklines used inside the summary cards.
 export const HISTORY = 60;
 
-// Marker palette per job type. Matches what MonitoringPage uses today.
-const JOB_TYPE_COLOR: Record<string, string> = {
-  action_run: "rgba(124, 58, 237, 0.78)",
-  scene_onboard: "rgba(37, 99, 235, 0.78)",
-  annotation_attach: "rgba(180, 83, 9, 0.78)",
-  project_export: "rgba(13, 148, 136, 0.78)",
-};
-function jobMarkerColor(type: string): string {
-  return JOB_TYPE_COLOR[type] ?? "rgba(99, 102, 241, 0.7)";
-}
+// Job-start markers carry no colour of their own: MetricLineChart draws them in
+// --accent-select and labels each with its job type (the label's text before " · ").
 
 export interface HostMetricsState {
   host: HostMetrics | null;
@@ -115,7 +107,7 @@ export function HostMetricsProvider({ children }: { children: ReactNode }) {
         const tSec = new Date(snap.timestamp).getTime() / 1000;
         const gpuPct =
           snap.gpu.available && snap.gpu.devices.length > 0
-            ? snap.gpu.devices[0].utilization_percent
+            ? snap.gpu.devices[0].utilization_percent ?? 0
             : 0;
         setState((prev) => {
           const cap = (arr: number[], v: number) => {
@@ -171,7 +163,6 @@ export function HostMetricsProvider({ children }: { children: ReactNode }) {
           newMarkers.push({
             t: new Date(j.started_at).getTime() / 1000,
             label: `${j.type} · ${j.id.slice("job_".length, "job_".length + 8)}…`,
-            color: jobMarkerColor(j.type),
           });
         }
         setState((prev) => ({

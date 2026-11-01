@@ -1,0 +1,83 @@
+== class score = logsumexp over the class's cosines / tau, planted entry left out ==
+z = cos / tau: [1.92, 1.8, 1.6, 1.2]
+g1 kept: S = [2.5549, 1.6, 1.2], P = [0.6087, 0.2343, 0.157], L = 0.4964
+g1 left out: S = [1.8, 1.6, 1.2], P = [0.4224, 0.3458, 0.2318], L = 0.8619
+e^z: [6.821, 6.0496, 4.953, 3.3201]
+by hand, kept: S_glass = ln(e^1.92 + e^1.80) = 2.5549
+left out: entry softmax over g2, metal, tarp: [0.4224, 0.3458, 0.2318]
+gradient dL/dz_j = q_j - 1[j in c] w_j  (left out; glass has only g2, w = 1): [-0.5776, 0.3458, 0.2318] sum 0.0
+kept: q = [0.3226, 0.2861, 0.2343, 0.157] w(glass) = [0.53, 0.47]
+kept gradient: [-0.2074, -0.1839, 0.2343, 0.157] sum -0.0
+per-spectrum InfoNCE with g2 as a 'negative' (true = g1): 1.1313 ; class-level: 0.4964
+
+== log-uniform fill on [0.05, 1] ==
+P(a <= 0.1) = ln(0.1/0.05)/ln 20 = 0.6931/2.9957 = 0.2314
+P(a <= 0.25) = ln(0.25/0.05)/ln 20 = 1.6094/2.9957 = 0.5372
+P(a <= 0.5) = ln(0.5/0.05)/ln 20 = 2.3026/2.9957 = 0.7686
+mean of a: (1 - 0.05)/ln 20 = 0.3171
+sampled mean 0.3173 share <= 0.25 0.5368
+
+== noise sigma from neighbour differences ==
+row 0.20 0.23 0.21 0.22 -> sigma 0.01528
+a noiseless slope 0.20..0.29 (step 0.01) -> sigma 0.00707 = 0.01/sqrt 2 = 0.00707
+
+== ring: 15x15 minus 5x5 ==
+pixels: 200 ; Chebyshev distances 3..7:  200
+  distance 3: (2*3+1)^2 - (2*3-1)^2 = 24 = 8*3
+  distance 4: (2*4+1)^2 - (2*4-1)^2 = 32 = 8*4
+  distance 5: (2*5+1)^2 - (2*5-1)^2 = 40 = 8*5
+  distance 6: (2*6+1)^2 - (2*6-1)^2 = 48 = 8*6
+  distance 7: (2*7+1)^2 - (2*7-1)^2 = 56 = 8*7
+
+== pass bars at fill 0.25 ==
+prisma: f = 0.1658, bar = 0.8724
+enmap: f = 0.2149, bar = 0.7635
+aviris_ng: f = 0.1866, bar = 0.8603
+
+== parameter count as a formula of D (stem width), H (hidden), E (embed) ==
+D=64 H=256 E=128: towers 4DH+3H^2+7H+2HE+2E+2 = 329,730; stem 17,825; BN 128; scalars 2; formula total 347,685; code 347,685
+D=64 H=128 E=64: towers 4DH+3H^2+7H+2HE+2E+2 = 99,330; stem 17,825; BN 128; scalars 2; formula total 117,285; code 117,285
+D=32 H=256 E=128: towers 4DH+3H^2+7H+2HE+2E+2 = 296,962; stem 14,721; BN 64; scalars 2; formula total 311,749; code 311,749
+stem(D) = 11,617 + 65 D + 32 D: D=64 -> 17825 ; D=32 -> 14721
+
+== level 1 by matching: 3 entries plastic 6.0, metal 5.0 | soil 5.5; man-made truth ==
+logit 0.8133 p 0.6928 BCE 0.367 grads [-0.2246, -0.0826, 0.3072]
+second natural entry at 5.5: S_nat = 6.1931 logit 0.1201
+
+== d logit / d ln tau with cosines fixed: s_j = c_j / tau, ds_j/dln tau = -s_j ==
+autograd d logit/d ln tau = -0.2311 ; by hand -(u.s_M - s_N) = -( 5.7311 - 5.5) = -0.2311
+dL1/dln tau = (p - y) * that = 0.071
+
+== the XOR square and nearest-shelf matching ==
+pixel at 80 deg: man-made cos [0.9848, -0.9848], natural cos [0.1736, -0.1736], logit 8.0810
+pixel at 190 deg: man-made cos [-0.1736, 0.1736], natural cos [-0.9848, 0.9848], logit -8.0810
+pixel at 45 deg: man-made cos [0.7071, -0.7071], natural cos [0.7071, -0.7071], logit 0.0000
+
+== the hash split as a coin of 0.2 per spectrum: held-out count per class ~ Binomial(n, 0.2) ==
+  oil        n=40: mean 8.0, sd 2.53, observed 8 (+0.00 sd)
+  plastic    n=46: mean 9.2, sd 2.71, observed 8 (-0.44 sd)
+  textile    n=14: mean 2.8, sd 1.50, observed 3 (+0.13 sd)
+  wood/paper n=11: mean 2.2, sd 1.33, observed 2 (-0.15 sd)
+  paint      n= 4: mean 0.8, sd 0.80, observed 1 (+0.25 sd)
+  metal      n=10: mean 2.0, sd 1.26, observed 3 (+0.79 sd)
+  concrete   n=34: mean 6.8, sd 2.33, observed 9 (+0.94 sd)
+  paint: P(no paint spectrum held out) = 0.8^4 = 0.4096 ; P(all 4 held out) = 0.2^4 = 0.0016000000000000003
+  total: mean 0.2*159 = 31.8 sd 5.04 observed 34
+
+== fill: variance ==
+E[a] = 0.3171 E[a^2] = (1 - a_min^2)/(2 ln 20) = 0.1665 Var = 0.0659 sd = 0.2568
+sampled E[a^2] 0.1666 sd 0.2567
+
+== the contrast in x - r' ==
+x - r' = [ 0.0663  0.0225 -0.049 ] ; g*(a(t-b) + (b-r)) = [ 0.0663  0.0225 -0.049 ]
+
+== band widths as quadrature: width-weighted mean of a line v = lambda/1000 over 410..470 ==
+widths [20.0, 17.5, 17.5, 20.0] ; weighted mean 0.43883 ; plain mean 0.43875
+
+== learning rate schedule: lambda(s) ==
+  s=0: 0.00200
+  s=249: 0.49981
+  s=499: 0.99846
+  s=10000: 0.50000
+  s=15000: 0.14645
+  s=19999: 0.00000

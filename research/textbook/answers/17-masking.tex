@@ -1,0 +1,83 @@
+\answersfor{ch:masking}
+
+\begin{solution}{ex:masking:1}
+With 9 valid pixels: $f_t = 9/16 = 0.5625$. Since $0.5625 > 0.5$, the token is valid. With 8 valid
+pixels: $f_t = 8/16 = 0.5$. The test is strict, $0.5 > 0.5$ is false, so the token is invalid. Ties go
+to invalid.
+\end{solution}
+
+\begin{solution}{ex:masking:2}
+\begin{align*}
+\rho\, n_{\text{valid}} &= 0.65 \times 37 = 24.05,\\
+n_{\text{hide}} &= \lfloor 24.05 \rfloor = 24,\\
+\text{tokens seen by the encoder} &= 1024 - 24 = 1000,\\
+\text{effective ratio} &= 24 / 37 \approx 0.6486 .
+\end{align*}
+The encoder sees the 13 visible valid tokens and all $1024 - 37 = 987$ invalid tokens: $13 + 987 =
+1000$. (In practice the trainer would have dropped this patch, since 37 valid tokens is far below 40\%
+valid pixels.)
+\end{solution}
+
+\begin{solution}{ex:masking:3}
+Token 3 is invalid. Add 2 there:
+\begin{align*}
+&[0.9,\ 0.1,\ 0.05,\ 0.4,\ 0.6,\ 0.02]\\
++\;&[0,\ 0,\ 0,\ 2,\ 0,\ 0]\\
+=\;&[0.9,\ 0.1,\ 0.05,\ 2.4,\ 0.6,\ 0.02] .
+\end{align*}
+Count: $n_{\text{valid}} = 1+1+1+0+1+1 = 5$, $n_{\text{hide}} = \lfloor 0.65 \times 5 \rfloor = \lfloor
+3.25 \rfloor = 3$.
+
+Sort ascending: $0.02\,(t_5) < 0.05\,(t_2) < 0.1\,(t_1) < 0.6\,(t_4) < 0.9\,(t_0) < 2.4\,(t_3)$, so
+$\pi = [5, 2, 1, 4, 0, 3]$. Flags $s = [1, 1, 1, 0, 0, 0]$.
+
+Scatter $q_{\pi_k} = s_k$: $q_5 = 1$, $q_2 = 1$, $q_1 = 1$, $q_4 = 0$, $q_0 = 0$, $q_3 = 0$. So
+$q = [0, 1, 1, 0, 0, 1]$ and $k = 1 - q = [1, 0, 0, 1, 1, 0]$. The invalid token 3 is kept and not
+hidden.
+
+Inverse: $\pi_0 = 5 \Rightarrow \pi^{-1}_5 = 0$; $\pi_1 = 2 \Rightarrow \pi^{-1}_2 = 1$; $\pi_2 = 1
+\Rightarrow \pi^{-1}_1 = 2$; $\pi_3 = 4 \Rightarrow \pi^{-1}_4 = 3$; $\pi_4 = 0 \Rightarrow \pi^{-1}_0 =
+4$; $\pi_5 = 3 \Rightarrow \pi^{-1}_3 = 5$. In token order $\pi^{-1} = [4, 2, 1, 5, 3, 0]$.
+
+Gather: $q_t = s_{\pi^{-1}_t}$, so $q = [s_4, s_2, s_1, s_5, s_3, s_0] = [0, 1, 1, 0, 0, 1]$, the same
+as the scatter. All of these values are reproduced by \file{research/textbook/tools/compute_masking.py}.
+\end{solution}
+
+\begin{solution}{ex:masking:4}
+$\text{num\_kept} = 1 + 0 + 1 + 1 = 3$, so $\text{max\_kept} = 3$. The descending argsort puts the three
+1s first, for example $[0, 2, 3, 1]$; the gather indices are $g = [0, 2, 3]$ and the kept tokens
+$[t_0, t_2, t_3]$, shape $(1, 3, C)$.
+\[
+\mat{S} = \begin{pmatrix} 1&0&0&0\\ 0&0&1&0\\ 0&0&0&1 \end{pmatrix}.
+\]
+Restore starts from four zero vectors and writes $t_0'$ at 0, $t_2'$ at 2, $t_3'$ at 3:
+$[t_0', \vect{0}, t_2', t_3']$. Position 1, the hidden token, stays zero.
+\end{solution}
+
+\begin{solution}{ex:masking:5}
+First mask, kernel 3, radius 1. Flip: invalid $= [1, 0, 0, 0, 0, 1]$. Maximum over $[i-1, i+1]$,
+clipped at the ends:
+\begin{align*}
+i=0&: \{1, 0\} \to 1, & i=1&: \{1, 0, 0\} \to 1, & i=2&: \{0, 0, 0\} \to 0,\\
+i=3&: \{0, 0, 0\} \to 0, & i=4&: \{0, 0, 1\} \to 1, & i=5&: \{0, 1\} \to 1 .
+\end{align*}
+Dilated $[1, 1, 0, 0, 1, 1]$; flip back: $[0, 0, 1, 1, 0, 0]$. One pixel removed from each end of the
+valid run.
+
+Second mask, kernel 5, radius 2. Flip: invalid only at index 4. Indices within 2 of index 4 are 2--6, so
+the dilated invalid is $[0, 0, 1, 1, 1, 1, 1, 0, 0]$ and the eroded mask $[1, 1, 0, 0, 0, 0, 0, 1, 1]$.
+The single bad pixel grew to a hole of 5. The two ends stay valid: the max pool pads with $-\infty$, so
+the array edge never counts as invalid.
+\end{solution}
+
+\begin{solution}{ex:masking:6}
+Patch A: $n_{\text{hide}} = \lfloor 0.65 \times 1024 \rfloor = \lfloor 665.6 \rfloor = 665$, kept
+$1024 - 665 = 359$.
+
+Patch B: $n_{\text{hide}} = \lfloor 0.65 \times 960 \rfloor = \lfloor 624 \rfloor = 624$, kept
+$1024 - 624 = 400$ (336 visible valid plus 64 invalid).
+
+$\text{max\_kept} = \max(359, 400) = 400$. Patch B gathers exactly its 400 kept tokens. Patch A gathers
+400, of which the last $400 - 359 = 41$ come from the tail of its sort: 41 of its hidden tokens leak
+into the encoder while still being graded. The fully valid patch is the one that leaks.
+\end{solution}

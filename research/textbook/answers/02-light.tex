@@ -1,0 +1,65 @@
+\answersfor{ch:light}
+
+\begin{solution}{ex:light:1}
+By \cref{eq:light:fwhm},
+\[ \sigma = 12 / 2.3548 \approx 5.096 \text{ nm}. \]
+At $\Delta = 3$ nm:
+\begin{align*}
+\Delta^2 &= 9,\\
+\sigma^2 &= 5.096^2 \approx 25.97,\\
+2\sigma^2 &\approx 51.94,\\
+\Delta^2/(2\sigma^2) &= 9/51.94 \approx 0.1733,\\
+w &= \exp(-0.1733) \approx 0.841.
+\end{align*}
+Three nanometres from the centre the band still responds at about $84\%$ of its peak; the half
+point is at $6$ nm, half the FWHM.
+\end{solution}
+
+\begin{solution}{ex:light:2}
+Products of weight and reflectance:
+\begin{align*}
+0.5 \times 0.30 &= 0.15,\\
+1 \times 0.26 &= 0.26,\\
+0.5 \times 0.18 &= 0.09.
+\end{align*}
+Sum of products $0.15 + 0.26 + 0.09 = 0.50$; sum of weights $0.5 + 1 + 0.5 = 2$; band value
+$0.50/2 = 0.25$. The reflectance at the centre is $0.26$. The spectrum falls more steeply on the
+long-wavelength side ($0.26 \to 0.18$, a drop of $0.08$) than it rises on the short side
+($0.30 \to 0.26$, a drop of $0.04$ going the other way), so the weighted average is pulled below
+the centre value.
+\end{solution}
+
+\begin{solution}{ex:light:3}
+\begin{align*}
+0.00341802 \times 41{,}000 &= 140.13882,\\
+T_{\mathrm{K}} &= 140.13882 + 149.0 = 289.13882\ \mathrm{K},\\
+T_{^\circ\mathrm{C}} &= 289.13882 - 273.15 = 15.98882 \approx 15.99\ ^\circ\mathrm{C}.
+\end{align*}
+About $16$ degrees: ordinary ground on a mild day.
+\end{solution}
+
+\begin{solution}{ex:light:4}
+Pixel $(1,0)$ reads position $(1,0)$ of each band matrix:
+$\mat{X}[0,1,0] = 0.05$, $\mat{X}[1,1,0] = 0.30$, $\mat{X}[2,1,0] = 0.14$, so
+$\vect{x}_{10} = (0.05,\ 0.30,\ 0.14)$. The $1{,}650$ nm band is the third matrix,
+\[ \mat{X}[2] = \begin{pmatrix} 0.14 & 0.10 \\ 0.14 & 0.10 \end{pmatrix}. \]
+Compare with $\vect{x}_{00} = (0.03,\ 0.20,\ 0.14)$ component by component:
+\begin{align*}
+0.05/0.03 &\approx 1.667,\\
+0.30/0.20 &= 1.5,\\
+0.14/0.14 &= 1.
+\end{align*}
+The ratios differ, so pixel $(1,0)$ is not a scaled copy of pixel $(0,0)$: the two have different
+spectral shapes, not only different brightness.
+\end{solution}
+
+\begin{solution}{ex:light:5}
+The denominator is unchanged, $E\cos\theta_s = 1.2990$. Numerator:
+$\pi \times 0.05 = 0.15708$. Reflectance: $0.15708/1.2990 \approx 0.121$, half of the first
+surface's $0.242$, as it must be since the radiance is half.
+
+Radiance depends on the sun's angle, the atmosphere and the instrument as well as the surface;
+the same field gives different radiances on different days and through different sensors.
+Reflectance is the surface's own ratio, so a model trained on reflectance from one sensor sees the
+same kind of number from another.
+\end{solution}

@@ -1,0 +1,58 @@
+\answersfor{ch:product}
+
+\begin{solution}{ex:product:1}
+One Scene (the uploaded file). Two Projects, one per band-filter setting, both bound to that Scene.
+In each Project: one \code{band_filter_apply}, one \code{anomaly_scoring} (Indradhanu and
+MNF-RX are two models ticked inside the same Action, not two Actions), and two
+\code{anomaly_detection_prep} Actions, one per threshold attempt:
+\[ 1 + 1 + 2 = 4 \text{ Actions per Project}, \qquad 2 \times 4 = 8 \text{ Actions in total.} \]
+\end{solution}
+
+\begin{solution}{ex:product:2}
+In-degrees (number of incoming arrows):
+\[ B{:}\,0,\quad G{:}\,1,\quad S{:}\,2,\quad P{:}\,1,\quad Q{:}\,1,\quad M{:}\,1. \]
+Kahn's algorithm: list $B$ (removing its arrows makes $G{:}\,0$, $S{:}\,1$); list $G$ ($S{:}\,0$);
+list $S$ ($P{:}\,0$, $Q{:}\,0$). Now there is a choice. Two valid orders:
+\[ B, G, S, P, M, Q \qquad\text{and}\qquad B, G, S, Q, P, M. \]
+An edge $M \to B$ would mean the band filter reads an output of the spectral match. $B$ is created
+first and can only name outputs that exist at its creation, and $M$ does not exist yet; moreover the
+edge would close the cycle $B \to S \to P \to M \to B$, which a DAG cannot contain.
+\end{solution}
+
+\begin{solution}{ex:product:3}
+$H = 2$, $W = 3$, so $HW = 6$. Band $0$:
+\[ s_0 = 100 \times \frac{1 + 0 + 1 + 1 + 1 + 0}{6} = 100 \times \frac{4}{6} \approx 66.67. \]
+Per pixel, sum the two bands at each position:
+\[
+\begin{pmatrix}1+1 & 0+0 & 1+1\\ 1+1 & 1+1 & 0+0\end{pmatrix}
+= \begin{pmatrix}2&0&2\\2&2&0\end{pmatrix}
+\;\Rightarrow\;
+m = \begin{pmatrix}1&0&1\\1&1&0\end{pmatrix}.
+\]
+Valid fraction $4/6 \approx 0.667$, equal to $s_0/100$ because validity is all-or-nothing per pixel.
+\end{solution}
+
+\begin{solution}{ex:product:4}
+Pixel $(i, j) = (0, 0)$:
+\[ x = 30 \times 0 + 0 + 500{,}000 = 500{,}000,\qquad y = 0 + (-30)\times 0 + 2{,}000{,}000 = 2{,}000{,}000, \]
+the top-left corner, as the definition of $(c, f)$ says. Pixel $(100, 0)$:
+\[ x = 500{,}000,\qquad y = -30 \times 100 + 2{,}000{,}000 = 2{,}000{,}000 - 3{,}000 = 1{,}997{,}000, \]
+three kilometres south. To invert (no rotation, so $b = d = 0$), solve each line for its pixel index:
+\begin{align*}
+x = a j + c \;&\Rightarrow\; j = \frac{x - c}{a} = \frac{501{,}500 - 500{,}000}{30} = \frac{1{,}500}{30} = 50,\\
+y = e i + f \;&\Rightarrow\; i = \frac{y - f}{e} = \frac{1{,}998{,}500 - 2{,}000{,}000}{-30} = \frac{-1{,}500}{-30} = 50.
+\end{align*}
+The pixel is row $50$, column $50$.
+\end{solution}
+
+\begin{solution}{ex:product:5}
+With a $60$ s timeout: during a $45$ s freeze no heartbeat is written. The last heartbeat before the
+freeze was at most $5$ s before it began, so at the moment the worker resumes the heartbeat's age is
+at most $45 + 5 = 50$ s, below $60$. Not reaped; the next heartbeat refreshes it.
+
+With a $12$ s timeout: after $12$ s without a heartbeat (at most $12$ s into the freeze) the reaper
+marks the job \texttt{failed} although the worker is alive. When the worker resumes, it is working on
+a job the system has already declared failed. This is why the source asks for a timeout of at least
+about three heartbeat intervals ($3 \times 5 = 15$ s), and why the default ($60$ s, twelve intervals)
+is generous.
+\end{solution}

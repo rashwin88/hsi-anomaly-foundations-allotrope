@@ -1,0 +1,80 @@
+\answersfor{ch:heavy}
+
+\begin{solution}{ex:heavy:1}
+Stage 2 has $R=4$, so the $C^2$ coefficient is $12+16=28$.
+\begin{align*}
+\text{FT04, } C=64 &: 28\times64^2+56\times64 = 28\times4{,}096+3{,}584 = 114{,}688+3{,}584 = 118{,}272\\
+\text{Heavy, } C=192 &: 28\times192^2+56\times192 = 28\times36{,}864+10{,}752 = 1{,}032{,}192+10{,}752 = 1{,}042{,}944\\
+\text{ratio} &: 1{,}042{,}944/118{,}272 = 8.82
+\end{align*}
+Both match the table. Doubling stage 1 ($C=32\to64$): the $C^2$ term $77{,}824\times4=311{,}296$, the $C$ term
+$1{,}792\times2=3{,}584$, total $314{,}880$; ratio $314{,}880/79{,}616=3.95$, a little under $2^2=4$.
+\end{solution}
+
+\begin{solution}{ex:heavy:2}
+Heavy: $96\times192\times3\times3=165{,}888$; plus bias 192 gives $166{,}080$; plus LayerNorm $2\times192=384$ gives
+$166{,}464$, what the built model reports for \texttt{encoder.patch\_embeds[1]}. FT04: $32\times64\times9=18{,}432$;
+$+64=18{,}496$; $+128=18{,}624$. Ratio $166{,}464/18{,}624=8.94$.
+\end{solution}
+
+\begin{solution}{ex:heavy:3}
+$\cos(20\pi/80)=\cos(\pi/4)=0.7071$. $(1+0.7071)/2=1.7071/2=0.85355$. $2.99\times10^{-4}\times0.85355=2.5521\times10^{-4}$.
+Add $10^{-6}$: $2.5621\times10^{-4}$. The CSV logs $2.56\times10^{-4}$ at epoch 20.
+\end{solution}
+
+\begin{solution}{ex:heavy:4}
+Every worker needs at least one shard, so at most 16 workers; a 17th would get none. For exactly two shards each
+with 12 workers you need $12\times2=24$ shards.
+\end{solution}
+
+\begin{solution}{ex:heavy:5}
+Old rule: $\max(0.3,0.8)=0.8>0.5$, so the cloud line assigns class 2, cloud, overriding water. Thick rule: only
+$\text{prob}[1]=0.3$ counts, and $0.3\le0.5$, so the cloud line does not fire; the pixel keeps the class from the
+earlier lines: shadow and snow do not pass, water does (0.6), so class 1, water.
+\end{solution}
+
+\begin{solution}{ex:heavy:6}
+Before: $1.0+0.8+0.8+0.6+0.4+0.4+0.0+0.0=4.0$; $4.0/8=0.50$. After zeroing the first three:
+$0.6+0.4+0.4+0+0=1.4$; $1.4/8=0.175$. The pAUC fell by $(0.50-0.175)/0.50=0.65$, 65\%, although only 3 of 8 targets
+(37.5\%) were removed, because the removed targets were the best-ranked ones, carrying $2.6$ of the $4.0$ credit.
+\end{solution}
+
+\begin{solution}{ex:heavy:7}
+FT04 had a four-stage curriculum and FTH1 one short run, so a loss could be the recipe's fault: the comparison is
+confounded. FTB1 gives F001 exactly FTH1's recipe, so FTH1 $-$ FTB1 holds the recipe fixed and isolates the
+model. It does not separate size from the decoder, the pretraining run or the segmentation-head width; that would
+need further controls.
+\end{solution}
+
+\begin{solution}{ex:heavy:8}
+On 2 threads: $(1-0.923)+0.923/2=0.077+0.4615=0.5385$. On 24: $0.077+0.923/24=0.077+0.0385=0.1155$. Speed-up
+$0.5385/0.1155=4.66$ (4.67 with $p$ unrounded), against 4.0 at 16. Reasons for doubt: $p$ was fitted to a single
+measurement, and the law ignores memory bandwidth, which threads share; and 24 threads on a 24-core host leave
+nothing for the api, the database and the operating system, which is why the compose file chose 16 for headroom.
+\end{solution}
+
+\begin{solution}{ex:heavy:9}
+The output network is $32\to64\to(D+1)$ on the wavelength encoding. With $D=32$:
+\begin{align*}
+32\times64+64 &= 2{,}048+64 = 2{,}112\\
+64\times33+33 &= 2{,}112+33 = 2{,}145\\
+2{,}112+2{,}145 &= 4{,}257,
+\end{align*}
+FT04's \texttt{spectral\_out} in \cref{tab:heavy:total}. FT04's segmentation head, width 128, $5\times16=80$ sub-pixel
+channels:
+\begin{align*}
+\text{projections} &: (32+64+160+256)\times128+4\times128 = 512\times128+512 = 65{,}536+512 = 66{,}048\\
+\text{fuse} &: 512\times128+128 = 65{,}536+128 = 65{,}664\\
+\text{refine} &: 128\times128\times9+128 = 147{,}456+128 = 147{,}584\\
+\text{sub-pixel} &: 128\times80\times9+80 = 92{,}160+80 = 92{,}240\\
+\text{total} &: 66{,}048+65{,}664 = 131{,}712;\ +147{,}584 = 279{,}296;\ +92{,}240 = 371{,}536,
+\end{align*}
+the head counted in \cref{ch:shipping}.
+\end{solution}
+
+\begin{solution}{ex:heavy:10}
+Each pass hides half of the 1,024 valid tokens and keeps 512. Stage~1 then attends among the kept tokens:
+$512^2=262{,}144$ scores per head, 16 times the unmasked $1{,}024\times16=16{,}384$. A batch of 8 tiles gives the stem
+$8\times128\times128=8\times16{,}384=131{,}072$ rows, and $131{,}072/32{,}768=4$ calls of the attention kernel.
+\end{solution}
+

@@ -1,0 +1,256 @@
+\chapter{Producing a submission}\label{ch:submission}
+
+\begin{onething}
+An evaluation result is a committed \code{anomaly_detection_prep} exported as a boolean 0/1 GeoTIFF plus a point
+shapefile, with no score anywhere a judge could read as a heatmap, on the product's own map grid. For PRISMA that grid
+now comes from the HE5's UTM corner attributes read as pixel \emph{centres}, pitch $=$ span$/(n-1)$ and origin $=$
+upper-left centre minus half a pixel, replacing a latitude and longitude bounding box that was a median 2.4 pixels
+off.
+\end{onething}
+
+On 2026-10-31 an AIGC Stage-III evaluation circular set the rules for the deliverables, with a report due on
+2~November 2026 and a presentation on 4~November. The plan and its status are
+\file{docs/proposals/aigc-evaluation-submission.md}: its changes C1--C6 were built and tested that day, and C7, the
+rehearsal, was done on the \emph{local} stack (``images rebuilt, worker \code{running}, export rehearsed on a committed
+PRISMA prep: \code{hyper_*} bundle, uint8 \{0,1\} mask in the product's UTM zone''). A production or air-gapped
+deployment is not approved and is a separate step. This chapter is how the product meets the rules, and the one piece
+of geometry that had to change.
+
+\begin{analogy}
+A land registry accepts boundary maps only as surveyed lines on its own grid: not a sketch, and not a shaded map of
+``likely boundaries''. You may file up to three claims per plot. Until this week the office drew PRISMA plots by eye
+from the corners of a road atlas; now it reads the surveyor's grid references off the deed.
+\end{analogy}
+
+%======================================================================
+\section{The rules, and the one bundle that meets them}\label{sec:submission:rules}
+
+\begin{center}\small
+\begin{tabular}{@{}lp{0.38\linewidth}p{0.44\linewidth}@{}}
+\toprule
+& rule (circular) & how the product meets it\\
+\midrule
+R2a & boolean 0/1 anomaly map as a GeoTIFF with a real CRS & the prep commit writes uint8 0/1; the export stamps on
+the raw scene's georeference\\
+R2b & the same map as a shapefile & one point per anomaly pixel, full sidecar set (.shp .shx .dbf .prj .cpg)\\
+R2c & no heatmap-style output: it disqualifies & no score raster in the bundle, and since 2026-10-31 no score
+attribute in the shapefile\\
+R2d & up to three results per scene & three committed prep actions, three exports\\
+R2e & library matching by a foundation model and by classic SAM, compared in the report & the per-object table,
+\cref{sec:submission:objects}\\
+R1 & a reflectance product from L1 data & not in the product; a writer for another module's output,
+\cref{sec:submission:reflectance}\\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Only the prep bundle qualifies: the export of a committed \code{anomaly_detection_prep}, built by
+\code{build_thermal_bundle} in \file{app/anomaly_detection/export.py}. The project export zips every output tree,
+\file{anomaly_score.tif} (a heatmap) included; the materials bundle of \cref{sec:material:export} carries int16 family
+codes, not 0/1. Two changes were made to the prep bundle (C2):
+\begin{lstlisting}
+prefix = "thermal" if spec.sensor_type in THERMAL_SENSORS else "hyper"   # ("landsat9", "hotsat1")
+folder = f"{prefix}_{_short(spec.scene_id)}_{_short(spec.action_id)}"
+keep_cols = ["row", "col", "latitude", "longitude", "geometry"]           # "score" removed
+\end{lstlisting}
+A PRISMA bundle used to be named \code{thermal_*}, against the rule that a name says \code{hyper} or \code{thermal}.
+The comment on the dropped column: ``No score column: the submission map is boolean, and a continuous score reads as a
+heatmap (AIGC rules, 2026-10-31). The CSV keeps it.''
+
+\begin{sourcenote}[: the score is still in the zip]
+The CSV, \code{<prefix>_anomaly_summary.csv}, is inside the same zip with its \code{score} column; the proposal calls it
+``not submitted'', so leave it out of the upload. Two names were not updated: the function is still
+\code{build_thermal_bundle}, and the manifest's schema is still \code{allotrope-export-thermal/1} for a \code{hyper_}
+bundle.
+\end{sourcenote}
+
+%======================================================================
+\section{The PRISMA grid}\label{sec:submission:grid}
+
+Recall \cref{eq:material:affine}: $X=a\,j+b\,i+c$, $Y=d\,j+e\,i+f$, with $(j,i)$ a position in pixel units measured from
+the top-left \emph{corner} of the image, so the top-left pixel's centre is $(0.5,0.5)$. Until 2026-10-31 a PRISMA export
+used the latitude and longitude bounding box of \cref{we:material:georef}. The ground-truth rasters are in UTM. On Set-1
+the box put pixels a median 2.4\,px from the product grid, 95\% within 4.1, at most 5.6
+\tagM{docs/proposals/aigc-evaluation-submission.md}: at 30\,m, $2.4\times30=72$\,m typical and $5.6\times30=168$\,m at
+worst. The internal evaluation never noticed, because it compares masks in pixel space.
+
+A PRISMA L2D product is already gridded in UTM, and the HE5's root attributes say how (\code{prisma_utm_grid},
+\file{app/georef/from_scene_file.py}): \code{Epsg_Code}, and the easting and northing of the upper-left, upper-right and
+lower-left corner pixels. Its docstring: they ``are the corner pixels' \emph{centres}, so the pitch is the corner span
+over $(n-1)$ and the origin is the UL centre minus half a pixel''.
+
+\paragraph{Centres, not edges.} Five fence posts 30\,m apart span $4\times30=120$\,m from the first post's centre to the
+last's. In general, $n$ pixel centres are $n-1$ pitches apart, so with $W$ columns
+\begin{align*}
+\text{UR}_E-\text{UL}_E &= (W-1)\,\Delta x &&\text{centres of the first and last column}\\
+\Delta x &= \frac{\text{UR}_E-\text{UL}_E}{W-1} &&\text{divide by } W-1\\
+c &= \text{UL}_E-\tfrac12\Delta x &&\text{the image edge is half a pixel left of the first centre,}
+\end{align*}
+and the same for rows with the northings, except that rows run southwards, so $e=-\Delta y$ and
+$f=\text{UL}_N+\tfrac12\Delta y$.
+
+\begin{worked}[label={we:submission:set1}]{Set-1's grid by hand}
+The test file \file{tests/test_utils/test_georef_prisma.py} holds Set-1's attributes, stored as 32-bit floats like the
+file: \code{Epsg_Code} 32642; UL easting 545,022.75 and northing 2,501,422.5; UR easting 580,872.5; LL northing
+2,465,872.5. The image is $H=1186$ rows by $W=1196$ columns.
+\begin{align*}
+\text{east span} &= 580{,}872.5-545{,}022.75 = 35{,}849.75\text{ m},\\
+\Delta x &= 35{,}849.75/1195 = 29.99979 \ \to\ 30.0\text{ m (rounded to centimetres)},\\
+\text{north span} &= 2{,}501{,}422.5-2{,}465{,}872.5 = 35{,}550\text{ m},\\
+\Delta y &= 35{,}550/1185 = 30.0\text{ m},\\
+c &= 545{,}022.75-15 = 545{,}007.75,\qquad f = 2{,}501{,}422.5+15 = 2{,}501{,}437.5 .
+\end{align*}
+The transform is $(30,\ 0,\ 545{,}007.75,\ 0,\ -30,\ 2{,}501{,}437.5)$ in EPSG:32642 (UTM zone 42 north): exactly the
+ground-truth raster's grid, which the test asserts. Check the top-left centre: $X=30\times0.5+545{,}007.75=545{,}022.75$,
+the UL attribute \tagC.
+\end{worked}
+
+Read the attributes as edges instead and $\Delta x=35{,}849.75/1196=29.9747$\,m: 0.025\,m short per pixel, which over
+1196 columns adds up to $1196\times0.0253\approx30$\,m, one whole pixel at the far edge. The rounding to centimetres
+(the code's comment: ``float32 attrs: 29.9998 -> 30.0'') snaps the pitch to the product's 30\,m; its price is that the
+bottom-right centre comes out at 580,872.75 instead of the attribute's 580,872.5, a quarter of a metre, under 1\% of a
+pixel \tagC.
+
+\paragraph{When the old method still runs.} \code{_resolve_prisma} uses the product grid only when the attributes are
+present and sane (a positive EPSG code, at least $2\times2$ pixels, positive spans) and the vendable's shape equals the
+latitude array's. Otherwise it falls back to the bounding box, whose docstring now says ``approximate, can be pixels
+off''; a test checks both refusals. The same function serves the reflectance writer's \code{--georef-from}.
+
+%======================================================================
+\section{Native bands by default}\label{sec:submission:native}
+
+The proposal's gap~3 was ``Indradhanu V2 cannot be run from the UI, because no UI control sets the band filter to native
+bands''. Its fix, C3: every hyperspectral sensor default in \file{band_filter_apply.py} now reads
+\begin{lstlisting}
+"use_common_wavelength_grid": False,   # native bands (2026-10-31): V2 reads them; 165-grid models resample at scoring
+\end{lstlisting}
+The dialog prefills its form from these defaults, so the default is now V2's setting, in line with the standing design
+decision ``One inference method: native bands'' (\file{docs/lld/spectral-stem.md}, 2026-10-15). The old 165-band model
+keeps working because \code{anomaly_scoring} resamples for it, per model, with the band filter's own resampler
+(\code{_to_common_grid}; a cube already on the grid is passed through):
+
+\begin{center}\small
+\begin{tabular}{@{}lccc@{}}
+\toprule
+band filter & v0.2.0 (165 grid) & V2 (native) & MNF-RX\\
+\midrule
+native (the default) & runs, resampled & runs & runs\\
+165 grid & runs & refused & runs\\
+\bottomrule
+\end{tabular}
+\end{center}
+
+So one scoring action can now run both Indradhanus on a native band filter (\cref{sec:material:v2}).
+
+\begin{sourcenote}[: a field default still describes the 165-band world]
+The pydantic field \code{BandFilterApplyConfig.use_common_wavelength_grid} still has \code{default=True}, and its
+description still says the grid is ``Required by Indradhanu (v0.2.0)''. The UI sends the sensor defaults, so the UI gets
+native bands; \textbf{an API call that omits the field gets the 165 grid, and V2 then fails}
+(\file{docs/09-known-issues.md} records it as deliberate). The worker's fallbacks \code{cfg.get("use_common_wavelength_grid", True)}
+agree with the field, not with the defaults. Two more comments were stale when this chapter was first written,
+\code{_check_band_grid}'s docstring and the resolver's comment on \code{band_grid}; both were corrected on
+2026-10-31 and now describe the refusal of V2 on the 165 grid and the resampling for a common165 model.
+\end{sourcenote}
+
+%======================================================================
+\section{Three results per scene}\label{sec:submission:three}
+
+Each result is one committed prep action, so three results are a procedure, not code: three prep actions (they may
+share one scoring output), three commits, three exports, each zip named by its action's short id. A re-commit overwrites
+a prep's mask, so one prep cannot carry two results. The proposal suggests, per hyperspectral scene and all with
+residual Mahalanobis: Indradhanu~V2 (Heavy); V2 and MNF-RX combined at the prep weights; and MNF-RX alone or V2 at a
+second threshold. Choosing the thresholds stays a person's job (\cref{sec:material:why}); with no ground truth on the
+evaluation scenes, the proposal asks whether to fix a percentile per model from the four labelled PRISMA scenes.
+
+%======================================================================
+\section{The per-object table}\label{sec:submission:objects}
+
+The report must compare a foundation model with SAM, per object. \file{scripts/aigc_object_table.py} groups the
+committed mask into connected components with \code{scipy.ndimage.label} and a $3\times3$ structure of ones.
+
+\begin{definition}[4- and 8-connectivity]
+Two flagged pixels are \emph{4-connected}\index{connectivity} if they share an edge, and \emph{8-connected} if they share
+an edge or a corner. An object is a largest set of flagged pixels linked by a chain of such neighbours.
+\end{definition}
+
+\begin{worked}[label={we:submission:components}]{Two objects or three}
+\[
+\begin{pmatrix}1&1&0&0&0\\0&1&0&0&1\\0&0&1&0&1\\0&0&0&0&0\end{pmatrix}
+\]
+The pixel at row 2, column 2 touches row 1, column 1 only at a corner. With 8-connectivity it joins the top-left group:
+2 objects. With 4-connectivity it is alone: 3 objects. \code{label} agrees in both cases \tagC.
+\end{worked}
+
+Per object the script writes size, centroid (latitude and longitude through the scene's own georeference, so PRISMA uses
+\cref{sec:submission:grid}'s grid), and three opinions: SAM (\file{matches.parquet}, rank~0: the majority top-1 name and
+its share, its chapter, the median angle, the three commonest names), the family match (\file{family_matches.parquet},
+answered pixels: majority family, group, mean confidence, answered share) and, with \code{--namer-ckpt}, the namer of
+\cref{ch:namer} (mean $P(M)$, majority class and share, mean $P(k\mid M)$, mean fill). Outputs: \file{objects.csv},
+\file{objects.geojson}, and a \file{findings.md} stub with agreement counts. Its docstring is honest that the family
+match is ``calibrated Simplex ACE (classical)'': the namer is the only foundation-model column, read from an N001
+checkpoint (\file{ep<n>.pt} exists after every epoch, so a preliminary one can be used before the block ends).
+
+%======================================================================
+\section{The reflectance writer}\label{sec:submission:reflectance}
+
+R1 asks for surface reflectance from L1 data. The atmospheric correction is another session's module;
+\file{scripts/write_reflectance_product.py} only writes its result: GeoTIFF and/or ENVI BSQ with a \file{.hdr}, every
+wavelength recorded, water-absorption bands removed (default 1340--1460 and 1790--1960\,nm, ends included), and
+reflectance $\times10000$ as int16 with nodata $-9999$:
+\begin{lstlisting}
+data = np.where(np.isfinite(cube), np.clip(np.round(cube * SCALE), -9998, 32767), NODATA).astype(np.int16)
+\end{lstlisting}
+
+\begin{worked}[label={we:submission:scale}]{Writing five values}
+\begin{center}\small
+\begin{tabular}{@{}rrrl@{}}
+\toprule
+reflectance & $\times10000$ & written & why\\
+\midrule
+0.2 & 2000 & 2000 & \\
+0.12345 & 1234.5 & 1234 & \code{np.round} sends a half to the even neighbour\\
+0.12355 & 1235.5 & 1236 & here the even neighbour is above\\
+NaN & NaN & $-9999$ & nodata\\
+4.0 & 40000 & 32767 & clipped to int16's top\\
+\bottomrule
+\end{tabular}
+\end{center}
+The lower clip is $-9998$, so no real value collides with nodata. Bands at 1330, 1345, 1460 and 1470\,nm under the
+default drop: 1345 and 1460 go (1460 is an end of the range), 1330 and 1470 stay \tagC.
+\end{worked}
+
+\begin{drift}
+The submission's status (C1--C7 on the local stack, deployment not approved), the deadlines, the Set-1 offset
+(median 2.4\,px, 95\% 4.1, max 5.6), the three suggested results, and the field default and its description in
+\cref{sec:submission:native}, which a later change may align.
+\end{drift}
+
+%======================================================================
+\begin{confusions}
+\confusion{Any export from the product will do.}{Only the prep bundle. The project export carries a heatmap; the
+materials raster is family codes.}
+\confusion{No score in the shapefile means no score in the zip.}{The CSV in the same zip keeps it. Do not upload it.}
+\confusion{PRISMA's corner attributes are the image's corners.}{They are the corner pixels' centres. Read as edges, the
+far edge drifts by a pixel.}
+\confusion{The georeference error moved the benchmark.}{The evaluation compares masks in pixel space. Only deliverables
+overlaid on a map were affected.}
+\confusion{V2 still needs a band-filter setting.}{Not from the UI since 2026-10-31. An API call that omits the field
+still gets the 165 grid.}
+\confusion{The reflectance script corrects the atmosphere.}{It writes another module's output. ``The atmospheric
+correction itself is not here.''}
+\end{confusions}
+
+\begin{checkyourself}
+\item\label{ex:submission:1} A PRISMA product has $W=1000$ columns, UL easting 400,015 and UR easting 429,985. Compute
+  $\Delta x$ and $c$. What pitch does dividing by $W$ give, and how far off is the last column's centre then?
+\item\label{ex:submission:2} With Set-1's transform, where is the centre of the pixel in row 10, column 20?
+\item\label{ex:submission:3} A band filter was created through the API without \code{use_common_wavelength_grid}. A
+  scoring action picks \code{["Indradhanu V2", "Indradhanu"]}. What happens?
+\item\label{ex:submission:4} Count the objects in $\begin{pmatrix}1&0&1\\0&1&0\\1&0&1\end{pmatrix}$ under 8- and under
+  4-connectivity.
+\item\label{ex:submission:5} Write 0.03, $-1.2$ and 3.5 as the reflectance writer would.
+\item\label{ex:submission:6} Why is a second commit on the same prep action not a way to make result~2?
+\end{checkyourself}
+
+\par\bigskip\noindent\textit{That brings the book to 2026-10-31: Indradhanu~V2 (Heavy) in the product, native bands by
+default, a spectral namer in training, and the first evaluation submission on the product's own grid.}

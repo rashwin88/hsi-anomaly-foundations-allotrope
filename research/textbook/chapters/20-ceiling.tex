@@ -1,0 +1,619 @@
+\chapter{Why the compressor is a ceiling: cross-attention and a spectrum as tokens}\label{ch:ceiling}
+
+\begin{onething}
+Today's spectral compressor mixes the bands of every pixel on Earth with one fixed matrix, so it cannot adapt to a pixel, cannot leave a broken band out, and only accepts exactly 165 band positions; cross-attention over \emph{band tokens that carry their wavelength} removes all three limits at once.
+\end{onething}
+
+This chapter opens Part~IV, the spectral stem. Everything in Parts~I to~III still holds: the SegFormer encoder of \cref{ch:encoder}, the masking of \cref{ch:masking} and the decoder of \cref{ch:decoder} are untouched. What changes is the thin layer at each end of the model that turns a pixel's spectrum into 32 numbers and back. The chapter leans on three earlier ones: \cref{ch:linalg} for matrices, rank and dot products, \cref{ch:compressor} for the compressor itself, and \cref{ch:attention} for attention.
+
+The chapter has three movements. \Cref{sec:ceiling:fixed,sec:ceiling:dead,sec:ceiling:positions} take the compressor apart and prove, with a rank argument and two pieces of hand arithmetic, that its limits are structural and not a matter of training longer. \Cref{sec:ceiling:cross} introduces cross-attention, the one mechanism that answers all three limits. \Cref{sec:ceiling:tokens} turns a single pixel's spectrum into the tokens that cross-attention reads, and derives the wavelength encoding the repository actually uses, worked for two wavelengths.
+
+%-----------------------------------------------------------------------------
+\section{The compressor you already know}\label{sec:ceiling:recap}
+
+Recall from \cref{ch:compressor} what the compressor does to one pixel. A pixel arrives as a vector $\vect{x}\in\R^{N}$ of $N$ normalised band values (on the 165-band grid of \cref{ch:sensors}, $N = 165$). A \index{parameter}\emph{parameter} is a number the model learns during training; the compressor's parameters are a weight matrix $\mat{W}\in\R^{D\times N}$ and a bias vector $\vect{b}\in\R^{D}$. Its output for that pixel is
+\begin{equation}\label{eq:ceiling:compressor}
+  \vect{z} = \mat{W}\vect{x} + \vect{b}, \qquad \vect{z}\in\R^{D},\ D = 32,
+\end{equation}
+followed by a BatchNorm that rescales each of the 32 outputs. In the code this is \code{nn.Conv2d(165, 32, kernel_size=1)} in \code{app/foundation_models/components/spectral_compressor.py}. A \emph{1$\times$1 convolution} is a convolution whose kernel covers one pixel only, so at every position of the image it computes exactly \cref{eq:ceiling:compressor} with the same $\mat{W}$ and $\vect{b}$. The source says so in its own docstring:
+
+\begin{quote}\small
+``A learnable 1x1 Convolution to reduce spectral channels -- analogous to MNF but trained end-to-end for the reconstruction objective.''
+\end{quote}
+
+\Cref{ch:compressor} used a four-band pixel that we keep using here, because it is small enough to do on paper:
+\begin{equation}\label{eq:ceiling:toy}
+  \vect{x} = \begin{bmatrix}1.2\\ 1.0\\ -0.4\\ -0.6\end{bmatrix},\qquad
+  \mat{W} = \begin{bmatrix}0.5 & 0.5 & 0 & 0\\ 0 & 0 & 0.5 & 0.5\end{bmatrix},\qquad
+  \vect{b} = \vect{0}.
+\end{equation}
+Row 0 of $\mat{W}$ is output 0's \emph{recipe}: half of band 0 plus half of band 1. Row 1 is output 1's recipe: half of band 2 plus half of band 3. Multiply row by column:
+\begin{align*}
+  z_0 &= 0.5\times 1.2 + 0.5\times 1.0 + 0\times(-0.4) + 0\times(-0.6)\\
+      &= 0.60 + 0.50 + 0 + 0\\
+      &= 1.10,\\
+  z_1 &= 0\times 1.2 + 0\times 1.0 + 0.5\times(-0.4) + 0.5\times(-0.6)\\
+      &= 0 + 0 - 0.20 - 0.30\\
+      &= -0.50.
+\end{align*}
+So $\vect{z} = [1.10, -0.50]$. Hold on to one fact about $\mat{W}$: \textbf{it is the same matrix for every pixel.} The forest pixel, the desert pixel, the cloud-shadowed pixel and the gas-flare pixel are all mixed by the same two recipes. Training chooses $\mat{W}$ once; after that, nothing about an individual pixel changes it.
+
+\begin{analogy}
+Think of a mixing desk with 48 input tracks and a stereo output. The compressor is a desk whose faders were set once, at the factory, and then glued in place. Every song that will ever be played through it gets the same mix. A pop song and a string quartet come out balanced by the same settings. This chapter is about unglueing the faders: letting each song (each pixel) set its own mix, letting a broken track be muted completely, and letting the desk accept a different number of tracks. The analogy returns in \cref{ch:specdecoder}, where a cheaper rival only adds a row of adjustable faders in front of the glued desk.
+\end{analogy}
+
+%-----------------------------------------------------------------------------
+\section{Consequence 1: one recipe for every pixel, proved with rank}\label{sec:ceiling:fixed}
+
+``Fixed'' sounds like a description. It is in fact a theorem with a measurable consequence: a fixed linear map must throw away the same spectral directions for every pixel. To see it you need two facts about matrices.
+
+\subsection{Linearity: the recipe cannot depend on the pixel}
+
+A map $f$ is \index{linear map}\emph{linear} if $f(a\vect{x} + c\vect{x}') = a f(\vect{x}) + c f(\vect{x}')$ for all vectors and numbers $a, c$. Ignoring the bias, \cref{eq:ceiling:compressor} is linear: multiplying a matrix by a sum is the sum of the products. A practical way to say what ``fixed recipe'' means is to ask how the output changes when one input band changes slightly. That rate of change is the derivative $\partial z_c/\partial x_b$. Differentiate $z_c = \sum_{b} W_{cb}x_b + b_c$ with respect to $x_b$: every term except the $b$-th is a constant, so
+\begin{equation}\label{eq:ceiling:jacobian}
+  \frac{\partial z_c}{\partial x_b} = W_{cb}.
+\end{equation}
+The right-hand side contains no $\vect{x}$. Whatever pixel you are at, nudging band $b$ by $0.01$ moves output $c$ by $0.01\,W_{cb}$. \textbf{That is the precise meaning of ``one recipe for every pixel'': the sensitivity of every output to every band is a constant.} An adaptive compressor would have a derivative that changes with $\vect{x}$; \cref{ch:crossstem} shows attention has exactly that property.
+
+\subsection{Rank and the null space}
+
+The \index{rank}\emph{rank} of a matrix is the number of linearly independent rows it has (equivalently, of columns; \cref{ch:linalg}). The \index{null space}\emph{null space} of $\mat{W}$ is the set of vectors $\vect{n}$ with $\mat{W}\vect{n} = \vect{0}$: directions in band space that the matrix sends to nothing. The two are tied by the \index{rank--nullity theorem}\emph{rank--nullity theorem}: for a matrix with $N$ columns,
+\begin{equation}\label{eq:ceiling:ranknullity}
+  \operatorname{rank}(\mat{W}) + \dim\bigl(\text{null space of }\mat{W}\bigr) = N .
+\end{equation}
+
+\begin{worked}[label={we:ceiling:rank}]{Rank and null space of the toy compressor}
+Take $\mat{W}$ from \cref{eq:ceiling:toy}. Do this on paper.
+
+\emph{Rank.} The two rows are $[0.5, 0.5, 0, 0]$ and $[0, 0, 0.5, 0.5]$. Neither is a multiple of the other (the first has zeros where the second does not), so they are independent and $\operatorname{rank}(\mat{W}) = 2$.
+
+\emph{Null space.} Look for $\vect{n} = [n_0, n_1, n_2, n_3]$ with $\mat{W}\vect{n} = \vect{0}$. Row 0 gives
+\begin{align*}
+  0.5 n_0 + 0.5 n_1 &= 0\\
+  n_1 &= -n_0 .
+\end{align*}
+Row 1 gives
+\begin{align*}
+  0.5 n_2 + 0.5 n_3 &= 0\\
+  n_3 &= -n_2 .
+\end{align*}
+So every null vector has the form $n_0[1,-1,0,0] + n_2[0,0,1,-1]$: two free numbers, dimension 2. Check \cref{eq:ceiling:ranknullity}: $2 + 2 = 4 = N$.
+
+\emph{What the null space hides.} Add $0.2$ times the first null vector to the pixel:
+\begin{align*}
+  \vect{x}' &= \vect{x} + 0.2\,[1, -1, 0, 0]\\
+            &= [1.2 + 0.2,\ 1.0 - 0.2,\ -0.4,\ -0.6]\\
+            &= [1.4,\ 0.8,\ -0.4,\ -0.6].
+\end{align*}
+Compress it:
+\begin{align*}
+  z'_0 &= 0.5\times 1.4 + 0.5\times 0.8 = 0.70 + 0.40 = 1.10,\\
+  z'_1 &= 0.5\times(-0.4) + 0.5\times(-0.6) = -0.20 - 0.30 = -0.50.
+\end{align*}
+The output is identical to the original pixel's. The difference between $\vect{x}$ and $\vect{x}'$ (band 0 up, band 1 down: a change of \emph{slope} between the two bands) is invisible to the compressor.
+\end{worked}
+
+Now scale up. The real compressor has $N = 165$ columns and $D = 32$ rows, so its rank is at most 32 (a matrix cannot have more independent rows than it has rows). By \cref{eq:ceiling:ranknullity},
+\begin{align*}
+  \dim(\text{null space}) &= 165 - \operatorname{rank}(\mat{W})\\
+  &\geq 165 - 32\\
+  &= 133 .
+\end{align*}
+\textbf{There are at least 133 independent spectral directions that the compressor maps to exactly zero, and they are the same 133 directions for every pixel.} If the interesting signal of a mineral survey (say a narrow dip near 2200\,nm) happens to lie largely in that null space, every pixel loses it, whether the pixel is bare rock (where the dip matters) or forest (where it does not). Training can rotate which 133 directions are discarded, to suit the training set as a whole. It cannot choose differently for different pixels.
+
+\begin{keypoint}
+A fixed $32\times165$ matrix discards at least 133 spectral directions, and it discards the same ones everywhere.
+\end{keypoint}
+
+{\sloppy The repository's configuration history shows the symptom. \code{configs/hyperspectral_segformer_exp_2.json} carries the note ``SAM stuck above 0.3 after epoch 30 -- Compressor bottleneck too narrow (try compressed\_channels=32)'', (the same note sits in \code{exp_1}), and version 0.2.0 raised $D$ from 24 to 32 \tagM{configs/hyperspectral_segformer_exp_2.json}. In the language above, that reduced the null space from at least $165 - 24 = 141$ dimensions to at least 133. It widened the pipe. It did not make the pipe smarter.\par}
+
+%-----------------------------------------------------------------------------
+\section{Consequence 2: a broken band cannot be left out}\label{sec:ceiling:dead}
+
+Real sensors lose bands: a dead detector column, a saturated pixel, a band that is no-data in one scene. The band pipeline of \cref{ch:bandpipeline} fills such holes with a substitute value before the model sees them. The compressor then mixes the substitute in as if it were a measurement.
+
+\subsection{The error of one bad band, in general}
+
+Suppose band $b$ should hold the true value $x_b$ but holds a fill value $f$ instead. Write the broken pixel as the true pixel plus an error that lives only in slot $b$:
+\begin{equation*}
+  \vect{x}_{\text{broken}} = \vect{x} + (f - x_b)\,\vect{e}_b,
+\end{equation*}
+where $\vect{e}_b$ is the vector with a 1 in slot $b$ and 0 elsewhere. Compress, using linearity to split the product:
+\begin{align}
+  \mat{W}\vect{x}_{\text{broken}} &= \mat{W}\vect{x} + (f - x_b)\,\mat{W}\vect{e}_b \nonumber\\
+  &= \vect{z} + (f - x_b)\,\vect{w}_{:,b}, \label{eq:ceiling:contam}
+\end{align}
+because multiplying a matrix by $\vect{e}_b$ picks out its $b$-th column, written $\vect{w}_{:,b}$. So the error in the output is the band's column of weights times the size of the bad value. Every output $c$ whose recipe gives band $b$ a non-zero weight $W_{cb}$ is contaminated, by exactly $W_{cb}(f - x_b)$.
+
+\begin{worked}[label={we:ceiling:dead}]{A dead band filled with zero}
+Band 2 of the toy pixel is dead and arrives filled with $f = 0.0$. Its true value was $x_2 = -0.4$. Do this on paper.
+
+Directly:
+\begin{align*}
+  \vect{x}_{\text{broken}} &= [1.2,\ 1.0,\ 0.0,\ -0.6],\\
+  z_1 &= 0\times1.2 + 0\times1.0 + 0.5\times0.0 + 0.5\times(-0.6)\\
+      &= 0 + 0 + 0 - 0.30\\
+      &= -0.30 .
+\end{align*}
+By \cref{eq:ceiling:contam}: column 2 of $\mat{W}$ is $[0, 0.5]$, and $f - x_2 = 0.0 - (-0.4) = 0.4$, so the output error is
+\begin{align*}
+  0.4 \times [0, 0.5] &= [0,\ 0.20],
+\end{align*}
+and $z_1$ moves from $-0.50$ to $-0.50 + 0.20 = -0.30$, agreeing with the direct calculation. The error, $0.20$, is
+\begin{align*}
+  \frac{0.20}{\abs{-0.50}} = 0.40 = 40\%
+\end{align*}
+of the true output. Output 0 is untouched only because its recipe happens to give band 2 a zero weight.
+\end{worked}
+
+\textbf{A fixed weighted sum cannot leave an input out: whatever sits in that slot gets multiplied by its weight and added.} Setting the fill value to zero is not ``no information''; it is a claim that the band measured zero. In a trained model almost every one of the 32 recipes gives every band a non-zero weight, so one dead band contaminates all 32 outputs. The cost is small for one band in one pixel and systematic across a scene with a striped detector.
+
+%-----------------------------------------------------------------------------
+\section{Consequence 3: tied to 165 positions}\label{sec:ceiling:positions}
+
+\code{Conv2d(165, 32, kernel_size=1)} has a weight for ``input 0'', ``input 1'', \ldots, ``input 164''. It does not have a weight for ``460\,nm'' or ``470\,nm''. \textbf{The layer knows positions, not wavelengths.} The matrix $\mat{W}$ has exactly 165 columns, and a vector with 202 entries cannot be multiplied by it at all: the shapes do not match.
+
+That is the real reason the 165-band common grid of \cref{ch:sensors} exists. Every sensor must be resampled onto exactly those 165 positions before this layer can accept it, and the sensors do not agree on their own:
+
+\begin{table}[htbp]\centering
+\caption{Bands as delivered by each source (counts from the anomaly-detection course part 04 and \texttt{docs/03-data-pipeline.md}).}\label{tab:ceiling:bands}
+\begin{tabular}{lr}\toprule
+source & bands as delivered\\\midrule
+SpectralEarth (\cref{ch:pretrain}) & 202 \tagM{app/constants/spectralearth_bands.json}\\
+EnMAP & 224 \tagM{docs/03-data-pipeline.md}\\
+PRISMA & 239 \tagM{docs/03-data-pipeline.md}\\
+AVIRIS-NG & about 425 \tagM{docs/training/anomaly-detection/04-the-sensors.md}\\\bottomrule
+\end{tabular}
+\end{table}
+
+Resampling is not free. Interpolating onto a 10\,nm grid blurs narrow features and invents values between real measurements. Worse, the grid's gaps (920--970, 1140--1150, 1350--1450 and 1800--1950\,nm, \cref{ch:sensors}) are invisible to the layer: input 45 and input 46 might be 10\,nm apart or 100\,nm apart, and the layer cannot tell, because nothing in it refers to a wavelength.
+
+\coursefig[0.95\linewidth]{iw-31-fixed-recipe}{The ceiling of a fixed compressor. (a) Every pixel -- forest, desert or shadow -- is mixed by the same trained matrix $\mathbf{W}$. (b) A dead band filled with 0.0 still receives its weight: with the toy numbers the output moves from $-0.50$ to $-0.30$ (\cref{we:ceiling:dead}).}{fig:ceiling:fixed}
+
+\subsection{From three problems to three requirements}
+
+Turn each consequence into a requirement on its replacement:
+
+\begin{table}[htbp]\centering
+\caption{What a replacement for the compressor has to do.}\label{tab:ceiling:requirements}
+\begin{tabular}{p{0.38\linewidth}p{0.52\linewidth}}\toprule
+problem & requirement\\\midrule
+one recipe for every pixel (constant derivative, \cref{eq:ceiling:jacobian}) & the mixing weights must \textbf{depend on the pixel's own spectrum}\\
+a broken band is mixed in (\cref{eq:ceiling:contam}) & a band must be \textbf{skippable}, per pixel, with weight exactly zero\\
+tied to 165 positions & bands must be described by \textbf{wavelength}, not position, so any count works\\\bottomrule
+\end{tabular}
+\end{table}
+
+\Cref{ch:attention} already showed you a mechanism whose mixing weights depend on the data: attention. The weights there came out of a softmax of dot products between queries and keys, so they change whenever the keys change. The rest of this chapter adapts attention to the job.
+
+%-----------------------------------------------------------------------------
+\section{Cross-attention: the same four steps, someone else asking}\label{sec:ceiling:cross}
+
+\subsection{Attention in one paragraph}
+
+In \cref{ch:attention}, every \index{token}\emph{token} (a vector standing for one item, there a patch of the image) produced three vectors from itself: a \index{query}\emph{query} (what am I looking for?), a \index{key}\emph{key} (what do I offer?) and a \index{value}\emph{value} (what do I hand over if chosen?). Each query was scored against every key by a dot product, the scores were scaled by $1/\sqrt{d_k}$ where $d_k$ is the length of a key, a softmax turned each row of scores into weights that sum to 1, and each token's output was the weighted average of the values. Because queries, keys and values all came from the same set of tokens, it is called \index{attention!self}\emph{self-attention}. \code{EfficientSelfAttention} in \code{app/foundation_models/components/efficient_self_attention.py} is exactly that, over spatial tokens (\cref{ch:esa}).
+
+\subsection{The one change}
+
+\begin{definition}[Cross-attention]\index{attention!cross}\index{cross-attention}
+Let $\mat{Q}\in\R^{M\times d_k}$ hold $M$ queries, one per row, and let $\mat{K}\in\R^{N\times d_k}$ and $\mat{V}\in\R^{N\times d_v}$ hold the keys and values of $N$ tokens. \emph{Cross-attention} computes
+\begin{equation}\label{eq:ceiling:xattn}
+  \operatorname{Attn}(\mat{Q},\mat{K},\mat{V}) = \softmax\!\left(\frac{\mat{Q}\mat{K}\T}{\sqrt{d_k}}\right)\mat{V},
+\end{equation}
+with the softmax applied to each row separately, where the queries come from a \emph{different source} than the keys and values.
+\end{definition}
+
+Everything in \cref{eq:ceiling:xattn} is the formula of \cref{ch:attention}. Only the origin of $\mat{Q}$ is new:
+\begin{center}
+\begin{tabular}{lll}\toprule
+ & queries from & keys and values from\\\midrule
+self-attention & the $N$ tokens & the same $N$ tokens\\
+cross-attention & $M$ outside askers & the $N$ tokens\\\bottomrule
+\end{tabular}
+\end{center}
+
+\begin{analogy}
+Self-attention is a meeting where everyone listens to everyone and updates their own view: $N$ people in, $N$ revised opinions out. Cross-attention is a questionnaire: a fixed list of $M$ questions is put to a crowd of $N$ people, and you get back exactly $M$ answers, each a blend of what the crowd said. Add more people to the crowd and you still get $M$ answers.
+\end{analogy}
+
+That last sentence is the property the spectral stem needs. A pixel's spectrum will be the crowd (one token per band); the compressor's 32 outputs will be the answers. Change the number of bands and the number of answers stays fixed.
+
+\subsection{Shapes, step by step}
+
+Work through \cref{eq:ceiling:xattn} one product at a time, using the rule for a matrix product: an $(m\times n)$ matrix times an $(n\times p)$ matrix is defined only when the inner sizes agree ($n = n$), and gives an $(m\times p)$ matrix.
+
+\begin{enumerate}
+\item \emph{Transpose the keys.} $\mat{K}$ is $(N\times d_k)$, so $\mat{K}\T$ is $(d_k\times N)$.
+\item \emph{Scores.} $\mat{Q}\mat{K}\T$ is $(M\times d_k)(d_k\times N)$: the inner sizes are both $d_k$, so the product exists and is $(M\times N)$. Entry $(i, j)$ is the dot product of query $i$ with key $j$.
+\item \emph{Scale.} Dividing by $\sqrt{d_k}$ changes no shape: still $(M\times N)$.
+\item \emph{Softmax per row.} Still $(M\times N)$, now each row sums to 1. Call this matrix $\mat{A}$, the \index{attention!weights}\emph{attention weights}.
+\item \emph{Blend the values.} $\mat{A}\mat{V}$ is $(M\times N)(N\times d_v)$: inner sizes both $N$, result $(M\times d_v)$.
+\end{enumerate}
+\textbf{$N$ appears only as an inner size, and inner sizes vanish from a product.} The output has $M$ rows, one per query, whatever $N$ is. In self-attention $M = N$, so the output count follows the input count; in cross-attention $M$ is chosen by the designer and stays fixed.
+
+\begin{figure}[htbp]\centering
+\begin{tikzpicture}[x=0.5cm,y=0.5cm,font=\small]
+  % Q: M x dk  (M=4 rows, dk=3 cols)
+  \fill[attn!25] (0,0) rectangle (3,4); \draw (0,0) rectangle (3,4);
+  \node at (1.5,2) {$\mat{Q}$}; \node[below] at (1.5,0) {$M\times d_k$};
+  \node at (3.8,2) {$\times$};
+  % K^T: dk x N (3 rows, N=7 cols)
+  \fill[spat!20] (4.6,0.5) rectangle (11.6,3.5); \draw (4.6,0.5) rectangle (11.6,3.5);
+  \node at (8.1,2) {$\mat{K}\T$}; \node[below] at (8.1,0.5) {$d_k\times N$};
+  \node at (12.4,2) {$=$};
+  % S: M x N
+  \fill[attn!12] (13.2,0) rectangle (20.2,4); \draw (13.2,0) rectangle (20.2,4);
+  \node at (16.7,2) {scores $M\times N$};
+  % second row: A V
+  \fill[attn!12] (0,-7) rectangle (7,-3); \draw (0,-7) rectangle (7,-3);
+  \node at (3.5,-5) {$\mat{A}$: $M\times N$};
+  \node at (7.8,-5) {$\times$};
+  \fill[spec!20] (8.6,-8.5) rectangle (11.6,-1.5); \draw (8.6,-8.5) rectangle (11.6,-1.5);
+  \node at (10.1,-5) {$\mat{V}$}; \node[below] at (10.1,-8.5) {$N\times d_v$};
+  \node at (12.4,-5) {$=$};
+  \fill[attn!25] (13.2,-7) rectangle (16.2,-3); \draw (13.2,-7) rectangle (16.2,-3);
+  \node at (14.7,-5) {out}; \node[below] at (14.7,-7) {$M\times d_v$};
+  \draw[-{Latex},thick,attn] (16.7,-0.3) -- node[right]{softmax per row} (16.7,-2.6) -- (7.2,-2.6);
+\end{tikzpicture}
+\caption{Shapes in cross-attention. The token count $N$ is an inner size in both products, so it never reaches the output: $M$ queries always give $M$ answers.}\label{fig:ceiling:shapes}
+\end{figure}
+
+\subsection{Cross-attention by hand}
+
+Before going further, do one cross-attention completely by hand. The example is tiny on purpose: one query, three tokens, two features. Every number below fits on a page of paper.
+
+\begin{worked}[label={we:ceiling:xattn}]{One query reading three tokens}
+One query, three key/value tokens, $d_k = 2$, one head. As in \cref{ch:attention}, pretend the projection matrices are the identity, so the vectors below are used as they stand. Do this on paper.
+\begin{center}
+\begin{tabular}{lll}
+query (from the asker): & $\vect{q} = [1, 0]$ & \\
+keys (from the tokens): & $\vect{k}_1 = [2, 0]$ & value $v_1 = 10$\\
+ & $\vect{k}_2 = [0, 1]$ & value $v_2 = 20$\\
+ & $\vect{k}_3 = [1, 1]$ & value $v_3 = 30$
+\end{tabular}
+\end{center}
+The scale is $1/\sqrt{2} = 0.7071$.
+
+\emph{Step 1, raw scores (dot products).}
+\begin{align*}
+  \vect{q}\cdot\vect{k}_1 &= 1\times2 + 0\times0 = 2,\\
+  \vect{q}\cdot\vect{k}_2 &= 1\times0 + 0\times1 = 0,\\
+  \vect{q}\cdot\vect{k}_3 &= 1\times1 + 0\times1 = 1.
+\end{align*}
+\emph{Step 2, scale by $0.7071$.}
+\begin{align*}
+  2\times0.7071 &= 1.4142, & 0\times0.7071 &= 0, & 1\times0.7071 &= 0.7071.
+\end{align*}
+\emph{Step 3, softmax.} Exponentiate each scaled score:
+\begin{align*}
+  e^{1.4142} &= 4.1132,\\
+  e^{0} &= 1.0000,\\
+  e^{0.7071} &= 2.0281.
+\end{align*}
+Add them:
+\begin{align*}
+  4.1132 + 1.0000 + 2.0281 &= 7.1413 .
+\end{align*}
+Divide each by the sum:
+\begin{align*}
+  a_1 &= 4.1132 / 7.1413 = 0.5760,\\
+  a_2 &= 1.0000 / 7.1413 = 0.1400,\\
+  a_3 &= 2.0281 / 7.1413 = 0.2840.
+\end{align*}
+Check: $0.5760 + 0.1400 + 0.2840 = 1.0000$.
+
+\emph{Step 4, weighted average of the values.}
+\begin{align*}
+  0.5760\times10 &= 5.760,\\
+  0.1400\times20 &= 2.800,\\
+  0.2840\times30 &= 8.520,\\
+  5.760 + 2.800 + 8.520 &= 17.080 .
+\end{align*}
+The query asked about ``feature 0''. Token 1 has the most of it, so it received the largest weight and pulled the answer towards its value of 10; token 3 has some, token 2 none. The answer, 17.08, is neither the plain average of the values (20) nor a copy of the best match (10): it is a \emph{relevance-weighted blend}. Running the same numbers through PyTorch gives weights $[0.576, 0.140, 0.284]$ and answer $17.0802$\tagC{} (\file{research/textbook/tools/compute_ceiling.py}).
+\end{worked}
+
+\subsection{Two properties you will rely on}
+
+\paragraph{The answer is a convex combination.} The weights $a_j$ are positive and sum to 1. A sum $\sum_j a_j v_j$ with such weights is called a \index{convex combination}\emph{convex combination}, and it always lies between the smallest and the largest value: here between 10 and 30. Proof for scalars: replace every $v_j$ by the largest value $v_{\max}$; the sum can only grow, and becomes $v_{\max}\sum_j a_j = v_{\max}$. The same argument with $v_{\min}$ gives the lower bound. This is why attention ``blends'' and never extrapolates beyond what the values offer.
+
+\paragraph{The order of the tokens does not matter.} Suppose you list the three tokens in a different order, say $(3, 1, 2)$. Each token's score is computed from its own key alone, so the three scores are the same numbers, listed in the new order. The softmax denominator is a sum, and a sum does not depend on the order of its terms, so each token keeps its weight. The final weighted sum is again a sum. The answer is unchanged. In symbols: if $\pi$ is any reordering,
+\begin{equation}\label{eq:ceiling:perm}
+  \sum_{j=1}^{N} a_{\pi(j)}\,v_{\pi(j)} = \sum_{j=1}^{N} a_j v_j .
+\end{equation}
+Attention treats its keys and values as an unordered \emph{set}. This is a strength (\cref{sec:ceiling:tokens} uses it to accept bands in any order) and a danger: unless the token itself says which band it is, attention cannot tell band 10 from band 150. Keep that in mind; it is why tokens need a wavelength tag.
+
+\subsection{Where do the outside queries come from?}
+
+Two options, and the next Indradhanu uses both:
+
+\begin{table}[htbp]\centering
+\caption{The two sources of cross-attention queries in the spectral stem.}\label{tab:ceiling:qsource}
+\begin{tabular}{p{0.28\linewidth}p{0.36\linewidth}p{0.24\linewidth}}\toprule
+source of queries & example & used in\\\midrule
+\textbf{learned parameters}: a table of $M$ vectors trained like any weight & ``32 questions the model has learned to ask of every spectrum'' & the compressor, \cref{ch:crossstem}\\
+\textbf{computed from something else} & ``what is the reflectance at 1650\,nm?'', built from the number 1650 & the decoder, \cref{ch:specdecoder}\\\bottomrule
+\end{tabular}
+\end{table}
+
+\index{learned query}Learned queries are an \code{nn.Parameter} of shape \shape{(D, d)}: $D$ rows, each a vector of $d$ numbers. They are the same for every pixel, like $\mat{W}$ in \cref{sec:ceiling:fixed}, but they are \emph{questions}, not \emph{recipes}. What comes back depends on the pixel, because the keys and values do. This difference is the heart of Part~IV, so state it twice: in the compressor, the weight band $b$ receives in output $c$ is the constant $W_{cb}$; in cross-attention it is $a_{cb}$, a softmax of scores between a fixed query and a key computed from the pixel.
+
+\subsection{Self against cross, side by side}
+
+\begin{table}[htbp]\centering
+\caption{Self-attention against cross-attention.}\label{tab:ceiling:selfcross}
+\begin{tabular}{p{0.3\linewidth}p{0.3\linewidth}p{0.3\linewidth}}\toprule
+ & self-attention (\cref{ch:attention}) & cross-attention\\\midrule
+queries from & the tokens themselves & outside: learned table or another input\\
+number of outputs & $N$ (one per token) & $M$ (one per query)\\
+score matrix & $N\times N$ & $M\times N$\\
+changing $N$ changes the output count? & yes & \textbf{no}\\
+in Indradhanu & spatial tokens, \texttt{EfficientSelfAttention} & the spectral stem, \cref{ch:crossstem}\\\bottomrule
+\end{tabular}
+\end{table}
+
+The score matrix is worth a number. With 202 band tokens per pixel and 32 queries:
+\begin{align*}
+  \text{self:}\quad 202\times202 &= 40{,}804 \text{ scores per pixel, per head},\\
+  \text{cross:}\quad 32\times202 &= 6{,}464 \text{ scores per pixel, per head}.
+\end{align*}
+Self-attention's count grows with the \emph{square} of the band count; cross-attention's grows \emph{linearly}. \Cref{ch:crossstem} turns that difference into gigabytes.
+
+\coursefig[0.95\linewidth]{iw-32-self-cross}{Where the questions come from, and what it costs. (a) In self-attention the band tokens produce queries, keys and values. (b) In cross-attention an outside set of $D$ queries reads the tokens' keys and values. Right: score matrices for one pixel and head with 202 bands, drawn to scale: 40,804 against 6,464 scores.}{fig:ceiling:selfcross}
+
+%-----------------------------------------------------------------------------
+\section{A spectrum as tokens that know their wavelength}\label{sec:ceiling:tokens}
+
+\subsection{Where the tokens live}
+
+In \cref{ch:patchembed} a token was a small square of the image. Here a token is \textbf{one band of one pixel}. A SpectralEarth pixel has 202 bands, so it becomes 202 tokens; an EnMAP pixel 224; a PRISMA pixel 239.
+\begin{center}
+\begin{tabular}{lll}
+one pixel's spectrum: & $[0.084, 0.091, \ldots, 0.183]$ & \shape{(202,)} reflectance\\
+as tokens: & 202 vectors of $d$ numbers & \shape{(202, d)}
+\end{tabular}
+\end{center}
+$d$ is the \index{token width}\emph{token width}. The design uses $d = 32$, matching the $D = 32$ channels of the current compressor so that parameter budgets compare cleanly (\cref{ch:crossstem}). Every pixel is handled separately: nothing in this section mixes one pixel with another.
+
+A token has two added parts: the band's measured value, stretched into a vector, and a fixed fingerprint of its wavelength.
+
+\subsection{Part 1 of a token: the value, stretched}
+
+A single reflectance number cannot take part in dot products with 32-number queries. It is stretched by a tiny linear layer, \code{nn.Linear(1, d)}: multiply by a learned vector $\vect{w}\in\R^{d}$ and add a learned bias $\vect{\beta}\in\R^{d}$,
+\begin{equation}\label{eq:ceiling:stretch}
+  \operatorname{stretch}(v) = v\,\vect{w} + \vect{\beta}.
+\end{equation}
+
+\begin{worked}[label={we:ceiling:stretch}]{Stretching one band value}
+Take $d = 2$ so it fits on paper, and suppose training gave $\vect{w} = [0.5, -1.0]$, $\vect{\beta} = [0.1, 0.2]$. A band measuring $v = 0.3$:
+\begin{align*}
+  \text{component 0:}\quad 0.3\times0.5 + 0.1 &= 0.15 + 0.10 = 0.25,\\
+  \text{component 1:}\quad 0.3\times(-1.0) + 0.2 &= -0.30 + 0.20 = -0.10.
+\end{align*}
+So $\operatorname{stretch}(0.3) = [0.25, -0.10]$.
+\end{worked}
+
+The layer has $d$ weights and $d$ biases: at $d = 32$, $32 + 32 = 64$ parameters. Notice that the stretch is the same for every band: the vector $\vect{w}$ does not know which band it is stretching. Two bands with the same value get the same value part. Something else must tell them apart.
+
+\subsection{Part 2 of a token: why a wavelength tag is required}
+
+\Cref{ch:attention} noted that Indradhanu's spatial attention needs no positional encoding, because the overlapping convolutions of the patch embedding already supply position. Here there is no grid and no convolution. By \cref{eq:ceiling:perm}, 202 band tokens built from values alone are, to attention, an unordered crowd: swap the values of bands 10 and 150 and every query gets the same answer. A spectrum with a dip at 700\,nm and one with the same dip at 2200\,nm would be indistinguishable if their values were the same multiset. So every token must carry its wavelength.
+
+\begin{definition}[Sinusoidal wavelength encoding]\index{wavelength encoding}\index{positional encoding!sinusoidal}
+For a wavelength $\lambda$ in nanometres and an even width $d = 2H$, choose $H$ \index{period}\emph{periods} $P_0, \ldots, P_{H-1}$ (a period is the distance in nm after which a wave repeats). The encoding is the vector
+\begin{equation}\label{eq:ceiling:enc}
+  \vect{e}(\lambda) = \bigl[\sin\theta_0, \ldots, \sin\theta_{H-1},\ \cos\theta_0, \ldots, \cos\theta_{H-1}\bigr],\qquad \theta_i = \frac{2\pi\lambda}{P_i}.
+\end{equation}
+It has no learned parameters: it is a formula of $\lambda$, identical in every run.
+\end{definition}
+
+This is the same family of encodings as the positional encoding of the original transformer \citep{vaswani2017attention}, with the token's position replaced by its physical wavelength.
+
+\begin{sourcenote}[: the encoding as the code builds it]
+\code{app/foundation_models/components/spectral_tokens.py}, lines 25--37, defines \code{wavelength_encoding}. Three facts the course states loosely are exact in the code:
+\begin{itemize}
+\item \emph{Sinusoidal, not learned.} No \code{nn.Parameter} appears; the function is pure arithmetic.
+\item \emph{The periods are geometric.} With $H = d/2 = 16$ and \code{MIN_PERIOD_NM} $= 10$ and \code{MAX_PERIOD_NM} $= 10{,}000$, line 35 computes
+$P_i = 10\cdot(10{,}000/10)^{\,i/(H-1)} = 10\cdot 1000^{\,i/15}$ for $i = 0, \ldots, 15$.
+\item \emph{Sines first, then cosines.} Line 37 is \code{torch.cat([torch.sin(angle), torch.cos(angle)], dim=-1)}. The course writes the tag as $[\sin, \cos]$ pairs per period; the code puts all 16 sines in components 0--15 and all 16 cosines in 16--31. Dot products and cosine similarities do not depend on this order (a dot product is a sum), so every number in this chapter is the same either way, but if you read a component index off the tensor, use the code's layout.
+\end{itemize}
+The function raises \code{ValueError} unless $d$ is even and at least 4.
+\end{sourcenote}
+
+\subsection{The sixteen periods}
+
+Work out the periods. The ratio between neighbouring periods is
+\begin{align*}
+  r &= 1000^{1/15}\\
+    &= \left(10^{3}\right)^{1/15}\\
+    &= 10^{3/15}\\
+    &= 10^{0.2}\\
+    &= 1.5849 .
+\end{align*}
+So each period is $1.585$ times the last, and five steps make a factor of $10^{0.2\times5} = 10$: \textbf{five periods per decade}. Starting at 10\,nm:
+
+\begin{table}[htbp]\centering
+\caption{The sixteen periods of \texttt{wavelength\_encoding} at $d = 32$, in nm (computed by \texttt{research/textbook/tools/compute\_ceiling.py}).}\label{tab:ceiling:periods}
+\begin{tabular}{rrrrrrrrr}\toprule
+$i$ & 0 & 1 & 2 & 3 & 4 & 5 & 6 & 7\\
+$P_i$ & 10.00 & 15.85 & 25.12 & 39.81 & 63.10 & 100.0 & 158.5 & 251.2\\\midrule
+$i$ & 8 & 9 & 10 & 11 & 12 & 13 & 14 & 15\\
+$P_i$ & 398.1 & 631.0 & 1000 & 1585 & 2512 & 3981 & 6310 & 10{,}000\\\bottomrule
+\end{tabular}
+\end{table}
+
+The source comment explains the two ends: ``10 nm resolves neighbouring bands (EnMAP and PRISMA sample every \textasciitilde6--12 nm); 10,000 nm exceeds the whole 400--2500 nm range, so the slowest pair varies monotonically across it and acts as a coarse `where in the spectrum' coordinate.'' Short periods separate neighbours; long periods separate regions.
+
+\subsection{Two periods worked by hand}
+
+Two of the sixteen periods are round numbers, $P_{10} = 1000$\,nm and $P_{15} = 10{,}000$\,nm, which makes them good for hand work.
+
+\begin{worked}[label={we:ceiling:enc1000}]{The tag of two wavelengths at one period}
+Take $P = 1000$\,nm and the wavelengths 660\,nm and 670\,nm (red light, 10\,nm apart). Use a calculator in radian mode; do it on paper.
+
+\emph{660\,nm.}
+\begin{align*}
+  \theta &= 2\pi\times660/1000\\
+         &= 6.2832\times0.660\\
+         &= 4.1469 \text{ rad},\\
+  \sin(4.1469) &= -0.8443,\\
+  \cos(4.1469) &= -0.5358 .
+\end{align*}
+\emph{670\,nm.}
+\begin{align*}
+  \theta &= 6.2832\times0.670 = 4.2097 \text{ rad},\\
+  \sin(4.2097) &= -0.8763,\\
+  \cos(4.2097) &= -0.4818 .
+\end{align*}
+The two pairs, $[-0.8443, -0.5358]$ and $[-0.8763, -0.4818]$, are close: nearby wavelengths get nearby tags. Now a third wavelength far away, 1650\,nm:
+\begin{align*}
+  \theta &= 6.2832\times1.650 = 10.3673 \text{ rad},\\
+  \sin(10.3673) &= -0.8090,\\
+  \cos(10.3673) &= -0.5878 .
+\end{align*}
+That is almost the same pair as 660\,nm's. With this one period, 1650\,nm and 660\,nm are nearly indistinguishable: 1650 is 990\,nm past 660, almost exactly one full period, so the wave has gone round once and come back. \textbf{One period aliases.}
+
+Add the long period, $P = 10{,}000$\,nm:
+\begin{align*}
+  660:&\quad \theta = 6.2832\times0.066 = 0.4147, & \sin &= 0.4029, & \cos &= 0.9152,\\
+  670:&\quad \theta = 6.2832\times0.067 = 0.4210, & \sin &= 0.4086, & \cos &= 0.9127,\\
+  1650:&\quad \theta = 6.2832\times0.165 = 1.0367, & \sin &= 0.8607, & \cos &= 0.5090.
+\end{align*}
+Now 1650 is far from 660, while 660 and 670 stay close. The short period separates neighbours, the long one separates regions, and several periods together do not alias.
+\end{worked}
+
+\subsection{The similarity of two tags depends only on their distance}
+
+How similar are two full 32-number tags? Use the dot product. Write $\theta_i = 2\pi\lambda_1/P_i$ and $\phi_i = 2\pi\lambda_2/P_i$. By \cref{eq:ceiling:enc} the dot product pairs sines with sines and cosines with cosines:
+\begin{align}
+  \vect{e}(\lambda_1)\cdot\vect{e}(\lambda_2)
+  &= \sum_{i=0}^{H-1}\sin\theta_i\sin\phi_i + \sum_{i=0}^{H-1}\cos\theta_i\cos\phi_i
+  \nonumber\\
+  \intertext{Collect the two sums term by term:}
+  &= \sum_{i=0}^{H-1}\bigl(\cos\theta_i\cos\phi_i + \sin\theta_i\sin\phi_i\bigr)
+  \nonumber\\
+  \intertext{and use the cosine of a difference, $\cos(\theta-\phi) = \cos\theta\cos\phi + \sin\theta\sin\phi$:}
+  &= \sum_{i=0}^{H-1}\cos(\theta_i - \phi_i)
+  \nonumber\\
+  &= \sum_{i=0}^{H-1}\cos\!\left(\frac{2\pi(\lambda_1-\lambda_2)}{P_i}\right). \label{eq:ceiling:encdot}
+\end{align}
+Two consequences fall out.
+
+\emph{Every tag has the same length.} Put $\lambda_1 = \lambda_2$: every cosine is $\cos 0 = 1$, so $\vect{e}(\lambda)\cdot\vect{e}(\lambda) = H = 16$ and $\norm{\vect{e}(\lambda)} = \sqrt{16} = 4$. (Running the module confirms a norm of 4.0 for every wavelength.)
+
+\emph{The cosine similarity depends only on the distance $\Delta = \lambda_1 - \lambda_2$.} The \index{cosine similarity}\emph{cosine similarity} of two vectors is their dot product divided by the product of their lengths (\cref{ch:linalg}): 1 means the same direction, 0 unrelated. With both lengths 4,
+\begin{equation}\label{eq:ceiling:cossim}
+  s(\Delta) = \frac{1}{4\times4}\sum_{i=0}^{15}\cos\!\left(\frac{2\pi\Delta}{P_i}\right) = \frac{1}{16}\sum_{i=0}^{15}\cos\!\left(\frac{2\pi\Delta}{P_i}\right).
+\end{equation}
+The encoding is \emph{shift invariant}: 660 against 670\,nm is exactly as similar as 2000 against 2010\,nm.
+
+\begin{worked}[label={we:ceiling:cossim}]{Cosine similarity of 660 and 670\,nm, all sixteen periods}
+Here $\Delta = 10$\,nm. Compute $2\pi\times10/P_i$ and its cosine for each period of \cref{tab:ceiling:periods}. Do the first few on paper; the rest follow the same pattern.
+\begin{align*}
+  P_0 = 10:&\quad 2\pi\times10/10 = 6.2832, & \cos &= 1.0000,\\
+  P_1 = 15.85:&\quad 62.832/15.85 = 3.9644, & \cos &= -0.6801,\\
+  P_2 = 25.12:&\quad 62.832/25.12 = 2.5013, & \cos &= -0.8020,\\
+  P_3 = 39.81:&\quad 62.832/39.81 = 1.5783, & \cos &= -0.0075,\\
+  P_4 = 63.10:&\quad 62.832/63.10 = 0.9958, & \cos &= 0.5438,\\
+  P_5 = 100:&\quad 62.832/100 = 0.6283, & \cos &= 0.8090.
+\end{align*}
+For the ten longer periods the angle is small and the cosine is close to 1: $0.9224$, $0.9689$, $0.9876$, $0.9950$, $0.9980$, $0.9992$, $0.9997$, $0.9999$, $1.0000$, $1.0000$. Add all sixteen:
+\begin{align*}
+  &1.0000 - 0.6801 - 0.8020 - 0.0075 + 0.5438 + 0.8090\\
+  &\quad + 0.9224 + 0.9689 + 0.9876 + 0.9950 + 0.9980\\
+  &\quad + 0.9992 + 0.9997 + 0.9999 + 1.0000 + 1.0000\\
+  &= 0.8632 + 9.8707\\
+  &= 10.7339 .
+\end{align*}
+Divide by 16:
+\begin{align*}
+  s(10) &= 10.7339/16 = 0.6709 .
+\end{align*}
+The same sum for $\Delta = 990$ (660 against 1650\,nm) comes to $0.2153$, so $s(990) = 0.2153/16 = 0.0135$. Running \code{wavelength_encoding} and \code{cosine_similarity} on the real module gives $0.6709$ and $0.0135$\tagC{} (\file{research/textbook/tools/compute_ceiling_output.txt}), matching the course's $0.671$ and $0.013$.
+\end{worked}
+
+Look at the first line of that table. At $P_0 = 10$\,nm, a 10\,nm step is exactly one period, so the cosine is 1: \textbf{the shortest period cannot tell apart two wavelengths exactly 10\,nm apart} (nor any two wavelengths that are whole multiples of 10\,nm, such as 660 and 670, which both get $\sin = 0$, $\cos = 1$ there). This is the aliasing of \cref{we:ceiling:enc1000} again, at the short end. The other fifteen periods break the tie, and real sensors' band centres are not round numbers (the first SpectralEarth band sits at 418.416\,nm \tagM{app/constants/spectralearth_bands.json}), so it does no harm, but it is a good illustration of why one period is never enough.
+
+\begin{figure}[htbp]\centering
+\begin{tikzpicture}
+\begin{axis}[width=0.92\linewidth,height=6cm,xmin=0,xmax=2100,ymin=-0.3,ymax=1.05,
+  xlabel={wavelength difference $\Delta$ (nm)},ylabel={cosine similarity $s(\Delta)$},
+  grid=major,grid style={gray!20},tick label style={font=\small},label style={font=\small}]
+\addplot[spec,thick,domain=0:2100,samples=700] {(cos(360*x/10)+cos(360*x/15.8489)+cos(360*x/25.1189)+cos(360*x/39.8107)
+  +cos(360*x/63.0957)+cos(360*x/100)+cos(360*x/158.489)+cos(360*x/251.189)+cos(360*x/398.107)+cos(360*x/630.957)
+  +cos(360*x/1000)+cos(360*x/1584.89)+cos(360*x/2511.89)+cos(360*x/3981.07)+cos(360*x/6309.57)+cos(360*x/10000))/16};
+\addplot[only marks,mark=*,mark size=2pt,loss] coordinates {(10,0.6709) (990,0.0135)};
+\node[loss,anchor=west,font=\small,fill=white,inner sep=1pt] at (axis cs:60,0.86) {$s(10) = 0.671$};
+\draw[loss] (axis cs:60,0.86) -- (axis cs:10,0.6709);
+\node[loss,anchor=south,font=\small,fill=white,inner sep=1pt] at (axis cs:990,0.86) {$s(990) = 0.013$};
+\draw[loss] (axis cs:990,0.84) -- (axis cs:990,0.0135);
+\end{axis}
+\end{tikzpicture}
+\caption{The cosine similarity of two wavelength tags, \cref{eq:ceiling:cossim}, plotted exactly from the sixteen periods of the source. It starts at 1 for $\Delta = 0$, is still about 0.6 at 20--30\,nm, and beyond about 100\,nm it fluctuates around a mean of about 0.06, never above 0.49 nor below $-0.35$: tags of distant wavelengths are close to orthogonal. The two marked points are \cref{we:ceiling:cossim}.}\label{fig:ceiling:cossim}
+\end{figure}
+
+\subsection{The token is the sum of the two parts}
+
+The two parts are added, component by component:
+\begin{equation}\label{eq:ceiling:token}
+  \vect{t}_b = v_b\,\vect{w} + \vect{\beta} + \vect{e}(\lambda_b)\ \in\R^{d}.
+\end{equation}
+
+\begin{worked}[label={we:ceiling:token}]{Building one band token}
+Continue \cref{we:ceiling:stretch} with $d = 2$. For this illustration let the tag be the period-1000 pair only (the real tag has 32 numbers). The band measures 0.3 at 660\,nm:
+\begin{align*}
+  \text{value part:}\quad &[\ 0.25,\ -0.10\ ]\\
+  \text{wavelength tag:}\quad &[-0.8443,\ -0.5358]\\
+  \text{token:}\quad &[\ 0.25 - 0.8443,\ -0.10 - 0.5358\ ]\\
+  &= [-0.5943,\ -0.6358] .
+\end{align*}
+\end{worked}
+
+Adding rather than placing side by side (\emph{concatenating}) keeps the token at width $d$. Concatenating would double the width to 64 and every later layer would grow with it. Adding works because training learns a value stretch whose direction $\vect{w}$ is usefully different from the directions the tags occupy, so later layers can still read both. In \code{spectral_attention.py}, line 77, the token is built exactly so: \code{self.value_embed(rows) + wavelength_encoding(wl, self.d)}.
+
+\coursefig[0.95\linewidth]{iw-33-band-token}{Building one band token. (a) The band's value is stretched to $d$ numbers by \texttt{Linear(1, d)} and added to a fixed sinusoidal tag of its wavelength. (b) The real 32-number tag for three wavelengths (teal positive, amber negative, shade = magnitude): 660 and 670\,nm share most of their pattern (cosine similarity 0.671), 660 and 1650\,nm almost none (0.013).}{fig:ceiling:token}
+
+\subsection{Why wavelength beats position}
+
+\begin{table}[htbp]\centering
+\caption{A band described by its position against a band described by its wavelength.}\label{tab:ceiling:wlvspos}
+\begin{tabular}{p{0.24\linewidth}p{0.32\linewidth}p{0.32\linewidth}}\toprule
+ & position (today) & wavelength (the spectral stem)\\\midrule
+what slot 87 means & depends on the sensor & slot numbers are not used\\
+the gap 1350--1450\,nm & invisible & 1340 and 1460 get distinct tags\\
+a new sensor & resample onto 165 first & read its native bands directly\\
+band order & fixed & any order (\cref{eq:ceiling:perm})\\
+band width (FWHM) & ignored & could be encoded too (a refinement for later)\\\bottomrule
+\end{tabular}
+\end{table}
+
+{\sloppy The ``any order'' row matters in practice. SpectralEarth's band list is not sorted by wavelength: EnMAP's two detectors overlap near 900--1000\,nm, and the list interleaves them \tagM{app/foundation_models/components/pixel_normalization.py}. Because the tag carries the wavelength and attention ignores order, the spectral stem needs no special sorting. The dropped water-vapour bands are absent: SpectralEarth sends 202 tokens, not 224, and nothing marks the gap except the wavelengths themselves, which is enough.\par}
+
+\begin{keypoint}
+A band token is ``value stretched, plus a fixed fingerprint of the wavelength'', so the model reads ``0.21 at 864\,nm'' rather than ``0.21 in slot 87''.
+\end{keypoint}
+
+With tokens defined and cross-attention in hand, all three requirements of \cref{tab:ceiling:requirements} have a candidate answer: softmax weights that depend on the pixel (adaptivity), weights that can be forced to zero (skipping; \cref{ch:crossstem}), and tokens indexed by wavelength (any band list). The next chapter assembles them into a compressor and counts what it costs.
+
+%-----------------------------------------------------------------------------
+\begin{confusions}
+\confusion{Isn't the compressor trained? Then it adapts.}{It adapts to the \emph{training set as a whole}, once. Inside a trained model it is frozen: every pixel of every scene meets the same $\mat{W}$, and the derivative of \cref{eq:ceiling:jacobian} is the same constant everywhere. ``Adaptive'' in this Part means changing per pixel, at run time.}
+\confusion{Interpolation fills the dead band with a good guess, so where is the harm?}{A guess is not a measurement, and the compressor cannot tell them apart. By \cref{eq:ceiling:contam} the error is the band's column of weights times the size of the guess's error. The cost is small for one band in one pixel and systematic across a scene with a striped detector.}
+\confusion{Could we give the convolution more outputs instead?}{That is what raising $D$ from 24 to 32 did. The null space shrank from at least 141 to at least 133 dimensions; it is still the same null space for every pixel, and the layer is still tied to 165 inputs.}
+\confusion{If the queries are fixed, isn't this the fixed recipe again?}{No. In the compressor the \emph{weights} are fixed. In cross-attention the \emph{questions} are fixed, and the weights come from a softmax over scores that depend on the pixel's keys. Same questions, different answers per pixel.}
+\confusion{Does cross-attention let the tokens talk to each other?}{Not directly. Each query reads all tokens, but the tokens are not updated. Information flows from the tokens into the $M$ answers only.}
+\confusion{Which side is ``cross''?}{The word means queries and keys come from different sources. It says nothing about direction; the decoder of \cref{ch:specdecoder} is also cross-attention, pointed the other way.}
+\confusion{Is the wavelength tag learned?}{No. It is \cref{eq:ceiling:enc}, a formula identical in every run, with periods fixed in the encoding's source file. Only the value stretch (64 parameters) is learned. That is deliberate: a learned table indexed by band number would bring back the position problem.}
+\confusion{The course writes the tag as sine-cosine pairs. Is that wrong?}{It is a different layout of the same 32 numbers. The code stores all sines, then all cosines. Dot products, and so attention, do not care; component indices do.}
+\confusion{Does this mean the current Indradhanu is wrong?}{No. A fixed linear bottleneck is a sensible, cheap choice that works; \cref{ch:compressor} shows it costs a tiny share of the parameters. It is a ceiling, not a bug.}
+\end{confusions}
+
+\begin{checkyourself}
+\item\label{ex:ceiling:1} Using the toy $\mat{W}$ of \cref{eq:ceiling:toy}, band 3 of $\vect{x} = [1.2, 1.0, -0.4, -0.6]$ arrives broken and filled with $0.0$. Compute $z_1$ directly, then again with \cref{eq:ceiling:contam}, and give the error as a percentage of the true $z_1$. Do it on paper.
+\item\label{ex:ceiling:2} The current compressor is a 1$\times$1 convolution from 165 to 32 channels, followed by \code{BatchNorm2d(32)} (which has a scale and a shift per channel). Compute its parameter count. Then give a lower bound on the dimension of its null space, and say what that bound would be at $D = 24$.
+\item\label{ex:ceiling:3} Redo \cref{we:ceiling:xattn} with the query $\vect{q} = [0, 1]$. Compute the three scaled scores, the softmax weights and the answer.
+\item\label{ex:ceiling:4} Using $\vect{w} = [0.5, -1.0]$, $\vect{\beta} = [0.1, 0.2]$, compute the value part of a band measuring $0.6$. Then compute the period-1000 tag $[\sin, \cos]$ for 500\,nm and add the two to get a $d = 2$ token.
+\item\label{ex:ceiling:5} Using \cref{eq:ceiling:cossim}, explain without a calculator why $s(\Delta)$ can never exceed 1, and why $s(10\,000)$ is not close to 1 even though the longest period is 10,000\,nm. (Hint: what is $\cos(2\pi\times10{,}000/P_i)$ for $P_0 = 10$?)
+\item\label{ex:ceiling:6} A crowd of 224 band tokens is read by 32 learned queries. How many answers come back, and how many scores are computed per head? For 425 bands (AVIRIS-NG), how many scores would self-attention compute per pixel per head, and how many would cross-attention with 32 queries compute?
+\end{checkyourself}
+
+\nextchapter{ch:crossstem}

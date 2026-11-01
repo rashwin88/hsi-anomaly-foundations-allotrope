@@ -1,0 +1,112 @@
+% main.tex - Allotrope: the mathematics of hyperspectral anomaly detection.
+% Build: C:/Users/FITT/tools/tectonic/tectonic.exe main.tex   (from research/textbook/)
+% Before building, run: python tools/build_backmatter.py  (merges glossary/ and bib/)
+\documentclass[11pt,openany]{book}
+\input{preamble}
+
+% Include a chapter (and later its answers) only if its file exists, so the
+% book always compiles while chapters are being written.
+\newcommand{\chap}[1]{\IfFileExists{chapters/#1.tex}{\include{chapters/#1}}{}}
+
+\begin{document}
+
+\frontmatter
+\input{front/titlepage}
+\tableofcontents
+\tcblistof[\chapter*]{loe}{List of worked examples}
+\listoffigures
+\input{front/howtoread}
+\input{front/notation}
+
+\mainmatter
+
+\part{The domain and the data}
+\chap{01-problem}
+\chap{02-light}
+\chap{03-sensors}
+\chap{04-product}
+\chap{05-bandpipeline}
+
+\part{Statistical detection}
+\chap{06-linalg}
+\chap{07-rx}
+\chap{08-localrx}
+
+\part{Reconstruction, the Indradhanu architecture and Chakshu}
+\chap{09-recon}
+\chap{10-shapes}
+\chap{10a-convae}
+\chap{11-compressor}
+\chap{12-patchembed}
+\chap{13-attention}
+\chap{14-esa}
+\chap{15-block}
+\chap{16-encoder}
+\chap{17-masking}
+\chap{18-decoder}
+\chap{19-params}
+\chap{19a-chakshu}
+
+\part{The spectral stem}
+\chap{20-ceiling}
+\chap{21-crossstem}
+\chap{22-specdecoder}
+
+\part{Training}
+\chap{23-losses}
+\chap{24-trainloop}
+\chap{25-pretrain}
+\chap{26-seghead}
+\chap{27-finetune}
+
+\part{From model to answer}
+\chap{28-inference}
+\chap{29-residualmaha}
+\chap{30-material}
+
+\part{Evaluation}
+\chap{31-measures}
+\chap{32-benchmarks}
+\chap{33-runeval}
+\chap{34-bootstrap}
+
+\part{The experiments, told as lessons}
+\chap{35-sortbug}
+\chap{36-ftruns}
+\chap{37-shipping}
+\chap{38-scoringgains}
+\chap{39-uncertainty}
+\chap{40-decoderwork}
+\chap{41-heavy}
+
+\part{Naming and delivering}
+\chap{42-namer}
+\chap{43-submission}
+
+\part{A foundation model that is wrong for this job: HyperSL}
+\chap{44-hslwhat}
+\chap{45-hslnorm}
+\chap{46-hsldetect}
+\chap{47-hslunmix}
+\chap{48-hslcloud}
+\chap{49-hslverdict}
+
+\appendix
+\chapter{Answers to the Check-yourself exercises}\label{app:answers}
+Every exercise in the book is solved here in full, chapter by chapter. Try each one on paper
+before you read its solution: reading a solution is not the same as finding it.
+{\emergencystretch=3em \input{answers-all}\par}
+
+\chapter{Glossary}\label{app:glossary}
+{\sloppy\emergencystretch=3em \input{glossary-all}\par}
+
+\backmatter
+\cleardoublepage
+\phantomsection
+\addcontentsline{toc}{chapter}{Bibliography}
+\bibliographystyle{plainnat}
+\bibliography{refs}
+
+\printindex
+
+\end{document}

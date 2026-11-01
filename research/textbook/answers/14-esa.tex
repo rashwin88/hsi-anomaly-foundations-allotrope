@@ -1,0 +1,91 @@
+\answersfor{ch:esa}
+
+\begin{solution}{ex:esa:1}
+Here $d = 64/2 = 32$ and $N' = 256/4^2 = 256/16 = 16$.
+\begin{align*}
+  \text{input } \vect{x} &: (B, 256, 64)\\
+  \mat{Q} = \text{q}(\vect{x}) &: (B, 256, 64) \to \text{reshape } (B, 256, 2, 32) \to \text{transpose } (B, 2, 256, 32)\\
+  \text{transpose for the grid} &: (B, 64, 256)\\
+  \text{reshape} &: (B, 64, 16, 16)\\
+  \text{conv } k = s = 4 &: (B, 64, 16/4, 16/4) = (B, 64, 4, 4)\\
+  \text{flatten(2)} &: (B, 64, 16)\\
+  \text{transpose} &: (B, 16, 64)\\
+  \text{LayerNorm} &: (B, 16, 64)\\
+  \mat{K}, \mat{V} &: (B, 16, 64) \to (B, 16, 2, 32) \to (B, 2, 16, 32)\\
+  \mat{S} = \mat{Q}\mat{K}\T/\sqrt{32} &: (B, 2, 256, 32)\,(B, 2, 32, 16) \to (B, 2, 256, 16)\\
+  \mat{A} = \softmax(\mat{S}) &: (B, 2, 256, 16)\\
+  \mat{A}\mat{V} &: (B, 2, 256, 16)\,(B, 2, 16, 32) \to (B, 2, 256, 32)\\
+  \text{transpose} &: (B, 256, 2, 32)\\
+  \text{reshape (concatenate heads)} &: (B, 256, 64)\\
+  \text{proj} &: (B, 256, 64).
+\end{align*}
+\end{solution}
+
+\begin{solution}{ex:esa:2}
+Reduction convolution:
+\begin{align*}
+  160\times160 &= 25{,}600\\
+  25{,}600\times2\times2 &= 25{,}600\times4 = 102{,}400\\
+  102{,}400 + 160 &= 102{,}560 .
+\end{align*}
+Reduction LayerNorm: $2\times160 = 320$. Four projections:
+$4\times(160\times160 + 160) = 4\times25{,}760 = 103{,}040$. Total:
+\[
+  103{,}040 + 102{,}560 + 320 = 205{,}920,
+\]
+exactly the built module's count. At this stage the convolution ($CR = 320$) is about as large as
+all four projections together.
+\end{solution}
+
+\begin{solution}{ex:esa:3}
+Stage 1 divides the patch side by 4 and each later stage by 2 again:
+\begin{align*}
+  \text{stage 1: } 256/4 &= 64, & N &= 64\times64 = 4096, & 64/8 &= 8, & N' &= 8\times8 = 64, & 4096\times64 &= 262{,}144\\
+  \text{stage 2: } 64/2 &= 32, & N &= 1024, & 32/4 &= 8, & N' &= 64, & 1024\times64 &= 65{,}536\\
+  \text{stage 3: } 32/2 &= 16, & N &= 256, & 16/2 &= 8, & N' &= 64, & 256\times64 &= 16{,}384\\
+  \text{stage 4: } 16/2 &= 8, & N &= 64, & 8/1 &= 8, & N' &= 64, & 64\times64 &= 4{,}096 .
+\end{align*}
+Every stage attends over an $8\times8$ summary of 64 tokens. Stage 1's score matrix grows from
+16{,}384 to 262{,}144, a factor of $262{,}144/16{,}384 = 16$: four times the queries and four times
+the keys. (Plain attention would grow from $1024^2$ to $4096^2$, also a factor of 16, but from a
+base 64 times larger: $4096^2 = 16{,}777{,}216$ entries per head.)
+\end{solution}
+
+\begin{solution}{ex:esa:4}
+$C^2 = 64\times64 = 4{,}096$.
+
+\emph{Plain.}
+\begin{align*}
+  4NC^2 &= 4\times256\times4{,}096 = 1{,}024\times4{,}096 = 4{,}194{,}304\\
+  N^2 &= 256\times256 = 65{,}536\\
+  2N^2C &= 2\times65{,}536\times64 = 2\times4{,}194{,}304 = 8{,}388{,}608\\
+  \text{total} &= 4{,}194{,}304 + 8{,}388{,}608 = 12{,}582{,}912 .
+\end{align*}
+\emph{Reduced.}
+\begin{align*}
+  3NC^2 &= 3\times256\times4{,}096 = 768\times4{,}096 = 3{,}145{,}728\\
+  2N'C^2 &= 2\times16\times4{,}096 = 131{,}072\\
+  2NN'C &= 2\times256\times16\times64 = 2\times262{,}144 = 524{,}288\\
+  \text{total} &= 3{,}145{,}728 + 131{,}072 + 524{,}288 = 3{,}801{,}088 .
+\end{align*}
+Both match the table; the ratio is $12{,}582{,}912/3{,}801{,}088 = 3.3$.
+\end{solution}
+
+\begin{solution}{ex:esa:5}
+With one channel the token is a single number $x$. Its mean is $\mu = x/1 = x$. Its variance is
+$\sigma^2 = (x - \mu)^2/1 = 0$. LayerNorm computes
+\[
+  \gamma\,\frac{x - \mu}{\sqrt{\sigma^2 + \epsilon}} + \beta = \gamma\,\frac{0}{\sqrt{0 + \epsilon}} + \beta = 0 + \beta = \beta ,
+\]
+whatever $x$ is (the small $\epsilon$ of \cref{ch:block} only prevents division by zero). The
+input is erased. It does not matter for the real model because its narrowest tokens have
+$C = 32$ channels, and LayerNorm only removes one number's worth of information (the mean) and one
+scale; the pattern across the channels survives. The toy example skipped LayerNorm for exactly this
+reason.
+\end{solution}
+
+\begin{solution}{ex:esa:6}
+Survivors: $1024\times(1 - 0.5) = 1024\times0.5 = 512$. Fallback score entries per head:
+$512\times512 = 262{,}144$ (the ``262K'' of the source comment). Fraction of plain attention over
+all tokens: $262{,}144/1{,}048{,}576 = 0.25$, a quarter, because halving $N$ quarters $N^2$.
+\end{solution}

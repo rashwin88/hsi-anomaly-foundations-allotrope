@@ -1,0 +1,41 @@
+\answersfor{ch:hslwhat}
+
+\begin{solution}{ex:hslwhat:1}
+With $D=128$ and feed-forward width $512$:
+\begin{align*}
+\text{LayerNorms} &= 2\times(2\times128) = 512,\\
+\text{q, k, v} &= 128\times384+384 = 49{,}152+384 = 49{,}536,\\
+\text{projection} &= 128\times128+128 = 16{,}512,\\
+\text{feed-forward} &= (128\times512+512)+(512\times128+128) = 66{,}048+65{,}664 = 131{,}712,\\
+\text{block} &= 512+49{,}536+16{,}512+131{,}712 = 198{,}272 .
+\end{align*}
+About a quarter of 789,760: halving $D$ quarters every $D\times D$ matrix.
+\end{solution}
+
+\begin{solution}{ex:hslwhat:2}
+$p=(1000-400)/10=60.0$. Entry 0 is $\sin(60.0)=-0.3048$, entry 1 is $\cos(60.0)=-0.9524$. Passed as 1.0,
+$p=(1.0-400)/10=-39.9$: a wavelength 400\,nm \emph{below} the code's zero, one the model has never seen.
+\end{solution}
+
+\begin{solution}{ex:hslwhat:3}
+$224-7=217$ bands; \code{int(217 * 0.05)} $=$ \code{int(10.85)} $=10$ visible. For 202 bands,
+\code{int(10.1)} $=10$.
+\end{solution}
+
+\begin{solution}{ex:hslwhat:4}
+With band 0--1 input: $59.60-39.60=20.00$ points. Raw input: $48.19-39.60=8.59$ points. Share kept:
+$8.59/20.00=0.43$, so 43\% of the gain survives without the scaling.
+\end{solution}
+
+\begin{solution}{ex:hslwhat:5}
+\code{pe} $500\times256=128{,}000$; \code{div_term} 128; BatchNorm running means and variances
+$4\times2\times256=2{,}048$; four \code{num_batches_tracked} counters, 4. Sum
+$128{,}000+128+2{,}048+4=130{,}180$, and $9{,}158{,}021-9{,}027{,}841=130{,}180$.
+\end{solution}
+
+\begin{solution}{ex:hslwhat:6}
+A sigmoid's output lies strictly between 0 and 1, so the model can only reproduce inputs in that range; per-scene
+min-max puts every input in $[0,1]$ by construction. A raw 1.2 is a target the output can never reach: the
+reconstruction saturates near 1 and leaves a residual of at least 0.2 there however well the model understands the
+spectrum.
+\end{solution}

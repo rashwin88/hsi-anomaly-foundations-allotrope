@@ -177,6 +177,13 @@ class VendableHyperspectralDataset(BaseModel):
         description="Percentage of valid pixels in each band (0.0 to 100.0), derived from the validity cube.",
     )
 
+    units: Optional[str] = Field(
+        None,
+        description="None = reflectance 0-1. 'not_reflectance' = a generic_hsi cube in DN or radiance "
+        "(docs/lld/generic-hsi.md); anomaly_scoring then skips foundation models. Vendables pickled "
+        "before 2026-11-01 lack it: read with getattr(v, 'units', None).",
+    )
+
 
 class VendableThermalDataset(BaseModel):
     """
@@ -201,6 +208,13 @@ class VendableThermalDataset(BaseModel):
 
     pure_validity_mask: Optional[SkipValidation[np.ndarray]] = Field(
         ..., description="Pure validity mask"
+    )
+
+    units: Optional[str] = Field(
+        None,
+        description="Units of normalized_thermal_cube when not Celsius, e.g. 'DN_14bit_relative' for HotSat-1. "
+        "anomaly_scoring switches to a per-scene z-score override when it starts with 'DN_' "
+        "(docs/lld/pixel-stats.md). None means Celsius. Vendables pickled before 2026-10-31 lack it.",
     )
 
     #### Provider specific data - we dont have access to this usually (use with care)

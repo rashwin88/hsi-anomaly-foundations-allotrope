@@ -45,39 +45,39 @@ export function ModelFlowNode({ data }: NodeProps) {
   return (
     <div
       style={{
-        background: colors.bg,
-        border: `1.5px solid ${colors.border}`,
-        borderRadius: 10,
-        padding: "10px 14px",
+        // Tufte: quiet labelled text on paper with a hairline frame. The stage kind is
+        // carried by the small-caps label colour alone.
+        background: "var(--paper)",
+        border: "1px solid var(--rule)",
+        borderRadius: 0,
+        padding: "8px 12px",
         minWidth: 200,
         maxWidth: 260,
-        color: colors.text,
-        fontSize: 13,
-        boxShadow: "0 2px 8px rgba(15, 23, 42, 0.08)",
+        color: "var(--ink)",
+        fontFamily: "var(--font-ui)",
+        fontSize: 14,
       }}
     >
-      <Handle type="target" position={Position.Top} style={{ background: colors.border, width: 8, height: 8 }} />
+      <Handle type="target" position={Position.Top} style={{ background: "var(--ink-3)", border: 0, width: 4, height: 4 }} />
       <div
         style={{
-          fontSize: 9,
+          fontSize: 12,
           letterSpacing: "0.08em",
-          fontWeight: 700,
+          fontVariantCaps: "all-small-caps",
           color: colors.badge,
-          marginBottom: 4,
+          marginBottom: 2,
         }}
       >
-        {STAGE_LABEL[d.kind]}
+        {STAGE_LABEL[d.kind].toLowerCase()}
       </div>
-      <div style={{ fontWeight: 600, lineHeight: 1.25 }}>{d.label}</div>
+      <div style={{ lineHeight: 1.25 }}>{d.label}</div>
       {d.shape && (
         <div
           style={{
             marginTop: 6,
-            fontSize: 11,
-            fontFamily:
-              "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
-            color: colors.badge,
-            opacity: 0.95,
+            fontSize: 12,
+            fontStyle: "italic",
+            color: "var(--ink-2)",
           }}
         >
           {d.shape}
@@ -87,16 +87,15 @@ export function ModelFlowNode({ data }: NodeProps) {
         <div
           style={{
             marginTop: 4,
-            fontSize: 10.5,
-            color: colors.text,
-            opacity: 0.7,
+            fontSize: 12,
+            color: "var(--ink-2)",
             lineHeight: 1.35,
           }}
         >
           {d.detail}
         </div>
       )}
-      <Handle type="source" position={Position.Bottom} style={{ background: colors.border, width: 8, height: 8 }} />
+      <Handle type="source" position={Position.Bottom} style={{ background: "var(--ink-3)", border: 0, width: 4, height: 4 }} />
     </div>
   );
 }

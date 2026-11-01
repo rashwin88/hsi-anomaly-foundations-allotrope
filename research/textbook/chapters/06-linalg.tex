@@ -1,0 +1,1114 @@
+\chapter{The mathematical toolkit: vectors, projection, covariance, eigenvectors, PCA and whitening}\label{ch:linalg}
+
+\begin{onething}
+A pixel's spectrum is an arrow in a space with one axis per band, and almost every calculation
+in this book is one of a handful of operations on such arrows: measuring length and angle,
+projecting one arrow onto another, and turning a cloud of arrows so that it is round instead of
+stretched. That last operation, whitening, is what the statistical detectors of
+\cref{ch:rx,ch:localrx} and the residual score of \cref{ch:residualmaha} are built on.
+\end{onething}
+
+\section{Why a chapter of linear algebra}\label{sec:linalg:why}
+
+The next two chapters build the classical anomaly detectors: the RX detector, its local version,
+and MNF-RX. The chapter after them in Part VI builds the score that Indradhanu ships with,
+residual Mahalanobis. All four do the same three things to a cloud of spectra:
+\begin{enumerate}
+  \item find the centre of the cloud (a \emph{mean});
+  \item find the directions in which the cloud is stretched, and how much (a \emph{covariance}
+    and its \emph{eigenvectors});
+  \item rescale every direction so that the cloud becomes round (\emph{whitening}), and measure
+    how far a pixel sits from the centre of the round cloud.
+\end{enumerate}
+
+You could try to skip the machinery and score each band on its own: subtract the band's average,
+divide by its spread, add up. \Cref{ch:rx} shows in detail why that fails, but the short version
+is this. Bands are not independent. Two neighbouring bands of a vegetation spectrum rise and fall
+together across a scene, so a pixel that is a little high in both is ordinary, and a pixel that
+is high in one and low in the other is strange, even if neither value alone is extreme. Seeing
+the second case needs the arithmetic of how bands vary \emph{together}, which is covariance, and
+the geometry of directions in band space, which is this chapter.
+
+The anomaly-detection course gives this material as a warm-up of five operations (dot product,
+norm, angle, matrix product, softmax). This chapter keeps the first four, raises them to a
+derivation, and adds what the detectors need: projection, transpose, the inverse, covariance,
+eigenvectors, PCA and whitening. Softmax and the 1 $\times$ 1 convolution belong to the neural
+network chapters; they are taught in \cref{ch:shapes,ch:attention}.
+
+\begin{analogy}
+Think of exam marks. A raw mark of 70 means little until you know the class average and how
+spread out the class was: 70 in a test where everyone scored between 68 and 72 is unremarkable,
+and 70 in a test where the average was 40 with a spread of 10 is three spreads above the
+average. Converting marks to ``spreads above average'' is the one-dimensional version of
+whitening. With two subjects that are correlated (students good at algebra tend to be good at
+geometry) you cannot convert each subject separately; you must first turn the axes to the
+directions in which the class actually varies, then convert. That turning-then-converting is
+what this chapter builds.
+\end{analogy}
+
+\section{Vectors, the dot product, length and angle}\label{sec:linalg:vectors}
+
+\begin{definition}[Vector]\index{vector}
+A \emph{vector} with $C$ entries is an ordered list of $C$ numbers, written as a column
+\[
+\vect{x} = \begin{pmatrix} x_1 \\ x_2 \\ \vdots \\ x_C \end{pmatrix}.
+\]
+The set of all such lists is written $\R^C$. You can picture a vector as an arrow from the
+origin to the point whose coordinates are its entries.
+\end{definition}
+
+A pixel's spectrum is a vector: $x_1$ is its reflectance in band 1, $x_2$ in band 2, and so on.
+On the 165-band common grid of \cref{ch:sensors} a spectrum lives in $\R^{165}$. You cannot draw
+165 axes, but every formula below works the same in 2, 3 or 165 dimensions, so we draw the 2-D
+case and trust the algebra for the rest.
+
+Two operations are defined entry by entry. Adding two vectors adds their entries,
+$(\vect{x}+\vect{y})_i = x_i + y_i$; multiplying a vector by a number $t$ (a \emph{scalar})
+multiplies every entry, $(t\vect{x})_i = t x_i$. Geometrically, $t\vect{x}$ is the same arrow
+stretched by $t$; for a spectrum it is the same shape at $t$ times the brightness.
+
+\subsection{The dot product}
+
+\begin{definition}[Dot product]\index{dot product}
+The \emph{dot product} (or inner product) of two vectors of the same length is the number
+\begin{equation}\label{eq:linalg:dot}
+\ip{\vect{a}}{\vect{b}} = \vect{a}\T\vect{b} = a_1 b_1 + a_2 b_2 + \cdots + a_C b_C
+= \sum_{i=1}^{C} a_i b_i .
+\end{equation}
+\end{definition}
+
+The notation $\vect{a}\T\vect{b}$ anticipates \cref{sec:linalg:matrices}: a row times a column.
+The result is a single number, not a vector. Three properties follow directly from the
+definition, and you will use all three:
+\begin{itemize}
+  \item symmetry: $\vect{a}\T\vect{b} = \vect{b}\T\vect{a}$, because $a_i b_i = b_i a_i$;
+  \item scaling: $(t\vect{a})\T\vect{b} = t(\vect{a}\T\vect{b})$, because $t$ factors out of
+    every term of the sum;
+  \item adding: $(\vect{a}+\vect{c})\T\vect{b} = \vect{a}\T\vect{b} + \vect{c}\T\vect{b}$,
+    because $(a_i + c_i)b_i = a_i b_i + c_i b_i$.
+\end{itemize}
+
+\begin{worked}[label={we:linalg:dot}]{The dot product of two 3-band spectra}
+Take the two spectra of the course's warm-up, $\vect{a} = (0.1, 0.2, 0.3)$ and
+$\vect{b} = (0.3, 0.2, 0.1)$: one rises towards the long wavelengths, the other falls.
+Do this on paper. Multiply position by position:
+\begin{align*}
+\text{band 1:}\quad 0.1 \times 0.3 &= 0.03\\
+\text{band 2:}\quad 0.2 \times 0.2 &= 0.04\\
+\text{band 3:}\quad 0.3 \times 0.1 &= 0.03
+\end{align*}
+then add:
+\[
+\vect{a}\T\vect{b} = 0.03 + 0.04 + 0.03 = 0.10 .
+\]
+\end{worked}
+
+\subsection{Length}
+
+\begin{definition}[Norm]\index{norm}
+The \emph{length} or \emph{Euclidean norm} of a vector is
+\begin{equation}\label{eq:linalg:norm}
+\norm{\vect{a}} = \sqrt{\vect{a}\T\vect{a}} = \sqrt{a_1^2 + a_2^2 + \cdots + a_C^2}.
+\end{equation}
+\end{definition}
+
+In two dimensions this is Pythagoras: the arrow to $(3, 4)$ is the hypotenuse of a right
+triangle with sides 3 and 4, so its length is $\sqrt{9 + 16} = 5$. In more dimensions you apply
+Pythagoras repeatedly, one axis at a time, and get the same formula. For a spectrum, the length
+is essentially its overall brightness.
+
+\begin{worked}[label={we:linalg:norm}]{The length of a spectrum}
+For $\vect{a} = (0.1, 0.2, 0.3)$, square each entry:
+\begin{align*}
+0.1^2 &= 0.01\\
+0.2^2 &= 0.04\\
+0.3^2 &= 0.09
+\end{align*}
+add them, $0.01 + 0.04 + 0.09 = 0.14$, and take the square root:
+$\norm{\vect{a}} = \sqrt{0.14} = 0.37417$.
+The spectrum $\vect{b} = (0.3, 0.2, 0.1)$ has the same three squares in a different order, so
+$\norm{\vect{b}} = 0.37417$ as well: the order of the bands does not affect the length.
+\end{worked}
+
+\subsection{Angle}
+
+The dot product and the lengths together give the angle between two arrows.
+
+\begin{definition}[Angle between vectors]\index{angle between vectors}
+For non-zero $\vect{a}$ and $\vect{b}$ the angle $\theta$ between them satisfies
+\begin{equation}\label{eq:linalg:cos}
+\cos\theta = \frac{\vect{a}\T\vect{b}}{\norm{\vect{a}}\,\norm{\vect{b}}},
+\qquad 0 \le \theta \le \pi .
+\end{equation}
+\end{definition}
+
+Where does \cref{eq:linalg:cos} come from? Draw the triangle with sides $\vect{a}$, $\vect{b}$
+and $\vect{a}-\vect{b}$. The school \emph{law of cosines} says the third side satisfies
+\[
+\norm{\vect{a}-\vect{b}}^2 = \norm{\vect{a}}^2 + \norm{\vect{b}}^2
+  - 2\norm{\vect{a}}\norm{\vect{b}}\cos\theta .
+\]
+Now compute the left side with the dot product instead. Expand the square using the adding and
+symmetry properties:
+\begin{align*}
+\norm{\vect{a}-\vect{b}}^2
+&= (\vect{a}-\vect{b})\T(\vect{a}-\vect{b})
+  && \text{definition of the norm}\\
+&= \vect{a}\T\vect{a} - \vect{a}\T\vect{b} - \vect{b}\T\vect{a} + \vect{b}\T\vect{b}
+  && \text{multiply out, term by term}\\
+&= \norm{\vect{a}}^2 - 2\,\vect{a}\T\vect{b} + \norm{\vect{b}}^2
+  && \text{symmetry: } \vect{b}\T\vect{a} = \vect{a}\T\vect{b}.
+\end{align*}
+Set the two expressions for $\norm{\vect{a}-\vect{b}}^2$ equal. The $\norm{\vect{a}}^2$ and
+$\norm{\vect{b}}^2$ terms cancel, leaving
+$-2\,\vect{a}\T\vect{b} = -2\norm{\vect{a}}\norm{\vect{b}}\cos\theta$. Divide both sides by
+$-2\norm{\vect{a}}\norm{\vect{b}}$ and you have \cref{eq:linalg:cos}.
+
+\begin{worked}[label={we:linalg:angle}]{The angle between two spectra}
+Every piece is already computed in \cref{we:linalg:dot,we:linalg:norm}:
+\begin{align*}
+\norm{\vect{a}}\,\norm{\vect{b}} &= 0.37417 \times 0.37417 = 0.14\\
+\cos\theta &= \frac{0.10}{0.14} = 0.71429\\
+\theta &= \arccos(0.71429) = 0.7752\ \text{rad}.
+\end{align*}
+To convert radians to degrees multiply by $180/\pi$:
+$0.7752 \times 180 / 3.14159 = 44.4^\circ$. The two spectra point in noticeably different directions.
+
+Now replace $\vect{b}$ by $2\vect{a} = (0.2, 0.4, 0.6)$, the same shape at twice the brightness:
+\begin{align*}
+\vect{a}\T(2\vect{a}) &= 0.1\times0.2 + 0.2\times0.4 + 0.3\times0.6 = 0.02 + 0.08 + 0.18 = 0.28\\
+\norm{2\vect{a}} &= \sqrt{0.04 + 0.16 + 0.36} = \sqrt{0.56} = 0.74833\\
+\cos\theta &= \frac{0.28}{0.37417 \times 0.74833} = \frac{0.28}{0.28} = 1\\
+\theta &= \arccos(1) = 0 .
+\end{align*}
+The angle is exactly zero although every entry differs. Angle measures shape and is blind to
+brightness. That is the spectral angle of \cref{ch:losses}, and the reason the training loss
+pairs it with an L1 term that does notice brightness.
+\end{worked}
+
+Two arrows with $\vect{a}\T\vect{b} = 0$ have $\cos\theta = 0$, so $\theta = \pi/2$: they are at
+right angles. The word for this is \emph{orthogonal}\index{orthogonal}. A vector of length 1 is
+a \emph{unit vector}\index{unit vector}; dividing any non-zero vector by its length makes one,
+$\vect{u} = \vect{a}/\norm{\vect{a}}$.
+
+\section{Projection: the best multiple of one vector}\label{sec:linalg:projection}
+
+The single most useful operation in this book is \emph{projection}: given a vector $\vect{x}$
+and a direction $\vect{u}$, find the multiple $t\vect{u}$ that comes closest to $\vect{x}$. You
+will meet it again as ``the coordinate of a pixel along a principal direction'' (this chapter),
+``the part of a residual inside the scene's main directions'' (the foreign fraction of
+\cref{ch:benchmarks}), and as the heart of PCA.
+
+\subsection{Derivation by minimising a squared distance}
+
+Write the squared distance from $\vect{x}$ to $t\vect{u}$ as a function of the unknown number
+$t$:
+\[
+f(t) = \norm{\vect{x} - t\vect{u}}^2 .
+\]
+Expand it, exactly as in the law-of-cosines derivation above:
+\begin{align}
+f(t) &= (\vect{x} - t\vect{u})\T(\vect{x} - t\vect{u})
+  && \text{definition of the norm} \notag\\
+&= \vect{x}\T\vect{x} - t\,\vect{x}\T\vect{u} - t\,\vect{u}\T\vect{x} + t^2\,\vect{u}\T\vect{u}
+  && \text{multiply out; $t$ factors out of each term} \notag\\
+&= \vect{x}\T\vect{x} - 2t\,\vect{u}\T\vect{x} + t^2\,\vect{u}\T\vect{u}
+  && \text{symmetry of the dot product.} \label{eq:linalg:ft}
+\end{align}
+This is a parabola in $t$: a constant, a term linear in $t$, and $t^2$ times the positive number
+$\vect{u}\T\vect{u}$. A parabola that opens upwards has its lowest point where its slope is
+zero. Differentiate with respect to $t$ (the constant $\vect{x}\T\vect{x}$ has slope 0; the
+derivative of $-2t\,c$ is $-2c$; the derivative of $t^2 c$ is $2tc$):
+\[
+\frac{df}{dt} = -2\,\vect{u}\T\vect{x} + 2t\,\vect{u}\T\vect{u}.
+\]
+Set the slope to zero and solve for $t$:
+\begin{align}
+-2\,\vect{u}\T\vect{x} + 2t^\star\,\vect{u}\T\vect{u} &= 0 \notag\\
+t^\star\,\vect{u}\T\vect{u} &= \vect{u}\T\vect{x}
+  && \text{add $2\vect{u}\T\vect{x}$ to both sides, divide by 2} \notag\\
+t^\star &= \frac{\vect{u}\T\vect{x}}{\vect{u}\T\vect{u}}
+  && \text{divide by $\vect{u}\T\vect{u} > 0$.} \label{eq:linalg:tstar}
+\end{align}
+
+\begin{definition}[Projection onto a vector]\index{projection}
+The \emph{projection} of $\vect{x}$ onto the direction of $\vect{u}$ is
+\begin{equation}\label{eq:linalg:proj}
+\vect{p} = t^\star\vect{u} = \frac{\vect{u}\T\vect{x}}{\vect{u}\T\vect{u}}\,\vect{u},
+\end{equation}
+and the \emph{residual} of the projection is $\vect{r} = \vect{x} - \vect{p}$. If $\vect{u}$ is a
+unit vector, $\vect{u}\T\vect{u} = 1$ and the formula shortens to
+$\vect{p} = (\vect{u}\T\vect{x})\,\vect{u}$: the number $\vect{u}\T\vect{x}$ is then the
+\emph{coordinate} of $\vect{x}$ along $\vect{u}$.
+\end{definition}
+
+The residual is always orthogonal to $\vect{u}$. Check it with the properties of the dot product:
+\[
+\vect{u}\T\vect{r} = \vect{u}\T\vect{x} - t^\star\,\vect{u}\T\vect{u}
+= \vect{u}\T\vect{x} - \frac{\vect{u}\T\vect{x}}{\vect{u}\T\vect{u}}\,\vect{u}\T\vect{u}
+= \vect{u}\T\vect{x} - \vect{u}\T\vect{x} = 0 .
+\]
+So $\vect{x} = \vect{p} + \vect{r}$ splits $\vect{x}$ into a part along $\vect{u}$ and a part at
+right angles to it, and by Pythagoras $\norm{\vect{x}}^2 = \norm{\vect{p}}^2 + \norm{\vect{r}}^2$.
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}[scale=1.3,>=Stealth]
+  \draw[->,gray] (-0.3,0) -- (3.8,0) node[right] {band 1};
+  \draw[->,gray] (0,-0.3) -- (0,3.0) node[above] {band 2};
+  \draw[spat,dashed] (-0.3,-0.3) -- (2.9,2.9) node[above right] {line $t\vect{u}$};
+  \draw[->,very thick,spat] (0,0) -- (1,1) node[midway,above left] {$\vect{u}$};
+  \draw[->,very thick,spec] (0,0) -- (3,1) node[right] {$\vect{x} = (3,1)$};
+  \draw[->,very thick,attn] (0,0) -- (2,2) node[above left] {$\vect{p} = (2,2)$};
+  \draw[->,thick,loss] (2,2) -- (3,1) node[midway,above right] {$\vect{r} = (1,-1)$};
+  \draw[loss] ($(2,2)+(0.15,-0.15)$) -- ++(0.15,0.15) -- ++(-0.15,0.15);
+  \fill[maskgrey] (0.95,0.95) circle (1.2pt);
+  \fill[maskgrey] (2.85,2.85) circle (1.2pt);
+  \draw[maskgrey,thin] (3,1) -- (0.95,0.95);
+  \draw[maskgrey,thin] (3,1) -- (2.85,2.85);
+\end{tikzpicture}
+\caption{Projecting $\vect{x} = (3,1)$ onto the direction $\vect{u} = (1,1)$. The closest point of
+the line $t\vect{u}$ is $\vect{p} = 2\vect{u} = (2,2)$; the residual $\vect{r}$ meets the line at a
+right angle. The grey segments go to two other points of the line, which are further away.}
+\label{fig:linalg:projection}
+\end{figure}
+
+\begin{worked}[label={we:linalg:proj2d}]{Projection in two dimensions}
+Take $\vect{x} = (3, 1)$ and $\vect{u} = (1, 1)$, as in \cref{fig:linalg:projection}. Do this on
+paper.
+\begin{align*}
+\vect{u}\T\vect{x} &= 1\times3 + 1\times1 = 3 + 1 = 4\\
+\vect{u}\T\vect{u} &= 1\times1 + 1\times1 = 2\\
+t^\star &= 4 / 2 = 2\\
+\vect{p} &= 2\,(1, 1) = (2, 2)\\
+\vect{r} &= (3, 1) - (2, 2) = (1, -1)\\
+\vect{u}\T\vect{r} &= 1\times1 + 1\times(-1) = 0 .
+\end{align*}
+The residual is orthogonal to $\vect{u}$, as promised. Check that $t^\star = 2$ really is the
+minimum by evaluating $f(t) = \norm{\vect{x}-t\vect{u}}^2$ at a few values of $t$:
+\begin{center}
+\begin{tabular}{cccc}
+\toprule
+$t$ & $\vect{x} - t\vect{u}$ & squares & $f(t)$\\
+\midrule
+1   & $(2, 0)$      & $4 + 0$         & 4\\
+1.5 & $(1.5, -0.5)$ & $2.25 + 0.25$   & 2.5\\
+2   & $(1, -1)$     & $1 + 1$         & 2\\
+2.5 & $(0.5, -1.5)$ & $0.25 + 2.25$   & 2.5\\
+3   & $(0, -2)$     & $0 + 4$         & 4\\
+\bottomrule
+\end{tabular}
+\end{center}
+The values fall to 2 at $t = 2$ and rise symmetrically on either side: a parabola with its
+bottom at $t^\star$. Finally, Pythagoras: $\norm{\vect{x}}^2 = 9 + 1 = 10$, and
+$\norm{\vect{p}}^2 + \norm{\vect{r}}^2 = (4 + 4) + (1 + 1) = 10$.
+\end{worked}
+
+\begin{worked}[label={we:linalg:proj3b}]{Projecting a pixel onto a reference spectrum}
+A reference spectrum has the shape $\vect{u} = (0.1, 0.2, 0.3)$. A pixel reads
+$\vect{x} = (0.12, 0.24, 0.30)$. How much of the pixel is ``the reference, scaled'', and what is
+left over? Compute the two dot products:
+\begin{align*}
+\vect{u}\T\vect{x} &= 0.1\times0.12 + 0.2\times0.24 + 0.3\times0.30
+  = 0.012 + 0.048 + 0.090 = 0.150\\
+\vect{u}\T\vect{u} &= 0.01 + 0.04 + 0.09 = 0.14 .
+\end{align*}
+The best multiple is
+\[
+t^\star = \frac{0.150}{0.14} = 1.0714 ,
+\]
+so the projection is
+\begin{align*}
+\vect{p} = 1.0714 \times (0.1, 0.2, 0.3)
+&= (0.10714,\ 0.21429,\ 0.32143)
+\end{align*}
+and the residual is
+\begin{align*}
+\vect{r} = \vect{x} - \vect{p}
+&= (0.12 - 0.10714,\ 0.24 - 0.21429,\ 0.30 - 0.32143)\\
+&= (0.01286,\ 0.02571,\ -0.02143).
+\end{align*}
+Check orthogonality:
+$0.1\times0.01286 + 0.2\times0.02571 + 0.3\times(-0.02143) = 0.001286 + 0.005143 - 0.006429 = 0$.
+The pixel is the reference at 107\% brightness, plus a small residual that is a little high in
+bands 1 and 2 and a little low in band 3. Its squared length,
+$0.01286^2 + 0.02571^2 + 0.02143^2 = 0.000165 + 0.000661 + 0.000459 = 0.001286$, is under 1\% of
+$\norm{\vect{x}}^2 = 0.0144 + 0.0576 + 0.09 = 0.162$: the pixel is almost entirely the
+reference shape.
+\end{worked}
+
+\begin{keypoint}
+Projection onto a unit vector is one dot product, and what it leaves behind is at right angles
+to the direction you projected on.
+\end{keypoint}
+
+\section{Matrices, the matrix-vector product and the transpose}\label{sec:linalg:matrices}
+
+\begin{definition}[Matrix]\index{matrix}
+A \emph{matrix} with $m$ rows and $n$ columns is a rectangular table of numbers; $A_{ij}$ is the
+entry in row $i$, column $j$. A vector of length $n$ is a matrix with $n$ rows and one column.
+\end{definition}
+
+\subsection{Matrix times vector}
+
+\begin{definition}[Matrix-vector product]\index{matrix-vector product}
+For an $m \times n$ matrix $\mat{A}$ and a vector $\vect{x}$ of length $n$, the product
+$\vect{y} = \mat{A}\vect{x}$ is the vector of length $m$ with
+\begin{equation}\label{eq:linalg:matvec}
+y_i = \sum_{j=1}^{n} A_{ij}\,x_j = (\text{row $i$ of } \mat{A})\T\vect{x}.
+\end{equation}
+\end{definition}
+
+Read \cref{eq:linalg:matvec} in two ways. Row by row, each output entry is the dot product of
+one row of $\mat{A}$ with $\vect{x}$, so each output is a weighted mixture of all the inputs with
+its own weights. If the rows of $\mat{A}$ are unit vectors, the outputs are the coordinates of
+$\vect{x}$ along those directions (\cref{sec:linalg:projection}); this is exactly how a
+pixel is turned onto its principal directions later in the chapter.
+
+\begin{worked}[label={we:linalg:matvec}]{A matrix times a vector}
+Let
+$\mat{A} = \begin{pmatrix} 1 & 2 \\ 3 & 4 \end{pmatrix}$ and
+$\vect{v} = \begin{pmatrix} 1 \\ -1 \end{pmatrix}$.
+\begin{align*}
+y_1 &= (\text{row 1})\T\vect{v} = 1\times1 + 2\times(-1) = 1 - 2 = -1\\
+y_2 &= (\text{row 2})\T\vect{v} = 3\times1 + 4\times(-1) = 3 - 4 = -1
+\end{align*}
+so $\mat{A}\vect{v} = (-1, -1)$.
+\end{worked}
+
+\subsection{Matrix times matrix}
+
+\begin{definition}[Matrix product]\index{matrix product}
+For an $m \times n$ matrix $\mat{A}$ and an $n \times p$ matrix $\mat{B}$, the product
+$\mat{A}\mat{B}$ is the $m \times p$ matrix with
+\[
+(\mat{A}\mat{B})_{ik} = \sum_{j=1}^{n} A_{ij} B_{jk}
+= (\text{row $i$ of } \mat{A})\T(\text{column $k$ of } \mat{B}).
+\]
+The inner sizes must agree ($n$ and $n$). Applying $\mat{A}\mat{B}$ to a vector is the same as
+applying $\mat{B}$ first and then $\mat{A}$: $(\mat{A}\mat{B})\vect{x} = \mat{A}(\mat{B}\vect{x})$.
+\end{definition}
+
+\begin{definition}[Transpose]\index{transpose}
+The \emph{transpose} $\mat{A}\T$ of an $m\times n$ matrix is the $n\times m$ matrix with the rows
+and columns swapped: $(\mat{A}\T)_{ij} = A_{ji}$. A column vector transposed is a row vector,
+which is why $\vect{a}\T\vect{b}$ (a row times a column) is the dot product. A matrix equal to its
+own transpose, $\mat{S}\T = \mat{S}$, is \emph{symmetric}\index{symmetric matrix}.
+\end{definition}
+
+The rule you will use constantly is that transposing a product reverses the order:
+\begin{equation}\label{eq:linalg:abt}
+(\mat{A}\mat{B})\T = \mat{B}\T\mat{A}\T .
+\end{equation}
+The proof is one line of index juggling. Entry $(i,k)$ of the left side is entry $(k,i)$ of
+$\mat{A}\mat{B}$, which is $\sum_j A_{kj}B_{ji}$. Entry $(i,k)$ of the right side is
+$\sum_j (\mat{B}\T)_{ij}(\mat{A}\T)_{jk} = \sum_j B_{ji}A_{kj}$. The two sums contain the same
+products, so they are equal. Order matters because matrix products do not commute in general:
+$\mat{A}\mat{B} \neq \mat{B}\mat{A}$.
+
+\begin{worked}[label={we:linalg:abt}]{The transpose of a product, on $2\times2$ matrices}
+Let $\mat{A} = \begin{pmatrix} 1 & 2 \\ 3 & 4 \end{pmatrix}$ and
+$\mat{B} = \begin{pmatrix} 0 & 1 \\ 5 & 2 \end{pmatrix}$. Do this on paper.
+First $\mat{A}\mat{B}$, entry by entry (row of $\mat{A}$ with column of $\mat{B}$):
+\begin{align*}
+(1,1):&\quad 1\times0 + 2\times5 = 0 + 10 = 10\\
+(1,2):&\quad 1\times1 + 2\times2 = 1 + 4 = 5\\
+(2,1):&\quad 3\times0 + 4\times5 = 0 + 20 = 20\\
+(2,2):&\quad 3\times1 + 4\times2 = 3 + 8 = 11
+\end{align*}
+so $\mat{A}\mat{B} = \begin{pmatrix} 10 & 5 \\ 20 & 11 \end{pmatrix}$ and
+$(\mat{A}\mat{B})\T = \begin{pmatrix} 10 & 20 \\ 5 & 11 \end{pmatrix}$.
+Now $\mat{B}\T = \begin{pmatrix} 0 & 5 \\ 1 & 2 \end{pmatrix}$ and
+$\mat{A}\T = \begin{pmatrix} 1 & 3 \\ 2 & 4 \end{pmatrix}$, and
+\begin{align*}
+(1,1):&\quad 0\times1 + 5\times2 = 0 + 10 = 10\\
+(1,2):&\quad 0\times3 + 5\times4 = 0 + 20 = 20\\
+(2,1):&\quad 1\times1 + 2\times2 = 1 + 4 = 5\\
+(2,2):&\quad 1\times3 + 2\times4 = 3 + 8 = 11
+\end{align*}
+so $\mat{B}\T\mat{A}\T = \begin{pmatrix} 10 & 20 \\ 5 & 11 \end{pmatrix}$, equal to
+$(\mat{A}\mat{B})\T$. The wrong order gives something else:
+$\mat{A}\T\mat{B}\T = \begin{pmatrix} 1\times0+3\times1 & 1\times5+3\times2 \\
+2\times0+4\times1 & 2\times5+4\times2 \end{pmatrix} = \begin{pmatrix} 3 & 11 \\ 4 & 18
+\end{pmatrix}$.
+\end{worked}
+
+\subsection{The identity and the inverse}
+
+The \emph{identity matrix}\index{identity matrix} $\mat{I}$ has ones on the diagonal and zeros
+elsewhere; $\mat{I}\vect{x} = \vect{x}$ for every $\vect{x}$. A square matrix $\mat{A}$ is
+\emph{invertible} if there is a matrix $\mat{A}\inv$ with $\mat{A}\mat{A}\inv = \mat{A}\inv\mat{A}
+= \mat{I}$. The inverse undoes the matrix: if $\vect{y} = \mat{A}\vect{x}$ then
+$\vect{x} = \mat{A}\inv\vect{y}$.
+
+\begin{definition}[Inverse of a $2\times2$ matrix]\index{inverse!of a 2x2 matrix}
+For $\mat{A} = \begin{pmatrix} a & b \\ c & d \end{pmatrix}$ with \emph{determinant}
+$\det\mat{A} = ad - bc \neq 0$,
+\begin{equation}\label{eq:linalg:inv2}
+\mat{A}\inv = \frac{1}{ad - bc}\begin{pmatrix} d & -b \\ -c & a \end{pmatrix}.
+\end{equation}
+\end{definition}
+
+You do not need to memorise a derivation; you need to be able to check it. Multiply:
+\[
+\begin{pmatrix} a & b \\ c & d \end{pmatrix}\begin{pmatrix} d & -b \\ -c & a \end{pmatrix}
+= \begin{pmatrix} ad - bc & -ab + ba \\ cd - dc & -cb + da \end{pmatrix}
+= \begin{pmatrix} ad - bc & 0 \\ 0 & ad - bc \end{pmatrix}
+= (ad - bc)\,\mat{I}.
+\]
+Dividing by $ad - bc$ gives $\mat{I}$. The recipe is: swap the diagonal, negate the
+off-diagonal, divide by the determinant. When the determinant is zero there is no inverse: the
+matrix squashes some direction flat and nothing can undo that. When the determinant is
+\emph{nearly} zero, the inverse exists but contains huge numbers. \Cref{ch:rx} is in part a
+chapter about that second case.\index{determinant}
+
+\begin{worked}[label={we:linalg:inv}]{Inverting a $2\times2$ matrix by hand}
+Take $\mat{S} = \begin{pmatrix} 2 & 3 \\ 3 & 10 \end{pmatrix}$, which is the covariance matrix
+you will build in \cref{we:linalg:cov}.
+\begin{align*}
+\det\mat{S} &= 2\times10 - 3\times3 = 20 - 9 = 11\\
+\mat{S}\inv &= \frac{1}{11}\begin{pmatrix} 10 & -3 \\ -3 & 2 \end{pmatrix}
+= \begin{pmatrix} 0.9091 & -0.2727 \\ -0.2727 & 0.1818 \end{pmatrix}.
+\end{align*}
+Check the first column of $\mat{S}\mat{S}\inv$ (using the fractions, not the decimals):
+$\tfrac{1}{11}(2\times10 + 3\times(-3)) = \tfrac{1}{11}(20 - 9) = 1$ and
+$\tfrac{1}{11}(3\times10 + 10\times(-3)) = \tfrac{1}{11}(30 - 30) = 0$. Do the second column
+yourself; you should get 0 and 1.
+\end{worked}
+
+\section{Mean, centring and the covariance matrix}\label{sec:linalg:covariance}
+
+Now the statistics. Suppose a scene has $N$ valid pixels with spectra
+$\vect{x}_1, \dots, \vect{x}_N$, each in $\R^C$.
+
+\begin{definition}[Mean vector]\index{mean vector}
+The \emph{mean} spectrum is the band-by-band average
+\begin{equation}\label{eq:linalg:mean}
+\muv = \frac{1}{N}\sum_{n=1}^{N}\vect{x}_n .
+\end{equation}
+\end{definition}
+
+\begin{definition}[Centring]\index{centring}
+\emph{Centring} subtracts the mean from every pixel: $\vect{d}_n = \vect{x}_n - \muv$. The
+centred vectors (\emph{deviations}) always add to the zero vector, because
+$\sum_n \vect{d}_n = \sum_n\vect{x}_n - N\muv = N\muv - N\muv = \vect{0}$.
+\end{definition}
+
+The \emph{variance}\index{variance} of one band is the average squared deviation in that band.
+The \emph{covariance}\index{covariance} of two bands $i$ and $j$ is the average of the product of
+their deviations, $d_{n,i}\,d_{n,j}$. When the two bands tend to be above their means together and
+below together, most products are positive and the covariance is positive; when one tends to be
+up while the other is down, it is negative; when they are unrelated, positive and negative
+products cancel and it is near zero. The variance is the covariance of a band with itself.
+
+All $C^2$ of these numbers fit into one matrix, and the neat way to build it is from
+\emph{outer products}.
+
+\begin{definition}[Outer product]\index{outer product}
+For a column vector $\vect{d}$ of length $C$, the outer product $\vect{d}\vect{d}\T$ is the
+$C \times C$ matrix whose entry $(i,j)$ is $d_i d_j$. (Compare the dot product $\vect{d}\T\vect{d}$,
+a single number: the same symbols in the other order.)
+\end{definition}
+
+Entry $(i,j)$ of $\vect{d}_n\vect{d}_n\T$ is exactly the product $d_{n,i}d_{n,j}$ that the
+covariance of bands $i$ and $j$ averages. So averaging the outer products averages every
+pairwise product at once:
+
+\begin{definition}[Covariance matrix]\index{covariance matrix}
+The (sample) \emph{covariance matrix} of the pixels is
+\begin{equation}\label{eq:linalg:cov}
+\Cov = \frac{1}{N-1}\sum_{n=1}^{N} (\vect{x}_n - \muv)(\vect{x}_n - \muv)\T
+     = \frac{1}{N-1}\sum_{n=1}^{N} \vect{d}_n\vect{d}_n\T .
+\end{equation}
+Its diagonal holds the band variances; entry $(i,j)$ off the diagonal holds the covariance of
+bands $i$ and $j$. Because $d_i d_j = d_j d_i$, it is symmetric.
+\end{definition}
+
+Why $N-1$ and not $N$? The deviations are measured from the sample's own mean, which sits a
+little closer to the sample than the true mean does, so the average squared deviation slightly
+underestimates the true spread. Dividing by $N-1$ instead of $N$ corrects that on average. The
+deeper reason, which \cref{ch:localrx} needs, is that the $N$ deviations add up to zero, so only
+$N-1$ of them are free. With millions of pixels the difference between the two divisors is
+negligible; with a handful it is not, and you must know which one the code uses.
+
+\begin{sourcenote}[: which divisor the code uses]
+\code{np.cov} divides by $N-1$, and every multi-band detector in this book computes its
+covariance that way: the \code{spectral} library behind \code{spectral.rx} calls \code{np.cov}
+on array input (\file{spectral/algorithms/algorithms.py}, function \code{mean_cov}, version 0.23.1),
+\code{app/detectors/_local_background.py} line 68 divides by \code{counts_f - 1}, and
+\code{app/utils/anomaly_detection/residual_mahalanobis.py} line 44 calls \code{np.cov}. The one
+exception is the single-band thermal detector,
+\code{app/detectors/thermal_grx_detector.py} line 100, which uses \code{vals.var()}, numpy's
+default divisor $N$. On a scene of millions of pixels the two agree to many digits.
+\end{sourcenote}
+
+\begin{worked}[label={we:linalg:cov}]{A covariance matrix from four pixels and two bands}
+Four pixels, two bands, reflectance in percent. Do every line on paper.
+\begin{center}
+\begin{tabular}{ccc}
+\toprule
+pixel & band 1 & band 2\\
+\midrule
+1 & 8  & 18\\
+2 & 10 & 17\\
+3 & 11 & 24\\
+4 & 11 & 21\\
+\bottomrule
+\end{tabular}
+\end{center}
+\textbf{Step 1, the mean.}
+\begin{align*}
+\mu_1 &= (8 + 10 + 11 + 11)/4 = 40/4 = 10\\
+\mu_2 &= (18 + 17 + 24 + 21)/4 = 80/4 = 20 .
+\end{align*}
+\textbf{Step 2, centre.} Subtract $(10, 20)$ from each pixel:
+\begin{align*}
+\vect{d}_1 &= (8-10,\ 18-20) = (-2, -2)\\
+\vect{d}_2 &= (10-10,\ 17-20) = (0, -3)\\
+\vect{d}_3 &= (11-10,\ 24-20) = (1, 4)\\
+\vect{d}_4 &= (11-10,\ 21-20) = (1, 1).
+\end{align*}
+Check that they add to zero: band 1, $-2 + 0 + 1 + 1 = 0$; band 2, $-2 - 3 + 4 + 1 = 0$.
+
+\textbf{Step 3, the outer products.} Entry $(i,j)$ is $d_i d_j$:
+\begin{align*}
+\vect{d}_1\vect{d}_1\T &= \begin{pmatrix} (-2)(-2) & (-2)(-2) \\ (-2)(-2) & (-2)(-2)\end{pmatrix}
+  = \begin{pmatrix} 4 & 4 \\ 4 & 4 \end{pmatrix}\\
+\vect{d}_2\vect{d}_2\T &= \begin{pmatrix} 0\times0 & 0\times(-3) \\ (-3)\times0 & (-3)(-3)\end{pmatrix}
+  = \begin{pmatrix} 0 & 0 \\ 0 & 9 \end{pmatrix}\\
+\vect{d}_3\vect{d}_3\T &= \begin{pmatrix} 1\times1 & 1\times4 \\ 4\times1 & 4\times4\end{pmatrix}
+  = \begin{pmatrix} 1 & 4 \\ 4 & 16 \end{pmatrix}\\
+\vect{d}_4\vect{d}_4\T &= \begin{pmatrix} 1\times1 & 1\times1 \\ 1\times1 & 1\times1\end{pmatrix}
+  = \begin{pmatrix} 1 & 1 \\ 1 & 1 \end{pmatrix}.
+\end{align*}
+\textbf{Step 4, add them} entry by entry:
+\begin{align*}
+(1,1):&\quad 4 + 0 + 1 + 1 = 6\\
+(1,2) = (2,1):&\quad 4 + 0 + 4 + 1 = 9\\
+(2,2):&\quad 4 + 9 + 16 + 1 = 30 .
+\end{align*}
+\textbf{Step 5, divide by $N - 1 = 3$:}
+\[
+\Cov = \frac{1}{3}\begin{pmatrix} 6 & 9 \\ 9 & 30 \end{pmatrix}
+     = \begin{pmatrix} 2 & 3 \\ 3 & 10 \end{pmatrix}.
+\]
+Read it: band 1 has variance 2 (spread $\sqrt2 = 1.41$), band 2 has variance 10 (spread
+$\sqrt{10} = 3.16$), and their covariance is $+3$: they tend to rise and fall together. The
+\emph{correlation}\index{correlation}, the covariance divided by both spreads, is
+$3/(\sqrt2\times\sqrt{10}) = 3/4.472 = 0.67$. Had you divided by $N = 4$ you would have got
+$\begin{pmatrix} 1.5 & 2.25 \\ 2.25 & 7.5\end{pmatrix}$, smaller by the factor $3/4$.
+\end{worked}
+
+In matrix form the whole calculation is one line. Stack the centred pixels as the rows of an
+$N \times C$ matrix $\mat{D}$. Then $\mat{D}\T\mat{D}$ is $C\times C$, and its entry $(i,j)$ is
+$\sum_n d_{n,i}d_{n,j}$: exactly the sum of outer products. So
+\begin{equation}\label{eq:linalg:covmat}
+\Cov = \frac{1}{N-1}\,\mat{D}\T\mat{D}.
+\end{equation}
+This is the line \code{cov = dX.transpose(-1, -2) @ dX} in
+\code{app/detectors/_local_background.py}, done for a whole batch of pixels at once.
+
+\subsection{How a linear map changes the covariance}
+
+Almost everything in the rest of Part II transforms the pixels by a matrix and asks what
+happens to their mean and covariance. The answer is short and worth deriving once. Let
+$\vect{y}_n = \mat{A}\vect{x}_n$ for a fixed matrix $\mat{A}$.
+
+The mean of the $\vect{y}$'s is $\mat{A}\muv$, because a matrix product distributes over the sum:
+$\frac1N\sum_n\mat{A}\vect{x}_n = \mat{A}\,\frac1N\sum_n\vect{x}_n$. So the deviations are
+$\vect{y}_n - \mat{A}\muv = \mat{A}\vect{d}_n$, and
+\begin{align}
+\Cov_y &= \frac{1}{N-1}\sum_n (\mat{A}\vect{d}_n)(\mat{A}\vect{d}_n)\T
+  && \text{definition, \cref{eq:linalg:cov}} \notag\\
+&= \frac{1}{N-1}\sum_n \mat{A}\vect{d}_n\vect{d}_n\T\mat{A}\T
+  && \text{transpose of a product, \cref{eq:linalg:abt}} \notag\\
+&= \mat{A}\left(\frac{1}{N-1}\sum_n \vect{d}_n\vect{d}_n\T\right)\mat{A}\T
+  && \text{$\mat{A}$ is the same in every term; factor it out} \notag\\
+&= \mat{A}\,\Cov\,\mat{A}\T . \label{eq:linalg:covtransform}
+\end{align}
+
+\begin{keypoint}
+If $\vect{y} = \mat{A}\vect{x}$, then $\Cov_y = \mat{A}\Cov\mat{A}\T$.
+\end{keypoint}
+
+A special case is a single direction. Take $\mat{A}$ to be one row, $\vect{u}\T$ with $\vect{u}$ a
+unit vector. Then $y_n = \vect{u}\T\vect{x}_n$ is the coordinate of each pixel along $\vect{u}$,
+and its variance is the $1\times1$ matrix
+\begin{equation}\label{eq:linalg:dirvar}
+\operatorname{Var}(\vect{u}\T\vect{x}) = \vect{u}\T\Cov\,\vect{u}.
+\end{equation}
+The covariance matrix therefore knows the spread of the cloud in \emph{every} direction, not only
+along the band axes. For the matrix of \cref{we:linalg:cov} and $\vect{u} = (1, 0)$ you get
+$\vect{u}\T\Cov\vect{u} = \Sigma_{11} = 2$, the variance of band 1. For the diagonal
+$\vect{u} = (1, 1)/\sqrt2$:
+\[
+\vect{u}\T\Cov\vect{u} = \tfrac12\,(1, 1)\begin{pmatrix} 2 & 3\\ 3 & 10\end{pmatrix}
+\begin{pmatrix}1\\1\end{pmatrix} = \tfrac12\,(1, 1)\begin{pmatrix} 5\\ 13\end{pmatrix}
+= \tfrac12\,(5 + 13) = 9 .
+\]
+Along the diagonal the cloud spreads more than along either axis. Which direction spreads the
+most? That is the question eigenvectors answer.
+
+\section{Eigenvalues and eigenvectors}\label{sec:linalg:eigen}
+
+\begin{definition}[Eigenvector and eigenvalue]\index{eigenvector}\index{eigenvalue}
+A non-zero vector $\vect{u}$ is an \emph{eigenvector} of a square matrix $\mat{S}$, with
+\emph{eigenvalue} $\lambda$, if
+\begin{equation}\label{eq:linalg:eig}
+\mat{S}\vect{u} = \lambda\vect{u}.
+\end{equation}
+The matrix does not turn an eigenvector; it only stretches it by $\lambda$.
+\end{definition}
+
+Most vectors are turned by a matrix. For $\mat{S} = \begin{pmatrix} 2 & 3\\ 3 & 10\end{pmatrix}$,
+the vector $(1, 0)$ goes to $(2, 3)$, a different direction. We want the special directions that
+are only stretched.
+
+\subsection{Finding them by hand: the characteristic polynomial}
+
+Rewrite \cref{eq:linalg:eig} as $\mat{S}\vect{u} - \lambda\vect{u} = \vect{0}$, that is
+$(\mat{S} - \lambda\mat{I})\vect{u} = \vect{0}$. A non-zero $\vect{u}$ is sent to zero, so the
+matrix $\mat{S} - \lambda\mat{I}$ squashes a direction flat, and (\cref{eq:linalg:inv2}) its
+determinant must be zero. For a $2\times2$ matrix
+$\mat{S} = \begin{pmatrix} a & b\\ b & c\end{pmatrix}$ (symmetric: both off-diagonal entries are
+$b$):
+\begin{align}
+\det(\mat{S} - \lambda\mat{I}) &= (a - \lambda)(c - \lambda) - b^2 \notag\\
+&= \lambda^2 - (a + c)\lambda + (ac - b^2) = 0 .
+  \label{eq:linalg:charpoly}
+\end{align}
+This quadratic is the \emph{characteristic polynomial}\index{characteristic polynomial}. Its
+coefficients are the \emph{trace} $a + c$ (the sum of the diagonal) and the determinant
+$ac - b^2$. Its two roots are the eigenvalues:
+\begin{equation}\label{eq:linalg:eig2}
+\lambda_{1,2} = \frac{(a + c) \pm \sqrt{(a - c)^2 + 4b^2}}{2}.
+\end{equation}
+(Expand $(a+c)^2 - 4(ac - b^2) = a^2 - 2ac + c^2 + 4b^2 = (a-c)^2 + 4b^2$ to get the square root.)
+The quantity under the root is a sum of squares, so it is never negative: a symmetric
+$2\times2$ matrix always has two real eigenvalues. For each eigenvalue, the first row of
+$(\mat{S} - \lambda\mat{I})\vect{u} = \vect{0}$, namely $(a - \lambda)u_1 + b u_2 = 0$, gives the
+direction.
+
+\begin{worked}[label={we:linalg:eig}]{Eigenvalues and eigenvectors of the covariance matrix}
+For $\Cov = \begin{pmatrix} 2 & 3\\ 3 & 10\end{pmatrix}$: trace $2 + 10 = 12$, determinant
+$2\times10 - 3\times3 = 11$. The characteristic polynomial is
+\[
+\lambda^2 - 12\lambda + 11 = 0 .
+\]
+It factorises: $(\lambda - 11)(\lambda - 1) = \lambda^2 - 11\lambda - \lambda + 11 = \lambda^2 -
+12\lambda + 11$. So $\lambda_1 = 11$ and $\lambda_2 = 1$. (The formula agrees:
+$\sqrt{(2-10)^2 + 4\times9} = \sqrt{64 + 36} = 10$, and $(12 \pm 10)/2 = 11$ or $1$.)
+
+\textbf{Eigenvector for $\lambda_1 = 11$.} The first row gives
+$(2 - 11)u_1 + 3u_2 = 0$, so $-9u_1 + 3u_2 = 0$, so $u_2 = 3u_1$. Take $(1, 3)$, length
+$\sqrt{1 + 9} = \sqrt{10}$, and divide: $\vect{u}_1 = (1, 3)/\sqrt{10} = (0.3162, 0.9487)$.
+Check without the scaling: $\Cov\,(1, 3) = (2\times1 + 3\times3,\ 3\times1 + 10\times3) = (11, 33)
+= 11\times(1, 3)$.
+
+\textbf{Eigenvector for $\lambda_2 = 1$.} $(2 - 1)u_1 + 3u_2 = 0$, so $u_1 = -3u_2$. Take
+$(3, -1)$ and divide by $\sqrt{10}$: $\vect{u}_2 = (3, -1)/\sqrt{10} = (0.9487, -0.3162)$.
+Check: $\Cov\,(3, -1) = (6 - 3,\ 9 - 10) = (3, -1) = 1\times(3, -1)$.
+
+The two eigenvectors are orthogonal: $(1, 3)\T(3, -1) = 3 - 3 = 0$.
+\end{worked}
+
+The orthogonality is not luck. For any symmetric $\mat{S}$, take eigenvectors $\vect{u}$ and
+$\vect{v}$ with different eigenvalues $\lambda \ne \nu$. Compute $\vect{v}\T\mat{S}\vect{u}$ two
+ways: as $\vect{v}\T(\lambda\vect{u}) = \lambda\,\vect{v}\T\vect{u}$, and, using
+$\mat{S}\T = \mat{S}$ and \cref{eq:linalg:abt}, as $(\mat{S}\vect{v})\T\vect{u} =
+\nu\,\vect{v}\T\vect{u}$. So $(\lambda - \nu)\,\vect{v}\T\vect{u} = 0$, and since
+$\lambda \ne \nu$ the dot product must be zero.
+
+\subsection{The spectral theorem}
+
+\begin{definition}[Spectral theorem for symmetric matrices]\index{spectral theorem}
+Every real symmetric $C\times C$ matrix $\mat{S}$ has $C$ real eigenvalues
+$\lambda_1 \ge \lambda_2 \ge \cdots \ge \lambda_C$ and a matching set of $C$ orthogonal unit
+eigenvectors $\vect{u}_1, \dots, \vect{u}_C$. Put the eigenvectors as the columns of
+$\mat{U}$ and the eigenvalues on the diagonal of $\mat{\Lambda} = \diag(\lambda_1, \dots,
+\lambda_C)$. Then
+\begin{equation}\label{eq:linalg:spectral}
+\mat{U}\T\mat{U} = \mat{I}
+\qquad\text{and}\qquad
+\mat{S} = \mat{U}\mat{\Lambda}\mat{U}\T = \sum_{k=1}^{C}\lambda_k\,\vect{u}_k\vect{u}_k\T .
+\end{equation}
+A square matrix with $\mat{U}\T\mat{U} = \mat{I}$ is \emph{orthogonal}\index{orthogonal matrix}:
+it only rotates (or reflects), never stretches, and its inverse is its transpose.
+\end{definition}
+
+We prove the two-by-two case by multiplication in the worked example below and take the general
+case on trust; it is proved in every linear algebra text. The decomposition is what
+\code{np.linalg.eigh} computes; the \code{h} stands for Hermitian, the complex-number word for
+symmetric. It returns the eigenvalues in \emph{ascending} order, which is why every piece of code
+in this repository that uses it reverses the order with \code{np.argsort(evals)[::-1]}.
+
+A covariance matrix has one more property: its eigenvalues are never negative. By
+\cref{eq:linalg:dirvar}, $\lambda_k = \vect{u}_k\T\Cov\vect{u}_k$ is the variance of the pixels
+along $\vect{u}_k$, and a variance is an average of squares. A matrix with all eigenvalues
+$\ge 0$ is \emph{positive semi-definite}\index{positive semi-definite}; if all are $>0$ it is
+\emph{positive definite} and invertible.
+
+\begin{worked}[label={we:linalg:spectral}]{Rebuilding the covariance from its eigenvectors}
+With $\vect{u}_1 = (1, 3)/\sqrt{10}$, $\vect{u}_2 = (3, -1)/\sqrt{10}$, $\lambda_1 = 11$,
+$\lambda_2 = 1$, use the sum form of \cref{eq:linalg:spectral}. The outer products are
+\[
+\vect{u}_1\vect{u}_1\T = \frac{1}{10}\begin{pmatrix} 1 & 3\\ 3 & 9\end{pmatrix},
+\qquad
+\vect{u}_2\vect{u}_2\T = \frac{1}{10}\begin{pmatrix} 9 & -3\\ -3 & 1\end{pmatrix}.
+\]
+Weight them by the eigenvalues and add:
+\[
+11\times\frac{1}{10}\begin{pmatrix} 1 & 3\\ 3 & 9\end{pmatrix}
++ 1\times\frac{1}{10}\begin{pmatrix} 9 & -3\\ -3 & 1\end{pmatrix}
+= \frac{1}{10}\begin{pmatrix} 11 + 9 & 33 - 3\\ 33 - 3 & 99 + 1\end{pmatrix}
+= \frac{1}{10}\begin{pmatrix} 20 & 30\\ 30 & 100\end{pmatrix}
+= \begin{pmatrix} 2 & 3\\ 3 & 10\end{pmatrix}.
+\]
+The covariance is back. Read the sum form as a statement about the cloud: it is the sum of a
+spread of 11 along $\vect{u}_1$ and a spread of 1 along $\vect{u}_2$, and nothing else.
+\end{worked}
+
+\section{Principal component analysis}\label{sec:linalg:pca}
+
+\subsection{PCA as variance maximisation}
+
+\emph{Principal component analysis}\index{principal component analysis} (PCA) asks: along which
+unit direction $\vect{u}$ do the pixels spread the most? By \cref{eq:linalg:dirvar} the spread
+along $\vect{u}$ is $\vect{u}\T\Cov\vect{u}$, so the question is the constrained maximisation
+\begin{equation}\label{eq:linalg:pcaproblem}
+\max_{\vect{u}}\ \vect{u}\T\Cov\vect{u}
+\qquad\text{subject to}\qquad \vect{u}\T\vect{u} = 1 .
+\end{equation}
+The constraint matters: without it you could make $\vect{u}\T\Cov\vect{u}$ as large as you like by
+making $\vect{u}$ long.
+
+The standard tool for maximising under a constraint is a \emph{Lagrange
+multiplier}\index{Lagrange multiplier}. The idea in one sentence: at the best point you cannot
+increase the objective by moving along the constraint, so the objective's gradient must point
+straight out of the constraint surface, which means it is a multiple $\lambda$ of the constraint's
+gradient. Formally, build
+\[
+L(\vect{u}, \lambda) = \vect{u}\T\Cov\vect{u} - \lambda\,(\vect{u}\T\vect{u} - 1)
+\]
+and set its derivatives with respect to every entry of $\vect{u}$ to zero.
+
+We need the derivative of a quadratic form. Work it out on two bands first. With
+$\Cov = \begin{pmatrix} a & b\\ b & c\end{pmatrix}$ and $\vect{u} = (u_1, u_2)$, multiplying out
+gives
+\[
+\vect{u}\T\Cov\vect{u} = a u_1^2 + 2b\,u_1u_2 + c u_2^2 .
+\]
+Differentiate with respect to $u_1$ (treat $u_2$ as a constant) and with respect to $u_2$:
+\begin{align*}
+\frac{\partial}{\partial u_1}\left(a u_1^2 + 2bu_1u_2 + cu_2^2\right) &= 2au_1 + 2bu_2,\\
+\frac{\partial}{\partial u_2}\left(a u_1^2 + 2bu_1u_2 + cu_2^2\right) &= 2bu_1 + 2cu_2 .
+\end{align*}
+Stacked, these are $2\begin{pmatrix} a & b\\ b & c\end{pmatrix}\begin{pmatrix}u_1\\u_2\end{pmatrix}
+= 2\Cov\vect{u}$. The same holds in any number of dimensions for a symmetric matrix: the gradient
+of $\vect{u}\T\Cov\vect{u}$ is $2\Cov\vect{u}$. With $\Cov = \mat{I}$ it says the gradient of
+$\vect{u}\T\vect{u}$ is $2\vect{u}$.
+
+Now set the gradient of $L$ to zero:
+\begin{align}
+2\Cov\vect{u} - 2\lambda\vect{u} &= \vect{0}
+  && \text{gradient of each term} \notag\\
+\Cov\vect{u} &= \lambda\vect{u}
+  && \text{add $2\lambda\vect{u}$, divide by 2.} \label{eq:linalg:pcaeig}
+\end{align}
+The best direction is an eigenvector of $\Cov$. Which one? Multiply \cref{eq:linalg:pcaeig} on the
+left by $\vect{u}\T$ and use $\vect{u}\T\vect{u} = 1$:
+\[
+\vect{u}\T\Cov\vect{u} = \lambda\,\vect{u}\T\vect{u} = \lambda .
+\]
+The variance along an eigenvector is its eigenvalue, so the maximum is reached at the eigenvector
+with the \emph{largest} eigenvalue. That eigenvector is the \emph{first principal
+direction}\index{principal direction}, and the coordinate of a pixel along it,
+$\vect{u}_1\T(\vect{x} - \muv)$, is its \emph{first principal component}.
+
+The second principal direction maximises the variance among unit directions orthogonal to the
+first. Repeating the argument with a second multiplier for the constraint
+$\vect{u}\T\vect{u}_1 = 0$ gives the eigenvector with the second-largest eigenvalue, and so on: the
+principal directions are the eigenvectors of $\Cov$, in order of decreasing eigenvalue.
+
+\begin{worked}[label={we:linalg:pcacheck}]{Checking that the first principal direction wins}
+For the covariance of \cref{we:linalg:cov}, compute the spread
+$\vect{u}\T\Cov\vect{u} = 2u_1^2 + 6u_1u_2 + 10u_2^2$ along unit directions at a few angles
+$\phi$ from the band-1 axis, $\vect{u} = (\cos\phi, \sin\phi)$:
+\begin{center}
+\begin{tabular}{cccc}
+\toprule
+$\phi$ & $\vect{u}$ & $2u_1^2 + 6u_1u_2 + 10u_2^2$ & spread\\
+\midrule
+$0^\circ$  & $(1, 0)$          & $2 + 0 + 0$                 & 2.0\\
+$45^\circ$ & $(0.7071, 0.7071)$ & $1 + 3 + 5$                & 9.0\\
+$71.57^\circ$ & $(0.3162, 0.9487)$ & $0.2 + 1.8 + 9$       & 11.0\\
+$90^\circ$ & $(0, 1)$          & $0 + 0 + 10$                & 10.0\\
+$135^\circ$ & $(-0.7071, 0.7071)$ & $1 - 3 + 5$              & 3.0\\
+\bottomrule
+\end{tabular}
+\end{center}
+The line for $71.57^\circ$ is $\vect{u}_1 = (1,3)/\sqrt{10}$ (its angle is $\arctan 3$): there
+$2\times0.1 = 0.2$, $6\times0.3 = 1.8$ and $10\times0.9 = 9$, using $u_1^2 = 0.1$,
+$u_1u_2 = 0.3$, $u_2^2 = 0.9$. No direction beats 11, the largest eigenvalue, and the smallest
+possible spread is the other eigenvalue, 1, at $\vect{u}_2$ (angle $-18.43^\circ$).
+\end{worked}
+
+\subsection{Explained variance}
+
+Because $\mat{U}$ only rotates, the total variance is the same in the rotated coordinates as in
+the bands: it is the trace, $\tr\Cov = \sum_i \Sigma_{ii} = \sum_k\lambda_k$. (For the example,
+$2 + 10 = 12 = 11 + 1$.) The share carried by component $k$ is its \emph{explained variance
+ratio}\index{explained variance ratio}
+\begin{equation}\label{eq:linalg:evr}
+\rho_k = \frac{\lambda_k}{\lambda_1 + \lambda_2 + \cdots + \lambda_C}.
+\end{equation}
+In the example $\rho_1 = 11/12 = 0.917$ and $\rho_2 = 1/12 = 0.083$: one direction carries 92\%
+of the spread. Real hyperspectral scenes are far more extreme, because neighbouring bands of a
+165-band spectrum are nearly copies of each other; a few components carry almost all the
+variance and the remaining hundred-odd carry almost none. Keep that sentence in mind: it is the
+whole of \cref{ch:rx}'s numerical problem.
+
+\begin{worked}[label={we:linalg:pcacoords}]{Turning the four pixels onto their principal directions}
+The principal components of each centred pixel are its dot products with $\vect{u}_1$ and
+$\vect{u}_2$. Working with $\sqrt{10}\,\vect{u}_1 = (1, 3)$ and $\sqrt{10}\,\vect{u}_2 = (3, -1)$
+keeps integers; divide by $\sqrt{10}$ at the end.
+\begin{center}
+\begin{tabular}{cccc}
+\toprule
+pixel & $\vect{d}$ & $(1,3)\T\vect{d}$ & $(3,-1)\T\vect{d}$\\
+\midrule
+1 & $(-2, -2)$ & $-2 - 6 = -8$  & $-6 + 2 = -4$\\
+2 & $(0, -3)$  & $0 - 9 = -9$   & $0 + 3 = 3$\\
+3 & $(1, 4)$   & $1 + 12 = 13$  & $3 - 4 = -1$\\
+4 & $(1, 1)$   & $1 + 3 = 4$    & $3 - 1 = 2$\\
+\bottomrule
+\end{tabular}
+\end{center}
+Variance of the first component (the mean is $(-8-9+13+4)/\sqrt{10} = 0$):
+\[
+\frac{1}{3}\cdot\frac{(-8)^2 + (-9)^2 + 13^2 + 4^2}{10}
+= \frac{1}{3}\cdot\frac{64 + 81 + 169 + 16}{10} = \frac{1}{3}\cdot\frac{330}{10} = 11 .
+\]
+Variance of the second:
+$\frac{1}{3}\cdot\frac{16 + 9 + 1 + 4}{10} = \frac13\cdot\frac{30}{10} = 1$.
+Covariance between them:
+$\frac{1}{3}\cdot\frac{(-8)(-4) + (-9)(3) + (13)(-1) + (4)(2)}{10}
+= \frac13\cdot\frac{32 - 27 - 13 + 8}{10} = 0$.
+In the rotated coordinates the covariance is $\diag(11, 1) = \mat{\Lambda}$: the components are
+uncorrelated, with variances equal to the eigenvalues. That is \cref{eq:linalg:covtransform}
+with $\mat{A} = \mat{U}\T$: $\mat{U}\T\Cov\mat{U} = \mat{U}\T\mat{U}\mat{\Lambda}\mat{U}\T\mat{U}
+= \mat{\Lambda}$.
+\end{worked}
+
+\section{Whitening}\label{sec:linalg:whitening}
+
+After PCA the cloud's axes line up with the coordinate axes, but it is still stretched: spread
+11 one way, 1 the other. \emph{Whitening}\index{whitening} also divides each rotated coordinate by
+its own standard deviation, so the cloud becomes round with spread 1 in every direction. The
+name comes from signal processing: ``white'' noise has equal power at every frequency, and a
+whitened cloud has equal variance in every direction.
+
+\begin{definition}[Whitening matrix]
+With $\Cov = \mat{U}\mat{\Lambda}\mat{U}\T$ and all $\lambda_k > 0$, let
+\[
+\mat{\Lambda}^{-1/2} = \diag(1/\sqrt{\lambda_1}, \dots, 1/\sqrt{\lambda_C}).
+\]
+The \emph{whitening matrix} is
+\begin{equation}\label{eq:linalg:whiten}
+\mat{W} = \mat{\Lambda}^{-1/2}\mat{U}\T ,
+\qquad
+\vect{z} = \mat{W}(\vect{x} - \muv).
+\end{equation}
+Row $k$ of $\mat{W}$ is $\vect{u}_k\T/\sqrt{\lambda_k}$: ``take the coordinate along
+$\vect{u}_k$, then divide by that direction's standard deviation''.
+\end{definition}
+
+Why the square root? The eigenvalue $\lambda_k$ is a variance, a squared spread. The coordinate
+$\vect{u}_k\T\vect{d}$ is in the data's own units, so it must be divided by a spread in the same
+units: $\sqrt{\lambda_k}$.
+
+\paragraph{Claim.} If $\vect{z} = \mat{W}(\vect{x} - \muv)$ with $\mat{W}$ as in
+\cref{eq:linalg:whiten}, then $\Cov_z = \mat{I}$: the whitened pixels have identity covariance.
+
+\noindent\textit{Proof.} By \cref{eq:linalg:covtransform} with $\mat{A} = \mat{W}$ (subtracting
+$\muv$ does not change a covariance):
+\begin{align*}
+\Cov_z &= \mat{W}\Cov\mat{W}\T\\
+&= \mat{\Lambda}^{-1/2}\mat{U}\T\;\mat{U}\mat{\Lambda}\mat{U}\T\;
+   (\mat{\Lambda}^{-1/2}\mat{U}\T)\T
+  && \text{substitute $\mat{W}$ and the spectral theorem}\\
+&= \mat{\Lambda}^{-1/2}\mat{U}\T\mat{U}\mat{\Lambda}\mat{U}\T\mat{U}\mat{\Lambda}^{-1/2}
+  && \text{\cref{eq:linalg:abt}; a diagonal matrix is its own transpose}\\
+&= \mat{\Lambda}^{-1/2}\,\mat{I}\,\mat{\Lambda}\,\mat{I}\,\mat{\Lambda}^{-1/2}
+  && \mat{U}\T\mat{U} = \mat{I}\\
+&= \mat{\Lambda}^{-1/2}\mat{\Lambda}\mat{\Lambda}^{-1/2}
+  && \text{the identity changes nothing}\\
+&= \mat{I}
+  && \text{diagonal entries: } \tfrac{1}{\sqrt{\lambda_k}}\,\lambda_k\,\tfrac{1}{\sqrt{\lambda_k}} = 1 .
+\end{align*}
+\hfill$\square$
+
+\begin{worked}[label={we:linalg:whiten}]{Whitening the four pixels}
+For the running example,
+\[
+\mat{W} = \begin{pmatrix} 1/\sqrt{11} & 0\\ 0 & 1\end{pmatrix}
+\frac{1}{\sqrt{10}}\begin{pmatrix} 1 & 3\\ 3 & -1\end{pmatrix}
+= \begin{pmatrix} 1/\sqrt{110} & 3/\sqrt{110}\\ 3/\sqrt{10} & -1/\sqrt{10}\end{pmatrix}
+= \begin{pmatrix} 0.0953 & 0.2860\\ 0.9487 & -0.3162\end{pmatrix}.
+\]
+The whitened pixels are the principal components of \cref{we:linalg:pcacoords} divided by
+$\sqrt{\lambda_k}$: the first by $\sqrt{11} = 3.317$, the second by $\sqrt1 = 1$. Pixel 1, for
+example, had components $-8/\sqrt{10} = -2.530$ and $-4/\sqrt{10} = -1.265$, so
+\[
+\vect{z}_1 = (-2.530/3.317,\ -1.265/1) = (-0.763,\ -1.265).
+\]
+All four:
+\begin{center}
+\begin{tabular}{ccc}
+\toprule
+pixel & $z_1 = (1,3)\T\vect{d}/\sqrt{110}$ & $z_2 = (3,-1)\T\vect{d}/\sqrt{10}$\\
+\midrule
+1 & $-8/10.488 = -0.763$ & $-4/3.162 = -1.265$\\
+2 & $-9/10.488 = -0.858$ & $3/3.162 = 0.949$\\
+3 & $13/10.488 = 1.240$  & $-1/3.162 = -0.316$\\
+4 & $4/10.488 = 0.381$   & $2/3.162 = 0.632$\\
+\bottomrule
+\end{tabular}
+\end{center}
+Variance of $z_1$: $\frac13(64 + 81 + 169 + 16)/110 = \frac13\cdot 330/110 = \frac13\cdot3 = 1$.
+Variance of $z_2$: $\frac13(16 + 9 + 1 + 4)/10 = \frac13\cdot3 = 1$. Their covariance is
+$\frac{1}{3}\cdot\frac{0}{\sqrt{1100}} = 0$ from the same products as before. The whitened
+covariance is $\mat{I}$, as the proof said it must be.
+\end{worked}
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}[>=Stealth]
+  % left panel: raw cloud, scale 0.4 cm per unit
+  \begin{scope}[scale=0.4]
+    \draw[->,gray] (-5,0) -- (5,0) node[right,font=\scriptsize] {$d_1$};
+    \draw[->,gray] (0,-7.5) -- (0,8) node[above,font=\scriptsize] {$d_2$};
+    \draw[spat,thick,rotate=71.565] (0,0) ellipse ({sqrt(11)} and 1);
+    \draw[spat,dashed,rotate=71.565] (0,0) ellipse ({2*sqrt(11)} and 2);
+    \foreach \p in {(-0.01,-0.44),(-0.77,-1.98),(0.22,1.80),(-2.27,-3.80),(1.94,1.81),(0.61,1.97),(2.65,7.25),(2.00,3.69),(0.87,1.61),(-1.42,-0.97),(-1.16,0.84),(0.36,2.20),(-1.04,-2.81),(1.65,2.05),(0.27,1.51),(1.26,3.11),(-0.35,0.67),(-0.56,-0.56),(0.81,2.02),(-2.24,-1.99),(-0.12,4.44),(-2.15,-3.99),(0.02,-0.93),(-3.39,-3.97),(-3.14,-5.25),(0.77,-1.51),(-0.62,0.22),(0.98,4.18),(-1.11,-1.13),(1.87,3.52),(1.57,1.00),(-1.35,-5.63),(-0.10,-1.12),(-2.91,-4.56),(1.43,-2.69),(-0.70,0.05),(-0.47,-3.35),(-0.66,-6.15),(-0.19,2.38),(-1.95,0.48),(0.40,-0.79),(1.43,0.84),(0.74,4.22),(-1.84,-1.42),(-0.81,2.91),(-1.19,1.40),(1.15,1.13),(-1.24,-0.46),(0.39,-0.69),(2.74,3.78),(-1.47,-1.27),(1.19,0.18),(0.30,-3.15),(0.16,2.44),(1.99,7.20),(0.51,1.86),(-0.11,0.30),(-0.01,-2.42),(-2.18,-4.24),(-1.99,-2.29)}
+      \fill[maskgrey] \p circle (0.12);
+    \foreach \p in {(-2,-2),(0,-3),(1,4),(1,1)}
+      \fill[spec] \p circle (0.22);
+    \draw[->,very thick,loss] (0,0) -- ({sqrt(11)*0.3162},{sqrt(11)*0.9487})
+      node[above right,font=\scriptsize] {$\sqrt{\lambda_1}\,\vect{u}_1$};
+    \draw[->,very thick,attn] (0,0) -- (0.9487,-0.3162)
+      node[below right,font=\scriptsize] {$\sqrt{\lambda_2}\,\vect{u}_2$};
+    \node[font=\small] at (0,-9.2) {(a) centred pixels};
+  \end{scope}
+  % right panel: whitened cloud, scale 1.25 cm per unit
+  \begin{scope}[xshift=7.6cm,scale=1.25]
+    \draw[->,gray] (-2.6,0) -- (2.7,0) node[right,font=\scriptsize] {$z_1$};
+    \draw[->,gray] (0,-2.3) -- (0,2.5) node[above,font=\scriptsize] {$z_2$};
+    \draw[spat,thick] (0,0) circle (1);
+    \draw[spat,dashed] (0,0) circle (2);
+    \foreach \p in {(-0.13,0.13),(-0.64,-0.10),(0.54,-0.36),(-1.30,-0.95),(0.70,1.27),(0.62,-0.04),(2.33,0.22),(1.25,0.73),(0.54,0.32),(-0.41,-1.04),(0.13,-1.37),(0.67,-0.35),(-0.90,-0.09),(0.74,0.92),(0.46,-0.22),(1.01,0.21),(0.16,-0.54),(-0.21,-0.36),(0.65,0.13),(-0.78,-1.49),(1.26,-1.51),(-1.35,-0.78),(-0.26,0.31),(-1.46,-1.96),(-1.80,-1.32),(-0.36,1.21),(0.00,-0.66),(1.29,-0.40),(-0.43,-0.70),(1.18,0.66),(0.44,1.17),(-1.74,0.50),(-0.33,0.26),(-1.58,-1.32),(-0.63,2.20),(-0.05,-0.68),(-1.00,0.62),(-1.82,1.32),(0.66,-0.94),(-0.05,-2.00),(-0.19,0.63),(0.38,1.09),(1.28,-0.63),(-0.58,-1.29),(0.75,-1.69),(0.29,-1.57),(0.43,0.74),(-0.25,-1.03),(-0.16,0.59),(1.34,1.40),(-0.50,-0.99),(0.16,1.07),(-0.87,1.28),(0.71,-0.62),(2.25,-0.39),(0.58,-0.11),(0.08,-0.20),(-0.69,0.76),(-1.42,-0.73),(-0.84,-1.16)}
+      \fill[maskgrey] \p circle (0.04);
+    \foreach \p in {(-0.763,-1.265),(-0.858,0.949),(1.240,-0.316),(0.381,0.632)}
+      \fill[spec] \p circle (0.07);
+    \draw[->,very thick,loss] (0,0) -- (1,0);
+    \draw[->,very thick,attn] (0,0) -- (0,1);
+    \node[font=\small] at (0,-2.85) {(b) whitened, $\vect{z} = \mat{W}\vect{d}$};
+  \end{scope}
+\end{tikzpicture}
+\caption{Before and after whitening. (a) Sixty points drawn from a Gaussian with the covariance
+$\begin{psmallmatrix} 2 & 3\\ 3 & 10\end{psmallmatrix}$ of \cref{we:linalg:cov} (grey;
+an illustrative sample, seed 0, \texttt{tools/compute\_linalg.py}) and the four worked pixels
+(teal). The ellipses are the points at whitened distance 1 and 2; the arrows are the eigenvectors
+scaled by the square roots of their eigenvalues, 3.32 and 1. (b) The same points after
+$\vect{z} = \mat{W}\vect{d}$: the ellipses have become circles, and the eigenvectors the
+coordinate axes.}
+\label{fig:linalg:whitening}
+\end{figure}
+
+\Cref{fig:linalg:whitening} shows the whole chapter in one picture. On the left, the cloud is a
+tilted ellipse: long along $\vect{u}_1$, short along $\vect{u}_2$. On the right, after rotating
+by $\mat{U}\T$ and dividing by $\sqrt{\lambda_k}$, it is round. Two points the same Euclidean
+distance from the centre on the left can be very different distances on the right: a step of 1
+unit along $\vect{u}_1$ becomes $1/3.32 = 0.30$ whitened units, while the same step along
+$\vect{u}_2$ stays 1. Distance in the whitened picture is the \emph{Mahalanobis distance}, and
+\cref{ch:rx} takes it from here.
+
+\begin{keypoint}
+Whitening is rotate onto the principal directions, then divide each by its standard deviation;
+afterwards the background cloud is round and every direction counts equally.
+\end{keypoint}
+
+\subsection{Two practical details you will meet in the code}
+
+\paragraph{Whitening with fewer directions.} If you keep only the top $d$ eigenvectors (the
+first $d$ rows of $\mat{W}$), $\vect{z}$ has $d$ entries and is still white: its covariance is
+the $d\times d$ identity, by the same proof with $\mat{U}$ replaced by its first $d$ columns
+(\cref{ex:linalg:5}). The residual score of \cref{ch:residualmaha} and the PCA-RX baseline of
+\cref{ch:localrx} do exactly this with $d = 30$.
+
+\paragraph{A floor under the eigenvalues.} Dividing by $\sqrt{\lambda_k}$ is impossible when
+$\lambda_k = 0$ and dangerous when it is tiny. Code that whitens therefore raises tiny eigenvalues
+to a floor before the square root: \code{np.maximum(evals[order], 1e-12)} in
+\code{app/utils/anomaly_detection/residual_mahalanobis.py} line 46, and
+\code{np.maximum(noise_eigvals, 1e-10)} in \code{app/detectors/mnf_compression_detector.py}
+line 321. Why tiny eigenvalues are dangerous, and not only zero ones, is the subject of
+\cref{sec:rx:singular}.
+
+\paragraph{Two whitening matrices.} The matrix $\mat{W} = \mat{\Lambda}^{-1/2}\mat{U}\T$ rotates
+and then scales. Multiplying it on the left by $\mat{U}$ gives
+$\mat{U}\mat{\Lambda}^{-1/2}\mat{U}\T$, which rotates, scales, and rotates back. It also whitens
+(the extra $\mat{U}$ is a rotation, and $\mat{U}\mat{I}\mat{U}\T = \mat{I}$), and it is the
+symmetric \emph{inverse square root} $\Cov^{-1/2}$, because multiplying it by itself gives
+$\mat{U}\mat{\Lambda}^{-1}\mat{U}\T = \Cov\inv$. The MNF code builds this second form from the
+noise covariance (\code{whiten = noise_eigvecs @ np.diag(1.0 / np.sqrt(noise_eigvals)) @
+noise_eigvecs.T}, line 323); \cref{ch:localrx} explains why it does not matter which form you
+use there.
+
+\begin{confusions}
+\confusion{Is the dot product the same as multiplying two vectors?}{No. Multiplying entry by
+entry gives another vector. The dot product adds those products into a single number. The outer
+product $\vect{d}\vect{d}\T$ is a third thing again: a whole matrix of products.}
+\confusion{Why does projection divide by $\vect{u}^\top\vect{u}$?}{To make the answer independent
+of the length of $\vect{u}$. Doubling $\vect{u}$ doubles $\vect{u}\T\vect{x}$ and quadruples
+$\vect{u}\T\vect{u}$, so $t^\star$ halves and $t^\star\vect{u}$ is unchanged. With a unit vector
+the division is by 1 and disappears.}
+\confusion{Why $N-1$ in the covariance?}{Because the deviations are measured from the sample's own
+mean and add to zero, so only $N-1$ of them are free. The code uses $N-1$ (\texttt{np.cov}). The
+difference matters only for small samples, such as the local windows of \cref{ch:localrx} and the
+tiny examples here.}
+\confusion{Is an eigenvector unique?}{Only up to sign and length. If $\vect{u}$ is an
+eigenvector, so is $-\vect{u}$ and $5\vect{u}$. We always take unit length; the sign is
+arbitrary, and \texttt{np.linalg.eigh} may return either. Squared coordinates, and therefore every
+score in this book, do not care about the sign.}
+\confusion{Does PCA find the most interesting directions?}{It finds the directions of greatest
+variance. Whether those are interesting depends on what produces the variance. If the noisiest
+bands have the largest variance, PCA keeps the noise. \Cref{ch:localrx} builds MNF to fix exactly
+that.}
+\confusion{Whitening makes everything the same size, so does it destroy information?}{No. It is
+an invertible change of coordinates (when all eigenvalues are kept and positive): you can undo it
+with $\mat{U}\mat{\Lambda}^{1/2}$. What changes is which differences look large. That change is
+the whole point.}
+\end{confusions}
+
+\begin{checkyourself}
+\item\label{ex:linalg:1} Compute the angle in degrees between $(1, 2, 2)$ and $(2, 1, 2)$. Then
+  project $(1, 2, 2)$ onto $(2, 1, 2)$ and check that the residual is orthogonal to $(2, 1, 2)$.
+\item\label{ex:linalg:2} Three pixels in two bands: $(1, 2)$, $(3, 2)$, $(2, 5)$. Compute the
+  mean, the deviations, the outer products and the covariance matrix (divide by $N - 1$). What is
+  the correlation of the two bands?
+\item\label{ex:linalg:3} Find the eigenvalues and unit eigenvectors of
+  $\begin{pmatrix} 5 & 2\\ 2 & 2\end{pmatrix}$ by hand, and the explained variance ratio of the
+  first component. Rebuild the matrix from $\sum_k \lambda_k\vect{u}_k\vect{u}_k\T$.
+\item\label{ex:linalg:4} Using the matrix of \cref{ex:linalg:3}, write down the whitening matrix
+  $\mat{W} = \mat{\Lambda}^{-1/2}\mat{U}\T$ and verify by multiplication that
+  $\mat{W}\Cov\mat{W}\T = \mat{I}$.
+\item\label{ex:linalg:5} Let $\mat{U}_d$ hold only the first $d$ eigenvectors of a $C\times C$
+  covariance $\Cov$ as columns, and $\mat{\Lambda}_d$ the first $d$ eigenvalues. Show that
+  $\vect{z} = \mat{\Lambda}_d^{-1/2}\mat{U}_d\T(\vect{x} - \muv)$ has covariance $\mat{I}_d$. Which
+  fact about the columns of $\mat{U}$ does the proof use?
+\item\label{ex:linalg:6} Show that $(\mat{A}\mat{B}\mat{C})\T = \mat{C}\T\mat{B}\T\mat{A}\T$ using
+  \cref{eq:linalg:abt} twice, and explain in one sentence why $\mat{A}\Cov\mat{A}\T$ is symmetric
+  whenever $\Cov$ is.
+\end{checkyourself}
+
+\nextchapter{ch:rx}

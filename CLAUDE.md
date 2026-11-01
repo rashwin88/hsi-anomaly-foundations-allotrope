@@ -7,8 +7,9 @@ Orientation for working in this repo. Written 2026-08-24 from a full-tree audit.
 **Allotrope** is a full-stack web product for satellite hyperspectral/thermal **anomaly
 detection** — Postgres + JWT auth + React SPA + a job worker — not just an ML pipeline.
 
-Sensors end-to-end: `prisma`, `enmap`, `aviris_ng` (hyperspectral); `landsat9`, `hotsat1`
-(thermal).
+Sensors end-to-end: `prisma`, `enmap`, `aviris_ng`, `tanager`, `generic_hsi` (any other
+hyperspectral file GDAL reads - GHOSt, OSK ENVI; `docs/lld/generic-hsi.md`) (hyperspectral);
+`landsat9`, `hotsat1` (thermal).
 
 Domain model: **Scene** (raw → vendable → annotations) → **Project** (bound to one Scene) →
 **Action** (chains into a DAG) → ActionOutput / Visualization / Export / Note.
@@ -97,7 +98,7 @@ To trace a feature: the science is in `app/`, but the thing that *runs* it is a
   transform. CRS/affine is recovered at export time by re-reading the raw file
   (`app/georef/`).
 - **The 165-band common grid** (10 nm, 460–2450 nm, atmospheric windows excluded) is what makes
-  PRISMA/EnMAP/AVIRIS mutually comparable and lets one model train on mixed-sensor shards.
+  PRISMA/EnMAP/AVIRIS/Tanager mutually comparable and lets one model train on mixed-sensor shards.
 - **Foundation models carry Indic codenames** and the backend selects by codename:
   Pratibimba, Antardhana, Tirohita, Asanskrita, Drashta, **Chakshu** (thermal SegFormer MAE),
   **Indradhanu** (hyperspectral SegFormer MAE). Architectures live in

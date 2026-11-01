@@ -71,6 +71,8 @@ band_filter_apply → scene_segmentation | cloud_mask → anomaly_scoring
 | PRISMA | hyperspectral, 239 bands | single `.he5` |
 | EnMAP | hyperspectral, 224 bands | folder |
 | AVIRIS-NG | hyperspectral | folder |
+| Tanager (Planet) | hyperspectral, 426 bands | single `.h5` |
+| Other hyperspectral (`generic_hsi`) | any band count; GHOSt / OSK and anything GDAL reads | GeoTIFF, ENVI or HDF5 / NetCDF + sidecars ([lld](lld/generic-hsi.md)) |
 | Landsat 9 | thermal (B10) | single `.tif` |
 | HotSat-1 | thermal | folder |
 

@@ -1,0 +1,851 @@
+\chapter{Masked autoencoding: validity, targets, remove-and-restore, erosion}\label{ch:masking}
+
+\begin{onething}
+Masked training is four small index computations done in order: decide which tokens hold real data
+(average-pool the pixel mask, keep a token when more than half its pixels are valid), hide a fixed
+fraction of the valid ones by sorting random numbers, physically delete the hidden tokens with a
+gather and put them back as zeros with a scatter, and grade the model only on hidden, valid pixels
+that are not too close to invalid ones.
+\end{onething}
+
+\Cref{ch:recon} established the rule that makes reconstruction useful for anomaly detection: a pixel
+must never help reconstruct itself. The encoder (\cref{ch:encoder}) showed \emph{where} hiding happens:
+at stage 1, between the patch embedding and the blocks. This chapter is the machinery behind that one
+line of the encoder, and the masks that the trainer builds around it. All of it lives in one file,
+\code{app/foundation_models/components/token_masking.py}, a class of static methods with no learnable
+parameters, plus a few lines of the trainer,
+\code{app/foundation_models/trainers/hyperspectral_segformer_mae_trainer.py}.
+
+\section{The problem, and why the obvious fixes fail}\label{sec:masking:why}
+
+You want the model to learn ``what normally goes here'' by predicting parts of a patch it cannot see.
+Three obvious approaches each fail in a specific way.
+
+\begin{enumerate}
+\item \textbf{Hide pixels by setting them to zero.} A zeroed pixel still enters the patch embedding and
+still becomes part of a token that attention can read. Worse, the patch already contains genuine
+zeros: invalid pixels (cloud, no-data, swath edge) were zeroed before normalisation
+(\cref{ch:bandpipeline}). The model could not tell ``hidden'' from ``missing''.
+\item \textbf{Hide random pixels, not tokens.} A token is built from a 4 $\times$ 4 block. If you hide
+half of a block's pixels, the token still contains the other half, and the model can interpolate from
+inside the very token it is graded on.
+\item \textbf{Grade the model everywhere.} Then it is graded on invalid pixels, where the ``truth'' is
+a fill value, and on pixels it could see, where copying is a perfect answer.
+\end{enumerate}
+
+The design that survives is: hide whole tokens, choose them only among tokens that hold real data,
+delete them from the encoder's input so nothing can attend to them, and grade only the pixels that
+were both hidden and valid.
+
+\begin{table}[htbp]\centering
+\caption{The four steps of masking and the masks each produces. $B$ is the batch size, $N = 1024$
+tokens for a 128 $\times$ 128 patch.}\label{tab:masking:map}
+\small
+\begin{tabular}{@{}clll@{}}\toprule
+Step & Question & Output & Section \\\midrule
+1 & Which tokens hold real data? & token mask $v$, \shape{(B, N)} & \ref{sec:masking:validity} \\
+2 & Of those, which are hidden? & keep mask $k$, prediction mask $q$, \shape{(B, N)} & \ref{sec:masking:choose} \\
+3 & How are they deleted and put back? & gather indices \shape{(B, N\_kept)} & \ref{sec:masking:gather} \\
+4 & Which pixels are graded? & loss mask \shape{(B, 1, H, W)} & \ref{sec:masking:targets}, \ref{sec:masking:erosion} \\\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{analogy}
+Think of a cloze test, the reading exercise in which words are blanked out of a paragraph and you must
+fill them in. A good examiner blanks whole words, not half a word (a token, not a pixel). She never
+blanks a word that was already illegible on the photocopy (an invalid token), because there is no
+right answer to mark. She removes the blanked words from the sheet entirely rather than writing them
+in faint ink (deletion, not zeroing). And she does not mark a filled-in word when the smudge from the
+illegible word next to it covers half of it (erosion). Each of those rules is one section of this
+chapter.
+\end{analogy}
+
+\section{Step 1: which tokens hold real data}\label{sec:masking:validity}
+
+\subsection{The mismatch}
+
+Validity arrives per \emph{pixel}: a tensor $m$ of shape \shape{(B, 1, H, W)} with
+$m_{y,x} = 1$ where the pixel is a real measurement and $0$ where it is not. Masking works per
+\emph{token}: one decision for each of the $N$ tokens. One stage-1 token covers a 4 $\times$ 4 block of
+16 pixels (\cref{ch:encoder}, $r_1 = j_1 = 4$). When a block is partly valid, somebody has to make a
+ruling.
+
+\subsection{The rule}
+
+\begin{definition}[Token validity]
+Let $P_t$ be the set of 16 pixels of token $t$. The \index{valid fraction}\emph{valid fraction} of $t$
+is
+\begin{equation}\label{eq:masking:frac}
+f_t = \frac{1}{\abs{P_t}} \sum_{(y,x) \in P_t} m_{y,x} = \frac{1}{16} \sum_{(y,x) \in P_t} m_{y,x} .
+\end{equation}
+Token $t$ is \index{token validity}\emph{valid} when $f_t > \tfrac12$, strictly:
+\begin{equation}\label{eq:masking:valid}
+v_t = \begin{cases} 1 & \text{if } f_t > 0.5,\\ 0 & \text{otherwise.}\end{cases}
+\end{equation}
+\end{definition}
+
+Why is \cref{eq:masking:frac} a fraction? Because $m$ contains only 0s and 1s, the sum counts the
+valid pixels, and dividing by 16 turns the count into a proportion. Sixteen valid pixels give $16/16 =
+1$; eight give $8/16 = 0.5$; none gives $0$.
+
+The code computes all $f_t$ at once with an \index{average pooling}\emph{average pool}, an operation
+that slides a window over a grid and outputs the mean of each window
+(\file{token_masking.py}, lines 112--127):
+\begin{lstlisting}
+token_fractions = F.avg_pool2d(pixel_mask.float(),     # (B, 1, 128, 128)
+                               kernel_size=4, stride=4, padding=0)   # -> (B, 1, 32, 32)
+token_valid = (token_fractions > 0.5).float()          # strict: 0.5 itself is invalid
+token_mask  = token_valid.squeeze(1).flatten(1)        # (B, 32, 32) -> (B, 1024)
+\end{lstlisting}
+\code{squeeze(1)} removes the size-1 channel axis; \code{flatten(1)} joins the two grid axes into one
+list of 1024 in \index{row-major order}\emph{row-major order} (row 0 left to right, then row 1, and so
+on), the same order the tokens themselves use (\cref{ch:shapes}).
+
+\begin{worked}[label={we:masking:validity}]{Token validity on a 4 \texorpdfstring{$\times$}{x} 4 pixel grid with 2 \texorpdfstring{$\times$}{x} 2 tokens}
+To keep the arithmetic small, shrink the token to 2 $\times$ 2 pixels (pooling kernel 2, stride 2; the
+real model uses 4 and 4). The pixel mask is
+\[
+m = \begin{pmatrix} 1 & 1 & 1 & 0\\ 1 & 1 & 0 & 0\\ 1 & 0 & 1 & 1\\ 1 & 0 & 1 & 1 \end{pmatrix}.
+\]
+The 2 $\times$ 2 token grid has four tokens, numbered row-major: $t_0$ top-left, $t_1$ top-right,
+$t_2$ bottom-left, $t_3$ bottom-right. Do each on paper.
+
+Token $t_0$, rows 0--1, columns 0--1: pixels $1, 1, 1, 1$.
+\begin{align*}
+f_0 &= \tfrac14 (1 + 1 + 1 + 1) = \tfrac44 = 1.00, & 1.00 &> 0.5 \;\Rightarrow\; v_0 = 1 .
+\end{align*}
+Token $t_1$, rows 0--1, columns 2--3: pixels $1, 0, 0, 0$.
+\begin{align*}
+f_1 &= \tfrac14 (1 + 0 + 0 + 0) = \tfrac14 = 0.25, & 0.25 &\not> 0.5 \;\Rightarrow\; v_1 = 0 .
+\end{align*}
+Token $t_2$, rows 2--3, columns 0--1: pixels $1, 0, 1, 0$.
+\begin{align*}
+f_2 &= \tfrac14 (1 + 0 + 1 + 0) = \tfrac24 = 0.50, & 0.50 &\not> 0.5 \;\Rightarrow\; v_2 = 0 .
+\end{align*}
+Token $t_3$, rows 2--3, columns 2--3: pixels $1, 1, 1, 1$.
+\begin{align*}
+f_3 &= \tfrac44 = 1.00 \;\Rightarrow\; v_3 = 1 .
+\end{align*}
+Flattened row-major: $v = [1, 0, 0, 1]$. Token $t_2$ is exactly half valid and is rejected:
+\textbf{ties go to ``invalid''}. The same computation with the real 4 $\times$ 4 tokens on the course's
+8 $\times$ 8 grid is in \cref{fig:masking:validity}; it ends in $[1, 0, 1, 0]$, again with one token
+rejected at exactly $8/16$.
+\end{worked}
+
+The tie rule is the conservative choice: a token built half from no-data is not something you want to
+grade the model on.
+
+\coursefig[0.95\linewidth]{iw-17-token-validity}{Token validity on an 8 $\times$ 8 pixel mask with the
+real stage-1 geometry (kernel 4, stride 4). (a) The pixel mask split into four 4 $\times$ 4 blocks.
+(b) Average pooling gives each block's valid fraction: 16/16, 4/16, 12/16, 8/16. (c) The strict
+threshold $> 0.5$ gives the token mask $[1, 0, 1, 0]$; the exactly-half block is invalid.}{fig:masking:validity}
+
+\subsection{Exactly the same geometry as the patch embedding}
+
+The pooling uses kernel 4, stride 4, padding 0: the stage-1 patch embedding's numbers
+(\cref{ch:patchembed}). That is a requirement, not a coincidence. With a different window, a token's
+\emph{validity} would be judged from a different set of pixels than the token's \emph{value} was
+computed from, and you could grade the model on a token built entirely from no-data. The trainer and
+the inferencer both declare the constants at the top of their files (\code{STAGE1_KERNEL_SIZE = 4},
+\code{STAGE1_STRIDE = 4}, \code{STAGE1_PADDING = 0}; trainer lines 36--38, inferencer
+\file{app/foundation_models/inferencers/segformer_mae_inferencer.py} lines 41--43) and pass them at
+every call site.
+
+\begin{sourcenote}[: padding defaults]
+\code{pixel_mask_to_token_mask} defaults \code{padding=None} to \code{kernel_size // 2}
+(\file{token_masking.py}, lines 107--108), which for kernel 4 would be 2 and would \emph{not} match
+stage 1. Every caller passes \code{padding=0} explicitly, so the default is never used for stage 1. If
+you add a caller, pass the constant.
+\end{sourcenote}
+
+\subsection{What happens to invalid tokens}
+
+This is the part people get wrong. An invalid token ($v_t = 0$) is
+\begin{itemize}
+\item \textbf{not} deleted from the encoder's input,
+\item \textbf{not} eligible to be hidden,
+\item \textbf{not} graded.
+\end{itemize}
+It stays in the sequence carrying its zero-filled, normalised values (an invalid pixel sits near
+$-1.22$ after normalisation, \cref{ch:bandpipeline}), so the encoder is told where the holes in the data
+are rather than being asked to invent them.
+
+\begin{keypoint}
+The token mask $v$ says ``is this real data?''; it is a fact about the sensor. The keep mask of the
+next section says ``shall the encoder see it?''; it is a choice. An invalid token has $v = 0$ and keep
+$= 1$.
+\end{keypoint}
+
+\section{Step 2: choosing which valid tokens to hide}\label{sec:masking:choose}
+
+\subsection{How many: the hiding count and its rounding}
+
+Let $n_{\text{valid}} = \sum_t v_t$ be the number of valid tokens and $\rho$ the
+\index{mask ratio}\emph{mask ratio}, the fraction of valid tokens to hide. The number hidden is
+\begin{equation}\label{eq:masking:count}
+n_{\text{hide}} = \lfloor \rho \, n_{\text{valid}} \rfloor ,
+\end{equation}
+because the code converts with \code{(num_valid * mask_ratio).long()} (\file{token_masking.py}, line
+186), and converting a positive float to an integer in PyTorch truncates toward zero, which for
+positive numbers is the floor. The ratio is a fraction of the \emph{valid} tokens, not of all tokens.
+
+The count is deterministic: for a given patch the number hidden is fixed; only \emph{which} tokens are
+hidden is random. Because every valid token is equally likely to be any of the hidden ones (shown
+below), each valid token is hidden with probability
+\begin{equation}\label{eq:masking:effective}
+\Pr[\text{token $t$ hidden}] = \frac{n_{\text{hide}}}{n_{\text{valid}}} = \frac{\lfloor \rho\, n_{\text{valid}} \rfloor}{n_{\text{valid}}} \le \rho ,
+\end{equation}
+the \index{mask ratio!effective}\emph{effective} mask ratio. The floor can only lower it.
+
+\begin{worked}[label={we:masking:rounding}]{Six tokens at \texorpdfstring{$\rho = 0.65$}{rho = 0.65}: what the rounding does}
+Six valid tokens, $\rho = 0.65$ (the training value). On paper:
+\begin{align*}
+\rho\, n_{\text{valid}} &= 0.65 \times 6 && \text{multiply}\\
+&= 3.9 ,\\
+n_{\text{hide}} &= \lfloor 3.9 \rfloor = 3 && \text{truncate, do not round to 4}\\
+n_{\text{keep}} &= 6 - 3 = 3 .
+\end{align*}
+The effective ratio is $3/6 = 0.50$, well below $0.65$. Rounding to nearest would have given 4 and an
+effective $4/6 \approx 0.67$. For the real patch the effect is tiny:
+\begin{align*}
+0.65 \times 1024 &= 665.6, & \lfloor 665.6 \rfloor &= 665, & \frac{665}{1024} &\approx 0.6494 ,
+\end{align*}
+so a fully valid patch hides 665 tokens and keeps $1024 - 665 = 359$. The lesson: on tiny examples the
+floor dominates; on real patches it costs a fraction of a token.
+\end{worked}
+
+Two edge cases follow from \cref{eq:masking:count}. A patch with one valid token hides
+$\lfloor 0.65 \rfloor = 0$ tokens, and so does a patch with none: the loss mask is then empty and the
+trainer returns a zero loss with zero counted pixels, which the training loop skips
+(\file{hyperspectral_segformer_mae_trainer.py}, lines 249--250). In practice the trainer has already
+dropped every patch with less than 40\% valid pixels (\code{MIN_VALID_PIXEL_FRACTION = 0.4}, line 34).
+
+\begin{drift}
+$\rho = 0.65$ in v0.2.0 (\file{configs/hyperspectral_segformer_exp_2.json}) and in every spectral-stem
+run up to FT04\tagM{research/experiments/indradhanu-finetune/FT04-final-joint/config.json}; v0.1.0
+used 0.50 (\file{configs/hyperspectral_segformer_exp_1.json}). The config class default is 0.5
+(\file{app/models/training/training_config.py}, line 97), which no shipped run uses. As of 2026-10-29.
+\end{drift}
+
+\subsection{Which ones: a random permutation by sorting noise}
+
+The obvious way to choose is a Python loop: for each patch, list the valid tokens, shuffle, take the
+first $n_{\text{hide}}$. On a GPU processing 128 patches at once, with a different list length per
+patch, that loop would stall the device on every batch. So the choice is written with array
+operations only, identical work for every patch. That is why it looks indirect.
+
+\begin{definition}[Permutation, argsort]
+A \index{permutation}\emph{permutation} of $\{0, \dots, N-1\}$ is a reordering: a list $\pi$ in which
+each index appears exactly once. The \index{argsort}\emph{argsort} of a list of numbers $a$ is the
+permutation that sorts it: $\pi = \operatorname{argsort}(a)$ means $a_{\pi_0} \le a_{\pi_1} \le \dots
+\le a_{\pi_{N-1}}$. Read $\pi_k$ as ``the index of the $k$-th smallest value''.
+\end{definition}
+
+The recipe (\file{token_masking.py}, lines 169--223):
+\begin{lstlisting}
+noise = torch.rand(B, N)                        # uniform in [0, 1), one per token
+noise = noise + (1 - token_mask) * 2            # invalid tokens move to [2, 3)
+num_to_mask = (token_mask.sum(1) * mask_ratio).long()          # (B,)
+sorted_indices = noise.argsort(dim=1)           # (B, N): smallest noise first
+positions = torch.arange(N).float().expand(B, -1)              # 0, 1, ..., N-1
+pred_mask_sorted = (positions < num_to_mask.unsqueeze(1)).float()   # first n_hide places
+pred_mask = torch.zeros(B, N)
+pred_mask.scatter_(1, sorted_indices, pred_mask_sorted)        # back to token order
+keep_mask = 1.0 - pred_mask
+\end{lstlisting}
+
+In words: give every token a random priority; push every invalid token's priority up by 2; sort by
+priority; flag the first $n_{\text{hide}}$ places in the queue; carry the flags back to the tokens they
+belong to.
+
+\paragraph{Why every hidden set is equally likely.} The noise values are independent draws from the
+same continuous distribution. Any particular ordering of $N$ such values is exactly as likely as any
+other (relabelling the tokens does not change the joint distribution), and ties have probability zero.
+So $\operatorname{argsort}(\text{noise})$ is a \emph{uniformly random permutation}: each of the $N!$
+orders has probability $1/N!$. Taking its first $n_{\text{hide}}$ entries therefore picks a uniformly
+random subset of size $n_{\text{hide}}$, which is what \cref{eq:masking:effective} assumed.
+
+\paragraph{Why the $+2$ protects invalid tokens.} Valid tokens keep noise in $[0, 1)$; invalid tokens
+get noise in $[2, 3)$. Every valid value is below every invalid one, so all valid tokens sort ahead of
+all invalid tokens. Since $n_{\text{hide}} \le n_{\text{valid}}$, the first $n_{\text{hide}}$ places
+are always valid tokens. Any shift of at least 1 would work; 2 is a clear margin. The valid tokens
+among themselves are still in uniformly random order, because adding the same constant to every invalid
+token does not touch their relative order.
+
+\begin{worked}[label={we:masking:perm}]{Hiding three of six tokens by hand}
+Six tokens, all valid, $\rho = 0.65$, so $n_{\text{hide}} = 3$ (\cref{we:masking:rounding}). Suppose
+the noise is
+\[
+\text{noise} = [0.42,\ 0.91,\ 0.07,\ 0.66,\ 0.18,\ 0.55] \quad (\text{tokens } t_0, \dots, t_5) .
+\]
+No token is invalid, so the $+2$ adds nothing. Sort the values ascending and write under each value the
+token it came from:
+\[
+\begin{array}{l|cccccc}
+\text{sorted value} & 0.07 & 0.18 & 0.42 & 0.55 & 0.66 & 0.91\\
+\text{came from token} & 2 & 4 & 0 & 5 & 3 & 1
+\end{array}
+\]
+So $\pi = \operatorname{argsort}(\text{noise}) = [2, 4, 0, 5, 3, 1]$. Flag the first three places:
+\[
+\text{pred\_mask\_sorted} = [\,0 < 3,\ 1 < 3,\ 2 < 3,\ 3 < 3,\ 4 < 3,\ 5 < 3\,] = [1, 1, 1, 0, 0, 0] .
+\]
+Carry the flags back. \code{scatter_} writes \code{pred_mask[pi[k]] = pred_mask_sorted[k]}:
+\begin{align*}
+k = 0:&\quad \pi_0 = 2, & \text{pred\_mask}[2] &= 1\\
+k = 1:&\quad \pi_1 = 4, & \text{pred\_mask}[4] &= 1\\
+k = 2:&\quad \pi_2 = 0, & \text{pred\_mask}[0] &= 1\\
+k = 3:&\quad \pi_3 = 5, & \text{pred\_mask}[5] &= 0\\
+k = 4:&\quad \pi_4 = 3, & \text{pred\_mask}[3] &= 0\\
+k = 5:&\quad \pi_5 = 1, & \text{pred\_mask}[1] &= 0
+\end{align*}
+Result: $q = \text{pred\_mask} = [1, 0, 1, 0, 1, 0]$ and $k = \text{keep\_mask} = 1 - q = [0, 1, 0, 1, 0, 1]$.
+Tokens 0, 2 and 4, the three with the smallest noise, are hidden.
+\end{worked}
+
+\subsection{The inverse permutation}
+
+The original masked autoencoder \citep{he2022masked} writes the same idea with two index lists:
+\code{ids_shuffle}, the argsort of the noise (our $\pi$), and \code{ids_restore}, its
+\index{permutation!inverse}\emph{inverse}. This code base never builds \code{ids_restore}; the
+\code{scatter_} does its job. Seeing why is worth the effort, because it is the same fact that makes
+remove-and-restore work in \cref{sec:masking:gather}.
+
+\begin{definition}[Inverse permutation]
+The inverse of a permutation $\pi$ is the permutation $\pi^{-1}$ with $\pi^{-1}_{\pi_k} = k$ for every
+$k$. If $\pi$ answers ``which token sits in place $k$?'', then $\pi^{-1}$ answers ``in which place does
+token $t$ sit?''. That is the \emph{rank} of token $t$.
+\end{definition}
+
+\begin{worked}[label={we:masking:inverse}]{Building ids\_restore for six tokens}
+Take $\pi = [2, 4, 0, 5, 3, 1]$ from \cref{we:masking:perm}. Apply the definition one place at a time:
+place $k$ holds token $\pi_k$, so token $\pi_k$ has rank $k$.
+\begin{align*}
+\pi_0 = 2 &\;\Rightarrow\; \pi^{-1}_2 = 0, & \pi_1 = 4 &\;\Rightarrow\; \pi^{-1}_4 = 1, & \pi_2 = 0 &\;\Rightarrow\; \pi^{-1}_0 = 2,\\
+\pi_3 = 5 &\;\Rightarrow\; \pi^{-1}_5 = 3, & \pi_4 = 3 &\;\Rightarrow\; \pi^{-1}_3 = 4, & \pi_5 = 1 &\;\Rightarrow\; \pi^{-1}_1 = 5.
+\end{align*}
+Read off in token order: $\pi^{-1} = [2, 5, 0, 4, 1, 3]$. Check: token 2 had the smallest noise
+(0.07) and has rank 0; token 1 had the largest (0.91) and has rank 5.
+
+There is a second way to get it: $\pi^{-1} = \operatorname{argsort}(\pi)$. Sort $\pi = [2,4,0,5,3,1]$
+ascending: the value 0 is at place 2, value 1 at place 5, value 2 at place 0, value 3 at place 4, value
+4 at place 1, value 5 at place 3. So $\operatorname{argsort}(\pi) = [2, 5, 0, 4, 1, 3]$, the same
+list. (The MAE code computes \code{ids_restore = argsort(ids_shuffle)} for this reason.)
+
+Now unshuffle the flags with a \emph{gather} instead of a scatter:
+\begin{align*}
+q_t &= \text{pred\_mask\_sorted}\big[\pi^{-1}_t\big] && \text{look up token $t$'s place}\\
+q &= [\,s_2,\ s_5,\ s_0,\ s_4,\ s_1,\ s_3\,] && \text{with } s = [1,1,1,0,0,0]\\
+  &= [\,1,\ 0,\ 1,\ 0,\ 1,\ 0\,] .
+\end{align*}
+The same $q$ as the scatter produced. Scattering through $\pi$ and gathering through $\pi^{-1}$ are the
+same operation.
+\end{worked}
+
+Why are they the same? A scatter through $\pi$ writes $q_{\pi_k} = s_k$ for every place $k$. Substitute
+$t = \pi_k$, so $k = \pi^{-1}_t$: then $q_t = s_{\pi^{-1}_t}$ for every token $t$, which is the gather
+through $\pi^{-1}$. One line of algebra, and it is the reason this code needs no \code{ids_restore}.
+
+\begin{worked}[label={we:masking:plus2}]{The course example: two invalid tokens and the \texorpdfstring{$+2$}{+2}}
+This is the example in the source's own docstring (\file{token_masking.py}, lines 147--163). Six tokens
+with $v = [1, 1, 0, 1, 1, 0]$ (tokens 2 and 5 invalid) and $\rho = 0.5$.
+
+Noise: $[0.30, 0.70, 0.10, 0.50, 0.20, 0.80]$. Token 2, which is invalid, drew the smallest value; left
+alone it would be hidden first.
+
+Add 2 where $v = 0$:
+\begin{align*}
+&[0.30,\ 0.70,\ 0.10,\ 0.50,\ 0.20,\ 0.80]\\
++\;&[0,\ 0,\ 2,\ 0,\ 0,\ 2]\\
+=\;&[0.30,\ 0.70,\ 2.10,\ 0.50,\ 0.20,\ 2.80] .
+\end{align*}
+Count: $n_{\text{valid}} = 1+1+0+1+1+0 = 4$, $n_{\text{hide}} = \lfloor 4 \times 0.5 \rfloor = 2$.
+Sort: $0.20 (t_4) < 0.30 (t_0) < 0.50 (t_3) < 0.70 (t_1) < 2.10 (t_2) < 2.80 (t_5)$, so
+$\pi = [4, 0, 3, 1, 2, 5]$. Flags $[1, 1, 0, 0, 0, 0]$ scatter to $q[4] = 1$, $q[0] = 1$, all others 0:
+\[
+q = [1, 0, 0, 0, 1, 0], \qquad k = [0, 1, 1, 1, 0, 1] .
+\]
+Two of the four valid tokens are hidden; neither invalid token was touched; both invalid tokens have
+$k = 1$ and stay in the sequence.
+\end{worked}
+
+\coursefig[0.95\linewidth]{iw-18-targets}{The worked example of \cref{we:masking:plus2} as one
+picture. Invalid tokens (hatched) get $+2$ so they sort to the back. After an ascending sort the first
+$\lfloor 4 \times 0.5 \rfloor = 2$ places (amber) are flagged and scattered back: tokens 0 and 4 are
+hidden, and the keep mask is the exact complement of the prediction mask.}{fig:masking:targets}
+
+There is no third state: every token is either hidden-and-graded ($q = 1$, $k = 0$) or
+shown-and-not-graded ($q = 0$, $k = 1$), and $k = 1 - q$ always.
+
+\subsection{Choosing the ratio}
+
+The ratio sets the difficulty of the exam. At $\rho = 0.1$ nine tokens in ten are visible and filling
+the tenth is interpolation; the model learns smoothing and, at inference, reconstructs anomalies well
+from their surroundings, so they stop standing out. At $\rho = 0.9$ there is too little evidence, the
+best strategy is a blurry average, and every pixel has a large residual. The masked-autoencoder
+literature on photographs settled near 0.75 \citep{he2022masked}; this project uses 0.65.
+
+\begin{sourcenote}[: inference does not use this function]
+At inference every pixel needs a score, so random hiding is replaced by an exact complementary split
+(a checkerboard, or a random half and its complement; \cref{ch:inference}). The invalid-token guarantee
+is kept by multiplication instead of the $+2$: \code{pred_mask = token_validity * (1.0 - checker)}
+(\file{segformer_mae_inferencer.py}). Only valid tokens can become targets either way.
+\end{sourcenote}
+
+\section{Step 3: gather and scatter, remove and restore}\label{sec:masking:gather}
+
+\subsection{The two index operations}
+
+\begin{definition}[Gather and scatter]
+Given data $x$ of length $N$ and a list of indices $g = (g_0, \dots, g_{M-1})$:
+\begin{itemize}
+\item a \index{gather}\emph{gather} reads from the named positions: $y_k = x_{g_k}$ for $k = 0, \dots,
+M-1$. The output is as long as the index list.
+\item a \index{scatter}\emph{scatter} writes into the named positions: starting from a given $z$
+(here all zeros), set $z_{g_k} = y_k$. Positions not named keep their starting value.
+\end{itemize}
+For tokens, each $x_t$ is a vector of $C$ numbers and the whole vector moves.
+\end{definition}
+
+A tiny example. With $x = [a, b, c, d, e]$ and $g = [3, 0, 4]$, the gather gives $[d, a, e]$. Scattering
+$[d, a, e]$ through the same $g$ into $[0,0,0,0,0]$ writes $d$ at 3, $a$ at 0, $e$ at 4: $[a, 0, 0, d, e]$.
+Gather then scatter with the same indices puts every gathered value back where it came from and leaves
+zeros elsewhere.
+
+\paragraph{The same thing as matrices.} Build the \index{selection matrix}\emph{selection matrix}
+$\mat{S}$ of size $M \times N$ whose row $k$ is all zeros except a 1 in column $g_k$. Then
+\begin{align*}
+\text{gather:}\quad \vect{y} &= \mat{S}\vect{x}, &
+\text{scatter into zeros:}\quad \vect{z} &= \mat{S}\T \vect{y} .
+\end{align*}
+Check the first on the tiny example: row 0 of $\mat{S}$ has its 1 in column 3, so
+$y_0 = 0 \cdot a + 0 \cdot b + 0 \cdot c + 1 \cdot d + 0 \cdot e = d$. Two products tell the whole story:
+\begin{itemize}
+\item $\mat{S}\mat{S}\T = \mat{I}_M$: entry $(k, l)$ is the dot product of rows $k$ and $l$ of
+$\mat{S}$, which is 1 when they point at the same column ($k = l$, since the $g_k$ are distinct) and 0
+otherwise. Scatter then gather returns exactly what you scattered.
+\item $\mat{S}\T\mat{S} = \diag(\text{keep})$: an $N \times N$ diagonal matrix with 1 at the gathered
+positions and 0 elsewhere. Gather then scatter keeps the gathered tokens and zeroes the rest.
+\end{itemize}
+The second line \emph{is} remove-then-restore, with the encoder's blocks in between.
+
+\begin{worked}[label={we:masking:smatrix}]{The selection matrix for three kept tokens of six}
+From \cref{we:masking:perm}, $k = [0, 1, 0, 1, 0, 1]$: tokens 1, 3, 5 are kept. With $g = [1, 3, 5]$,
+\[
+\mat{S} = \begin{pmatrix} 0&1&0&0&0&0\\ 0&0&0&1&0&0\\ 0&0&0&0&0&1 \end{pmatrix}.
+\]
+Multiply $\mat{S}\T\mat{S}$ entry by entry: entry $(i, j)$ sums $S_{ki} S_{kj}$ over the three rows $k$.
+It is nonzero only when column $i$ and column $j$ both hold a 1 in the same row, which happens only for
+$i = j \in \{1, 3, 5\}$. So $\mat{S}\T\mat{S} = \diag(0, 1, 0, 1, 0, 1) = \diag(k)$.
+\end{worked}
+
+\subsection{remove\_tokens, line by line}
+
+\begin{lstlisting}
+num_kept = keep_mask.sum(dim=1).long()                       # (B,)
+max_kept = num_kept.max().item()                             # one number for the batch
+sorted_indices = keep_mask.argsort(dim=1, descending=True)   # (B, N): 1s first
+gather_indices = sorted_indices[:, :max_kept]                # (B, max_kept)
+idx = gather_indices.unsqueeze(-1).expand(-1, -1, C)         # (B, max_kept, C)
+kept_tokens = torch.gather(tokens, dim=1, index=idx)         # (B, max_kept, C)
+\end{lstlisting}
+Sorting the keep mask descending puts every 1 before every 0, so the first \code{max_kept} indices are
+the kept positions. \code{torch.gather} needs an index tensor of the output's shape, so each index is
+repeated $C$ times by \code{expand} (a view, no copy): for $g = [1, 3, 5]$ and $C = 2$ the expanded index
+is $[[1,1], [3,3], [5,5]]$, which pulls whole token vectors.
+
+\begin{worked}[label={we:masking:rr}]{Remove and restore on six tokens}
+Continue with $k = [0, 1, 0, 1, 0, 1]$, tokens $t_0, \dots, t_5$, each of $C = 2$ numbers.
+\begin{align*}
+\text{num\_kept} &= 0 + 1 + 0 + 1 + 0 + 1 = 3, \qquad \text{max\_kept} = 3,\\
+\text{argsort descending of } k &= [1, 3, 5, 0, 2, 4] \quad (\text{the three 1s, then the three 0s}),\\
+g &= [1, 3, 5],\\
+\text{kept} &= [t_1, t_3, t_5], \quad \text{shape } (1, 3, 2) .
+\end{align*}
+The blocks turn these into $t_1', t_3', t_5'$. Restore starts from zeros of shape $(1, 6, 2)$ and
+scatters through $g$:
+\begin{align*}
+\text{position } 1 &\leftarrow t_1', & \text{position } 3 &\leftarrow t_3', & \text{position } 5 &\leftarrow t_5',
+\end{align*}
+giving $[\,\vect{0},\ t_1',\ \vect{0},\ t_3',\ \vect{0},\ t_5'\,]$. The hidden positions 0, 2, 4 are
+exactly zero vectors.
+\end{worked}
+
+\begin{sourcenote}[: the order of the kept tokens is not guaranteed, and does not matter]
+The course says the descending sort keeps ties ``in index order''. \code{torch.argsort} is not stable by
+default (\code{stable=False}), so among equal keys the order is implementation-defined. On this
+machine (CPU, PyTorch 2.5.1) the small cases happen to come out in index order, $[1, 3, 5, 0, 2, 4]$
+for the keep mask above (\file{research/textbook/tools/compute_masking_output.txt}), but on a GPU and
+for $N = 1024$ nothing promises it. It does not
+matter, for two reasons. First, restore scatters through the \emph{same} $g$, so every token returns to
+its own slot whatever order it travelled in. Second, nothing in the stage-1 blocks depends on order when
+tokens have been removed: the linear layers and LayerNorms act on each token separately, attention
+takes its full-attention fallback, which treats the keys as a set, and Mix-FFN skips its depthwise
+convolution (\cref{ch:encoder}). There is no positional encoding to disturb. In the language of
+\cref{ch:attention}, a masked stage 1 is \emph{permutation-equivariant}: shuffling the input tokens
+shuffles the outputs the same way.
+\end{sourcenote}
+
+\subsection{The documented wrinkle: max\_kept}
+
+\code{max_kept} is the largest kept count in the batch. If patch A keeps 400 tokens and patch B keeps
+380, both gather 400 indices, and B's last 20 come from the tail of its sort, which is its
+\emph{hidden} tokens. Those 20 slip back into the encoder. The source says so: ``shorter items get a few
+extra tokens from the sort tail (minor leakage)'' (\file{token_masking.py}, lines 301--304).
+
+\begin{worked}[label={we:masking:leak}]{Leakage in a batch of two}
+Patch A is fully valid: $n_{\text{valid}} = 1024$, $n_{\text{hide}} = 665$, kept 359. Patch B has
+$n_{\text{valid}} = 1000$ and 24 invalid tokens:
+\begin{align*}
+n_{\text{hide}}^{B} &= \lfloor 0.65 \times 1000 \rfloor = \lfloor 650 \rfloor = 650,\\
+\text{kept}^{B} &= 1024 - 650 = 374 \quad (\text{350 visible valid plus 24 invalid}).
+\end{align*}
+Then $\text{max\_kept} = \max(359, 374) = 374$, and patch A gathers $374 - 359 = 15$ indices from the
+tail of its sort: 15 of its 665 hidden tokens, about $15/665 \approx 2.3\%$, are seen by the encoder
+and still graded. Notice the direction: the patch with \emph{fewer} invalid tokens keeps fewer tokens
+(its hiding count is larger) and is the one that leaks.
+\end{worked}
+
+The source calls it tolerable because counts differ only when validity differs, and the 40\%-valid
+filter keeps batches fairly homogeneous. It is a real, small leak: on mixed batches with very different
+cloud cover the fully valid patches leak most.
+
+\subsection{restore\_tokens, and why zeros}
+
+\begin{lstlisting}
+full_tokens = torch.zeros(B, N, C)                                 # (B, 1024, 32)
+scatter_indices = gather_indices.unsqueeze(-1).expand(-1, -1, C)   # (B, N_kept, C)
+full_tokens.scatter_(1, scatter_indices, kept_tokens)              # kept slots written
+\end{lstlisting}
+Positions not written stay zero (\file{token_masking.py}, lines 402--417). The original masked
+autoencoder fills them with a learned \emph{mask token} \citep{he2022masked}; this model does not, and
+the encoder chapter gives the reason (the decoder fuses four maps and reads the gaps from F2--F4). The
+round trip for one patch at $\rho = 0.65$:
+\[
+\begin{aligned}
+&\shape{(B, 1024, 32)} \xrightarrow{\text{remove}} \shape{(B, 359, 32)} \xrightarrow{\text{2 blocks, LN}} \shape{(B, 359, 32)}\\
+&\quad\xrightarrow{\text{restore}} \shape{(B, 1024, 32)} \xrightarrow{\text{reshape}} \shape{(B, 32, 32, 32)} .
+\end{aligned}
+\]
+
+\coursefig[0.95\linewidth]{iw-19-remove-restore}{Hidden tokens are removed, not zeroed. The gather
+keeps only the visible tokens (here 4 of 6), so the stage-1 blocks never see the hidden ones; after the
+blocks the scatter writes the encoded tokens back into a zero tensor at their original positions.}{fig:masking:rr}
+
+\paragraph{Why delete rather than zero?} Two reasons. \emph{Zero leakage}: a zeroed token is still a
+key; after the pre-norm LayerNorm and the projections' biases it is a perfectly ordinary key and value,
+and it takes a share of every softmax. In the unmasked path it would also enter the depthwise
+convolution and the reduction convolution of its neighbours. A deleted token cannot influence anything. \emph{Cost}: the linear layers of stage 1 run on
+359 tokens instead of 1024. (The attention scores do not get cheaper, because a masked stage 1 falls
+back to full attention: \cref{ch:encoder}.)
+
+\section{Step 4a: prediction targets and the loss mask}\label{sec:masking:targets}
+
+The model returns a full reconstruction $\xhat$ of shape \shape{(B, 165, H, W)}; the trainer decides
+which pixels count. It builds three pixel-level masks (\file{hyperspectral_segformer_mae_trainer.py},
+lines 186--238):
+
+\begin{enumerate}
+\item The \textbf{pixel prediction mask} $Q$: each token's flag $q_t$ copied to its 16 pixels by
+nearest-neighbour upsampling (\code{F.interpolate(..., mode="nearest")} from 32 $\times$ 32 to
+128 $\times$ 128). Pixel $(y, x)$ belongs to token $(\lfloor y/4 \rfloor, \lfloor x/4 \rfloor)$, so
+$Q_{y,x} = q_{\lfloor y/4 \rfloor, \lfloor x/4 \rfloor}$.
+\item The \textbf{eroded validity mask} $E = \operatorname{erode}(m)$ of \cref{sec:masking:erosion}.
+In training the erosion kernel is 1, which leaves $E = m$.
+\item The \textbf{loss mask}, their product:
+\begin{equation}\label{eq:masking:lossmask}
+L_{y,x} = Q_{y,x} \cdot E_{y,x} .
+\end{equation}
+\end{enumerate}
+A pixel is graded when it was hidden \emph{and} is valid (and, with erosion on, far enough from an
+invalid pixel). The L1 part of the loss (\cref{ch:losses}) averages the per-pixel band-mean error over
+the set $\Omega = \{(y,x) : L_{y,x} = 1\}$:
+\begin{equation}\label{eq:masking:l1}
+\mathcal{L}_{1} = \frac{1}{\abs{\Omega}} \sum_{(y,x) \in \Omega} \frac{1}{165} \sum_{c=1}^{165} \abs{\hat{x}_{c,y,x} - x_{c,y,x}} .
+\end{equation}
+
+\begin{worked}[label={we:masking:lossmask}]{The loss mask on the 4 \texorpdfstring{$\times$}{x} 4 example}
+Return to \cref{we:masking:validity} with 2 $\times$ 2 tokens, $v = [1, 0, 0, 1]$. Two tokens are
+valid; say $\rho = 0.65$ gives $\lfloor 0.65 \times 2 \rfloor = \lfloor 1.3 \rfloor = 1$ hidden token,
+and the noise picks $t_3$ (bottom-right). So $q = [0, 0, 0, 1]$. Upsample to pixels, then multiply by
+$m$ (erosion off):
+\[
+Q = \begin{pmatrix} 0&0&0&0\\0&0&0&0\\0&0&1&1\\0&0&1&1 \end{pmatrix},\quad
+m = \begin{pmatrix} 1&1&1&0\\1&1&0&0\\1&0&1&1\\1&0&1&1 \end{pmatrix},\quad
+L = Q \odot m = \begin{pmatrix} 0&0&0&0\\0&0&0&0\\0&0&1&1\\0&0&1&1 \end{pmatrix}.
+\]
+($\odot$ is the entry-by-entry product.) $\abs{\Omega} = 4$. Now suppose instead the course's 8
+$\times$ 8 grid of \cref{fig:masking:validity} hid its token 2, which has 12 valid pixels of 16. Then
+$Q$ has 16 ones in that block but $L$ has only $12$: \textbf{a hidden token is graded only on its valid
+pixels}. A token can be valid (more than half) and still contain invalid pixels, and those are never
+graded.
+\end{worked}
+
+\section{Step 4b: erosion of the mask border}\label{sec:masking:erosion}
+
+\subsection{The problem}
+
+Take a pixel that is perfectly valid but sits two pixels from a cloud edge. Its token's 4 $\times$ 4
+block may include cloud pixels, which were zeroed and sit near $-1.22$ in normalised space. The
+token's value is built partly from ground and partly from ``no data'', and the reconstruction there is
+poor for a purely technical reason. In a scene this shows up as a bright ring around every cloud, every
+water edge and every ragged swath edge in the anomaly map: the most common false-positive pattern in
+this system. The fix is to shrink the valid region by a border strip and not count that strip in the
+loss (training) or the score (inference). The pixels are still reconstructed; they do not count.
+
+\subsection{Binary erosion and dilation}
+
+\begin{definition}[Binary erosion and dilation]
+Let $A$ be a set of pixels (here the valid ones) and $K_r$ the square of offsets
+$\{(\delta_y, \delta_x) : \abs{\delta_y} \le r,\ \abs{\delta_x} \le r\}$, of side $k = 2r + 1$. The
+\index{erosion}\emph{erosion} of $A$ keeps a pixel only if its whole square neighbourhood lies in $A$:
+\[
+A \ominus K_r = \{\, p : p + \delta \in A \text{ for every } \delta \in K_r \,\}.
+\]
+The \index{dilation}\emph{dilation} of a set $D$ adds every pixel within reach of it:
+\[
+D \oplus K_r = \{\, p : p + \delta \in D \text{ for some } \delta \in K_r \,\}.
+\]
+\end{definition}
+
+Erosion and dilation are linked by complements. Write $A^c$ for the pixels not in $A$ (the invalid
+ones). Then
+\begin{equation}\label{eq:masking:duality}
+(A \ominus K_r)^c = A^c \oplus K_r .
+\end{equation}
+Derive it in words, one step at a time:
+\begin{align*}
+p \notin A \ominus K_r
+&\iff \text{not } \big(p + \delta \in A \text{ for every } \delta\big) && \text{definition of erosion}\\
+&\iff p + \delta \notin A \text{ for some } \delta && \text{``not every'' is ``some not''}\\
+&\iff p + \delta \in A^c \text{ for some } \delta && \text{definition of complement}\\
+&\iff p \in A^c \oplus K_r && \text{definition of dilation.}
+\end{align*}
+So to erode the valid region you may \emph{grow} the invalid region and flip back. Growing a 0/1 mask is
+a \index{max pooling}\emph{max pool} with stride 1: the window's maximum is 1 exactly when some pixel in
+the window is 1. That is the whole implementation (\file{token_masking.py}, lines 64--74):
+\begin{lstlisting}
+padding = kernel_size // 2                     # radius r
+invalid = 1.0 - mask                           # (B, 1, H, W): invalid -> 1
+dilated_invalid = F.max_pool2d(invalid, kernel_size=kernel_size, stride=1, padding=padding)
+eroded_mask = 1.0 - dilated_invalid            # flip back
+\end{lstlisting}
+The erosion radius is $r = \lfloor k/2 \rfloor$: kernel 5 removes 2 pixels, kernel 15 removes 7, and
+kernel 1 removes nothing, because a 1 $\times$ 1 max pool returns its input. That is how ``off'' is
+expressed without a special case.
+
+\begin{worked}[label={we:masking:erode1d}]{Erosion in one dimension, kernel 5}
+The mask $[0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0]$ (indices 0--11), kernel 5, radius $\lfloor 5/2 \rfloor
+= 2$. Flip: invalid $= [1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1]$. Take the maximum over $[i - 2, i + 2]$,
+clipped at the ends:
+\begin{align*}
+i = 0, 1, 2, 3&: \text{window contains index 0 or 1, max } 1\\
+i = 4&: \text{indices } 2..6, \text{ all } 0, \text{ max } 0\\
+i = 5, 6, 7&: \text{indices } 3..9 \text{ at most, all } 0, \text{ max } 0\\
+i = 8, 9, 10, 11&: \text{window contains index 10 or 11, max } 1
+\end{align*}
+Dilated invalid: $[1,1,1,1,0,0,0,0,1,1,1,1]$. Flip back: $[0,0,0,0,1,1,1,1,0,0,0,0]$. The valid run was
+indices 2--9 (8 pixels) and is now 4--7 (4 pixels): two removed from each end, as the radius promised.
+\end{worked}
+
+\begin{worked}[label={we:masking:erode2d}]{Erosion in two dimensions, kernel 3}
+A 5 $\times$ 5 mask whose top row is invalid (a swath edge) and whose centre pixel is invalid (one bad
+pixel). Kernel 3, radius 1: a pixel survives only if all 8 neighbours and itself are valid.
+\[
+m = \begin{pmatrix}0&0&0&0&0\\1&1&1&1&1\\1&1&0&1&1\\1&1&1&1&1\\1&1&1&1&1\end{pmatrix}
+\quad\Longrightarrow\quad
+\operatorname{erode}(m) = \begin{pmatrix}0&0&0&0&0\\0&0&0&0&0\\1&0&0&0&1\\1&0&0&0&1\\1&1&1&1&1\end{pmatrix}.
+\]
+Check three pixels by hand. Pixel $(1, 0)$: its window covers rows 0--2, and row 0 is invalid, so it
+is eroded. Pixel $(2, 0)$: its window covers rows 1--3 and columns 0--1 (column $-1$ is outside the
+image); none of those is invalid, so it survives. Pixel $(3, 1)$: its window covers rows 2--4 and
+columns 0--2, which includes the bad centre $(2, 2)$, so it is eroded. The single bad pixel grew a
+3 $\times$ 3 hole; the invalid row grew a second invalid row beneath it.
+\end{worked}
+
+\begin{sourcenote}[: the patch edge itself is not eroded]
+\code{F.max_pool2d} pads with $-\infty$, not with zeros, so positions outside the image never count as
+invalid. Erosion therefore grows only around \emph{invalid pixels}; the edge of a 128-pixel patch or of
+the scene array is not trimmed unless the pixels there are invalid. Real swath and scene borders are
+no-data pixels, so they are trimmed. The script \file{research/textbook/tools/compute_masking.py}
+checks both cases: an all-valid 4 $\times$ 4 mask comes back unchanged with kernel 3.
+\end{sourcenote}
+
+\begin{sourcenote}[: the kernel must be odd]
+Nothing validates oddness: the training field has \code{ge=1} and the inference field \code{gt=0}
+(\file{app/models/training/training_config.py}, lines 101--106;
+\file{app/models/training/inference_config.py}, lines 109--116). An even kernel breaks the shape. By the
+output-size formula of \cref{ch:encoder} with stride 1 and padding $k/2$, a side $H$ becomes
+$H + 2(k/2) - k + 1 = H + 1$, so the eroded mask would be one pixel larger than the image and the loss
+mask product would fail. Both docstrings also say the kernel ``should match OPE kernel size (7 for
+Stage 1)'' (\file{token_masking.py}, line 48; \file{inference_config.py}, line 115); stage 1's kernel
+is 4 (\cref{ch:encoder}). Use odd kernels.
+\end{sourcenote}
+
+\subsection{Why throw the border strip away, and how wide}
+
+A valid pixel within $r$ pixels of an invalid one shares its token, or a neighbouring token whose
+patch-embedding window it feeds, with no-data. The stage-1 token is 4 pixels wide, so a radius of 3 is
+enough to cover any token that touches an invalid pixel; larger radii also cover the wider windows of
+stages 2--4 ($r_2 = 12$ pixels, \cref{ch:encoder}). Training uses radius 0 because training patches
+come from scene interiors and are mostly fully valid: eroding every patch would throw away supervision
+for little gain. Inference covers whole scenes with real cloud and swath edges, where a false ring costs
+more than a few missing pixels, so it erodes by 7.
+
+\begin{table}[htbp]\centering
+\caption{The three erosions in the pipeline. A pixel must survive every one that applies to contribute
+a score.}\label{tab:masking:erosions}
+\begin{tabular}{@{}lllc@{}}\toprule
+Erodes & Where & Field & Default kernel \\\midrule
+sensor validity & training loss & \texttt{erosion\_kernel\_size} & 1 (off) \\
+sensor validity & inference & \texttt{erosion\_kernel\_size} & 15 \\
+analyst's region & scoring & \texttt{keep\_mask\_erosion\_kernel\_size} & 1 (off) \\\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{drift}
+Defaults as of 2026-10-29: training erosion kernel 1\tagM{app/models/training/training_config.py},
+inference 15\tagM{app/models/training/inference_config.py}; FT04 trained with 1
+\tagM{research/experiments/indradhanu-finetune/FT04-final-joint/config.json}. The scoring erosion uses
+SciPy's \code{binary_erosion} in \file{_anomaly_scoring_run.py} rather than a max pool.
+\end{drift}
+
+\coursefig[0.95\linewidth]{iw-20-erosion}{Erosion as a max pool, with the 1-D example of
+\cref{we:masking:erode1d} (kernel 5). Flipping makes invalid pixels 1; a stride-1 max pool grows that
+region by $\lfloor 5/2 \rfloor = 2$ pixels on each side; flipping back leaves the valid region shrunk by
+2 pixels per edge.}{fig:masking:erosion}
+
+\section{All four masks on one patch}\label{sec:masking:all}
+
+\Cref{fig:masking:grids} puts the four steps on one small patch of 16 $\times$ 16 pixels with 4
+$\times$ 4 tokens (16 tokens). A cloud covers rows 10--15, columns 11--15.
+
+\begin{figure}[htbp]\centering
+\begin{tikzpicture}[x=0.32cm,y=-0.32cm,font=\small]
+  % token-level panel (a)
+  \def\hid{{1,0,1,1,0,1,0,1,1,0,1,0,0,1,1,0}}
+  \def\inv{{0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,1}}
+  \foreach \t in {0,...,15}{
+    \pgfmathtruncatemacro{\r}{floor(\t/4)}\pgfmathtruncatemacro{\c}{mod(\t,4)}
+    \pgfmathtruncatemacro{\h}{\hid[\t]}\pgfmathtruncatemacro{\iv}{\inv[\t]}
+    \ifnum\iv=1
+      \fill[maskgrey!45] (4*\c,4*\r) rectangle ++(4,4);
+      \fill[pattern=north east lines,pattern color=maskgrey!90!black] (4*\c,4*\r) rectangle ++(4,4);
+    \else\ifnum\h=1
+      \fill[loss!55] (4*\c,4*\r) rectangle ++(4,4);
+    \else
+      \fill[spat!22] (4*\c,4*\r) rectangle ++(4,4);
+    \fi\fi
+    \node[font=\scriptsize] at (4*\c+2,4*\r+2) {\t};}
+  \foreach \i in {0,4,...,16}{\draw[spat,thick] (\i,0) -- (\i,16); \draw[spat,thick] (0,\i) -- (16,\i);}
+  \draw[densely dashed,thick] (11,16) -- (11,10) -- (16,10);
+  \node[above] at (8,0) {(a) tokens};
+  % pixel-level panel (b)
+  \begin{scope}[shift={(20,0)}]
+  \foreach \y in {0,...,15}{\foreach \x in {0,...,15}{
+    \pgfmathtruncatemacro{\t}{4*floor(\y/4)+floor(\x/4)}
+    \pgfmathtruncatemacro{\h}{\hid[\t]}
+    \pgfmathtruncatemacro{\bad}{(\y>9)&&(\x>10)}
+    \pgfmathtruncatemacro{\near}{(\y>8)&&(\x>9)}
+    \ifnum\bad=1
+      \fill[maskgrey!70] (\x,\y) rectangle ++(1,1);
+    \else\ifnum\h=1
+      \ifnum\near=1
+        \fill[loss!25] (\x,\y) rectangle ++(1,1);
+        \fill[pattern=crosshatch dots,pattern color=loss!90!black] (\x,\y) rectangle ++(1,1);
+      \else
+        \fill[loss!75] (\x,\y) rectangle ++(1,1);
+      \fi
+    \else
+      \fill[white] (\x,\y) rectangle ++(1,1);
+    \fi\fi}}
+  \foreach \i in {0,...,16}{\draw[gray!50,line width=0.1pt] (\i,0) -- (\i,16); \draw[gray!50,line width=0.1pt] (0,\i) -- (16,\i);}
+  \foreach \i in {0,4,...,16}{\draw[spat,thick] (\i,0) -- (\i,16); \draw[spat,thick] (0,\i) -- (16,\i);}
+  \node[above] at (8,0) {(b) pixels: the loss mask};
+  \end{scope}
+  % legend
+  \begin{scope}[shift={(0,17.5)},y=1cm,x=1cm]
+    \fill[spat!22] (0,0) rectangle ++(0.35,-0.35); \node[right,font=\footnotesize] at (0.4,-0.17) {visible valid token};
+    \fill[loss!55] (3.6,0) rectangle ++(0.35,-0.35); \node[right,font=\footnotesize] at (4.0,-0.17) {hidden token};
+    \fill[maskgrey!45] (6.4,0) rectangle ++(0.35,-0.35);
+    \fill[pattern=north east lines,pattern color=maskgrey!90!black] (6.4,0) rectangle ++(0.35,-0.35);
+    \node[right,font=\footnotesize] at (6.8,-0.17) {invalid token};
+    \fill[loss!75] (0,-0.6) rectangle ++(0.35,-0.35); \node[right,font=\footnotesize] at (0.4,-0.77) {graded pixel};
+    \fill[loss!25] (3.6,-0.6) rectangle ++(0.35,-0.35);
+    \fill[pattern=crosshatch dots,pattern color=loss!90!black] (3.6,-0.6) rectangle ++(0.35,-0.35);
+    \node[right,font=\footnotesize] at (4.0,-0.77) {hidden, eroded};
+    \fill[maskgrey!70] (6.4,-0.6) rectangle ++(0.35,-0.35); \node[right,font=\footnotesize] at (6.8,-0.77) {invalid pixel};
+  \end{scope}
+\end{tikzpicture}
+\caption{The four masks on one 16 $\times$ 16 patch with 4 $\times$ 4 tokens, in the book's colours
+(indigo spatial tokens, amber loss, grey invalid). A cloud (dashed) covers rows 10--15, columns 11--15.
+(a) Tokens 11 and 15 are invalid (valid fractions $8/16$ and $0/16$); the other 14 are valid and
+$\lfloor 0.65 \times 14 \rfloor = 9$ of them are hidden (an illustrative draw). (b) The loss mask with
+erosion radius 1 (kernel 3): hidden pixels count only when valid and not next to the cloud. Worked in
+\cref{we:masking:fourmasks}.}
+\label{fig:masking:grids}
+\end{figure}
+
+\begin{worked}[label={we:masking:fourmasks}]{Counting the graded pixels in \cref{fig:masking:grids}}
+Token $t$ covers rows $4\lfloor t/4 \rfloor$ to $+3$ and columns $4(t \bmod 4)$ to $+3$. The cloud is
+rows $\ge 10$ and columns $\ge 11$.
+
+\emph{Validity.} Token 10 (rows 8--11, columns 8--11) contains cloud at rows 10--11, column 11: 2
+pixels, so $f_{10} = 14/16 = 0.875$, valid. Token 11 (rows 8--11, columns 12--15) has cloud in rows
+10--11, all four columns: 8 pixels, so $f_{11} = 8/16 = 0.5$, \emph{invalid} by the strict rule. Token
+14 (rows 12--15, columns 8--11) has cloud in column 11: 4 pixels, $f_{14} = 12/16 = 0.75$, valid.
+Token 15 is all cloud, $f_{15} = 0$. So $n_{\text{valid}} = 16 - 2 = 14$.
+
+\emph{Hiding.} $n_{\text{hide}} = \lfloor 0.65 \times 14 \rfloor = \lfloor 9.1 \rfloor = 9$; the draw
+shown hides tokens $0, 2, 3, 5, 7, 8, 10, 13, 14$. That is $9 \times 16 = 144$ hidden pixels.
+
+\emph{Without erosion}, the loss mask drops the hidden pixels that are invalid: 2 in token 10 and 4 in
+token 14, so $144 - 2 - 4 = 138$ graded pixels.
+
+\emph{With kernel 3} (radius 1), the invalid region grows by one pixel: rows $\ge 9$, columns $\ge 10$.
+In token 10 that removes rows 9--11, columns 10--11: $3 \times 2 = 6$ pixels (the 2 invalid ones
+included). In token 14, rows 12--15, columns 10--11: $4 \times 2 = 8$ pixels (the 4 invalid ones
+included). Graded pixels: $144 - 6 - 8 = 130$. The 8 extra pixels lost to erosion are the border strip
+next to the cloud.
+\end{worked}
+
+\begin{confusions}
+\confusion{Is the token mask the same as the keep mask?}{No, and this is the most common mix-up. The
+token mask says whether a token holds real data; the keep mask says whether the encoder is shown it.
+Invalid tokens have token mask 0 and keep mask 1.}
+\confusion{Is the mask ratio a fraction of all tokens?}{Of the valid ones: $\lfloor \rho\, n_{\text{valid}}
+\rfloor$. A half-cloudy patch hides about half as many tokens in absolute terms.}
+\confusion{Does 0.65 mean 65\% are hidden?}{Slightly fewer: the count is rounded down. A fully valid
+patch hides 665 of 1024 (64.9\%); six valid tokens would hide 3 (50\%).}
+\confusion{Why add exactly 2?}{Any shift of at least 1 puts invalid noise at or above 1, above every valid
+value in $[0, 1)$. Two is a comfortable margin.}
+\confusion{Where is ids\_restore?}{Nowhere. The scatter through the sort order is the same operation as a
+gather through the inverse permutation (\cref{we:masking:inverse}), so it is never built.}
+\confusion{Does a hidden token get graded on all 16 of its pixels?}{Only on the valid ones (and, with
+erosion on, only those away from invalid pixels). A token can be valid with up to 7 invalid pixels.}
+\confusion{Does the same mask get used every batch?}{No. \texttt{torch.rand} is called afresh each time, so
+every batch of every epoch hides a different set.}
+\confusion{Does erosion shrink the output image?}{No. The image keeps its size; eroded pixels are
+reconstructed but not counted in the loss or score.}
+\end{confusions}
+
+\begin{checkyourself}
+\item\label{ex:masking:1} A token's 4 $\times$ 4 block has 9 valid pixels. Compute $f_t$ and decide
+whether it is valid. Then do the same for 8 valid pixels.
+\item\label{ex:masking:2} A patch has 37 valid tokens and $\rho = 0.65$. How many are hidden, how many
+tokens does the encoder see if the patch has 1024 tokens in all, and what is the effective mask ratio?
+\item\label{ex:masking:3} Six tokens, $v = [1, 1, 1, 0, 1, 1]$, $\rho = 0.65$, noise $[0.9, 0.1,
+0.05, 0.4, 0.6, 0.02]$. Work through the $+2$, the count, the argsort, the scatter and the keep mask.
+Then compute the inverse permutation and check that gathering the sorted flags through it gives the
+same prediction mask.
+\item\label{ex:masking:4} \code{keep_mask = [1, 0, 1, 1]} for tokens $t_0..t_3$. Write the gather
+indices, the kept tokens, the selection matrix $\mat{S}$, and the restored sequence after the blocks
+produce $t_0', t_2', t_3'$.
+\item\label{ex:masking:5} Erode $m = [0, 1, 1, 1, 1, 0]$ with kernel 3, by hand, using the
+dilate-then-flip method. Then erode $[1, 1, 1, 1, 0, 1, 1, 1, 1]$ with kernel 5.
+\item\label{ex:masking:6} In a batch of two, patch A has 1024 valid tokens and patch B 960. With
+$\rho = 0.65$, compute each patch's kept count, \code{max_kept}, and how many hidden tokens leak into
+which patch.
+\end{checkyourself}
+
+\nextchapter{ch:decoder}

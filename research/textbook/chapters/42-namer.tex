@@ -1,0 +1,1393 @@
+\chapter{The spectral namer as built}\label{ch:namer}
+
+\begin{onething}
+The spectral namer is a 347,685-parameter two-tower network on Indradhanu~V2's wavelength-aware stem: one tower reads
+a pixel with its ring of neighbours, the other reads a laboratory spectrum, and both meet in one table of cosines;
+since 2026-10-31 \emph{both} of its questions are answered from that table, the material class by pooling the
+cosines of each man-made class, and natural-or-man-made by comparing the pooled man-made cosines with the pooled
+natural ones, because a single linear head on the pixel tower sat at chance.
+\end{onething}
+
+\Cref{sec:material:twolevel} gave the \emph{why} of the redesigned naming step: use-based families, two questions
+in turn, matching instead of classifying, and the separability check as a classical baseline. The design became
+\file{docs/proposals/spectral-namer.md}, and then code, all on 2026-10-31. This chapter reads the code from end to
+end, with every tensor shape and every parameter, and it tells the one change made after the first run started:
+\emph{level~1 by matching}.
+
+\paragraph{Status when this chapter was written.} Run N001 started on an H100 capacity block at 11:30~UTC on
+2026-10-31 (block until 2026-11-02 11:30~UTC). After its first epoch its level-1 head was at chance; it was stopped
+and replaced by N001b (\file{configs/namer/N001b.json}), the same run with level~1 by matching, and by N002, the
+open-set run, also with matching. \textbf{The results of N001b and N002 are pending}: N001b's README records its
+first epoch only, and N002 has none yet, so nothing in this chapter is a final result of either. Every number is a
+setting \tagM{configs/namer/N001b.json}, a count or worked number from this book's script
+\file{research/textbook/tools/compute_namer_full.py} \tagC, a CPU smoke test, or one of the early measurements now
+recorded in \file{research/experiments/spectral-namer/N001/README.md} and \file{N001b/README.md}.
+
+Paths abbreviate: \file{namer/} is \file{app/spectral_match/namer/}, and \file{components/} is
+\file{app/foundation_models/components/}.
+
+\begin{analogy}
+A wine-tasting course that cannot find enough labelled wines. The teacher pours ordinary table wine, adds a measured
+splash of a reference wine from the cellar, and asks two questions: ``was anything added that does not grow in a
+vineyard?'' and ``which grape?''. The splash size varies, the glasses differ a little, the room is noisy. The student
+is marked right for naming the \emph{grape}, not for recognising the exact bottle, and the bottle used for the splash
+is never one of the answers on the card. The student answers both questions the same way: by asking which bottles on
+the shelf the glass tastes most like. The table wine is a real pixel, the splash a library spectrum, the grape the
+material class, and the shelf the library.
+\end{analogy}
+
+%======================================================================
+\section{What the namer answers}\label{sec:namer:question}
+
+The namer runs \emph{after} detection. Something else (\cref{ch:inference,ch:material}) has already flagged a pixel
+as anomalous; the namer says what it might be. For each pixel it returns four numbers (\file{namer/infer.py},
+\code{NamerResult}):
+\begin{enumerate}
+\item $P(M)$, the probability that something man-made is in the pixel: \emph{level~1};
+\item the most likely man-made class $\hat k$ among seven;
+\item $P(\hat k\mid M)$, that class's probability \emph{if} the pixel is man-made: \emph{level~2};
+\item $\hat a$, an estimate of the \emph{fill}, the share of the pixel the material covers.
+\end{enumerate}
+The proposal combines the two levels as $P(k)=P(M)\times P(k\mid M)$. The seven classes are materials, not uses
+(\file{namer/classes.py}, \code{MANMADE_CLASSES}): oil/fuel, plastic, textile/fabric, wood/paper, paint/coatings,
+metal, concrete/asphalt.
+
+\begin{definition}[Fill]
+The \emph{fill}\index{fill} $a$ of a pixel is the fraction of its area covered by the target material, between 0 and
+1. A 10\,m boat in a 30\,m pixel has $a\approx(10\times10)/(30\times30)=100/900=0.11$ \tagA.
+\end{definition}
+
+%======================================================================
+\section{The architecture: a Siamese, two-tower network}\label{sec:namer:model}
+
+\begin{definition}[Encoder, embedding, tower, Siamese network]
+An \emph{encoder}\index{encoder} is a network that turns an input into a short vector, its
+\emph{embedding}\index{embedding}. A \emph{tower}\index{tower} is one encoder in a model that has several, drawn
+side by side. A \emph{Siamese network}\index{Siamese network} \citep{bromley1993signature} runs two inputs through
+the \emph{same} weights and compares the outputs. A \emph{two-tower} (or dual-encoder\index{dual encoder}) model has
+two towers whose outputs are compared, usually by a cosine; the towers may share some weights and not others.
+\end{definition}
+
+The namer is both, in a precise sense. Its first stage, the \emph{stem}, is Siamese: one set of 17,825 weights runs
+on the pixel $\vect{x}$, on its ring mean $\vect{r}$ and on every library spectrum $\vect{t}_j$. After the stem the
+two sides part into towers with different weights. The namer's own docstring (\file{namer/model.py}) says:
+\begin{lstlisting}[language={}]
+pixel side:   x, r (ring mean) -> stem -> [z_x, z_r, z_x - z_r] -> MLP -> h
+              h -> embedding (unit, 128) | fill in [0, 1] | (level-1 linear head, unused with level1="matching")
+library side: t -> stem -> MLP -> embedding (unit, 128)
+class score:  logsumexp over the class's library embeddings of  cos(z, e_j) / tau
+level 1:      "matching" (N001b on) - natural entries as one more class, level1_logit; or the linear head (N001)
+\end{lstlisting}
+The linear head is the one N001 used; N001b computes level~1 by matching (\cref{sec:namer:level1}), and the head is
+still built but no longer read.
+
+\begin{figure}[p]
+\centering
+\includegraphics[angle=90,height=0.86\textheight]{namer_network}
+\caption{The publication schematic of the namer, from
+\texttt{research/\allowbreak experiments/\allowbreak spectral-namer/\allowbreak figures/\allowbreak namer\_network.pdf}, redrawn on
+31~October 2026 for level~1 by matching: the pixel tower has two heads (embedding and fill), and the class-matching
+box pools the natural library entries as one more class, $P(\text{man-made})=\sigma(\operatorname{LSE}_{c<7}S_c-S_{\text{natural}}+b)$
+(\cref{sec:namer:level1}, \cref{fig:namer:shapes}). The old Linear level-1 head is still built in the model but not used, so it is not drawn.}
+\label{fig:namer:schematic}
+\end{figure}
+
+\subsection{The pixel tower}
+
+The pixel tower encodes the pixel $\vect{x}$ and its ring mean $\vect{r}$ separately through the stem, getting
+$\vect{z}_x$ and $\vect{z}_r$ of 64 numbers each, and concatenates
+\begin{equation}
+\vect{u}=[\vect{z}_x,\ \vect{z}_r,\ \vect{z}_x-\vect{z}_r]\in\R^{192}.
+\label{eq:namer:concat}
+\end{equation}
+This is \cref{sec:material:naming}'s ``subtract the ring'', done on features rather than on reflectance; the network
+also keeps $\vect{z}_x$ and $\vect{z}_r$ themselves, so it can learn when the subtraction helps and when it does not.
+A three-layer perceptron (\code{_mlp}, Linear--GELU--Linear--GELU--Linear, \cref{ch:block} defined GELU) maps
+$\vect{u}$ to $\vect{h}\in\R^{256}$. Three linear \emph{heads} read $\vect{h}$:
+\begin{itemize}
+\item \code{to_embed}: $256\to128$, then divided by its length, so the pixel embedding $\vect{z}$ is a unit vector;
+\item \code{to_fill}: $256\to1$, then a sigmoid, so $\hat a\in(0,1)$;
+\item \code{to_manmade}: $256\to1$, a raw score (a \emph{logit}). This was level~1 in N001; under
+\code{"level1": "matching"} its output is overwritten before any loss sees it.
+\end{itemize}
+
+\subsection{The library tower}
+
+The library tower runs each library spectrum $\vect{t}_j$ through the same stem, a second perceptron
+$64\to256\to256\to128$ (\code{library}), and divides by the length: a unit vector $\vect{e}_j\in\R^{128}$.
+
+\subsection{Where the towers meet}
+
+Both embeddings have length 1, so their dot product is their cosine. With a learned temperature $\tau$:
+\begin{equation}
+s_j=\frac{\vect{z}\cdot\vect{e}_j}{\tau}=\frac{\cos(\vect{z},\vect{e}_j)}{\tau}.
+\label{eq:namer:sj}
+\end{equation}
+For a batch of $P$ pixels and $L$ library entries, all the $s_j$ form one matrix
+$\mat{S}=\mat{Z}\mat{E}\T/\tau$ of shape \shape{(P, L)}, the line \code{s = z @ lib_embed.T / self.log_tau.exp()} of
+\code{class_scores}. Everything the namer says about materials is read from this matrix.
+
+\subsection{Why the towers are not the same}
+
+A Siamese network often uses one tower for both inputs. The namer does not, after the stem, because the two inputs
+are different kinds of object:
+\begin{itemize}
+\item \textbf{The pixel is a mixture in context.} It is $a\vect{t}+(1-a)\vect{b}$ plus noise and an atmospheric
+error, with $a$ often below 0.25. What identifies the target is the \emph{difference} from the surroundings, so the
+pixel tower takes the ring too, and it must also estimate how much was added (the fill head).
+\item \textbf{The library spectrum is pure and alone.} It is a laboratory measurement of one material, $a=1$, no
+background, no ring, no noise worth modelling. The library tower has no ring input and no fill head.
+\end{itemize}
+The pixel tower's job is to \emph{undo} the mixing: to map a 15\%-plastic pixel over grass near the point where the
+library tower maps pure plastic. The library tower only has to place pure spectra so that materials group together.
+Forcing one set of weights to do both would make the library side pretend to un-mix something that was never mixed.
+\textbf{The asymmetry is deliberate: the pixel tower learns to un-mix, the library tower only to arrange.}
+
+\subsection{Why a new library needs no retraining}
+
+Nothing in the model is tied to a library entry. The library tower is a function: spectrum in, embedding out. To add
+a spectrum, or a whole class, you encode it and append the row to $\mat{E}$; to add a class you also give its rows a
+new class index. Inference does exactly this every time: \code{name_pixels} builds the bank at the scene's own bands
+and calls \code{forward_library} on all of it (\cref{sec:namer:infer}). A closed classifier, by contrast, has one
+output per class; a new class means a new output and new training. The proposal's decision record says this is why
+the namer matches rather than classifies (``a matching (not closed-classifier) model so a new library needs no
+retraining'').
+
+\begin{worked}[label={we:namer:newlib}]{The cost of a new library}
+A new library of 500 spectra at EnMAP's bands, encoded on the laptop. The library tower is one stem pass over
+\shape{(500, N, 1, 1)} and one perceptron over \shape{(500, 64)}. Its perceptron multiplies
+\begin{align*}
+64\times256+256\times256+256\times128 &= 16{,}384+65{,}536+32{,}768 = 114{,}688
+\end{align*}
+numbers per spectrum, so $500\times114{,}688=57{,}344{,}000$ multiply-adds: a fraction of a second on a CPU. Training
+the namer is 20,000 steps of tens of thousands of samples. The difference is the reason for the design: a new library
+costs one forward pass, not a training run \tagC.
+\end{worked}
+
+But note what ``no retraining'' does not promise. The library tower was trained on the family library's spectra; a new
+spectrum that is unlike all of them may land somewhere unhelpful. Whether a new class is \emph{named well} without
+training is exactly what the open-set run N002 measures (\cref{sec:namer:splits}).
+
+\subsection{Counting the parameters}
+
+\begin{worked}[label={we:namer:params}]{Counting the namer's parameters}
+A linear layer from $i$ to $o$ numbers has $i\times o$ weights and $o$ biases. The pixel perceptron is
+$192\to256\to256\to256$, the library perceptron $64\to256\to256\to128$:
+\begin{align*}
+\text{pixel MLP} &= (192\times256+256)+(256\times256+256)+(256\times256+256)\\
+&= 49{,}408+65{,}792+65{,}792 = 180{,}992,\\
+\text{library MLP} &= (64\times256+256)+(256\times256+256)+(256\times128+128)\\
+&= 16{,}640+65{,}792+32{,}896 = 115{,}328,\\
+\text{heads} &= \underbrace{(256\times128+128)}_{\text{embedding}}+\underbrace{2\times(256+1)}_{\text{manmade, fill}}
+ = 32{,}896+514 = 33{,}410,\\
+\text{BatchNorm} &= \underbrace{64}_{\text{scale}}+\underbrace{64}_{\text{shift}} = 128,\\
+\text{scalars} &= \underbrace{1}_{\ln\tau}+\underbrace{1}_{\text{level-1 bias }b} = 2,\\
+\text{stem} &= 17{,}825 \quad\text{(counted by hand in \cref{sec:namer:stemparams})},\\
+\text{total} &= 180{,}992+115{,}328+33{,}410+128+2+17{,}825 = 347{,}685 .
+\end{align*}
+Instantiating \code{SpectralNamer} with N001b's settings gives 347,685 \tagC. The stem, the only part taken from
+Indradhanu, is $17{,}825/347{,}685=5.1\%$ of it. The pixel tower (perceptron and three heads) is
+$180{,}992+33{,}410=214{,}402$, the library tower 115,328.
+\end{worked}
+
+\begin{sourcenote}[: 347,685, not 347,684; and not 1--3\,M]
+The first version of this chapter, and the course, counted 347,684. That was right for the code before level~1 by
+matching: \code{l1_bias}, one number, was added on 2026-10-31 with \code{level1_logit}. The proposal's ``Size: small
+($\sim$1-3 M parameters)'' is three to nine times the model in the code. Of the 347,685, the 257 of
+\code{to_manmade} receive no gradient under matching (\cref{sec:namer:level1}).
+\end{sourcenote}
+
+%======================================================================
+\section{The stem in full, at the namer's shapes}\label{sec:namer:stem}
+
+\Cref{sec:specdecoder:reduced} built the reduced stem at $D=32$ for SpectralEarth. The namer runs it at
+$D=64$, Indradhanu Heavy's width, copied from the V2 checkpoint FTH3 epoch~5 by \code{from_spectral_stem} with the
+settings \code{compressed_channels} 64, \code{token_dim} 32, \code{attention_heads} 4, \code{bin_nm} 40,
+\code{band_weighting} \code{"width"} (FTH3's own config has the same five values
+\tagM{research/experiments/indradhanu-finetune/FTH3-heavy-joint-more2/config.json}). This section walks it once more,
+at the shapes it really runs in one namer training step: $P=8192$ pixels (or $L=378$ library spectra) and $N=200$
+bands \tagA.
+
+The namer calls it through \code{SpectralNamer.encode}:
+\begin{lstlisting}
+x = spectra[:, :, None, None]                     # (P, N) -> (P, N, 1, 1): P images of one pixel
+z = self.stats.normalize(x, wavelengths_nm)       # per-wavelength z-score
+...
+return self.norm(self.stem(z, wavelengths_nm, bv)[:, :, 0, 0])   # (P, 64)
+\end{lstlisting}
+The stem works along wavelength inside each pixel, so a batch of $P$ spectra is passed as $P$ images of size
+$1\times1$. Nothing spatial happens.
+
+\subsection{Step 0: normalisation by wavelength}
+
+\code{WavelengthStats} (\file{components/pixel_normalization.py}) holds a mean curve $\mu(\lambda)$ and a spread curve
+$\sigma(\lambda)$ over wavelength, measured once on SpectralEarth's training split and stored in the checkpoint
+(``never recomputed''). A band at wavelength $\lambda$ between two stored wavelengths $\lambda_{lo}<\lambda<\lambda_{hi}$
+reads the curves by linear interpolation:
+\begin{align}
+t &= \frac{\lambda-\lambda_{lo}}{\lambda_{hi}-\lambda_{lo}}, \qquad
+\mu(\lambda)=\mu_{lo}+t\,(\mu_{hi}-\mu_{lo}), \qquad \sigma(\lambda)=\sigma_{lo}+t\,(\sigma_{hi}-\sigma_{lo}),\\
+v &= \frac{x-\mu(\lambda)}{\sigma(\lambda)} .
+\end{align}
+Outside the stored range the end values are held.
+
+\begin{worked}[label={we:namer:lerp}]{Normalising one band}
+Stored: at 860\,nm mean 0.30, spread 0.10; at 870\,nm mean 0.32, spread 0.12 \tagA. A band at 864\,nm reads 0.35:
+\begin{align*}
+t &= (864-860)/(870-860) = 4/10 = 0.4,\\
+\mu &= 0.30+0.4\times(0.32-0.30) = 0.30+0.008 = 0.308,\\
+\sigma &= 0.10+0.4\times(0.12-0.10) = 0.10+0.008 = 0.108,\\
+v &= (0.35-0.308)/0.108 = 0.042/0.108 = 0.389 .
+\end{align*}
+\end{worked}
+
+This keeps \emph{absolute} reflectance meaningful: a bright and a dark pixel stay different, unlike a per-scene
+min-max scaling. The proposal names this as a requirement (``it keeps absolute reflectance''). Invalid bands are set
+to 0 after normalisation (\code{masked_fill}) and are also excluded from every average below.
+
+\subsection{Step 1: the wavelength encoding}
+
+Every band's wavelength becomes a vector of $d=32$ numbers (\file{components/spectral_tokens.py},
+\code{wavelength_encoding}): 16 periods spaced geometrically from 10 to 10,000\,nm, a sine and a cosine of each,
+\begin{equation}
+p_i=10\times1000^{\,i/15}\ \text{nm},\quad i=0,\dots,15;\qquad
+\operatorname{enc}(\lambda)=\Big[\sin\tfrac{2\pi\lambda}{p_0},\dots,\sin\tfrac{2\pi\lambda}{p_{15}},\
+\cos\tfrac{2\pi\lambda}{p_0},\dots,\cos\tfrac{2\pi\lambda}{p_{15}}\Big].
+\label{eq:namer:enc}
+\end{equation}
+Successive periods differ by the factor $1000^{1/15}=1.5849$: 10.0, 15.8, 25.1, 39.8, \dots, 6309.6, 10000.0\,nm \tagC.
+
+\begin{worked}[label={we:namer:enc}]{Three entries of $\operatorname{enc}(1000\text{ nm})$}
+\begin{align*}
+\sin(2\pi\times1000/10) &= \sin(200\pi) = 0,\\
+\sin(2\pi\times1000/15.85) &= \sin(396.4) = 0.5659,\\
+\sin(2\pi\times1000/10000) &= \sin(0.6283) = 0.5878,\qquad \cos(0.6283)=0.8090 .
+\end{align*}
+The code gives the same \tagC. The slowest pair (period 10,000\,nm) changes by only a few per cent between
+neighbouring bands, so it says roughly \emph{where} in the spectrum a band sits; the fastest pair separates bands 5\,nm
+apart. The encodings of 1000 and 1010\,nm have cosine 0.6709 \tagC: similar, not identical.
+\end{worked}
+
+For the batch, $\operatorname{enc}$ of all $N$ bands is one matrix of shape \shape{(N, 32)} = \shape{(200, 32)}, the
+same for every pixel; it is computed once per call.
+
+\subsection{Step 2: bins of 40\,nm}
+
+The bins are a fixed grid from 400\,nm, the same on every sensor (\code{BIN_ORIGIN_NM}, \code{BIN_END_NM} = 400, 2500):
+\begin{equation}
+G=\Big\lceil\frac{2500-400}{40}\Big\rceil=\lceil52.5\rceil=53,\qquad
+g(\lambda)=\operatorname{clamp}\Big(\Big\lfloor\frac{\lambda-400}{40}\Big\rfloor,\ 0,\ 52\Big).
+\end{equation}
+So 405 and 439.9\,nm fall in bin 0, 440\,nm in bin 1, 1000\,nm in bin $\lfloor600/40\rfloor=15$, 2450\,nm in bin 51; the
+last bin runs from 2480 to 2520\,nm, past the grid's end, and a band below 400\,nm is clamped into bin 0 \tagC. Bin $g$
+has centre $420+40g$\,nm. The membership is a one-hot matrix $\mat{O}$ of shape \shape{(N, G)} = \shape{(200, 53)}:
+$O_{bg}=1$ if band $b$ is in bin $g$.
+
+On EnMAP's real 224-band list (418--2445\,nm), 47 of the 53 bins hold at least one band, at most 9 in one bin; the
+empty ones are the two water-vapour gaps and the bins past 2445\,nm \tagC.
+
+\subsection{Step 3: band widths}
+
+With \code{band_weighting="width"} each band counts by the nanometres of spectrum it stands for (\code{band_widths}):
+half the gap to each neighbour, the single gap at either end, every gap capped at \code{MAX_GAP_NM} = 20\,nm.
+
+\begin{worked}[label={we:namer:widths}]{Widths of four bands, and of a band beside a water gap}
+Bands at 410, 430, 445, 470\,nm. Gaps: $430-410=20$, $445-430=15$, $470-445=25$, capped to 20, 15, 20.
+\begin{align*}
+w_{410} &= 20 &&\text{one gap at the end}\\
+w_{430} &= (20+15)/2 = 17.5,\qquad w_{445} = (15+20)/2 = 17.5\\
+w_{470} &= 20 &&\text{one (capped) gap at the end}
+\end{align*}
+Bands at 1320, 1330, 1340, 1460, 1470\,nm: the 120\,nm water gap is capped to 20, so the widths are 10, 10,
+$(10+20)/2=15$, $(20+10)/2=15$, 10. Without the cap the 1340\,nm band would claim 65\,nm of spectrum it never measured.
+The code gives both lists \tagC.
+\end{worked}
+
+The widths, times validity, form the weight $c_b$ of band $b$ for each pixel, and the stem multiplies the values by it:
+\code{vals} $=c_b v_b$, shape \shape{(P, N)}; \code{cnt_band} $=c_b$, shape \shape{(P, N)}; and the total weight per
+bin \code{cnt} $=\mat{C}_{\text{band}}\mat{O}$, shape \shape{(P, N)}$\times$\shape{(N, G)} = \shape{(P, 53)}.
+
+\subsection{Step 4: bin tokens, as one matrix product}
+
+Each band also gets its own weight vector $\vect{k}(\lambda_b)\in\R^{32}$, from a small network of its encoding
+(\code{band_weight}, $32\to64\to32$). Bin $g$'s token is the weighted mean of its bands' $v_b\,\vect{k}(\lambda_b)$:
+\begin{equation}
+\vect{\tau}_g=\frac{\sum_{b\in g}c_b\,v_b\,\vect{k}(\lambda_b)}{\sum_{b\in g}c_b}.
+\label{eq:namer:token}
+\end{equation}
+Written as a loop this would build a \shape{(P, N, 32)} tensor, 52.4 million numbers at $P=8192$, $N=200$. The code
+avoids it by folding the bin membership into the weights. Build
+\begin{equation}
+\mat{K}\in\R^{N\times(G\cdot d)},\qquad K_{b,\,(g,i)}=O_{bg}\,k_i(\lambda_b),
+\end{equation}
+row $b$ holding $\vect{k}(\lambda_b)$ in the 32 columns of its own bin and zeros elsewhere
+(\code{kmat = (onehot[:, :, None] * self.band_weight(enc)[:, None, :]).reshape(n, G * self.d)}). Then one product
+\shape{(P, N)}\,@\,\shape{(N, 53$\cdot$32)} = \shape{(P, 1696)}, reshaped to \shape{(P, 53, 32)} and divided by
+\code{cnt}, gives every token of every pixel. $\mat{K}$ has $200\times1696=339{,}200$ entries; the tokens
+$8192\times53\times32=13{,}893{,}632$ \tagC.
+
+\begin{worked}[label={we:namer:kmat}]{Tokens by the matrix product, on paper}
+Take the four bands of \cref{we:namer:widths} with $d=2$ instead of 32 and two bins (410, 430 in bin~0; 445, 470 in
+bin~1). Normalised values $v=(0.5,-0.2,1.0,0.4)$ and band vectors $\vect{k}=(1,0)$, $(0.5,0.5)$, $(0,1)$, $(1,-1)$
+\tagA. Widths $c=(20,17.5,17.5,20)$.
+\begin{align*}
+c\,v &= (20\times0.5,\ 17.5\times(-0.2),\ 17.5\times1.0,\ 20\times0.4) = (10,\ -3.5,\ 17.5,\ 8),\\
+\text{cnt} &= (20+17.5,\ 17.5+20) = (37.5,\ 37.5),\\
+\mat{K} &= \begin{pmatrix}1&0&0&0\\0.5&0.5&0&0\\0&0&0&1\\0&0&1&-1\end{pmatrix},\\
+(c\,v)\,\mat{K} &= \big(10\times1+(-3.5)\times0.5,\ \ (-3.5)\times0.5,\\
+&\qquad\ 8\times1,\ \ 17.5\times1+8\times(-1)\big)\\
+&= (8.25,\ -1.75,\ 8.0,\ 9.5),\\
+\vect{\tau}_0 &= (8.25,\ -1.75)/37.5 = (0.2200,\ -0.0467),\\
+\vect{\tau}_1 &= (8.0,\ 9.5)/37.5 = (0.2133,\ 0.2533).
+\end{align*}
+A direct loop over the bands of each bin gives the same two tokens \tagC.
+\end{worked}
+
+Then every token gets its bin's position,
+\begin{lstlisting}
+tok = tok + self.bin_bias(wavelength_encoding(centres))     # (P, 53, 32) + (53, 32)
+\end{lstlisting}
+a linear map $32\to32$ of the encoding of the bin centre, shape \shape{(53, 32)}, added to every pixel's tokens.
+
+\subsection{Step 5: 64 queries attend over 53 bins, in 4 heads}
+
+The stem has 64 learned queries, a \shape{(64, 32)} matrix, one per output channel. Attention (\cref{ch:attention})
+lets each query read the bins it needs:
+\begin{center}\small
+\begin{tabular}{@{}lll@{}}
+\toprule
+what & formula & shape\\
+\midrule
+queries & $\mat{Q}=\operatorname{Lin}_q(\text{queries})$, all pixels & \shape{(64, 32)} $\to$ 4 heads \shape{(64, 8)}\\
+keys, values & $\mat{K}_p=\operatorname{Lin}_k(\vect{\tau})$, $\mat{V}_p=\operatorname{Lin}_v(\vect{\tau})$ & \shape{(P, 53, 32)} $\to$ \shape{(P, 4, 53, 8)}\\
+weights & $\softmax\big(\mat{Q}\mat{K}_p\T/\sqrt8\big)$, masked & \shape{(P, 4, 64, 53)}\\
+answers & weights $\times\,\mat{V}_p$, heads joined & \shape{(P, 64, 32)}\\
+\bottomrule
+\end{tabular}
+\end{center}
+The mask is \code{cnt > 0}: a bin with no valid band gets weight exactly 0 (\cref{sec:crossstem:mask}). If a pixel
+has no valid band at all, the mask is dropped for it and its output is set to 0 at the end.
+
+\begin{worked}[label={we:namer:attn}]{One query, three bins, one empty}
+Head dimension 2 for paper: query $\vect{q}=(1,0.5)$; keys $(1,0)$, $(0,1)$, $(2,2)$; values $(0.2,0.4)$, $(0.6,-0.2)$,
+$(9,9)$; bin~3 has no valid band \tagA.
+\begin{align*}
+\vect{q}\cdot\vect{k}/\sqrt2 &= (1,\ 0.5,\ 3)/1.4142 = (0.7071,\ 0.3536,\ 2.1213),\\
+\text{masked} &= (0.7071,\ 0.3536,\ -\infty),\\
+e^{0.7071} &= 2.0281,\quad e^{0.3536}=1.4242,\quad e^{-\infty}=0,\quad\text{sum }3.4523,\\
+\text{weights} &= (2.0281/3.4523,\ 1.4242/3.4523,\ 0) = (0.5875,\ 0.4125,\ 0),\\
+\text{answer} &= 0.5875\,(0.2,0.4)+0.4125\,(0.6,-0.2) = (0.3650,\ 0.1525).
+\end{align*}
+The large value 9 in the empty bin cannot leak. PyTorch's \code{scaled_dot_product_attention} with the same boolean
+mask returns $(0.3650,\ 0.1525)$ \tagC.
+\end{worked}
+
+If the attention weights were stored, they would be $8192\times4\times64\times53=111{,}149{,}056$ numbers, 424\,MiB in
+float32, per stem call \tagC. PyTorch's fused attention kernel avoids storing them, and the stem splits calls above
+32,768 rows (\code{SDPA_MAX_ROWS}); at $P=8192$ one call suffices.
+
+\subsection{Step 6: one number per channel, plus the skip path}
+
+The answers pass through $\operatorname{Lin}_o$ ($32\to32$) and \code{to_channel} ($32\to1$): \shape{(P, 64, 32)}
+$\to$ \shape{(P, 64, 1)} $\to$ \shape{(P, 64)}. Channel $c$ is query $c$'s answer squeezed to one number.
+
+Alongside, a per-band \emph{skip path} lets every valid band reach the channels directly with weights computed from
+its wavelength (\code{skip_weight}, $32\to64\to64$):
+\begin{equation}
+\text{skip}_c=\frac{\sum_b c_b\,v_b\,W_c(\lambda_b)}{\sum_b c_b},
+\end{equation}
+in code \code{(vals @ self.skip_weight(enc)) / cnt_band.sum(1)}: \shape{(P, N)} @ \shape{(N, 64)} = \shape{(P, 64)}.
+This is the old $1\times1$ compressor with columns computed from wavelength; attention adds adaptivity on top, it does
+not carry all the detail alone (the stem's docstring, ``fix 2''). The stem returns
+$\vect{z}=\text{attention}+\text{skip}$, \shape{(P, 64)} (as \shape{(P, 64, 1, 1)}).
+
+\subsection{Step 7: the frozen BatchNorm}
+
+\begin{definition}[BatchNorm in evaluation mode]
+A BatchNorm\index{BatchNorm} layer \citep{ioffe2015batch} with stored running mean $m_c$ and variance $s_c^2$, learned
+scale $\gamma_c$ and shift $\beta_c$, maps channel $c$ of an input as
+$y_c=\gamma_c\,(z_c-m_c)/\sqrt{s_c^2+\epsilon}+\beta_c$, $\epsilon=10^{-5}$. In \emph{training} mode it uses the
+current batch's mean and variance instead of $m_c,s_c^2$, and updates the stored ones.
+\end{definition}
+
+\begin{worked}[label={we:namer:bn}]{One channel through the frozen BatchNorm}
+$m=0.4$, $s^2=0.25$, $\gamma=1.5$, $\beta=-0.1$, input $z=0.9$ \tagA:
+\begin{align*}
+z-m &= 0.9-0.4 = 0.5,\qquad \sqrt{0.25+0.00001} = 0.50001,\\
+y &= 1.5\times0.5/0.50001-0.1 = 1.49997-0.1 = 1.39997 .
+\end{align*}
+\code{BatchNorm1d} in evaluation mode gives 1.39997 \tagC.
+\end{worked}
+
+\code{SpectralNamer.train()} calls the usual \code{train()} and then \code{self.norm.eval()}: the running statistics
+stay those of V2, estimated on real pixels of the three sensors, and normalise pixels, rings and library spectra alike,
+in training and evaluation; $\gamma$ and $\beta$ still train. \Cref{sec:namer:loss} tells why.
+
+\subsection{The stem's parameters, by hand}\label{sec:namer:stemparams}
+
+\begin{table}[htbp]
+\centering\small
+\begin{tabular}{llr}
+\toprule
+piece & layers & parameters\\
+\midrule
+\code{band_weight}, $\vect{k}(\lambda)$ & $32\to64$, $64\to32$ & $(32\times64+64)+(64\times32+32)=2{,}112+2{,}080=4{,}192$\\
+\code{skip_weight}, $W(\lambda)$ & $32\to64$, $64\to64$ & $(32\times64+64)+(64\times64+64)=2{,}112+4{,}160=6{,}272$\\
+\code{bin_bias} & $32\to32$ & $32\times32+32=1{,}056$\\
+\code{queries} & $64\times32$ & $2{,}048$\\
+$\operatorname{Lin}_{q,k,v,o}$ & $4\times(32\to32)$ & $4\times1{,}056=4{,}224$\\
+\code{to_channel} & $32\to1$ & $33$\\
+\midrule
+total & & $4{,}192+6{,}272+1{,}056+2{,}048+4{,}224+33=17{,}825$\\
+\bottomrule
+\end{tabular}
+\caption{The reduced stem at $D=64$, $d=32$. Instantiation gives 17,825, tensor by tensor \tagC; the Indradhanu
+course's part~71 derives the same total. No count depends on the number of bands $N$ or on the sensor.}
+\label{tab:namer:stemparams}
+\end{table}
+
+\begin{table}[htbp]
+\centering\small
+\begin{tabular}{lll}
+\toprule
+step & tensor & shape\\
+\midrule
+input & spectra as images & \shape{(8192, 200, 1, 1)}\\
+0 & normalised values $v$, masked & \shape{(8192, 200, 1, 1)}\\
+1 & $\operatorname{enc}(\lambda)$ & \shape{(200, 32)}\\
+2 & one-hot bins $\mat{O}$ & \shape{(200, 53)}\\
+3 & \code{vals}, \code{cnt_band}; \code{cnt} & \shape{(8192, 200)}; \shape{(8192, 53)}\\
+4 & $\vect{k}(\lambda)$; $\mat{K}$; tokens & \shape{(200, 32)}; \shape{(200, 1696)}; \shape{(8192, 53, 32)}\\
+4 & bin bias & \shape{(53, 32)}\\
+5 & $\mat{Q}$; $\mat{K}_p,\mat{V}_p$ & \shape{(1, 4, 64, 8)} expanded; \shape{(8192, 4, 53, 8)}\\
+5 & weights (not stored); answers & \shape{(8192, 4, 64, 53)}; \shape{(8192, 64, 32)}\\
+6 & \code{to_channel}; skip; $\vect{z}$ & \shape{(8192, 64, 1)}; \shape{(8192, 64)}; \shape{(8192, 64)}\\
+7 & BatchNorm (frozen) & \shape{(8192, 64)}\\
+\bottomrule
+\end{tabular}
+\caption{The stem for the 8,192 pixels of one sensor's batch, $N=200$ bands \tagA. Forward hooks on the real modules
+record these shapes \tagC; for the library replace 8192 by 378.}
+\label{tab:namer:stemshapes}
+\end{table}
+
+%======================================================================
+\section{The ring mean}\label{sec:namer:ring}
+\index{ring mean}
+
+A pixel's surroundings are summarised by the mean of the valid pixels in a $15\times15$ box minus the central
+$5\times5$ box (\file{namer/generator.py}, \code{INNER, OUTER = 5, 15}). Box sums come for every pixel at once from an
+average pool times the box area:
+\begin{lstlisting}
+s = box(v, OUTER) - box(v, INNER)     # sum of valid values in the ring, (B, N, H, W)
+c = box(m, OUTER) - box(m, INNER)     # number of valid pixels in the ring
+ring = s / c.clamp(min=1)
+\end{lstlisting}
+In the interior $c=15^2-5^2=225-25=200$. The $5\times5$ box covers offsets $-2$ to $2$, so it removes every pixel up to
+two steps away (a diagonal step counts as one: the \emph{Chebyshev distance}\index{Chebyshev distance}
+$\max(|\Delta\text{row}|,|\Delta\text{col}|)$). The ring is the pixels at Chebyshev distance 3 to 7. Check: the square
+ring at distance $d$ holds $(2d+1)^2-(2d-1)^2=8d$ pixels, and $8\times(3+4+5+6+7)=8\times25=200$. The two-pixel gap keeps
+a target's halo (\cref{ch:benchmarks}) out of its own background.
+
+\begin{worked}[label={we:namer:ring}]{A ring that ignores the halo}
+A flat tile of 0.20; the target pixel 0.50; its eight neighbours 0.35 \tagA. The $15\times15$ box holds the
+target, its 8 neighbours and $225-9=216$ background pixels; the $5\times5$ box holds the same 9 and $25-9=16$
+background pixels:
+\begin{align*}
+S_{15} &= 216\times0.20+8\times0.35+0.50 = 43.2+2.8+0.5 = 46.5,\\
+S_{5} &= 16\times0.20+8\times0.35+0.50 = 3.2+2.8+0.5 = 6.5,\\
+\vect{r} &= \frac{S_{15}-S_5}{200} = \frac{40.0}{200} = 0.200 .
+\end{align*}
+The target and its halo cancel exactly; the code gives 0.2000 with a count of 200 \tagC.
+\end{worked}
+
+Samples are drawn only where every band is valid, the ring has at least 20 valid pixels and the pixel is at least
+7~px from the tile's edge, so of a $128\times128$ tile at most $(128-14)^2=12{,}996$ pixels qualify \tagC. Inference
+computes the same ring one band at a time with \code{scipy}'s \code{uniform_filter} (\file{namer/infer.py},
+\code{ring_means}); a test pins the two to $10^{-5}$.
+
+\begin{sourcenote}[: 3 to 7 pixels, not 2 to 7]
+The proposal's diagram says ``r (ring mean 2-7 px)''. The code's ring is Chebyshev distance 3 to 7, as the
+generator's docstring and, now, \file{infer.py}'s docstring say (``3-7 px''); an earlier version of \file{infer.py}
+said ``2-7 px''.
+\end{sourcenote}
+
+%======================================================================
+\section{The generator}\label{sec:namer:generator}
+\index{planted-sample generator}
+
+Almost no real pixel comes with a known material, so the namer trains on samples it makes from real tiles of the
+three sensors' fine-tuning shards. For a sampled pixel $\vect{b}$ with ring mean $\vect{r}$ (\file{namer/generator.py},
+\code{plant}):
+\begin{equation}
+\vect{x}=\vect{g}\odot\big(a\,\vect{t}+(1-a)\,\vect{b}\big)+\vect{n},\qquad \vect{r}'=\vect{g}\odot\vect{r},
+\label{eq:namer:plant}
+\end{equation}
+where $\odot$ multiplies band by band. The kind of sample decides $\vect{t}$ and $a$:
+\begin{center}\small
+\begin{tabular}{llll}
+\toprule
+kind & share & $\vect{t}$ & level-1 truth\\
+\midrule
+0, man-made & 0.50 & a man-made library spectrum of the training split & man-made\\
+1, natural mix & 0.25 & a natural library spectrum (either split) & natural\\
+2, plain & 0.25 & none, $a=0$ & natural\\
+\bottomrule
+\end{tabular}
+\end{center}
+(\code{kinds} = 0.5, 0.25, 0.25 \tagM{configs/namer/N001b.json}.) The kind is drawn per sample with
+\code{torch.multinomial}, so the counts vary: one draw of 8,192 gave 4,110, 1,984 and 2,098 \tagC. Each sample records
+its library entry index (\code{entry}, $-1$ for plain), its class (\code{cls}, $-1$ unless man-made) and its fill.
+
+\paragraph{Picking pixels.} For each tile the generator draws 512 positions (\code{pixels_per_tile}) uniformly,
+\emph{with replacement}, among the allowed pixels of \cref{sec:namer:ring}; with 16 tiles that is $P=16\times512=8192$
+samples per sensor per step. It gathers $\vect{b}$ and $\vect{r}$ at those positions, shape \shape{(8192, N)} each,
+and the tile's noise level $\sigma$, one per band, also \shape{(8192, N)}.
+
+\paragraph{The fill, log-uniform.} With $u$ uniform on $[0,1]$, the code sets
+$a=\exp\big(\ln a_{\min}\,(1-u)\big)=a_{\min}^{\,1-u}$ with $a_{\min}=0.05$: $u=0$ gives $a_{\min}$, $u=1$ gives 1.
+Its distribution, one step per line; remember that $\ln a_{\min}<0$:
+\begin{align*}
+a\le q\ &\Longleftrightarrow\ (1-u)\ln a_{\min}\le\ln q &&\text{take logs}\\
+&\Longleftrightarrow\ 1-u\ \ge\ \frac{\ln q}{\ln a_{\min}} &&\text{divide by $\ln a_{\min}<0$: it flips}\\
+&\Longleftrightarrow\ u\ \le\ 1-\frac{\ln q}{\ln a_{\min}} &&\text{rearrange}\\
+P(a\le q) &= 1-\frac{\ln q}{\ln a_{\min}} &&\text{$P(u\le v)=v$, $u$ uniform}\\
+&= \frac{\ln a_{\min}-\ln q}{\ln a_{\min}} &&\text{common denominator}\\
+&= \frac{\ln q-\ln a_{\min}}{-\ln a_{\min}} &&\text{times }\tfrac{-1}{-1}
+\end{align*}
+which, with $\ln q-\ln a_{\min}=\ln(q/a_{\min})$ and $-\ln a_{\min}=\ln(1/a_{\min})$, is
+\begin{equation}
+P(a\le q)=\frac{\ln(q/a_{\min})}{\ln(1/a_{\min})} .
+\label{eq:namer:loguniform}
+\end{equation}
+A shorter way to see it: $\ln a=(1-u)\ln a_{\min}$ moves linearly from $\ln a_{\min}$ to 0 as $u$ goes from 0 to 1,
+so $\ln a$ is uniform on $[\ln a_{\min},0]$, and the share below $\ln q$ is that interval's length fraction. That is
+why the distribution is called \emph{log-uniform}\index{log-uniform distribution}.
+
+\paragraph{Its density and mean.} The density is the slope of \cref{eq:namer:loguniform} in $q$. The slope of
+$\ln q$ is $1/q$, so
+\begin{equation}
+p(a)=\frac{1}{a\,\ln(1/a_{\min})}\quad\text{for }a_{\min}\le a\le1 .
+\end{equation}
+The mean, one step per line:
+\begin{align*}
+\E[a] &= \int_{a_{\min}}^{1} a\,p(a)\,da &&\text{definition of a mean}\\
+&= \int_{a_{\min}}^{1} a\cdot\frac{1}{a\ln(1/a_{\min})}\,da &&\text{insert the density}\\
+&= \frac{1}{\ln(1/a_{\min})}\int_{a_{\min}}^{1} 1\,da &&\text{the $a$ cancels}\\
+&= \frac{1-a_{\min}}{\ln(1/a_{\min})} &&\text{the integral of 1 is the interval's length.}
+\end{align*}
+
+\begin{worked}[label={we:namer:fill}]{How much training goes to small fills}
+With $a_{\min}=0.05$, $\ln(1/0.05)=\ln20=2.9957$. By \cref{eq:namer:loguniform}:
+\begin{align*}
+P(a\le0.1) &= \frac{\ln(0.1/0.05)}{2.9957}=\frac{\ln2}{2.9957}=\frac{0.6931}{2.9957}=0.2314,\\
+P(a\le0.25) &= \frac{\ln5}{2.9957}=\frac{1.6094}{2.9957}=0.5372,\\
+P(a\le0.5) &= \frac{\ln10}{2.9957}=\frac{2.3026}{2.9957}=0.7686 .
+\end{align*}
+The mean: $\E[a]=(1-0.05)/2.9957=0.95/2.9957=0.3171$; the median is where $P=\frac12$, $u=\frac12$, so
+$a=0.05^{0.5}=0.2236$. A million samples drawn with the code's formula put 0.5368 of them at or below 0.25, median
+0.2241 \tagC. A uniform fill on $[0.05,1]$ would put only $(0.25-0.05)/0.95=0.21$ there and have mean 0.525.
+\Cref{tab:material:separability} showed small fills are where ACE fails; the log-uniform spends more than half of the
+man-made training there.
+\end{worked}
+
+The fill \emph{target} of the fill head is $a$ for kinds 0 and 1 and 0 for plain pixels, so over all samples its mean
+is $0.75\times0.3171=0.2378$ \tagC.
+
+\paragraph{The gain, smooth.} Three coefficients $c_0,c_1,c_2\sim\mathcal{N}(0,0.5^2)$ make a parabola over the band
+index rescaled to $t\in[-1,1]$, clipped to $[-1,1]$; then $g=1+0.1\times\text{curve}$, so $0.9\le g\le1.1$
+(\code{smooth_gain}, shape \shape{(P, N)}). It stands for an atmospheric-correction error, and the same $\vect{g}$
+multiplies the ring mean, because the atmosphere errs alike over a pixel and its neighbours. With $c=(0.2,-0.4,0.6)$
+\tagA: at $t=-1$ the curve is $0.2+0.4+0.6=1.2$, clipped to 1, $g=1.10$; at $t=0$, $g=1.02$; at $t=1$,
+$0.2-0.4+0.6=0.4$, $g=1.04$.
+
+\paragraph{The noise, from the tile.} Per tile and band, $\sigma$ is the root mean square of the differences between
+horizontal neighbours, divided by $\sqrt2$ (\code{ring_and_noise}, shape \shape{(B, N)}). The reason, using one rule:
+\emph{the variance of a difference of independent variables is the sum of their variances.} Check it on two coins:
+$X,Y\in\{0,1\}$ each with probability $\frac12$ have variance $\frac14$; $X-Y$ takes $-1,0,0,1$ with equal chance, mean
+0, variance $\frac14(1+0+0+1)=\frac12=\frac14+\frac14$. So if neighbours carry independent noise of variance
+$\sigma^2$,
+\begin{align*}
+\operatorname{Var}(n_1-n_2) &= \sigma^2+\sigma^2 = 2\sigma^2 &&\text{the rule}\\
+\operatorname{sd}(n_1-n_2) &= \sigma\sqrt2 &&\text{square root}\\
+\sigma &= \operatorname{sd}(n_1-n_2)/\sqrt2 &&\text{divide by }\sqrt2 .
+\end{align*}
+
+\begin{worked}[label={we:namer:noise}]{Noise from four pixels}
+One band of a row reads $0.20, 0.23, 0.21, 0.22$ \tagA:
+\begin{align*}
+\text{differences} &= 0.03,\ -0.02,\ 0.01\\
+\text{squares} &= 0.0009,\ 0.0004,\ 0.0001, \qquad \text{sum } 0.0014\\
+\text{mean square} &= 0.0014/3 = 0.000467\\
+\text{RMS} &= \sqrt{0.000467} = 0.0216\\
+\sigma &= 0.0216/1.4142 = 0.01528 .
+\end{align*}
+The code gives 0.01528; on 200,000 samples of white noise with $\sigma=0.01$ it estimates 0.01003 \tagC.
+\end{worked}
+
+\begin{sourcenote}[: an RMS, not a standard deviation]
+The differences' mean is not subtracted before squaring (``RMS (uncentred) \dots\ texture counts too'', the
+docstring), so real texture, an edge or a slope, counts as noise. On textured tiles $\sigma$ is an over-estimate, which
+errs on the hard side.
+\end{sourcenote}
+
+\begin{worked}[label={we:namer:plant}]{Planting one pixel}
+Three bands, $\vect{b}=(0.10,0.30,0.25)$, $\vect{t}=(0.40,0.35,0.05)$, $a=0.25$, $\vect{g}=(1.02,1.00,0.98)$,
+$\vect{n}=(0.003,-0.002,0.001)$ \tagA. By \cref{eq:namer:plant}:
+\begin{align*}
+a\vect{t} &= (0.1000,\ 0.0875,\ 0.0125),\\
+(1-a)\vect{b} &= (0.0750,\ 0.2250,\ 0.1875),\\
+\text{sum} &= (0.1750,\ 0.3125,\ 0.2000),\\
+\vect{g}\odot\text{sum} &= (1.02\times0.1750,\ 1.00\times0.3125,\ 0.98\times0.2000) = (0.1785,\ 0.3125,\ 0.1960),\\
+\vect{x} &= (0.1785+0.003,\ 0.3125-0.002,\ 0.1960+0.001) = (0.1815,\ 0.3105,\ 0.1970) .
+\end{align*}
+\end{worked}
+
+What is \emph{not} modelled matters as much: the planting is one pixel, with no point-spread function, no halo and no
+adjacency, and the ring is untouched by the target. The proposal's ``Risks'' list says so (``linear mixing, smooth gain
+and Gaussian noise are simplifications''). Per batch only bands valid in more than half the tiles' pixels are kept
+(\code{keep = valid.float().mean(dim=(0, 2, 3)) > 0.5}), so water-vapour bands drop out, and the library is cut to the
+same bands (\code{bank.bands(keep)}); a batch with fewer than 20 bands left is skipped.
+
+\begin{sourcenote}[: no band-list jitter]
+The proposal lists ``Band-list jitter as in pretraining (\texttt{band\_augment\_prob})''. Neither the generator nor the
+trainer reads such a setting; every sample of a batch has the batch's live bands.
+\end{sourcenote}
+
+%======================================================================
+\section{The class score}\label{sec:namer:classscore}
+
+\begin{definition}[Logsumexp, class score]
+For numbers $z_1,\dots,z_m$, $\operatorname{LSE}(z)=\ln\sum_j e^{z_j}$\index{logsumexp}, a smooth maximum: it lies
+between $\max_j z_j$ and $\max_j z_j+\ln m$. With $s_j$ from \cref{eq:namer:sj}, the \emph{class score} of class $k$ is
+$S_k=\operatorname{LSE}(\{s_j: j\in k\})$, and $P(k\mid M)$ is the softmax of $S_1,\dots,S_7$ (\code{class_scores}).
+\end{definition}
+
+The temperature\index{temperature} $\tau$ is learned, stored as $\ln\tau$ and started at $\ln0.07=-2.6593$, so
+$1/\tau=14.286$ at the start: a cosine of 0.9 against 0.7 becomes a score of 12.86 against 10.00.
+
+\paragraph{The class softmax is a sum of entry softmaxes.} Write $q_j=e^{s_j}/\sum_i e^{s_i}$ for the softmax over all
+library entries that belong to some class. Then
+\begin{align*}
+P(k\mid M) &= \frac{e^{S_k}}{\sum_{k'}e^{S_{k'}}} &&\text{definition}\\
+&= \frac{\sum_{j\in k}e^{s_j}}{\sum_{k'}\sum_{j\in k'}e^{s_j}} &&e^{\ln u}=u\\
+&= \frac{\sum_{j\in k}e^{s_j}}{\sum_i e^{s_i}} &&\text{every entry is in exactly one class}\\
+&= \sum_{j\in k}q_j .
+\end{align*}
+So the loss treats \emph{any} member of the right class as a right answer. That is the remedy the companion volume
+proposed for ``false negatives'' in a per-spectrum contrastive loss, two spectra of one material pushed apart; here it
+is built in.
+
+\paragraph{Leaving the planted spectrum out.} In \code{forward}, \code{class_scores(..., exclude=s["entry"])} sets the
+planted entry's $s_j$ to $-\infty$ before the logsumexp, in training and in evaluation alike. Every planted sample
+(man-made and natural mix) has its own entry excluded; plain pixels have none. A test checks that a class whose only
+member is excluded scores $-\infty$.
+
+\begin{worked}[label={we:namer:classscore}]{Recognising the sample, or naming the material}
+Take $\tau=0.1$ for round numbers \tagA. The pixel was planted with metal spectrum $e_1$; cosines: metal $e_1$ 0.95,
+$e_2$ 0.70, $e_3$ 0.60; plastic $e_4$ 0.75; oil $e_5$ 0.20. Divided by $\tau$: 9.5, 7.0, 6.0, 7.5, 2.0.
+
+With $e_1$ in the library:
+\begin{align*}
+S_{\text{metal}} &= \ln(e^{9.5}+e^{7}+e^{6}) = 9.6064, \quad S_{\text{plastic}}=7.5, \quad S_{\text{oil}}=2.0,\\
+P &= \operatorname{softmax}(9.6064,\ 7.5,\ 2.0) = (0.8911,\ 0.1084,\ 0.0004),\\
+L &= -\ln0.8911=0.1153 .
+\end{align*}
+With $e_1$ left out:
+\begin{align*}
+S_{\text{metal}} &= \ln(e^{7}+e^{6}) = 7+\ln(1+e^{-1}) = 7+\ln1.3679 = 7.3133,\\
+P &= (0.4524,\ 0.5453,\ 0.0022),\qquad L=-\ln0.4524=0.7931 .
+\end{align*}
+Check the sum-of-entries identity: over $e_2,\dots,e_5$ the entry softmax is $(0.3308,0.1217,0.5453,0.0022)$, and
+$0.3308+0.1217=0.4525$, the metal probability up to rounding \tagC.
+\end{worked}
+
+With its own spectrum present the pixel is ``metal'' at 0.89 because it recognises $e_1$. With $e_1$ out it must lean
+on the other metals, and here plastic wins. \textbf{Leaving the planted spectrum out makes the only route to a low loss
+putting all metals near each other: learning the material, not the sample.} It is the separability check's
+leave-one-spectrum-out (\code{ace[e] = -1}) used as a training rule.
+
+\paragraph{The gradient.}\label{par:namer:l2grad} Let $c$ be the true class. The loss is
+$L=-S_c+\ln\sum_{k}e^{S_k}=-\ln\sum_{j\in c}e^{s_j}+\ln\sum_i e^{s_i}$. Differentiate with respect to one entry's
+$s_j$:
+\begin{align*}
+\frac{\partial}{\partial s_j}\ln\sum_i e^{s_i} &= \frac{e^{s_j}}{\sum_i e^{s_i}} = q_j &&\text{chain rule}\\
+\frac{\partial}{\partial s_j}\Big(-\ln\sum_{i\in c}e^{s_i}\Big) &= -\,\mathbf{1}[j\in c]\,w_j,\quad
+ w_j=\frac{e^{s_j}}{\sum_{i\in c}e^{s_i}} &&\text{the same rule, inside class }c\\
+\frac{\partial L}{\partial s_j} &= q_j-\mathbf{1}[j\in c]\,w_j .
+\end{align*}
+Wrong-class entries are pushed down by their probability $q_j$, as in the per-spectrum loss. The true class's members
+are pulled up, but shared out by $w_j$: the member already closest gets most of the pull.
+
+\begin{worked}[label={we:namer:gradient}]{Who gets the pull}
+In \cref{we:namer:classscore} with $e_1$ out: within metal, $w=(e^7,e^6)/(e^7+e^6)=(0.7311,\ 0.2689)$. With
+$q=(0.3308,0.1217,0.5453,0.0022)$ for $e_2,e_3,e_4,e_5$:
+\begin{align*}
+e_2 &: 0.3308-0.7311=-0.4003, & e_3 &: 0.1217-0.2689=-0.1473,\\
+e_4 &: 0.5453, & e_5 &: 0.0022 .
+\end{align*}
+They sum to $-0.4003-0.1473+0.5453+0.0022=-0.0001\approx0$, as they must \tagC. Plastic $e_4$, the tempting wrong
+answer, is pushed hardest; metal's pull is shared $73:27$.
+\end{worked}
+
+Which entries take part in level~2? In training, only \emph{training-split man-made} entries (\code{train_lib}, minus an
+open-set class). Test-split entries are still encoded (the whole bank goes through the library tower) but get class
+index $-1$, which no class selects.
+
+\begin{sourcenote}[: class-level, not per-spectrum InfoNCE]
+The proposal's ``Losses'' (InfoNCE, \citealp{oord2018representation}) says ``InfoNCE over the batch's library spectra.
+The positive is the planted spectrum''. The code does what its ``As built'' list says instead: cross-entropy over class
+scores, own spectrum left out. Read the proposal's loss section as superseded.
+\end{sourcenote}
+
+%======================================================================
+\section{Level 1 by matching}\label{sec:namer:level1}
+
+\subsection{What N001 did, and what it measured}
+
+In N001, level~1 was the linear head \code{to_manmade}: one weight vector $\vect{w}\in\R^{256}$ and a bias on the
+pixel tower's $\vect{h}$, $\ell=\vect{w}\cdot\vect{h}+b_0$, $P(M)=\sigma(\ell)$, trained by binary cross-entropy. Two
+measurements, both from 2026-10-31 \tagM{research/experiments/spectral-namer/N001/README.md}:
+\begin{itemize}
+\item \textbf{N001, epoch 1, on the H100.} Level-1 accuracy was about 0.50 at every evaluation fill on all three
+sensors: on EnMAP 0.52 at fill 0.25 and 0.50 at fill 1.0. In the same epoch level-2 class accuracy was 0.60 to 0.68.
+\item \textbf{A laptop CPU test, 150 steps at full fill on the EnMAP smoke shards}, the two level-1 forms side by side:
+\end{itemize}
+\begin{table}[htbp]
+\centering\small
+\begin{tabular}{lccc}
+\toprule
+level 1 & BCE & accuracy & man-made recall at ACE's false-alarm rate\\
+\midrule
+chance & $\ln2=0.6931$ & 0.50 & --\\
+linear head on $\vect{h}$ & 0.64 & 0.65 & 0.41\\
+by matching & 0.43 & 0.80 & 0.74\\
+\bottomrule
+\end{tabular}
+\caption{The laptop test that decided the switch, as recorded in N001's README \tagM{research/experiments/spectral-namer/N001/README.md}. ACE at fill 1.0 on
+EnMAP calls 13.36\% of natural plantings man-made and recalls 0.8711 of man-made ones \tagC, so after 150 steps neither
+form is yet at ACE's level; the comparison is between the two forms.}
+\label{tab:namer:l1evidence}
+\end{table}
+
+Read the epoch-1 numbers together. At fill 1.0 a planted man-made pixel \emph{is} a library spectrum (with gain and
+noise), and level~2 named its class correctly about two times in three: the embedding $\vect{z}$, computed from the
+same $\vect{h}$, plainly carried the information. The linear head on $\vect{h}$ could not read ``man-made'' out of it.
+\textbf{The information was there; one linear layer was the wrong way to read it.}
+
+To compare the two BCEs, turn each into a probability: $e^{-\text{BCE}}$ is the geometric mean of the probability given
+to the truth. Chance: $e^{-0.6931}=0.5000$; linear: $e^{-0.64}=0.5273$; matching: $e^{-0.43}=0.6505$ \tagC.
+
+N001 was stopped. N001b is the same configuration plus \code{"level1": "matching"} (\file{configs/namer/N001b.json},
+whose description says ``N001's linear level-1 head sat at chance after epoch 1''), and N002 adds it too.
+
+\subsection{The rule}
+
+Under \code{"level1": "matching"} (\file{namer/train.py}, \code{forward}) the natural library entries become one more
+class, index $C=7$:
+\begin{lstlisting}
+lib_cls = torch.where(bank.manmade, lib_cls, torch.full_like(lib_cls, C))     # natural -> class 7
+scores = self.model.class_scores(z.float(), e.float(), lib_cls, C + 1, exclude=s["entry"])   # (P, 8)
+logit, scores = self.model.level1_logit(scores), scores[:, :C]
+\end{lstlisting}
+and \code{level1_logit} (\file{namer/model.py}) is
+\begin{lstlisting}
+return torch.logsumexp(scores[:, :-1], dim=1) - scores[:, -1] + self.l1_bias
+\end{lstlisting}
+In symbols, with $S_0,\dots,S_6$ the man-made class scores, $S_7=S_{\text{nat}}$ the natural one, and $b$ the learned
+scalar \code{l1_bias} (started at 0):
+\begin{equation}
+\ell=\operatorname{LSE}(S_0,\dots,S_6)-S_{\text{nat}}+b,\qquad P(M)=\sigma(\ell)=\frac{1}{1+e^{-\ell}} .
+\label{eq:namer:l1}
+\end{equation}
+The level-2 scores are the first seven columns, exactly as before; the old head's output is discarded.
+
+\subsection{What the rule means}
+
+Two identities make \cref{eq:namer:l1} readable.
+
+\emph{A logsumexp of logsumexps is the logsumexp of everything.} Since $S_c=\ln\sum_{j\in c}e^{s_j}$,
+\begin{align*}
+\operatorname{LSE}(S_0,\dots,S_6) &= \ln\sum_{c<7}e^{S_c} &&\text{definition}\\
+&= \ln\sum_{c<7}\sum_{j\in c}e^{s_j} &&e^{\ln u}=u\\
+&= \ln\sum_{j\in\mathcal{M}}e^{s_j} &&\mathcal{M}\text{: all man-made entries in play.}
+\end{align*}
+Check on five numbers $(1,2,0.5,3,-1)$ in groups $\{1,2\},\{0.5\},\{3,-1\}$: both ways give 3.4723 \tagC.
+
+\emph{The sigmoid of a log-ratio is a share.} Write $A=\sum_{j\in\mathcal{M}}e^{s_j}$ and
+$N=\sum_{j\in\mathcal{N}}e^{s_j}$ over the natural entries. Then $\ell=\ln A-\ln N+b$, and
+\begin{align*}
+e^{\ell} &= e^{b}A/N &&\text{exponentiate}\\
+\sigma(\ell) &= \frac{e^{\ell}}{e^{\ell}+1} &&\text{multiply top and bottom of }\tfrac{1}{1+e^{-\ell}}\text{ by }e^{\ell}\\
+&= \frac{e^{b}A/N}{e^{b}A/N+1} = \frac{e^{b}A}{e^{b}A+N} &&\text{multiply top and bottom by }N .
+\end{align*}
+So
+\begin{equation}
+P(M)=\frac{e^{b}\sum_{j\in\mathcal{M}}e^{s_j}}{e^{b}\sum_{j\in\mathcal{M}}e^{s_j}+\sum_{j\in\mathcal{N}}e^{s_j}} :
+\label{eq:namer:l1share}
+\end{equation}
+\textbf{$P(M)$ is the share of the pixel's softmax mass over the library that falls on man-made entries}, with the
+man-made side weighted by $e^{b}$. Level~1 asks ``does this pixel look more like the man-made shelf or the natural
+shelf?'', in the same embedding level~2 uses.
+
+\subsection{Its gradient, through the logsumexp}
+
+The level-1 loss is $L_1=\operatorname{BCE}(\ell,y)=-[y\ln\sigma(\ell)+(1-y)\ln(1-\sigma(\ell))]$ with $y=1$ for
+man-made. Two pieces, then the chain rule.
+
+\emph{The BCE's slope in the logit.} With $p=\sigma(\ell)$ and $\sigma'(\ell)=p(1-p)$:
+\begin{align*}
+\frac{\partial L_1}{\partial\ell} &= -\Big[y\,\frac{p(1-p)}{p}-(1-y)\,\frac{p(1-p)}{1-p}\Big] &&\text{slope of }\ln\text{ is }1/\cdot\\
+&= -[y(1-p)-(1-y)p] &&\text{cancel}\\
+&= -[y-yp-p+yp] = p-y &&\text{expand.}
+\end{align*}
+
+\emph{The logit's slope in each entry score.} For $j\in\mathcal{M}$, only $\ln A$ depends on $s_j$; for
+$j\in\mathcal{N}$, only $-\ln N$:
+\begin{align*}
+\frac{\partial\ell}{\partial s_j} &= \frac{e^{s_j}}{A}=:u_j &&j\in\mathcal{M}\ \text{(softmax within the man-made entries)}\\
+\frac{\partial\ell}{\partial s_j} &= -\frac{e^{s_j}}{N}=:-v_j &&j\in\mathcal{N}\ \text{(softmax within the natural entries)}\\
+\frac{\partial\ell}{\partial b} &= 1 .
+\end{align*}
+
+\emph{Together}, by the chain rule:
+\begin{equation}
+\frac{\partial L_1}{\partial s_j}=(p-y)\,u_j\ \ (j\in\mathcal{M}),\qquad
+\frac{\partial L_1}{\partial s_j}=-(p-y)\,v_j\ \ (j\in\mathcal{N}),\qquad
+\frac{\partial L_1}{\partial b}=p-y .
+\label{eq:namer:l1grad}
+\end{equation}
+Since $\sum_{\mathcal{M}}u_j=1$ and $\sum_{\mathcal{N}}v_j=1$, the entry gradients sum to $(p-y)-(p-y)=0$: like level~2's,
+a step moves score from one side to the other, it cannot raise everything. Finally
+$s_j=\vect{z}\cdot\vect{e}_j/\tau$, so $\partial s_j/\partial\vect{z}=\vect{e}_j/\tau$ and the pixel embedding moves
+along $\sum_j(\partial L_1/\partial s_j)\,\vect{e}_j/\tau$: \emph{towards} the man-made entries it is already closest to
+and \emph{away} from the nearest natural ones when it is man-made, and the reverse when it is natural.
+
+\begin{worked}[label={we:namer:l1}]{Level 1 by matching, three library entries}
+One pixel, truth man-made ($y=1$). Three entries in play: plastic $s=6.0$, metal $s=5.0$ (both man-made, in different
+classes) and soil $s=5.5$ (natural); $b=0$ \tagA.
+
+The logit:
+\begin{align*}
+S_{\text{plastic}} &= 6.0,\quad S_{\text{metal}}=5.0,\quad S_{\text{nat}}=5.5 &&\text{one member each}\\
+\operatorname{LSE}(6.0,5.0) &= 6+\ln(1+e^{-1}) = 6+\ln1.3679 = 6+0.3133 = 6.3133\\
+\ell &= 6.3133-5.5+0 = 0.8133 .
+\end{align*}
+The probability, two ways:
+\begin{align*}
+p=\sigma(0.8133) &= 1/(1+e^{-0.8133}) = 1/(1+0.4434) = 0.6928,\\
+\text{share} &= \frac{e^{6}+e^{5}}{e^{6}+e^{5}+e^{5.5}} = \frac{403.4288+148.4132}{403.4288+148.4132+244.6919}
+= \frac{551.8420}{796.5339} = 0.6928 .
+\end{align*}
+The loss: $L_1=-\ln0.6928=0.3670$. The gradient, by \cref{eq:namer:l1grad}, with $p-y=0.6928-1=-0.3072$:
+\begin{align*}
+u &= \big(e^{6},e^{5}\big)/(e^{6}+e^{5}) = (403.4288,\ 148.4132)/551.8420 = (0.7311,\ 0.2689),\\
+\partial L_1/\partial s_{\text{plastic}} &= -0.3072\times0.7311 = -0.2246,\\
+\partial L_1/\partial s_{\text{metal}} &= -0.3072\times0.2689 = -0.0826,\\
+\partial L_1/\partial s_{\text{soil}} &= -(-0.3072)\times1 = +0.3072,\\
+\partial L_1/\partial b &= -0.3072 .
+\end{align*}
+Sum: $-0.2246-0.0826+0.3072=0$. Autograd on \code{level1_logit} gives $(-0.2246,\ -0.0826,\ 0.3072)$ \tagC. Gradient
+descent raises the plastic score most (the closer man-made entry), the metal score a little, lowers the soil score, and
+raises $b$.
+
+Had the truth been natural ($y=0$): $L_1=-\ln(1-0.6928)=1.1803$ and the gradients flip sign and scale by $p=0.6928$:
+$(0.5065,\ 0.1863,\ -0.6928)$ \tagC.
+\end{worked}
+
+\subsection{Why matching helps}
+
+A hypothesis, consistent with \cref{tab:namer:l1evidence} but not proven by it. Three reasons.
+
+\paragraph{1. One hyperplane must hold all of nature on one side.} A linear head says ``man-made'' when
+$\vect{w}\cdot\vect{h}+b_0>0$: one flat cut through the 256-dimensional space. Nature is not one cluster: vegetation,
+soils, rocks, water, snow and dry plant matter sit in different places, and man-made materials sit between them (a
+green tarpaulin near vegetation, concrete near rock). For a \emph{fixed} feature space, one cut can be impossible.
+
+\begin{worked}[label={we:namer:xor}]{Four points no line can split}
+Two dimensions, unit vectors: natural at $0^\circ$ and $180^\circ$, $\vect{n}_1=(1,0)$, $\vect{n}_2=(-1,0)$; man-made at
+$90^\circ$ and $270^\circ$, $\vect{m}_1=(0,1)$, $\vect{m}_2=(0,-1)$ \tagA. Suppose a line $\vect{w}\cdot\vect{h}+b_0$ is
+negative on both natural points and positive on both man-made ones:
+\begin{align*}
+w_1+b_0<0,\quad -w_1+b_0<0 &\ \Rightarrow\ \text{adding: } 2b_0<0,\\
+w_2+b_0>0,\quad -w_2+b_0>0 &\ \Rightarrow\ \text{adding: } 2b_0>0 .
+\end{align*}
+Both cannot hold: no line does it. Matching does, with the four points as library entries and $\tau=0.1$. A pixel at
+$80^\circ$ has cosines $0.9848$ to $\vect{m}_1$, $-0.9848$ to $\vect{m}_2$, $0.1736$ to $\vect{n}_1$, $-0.1736$ to
+$\vect{n}_2$:
+\begin{align*}
+\operatorname{LSE}(9.848,\ -9.848) &= 9.848,\qquad \operatorname{LSE}(1.736,\ -1.736)=1.767,\\
+\ell &= 9.848-1.767 = 8.081\ \Rightarrow\ \text{man-made}.
+\end{align*}
+A pixel at $190^\circ$ gets $\ell=-8.081$, natural \tagC. The nearest shelf decides.
+\end{worked}
+
+The perceptron beneath the head \emph{could} bend $\vect{h}$ until one cut works; that is what training would have
+to discover from one bit per sample. Matching needs no such bend: it is a nearest-prototype rule
+\citep{snell2017prototypical}, and the namer has 219 natural prototypes on EnMAP's bank \tagC, one per natural
+spectrum, rather than one half-space.
+
+\paragraph{2. It reuses what level 2 already learns.} The class loss shapes $\vect{z}$ and $\vect{e}_j$ with a rich
+signal: seven classes, own spectrum left out. A separate linear head on $\vect{h}$ competes with that for the same
+features. Under matching, level~1 reads the \emph{same} cosine table, so whatever arrangement helps level~2 helps level~1;
+and level~1's gradient (\cref{eq:namer:l1grad}) is the same kind of signal, moving the pixel toward and away from
+specific entries. The natural entries now also get a training signal they never had: in N001 nothing pulled a pixel
+toward a natural spectrum.
+
+\paragraph{3. Nature gets described by examples.} A new natural spectrum in the library is a new prototype at
+inference without retraining, as for man-made ones. A linear head's idea of nature is frozen in $\vect{w}$.
+
+\paragraph{One built-in offset.} The logsumexp of $m$ equal scores is $s+\ln m$, so the side with more entries scores
+higher when nothing distinguishes them. On EnMAP's bank the training uses $219$ natural and $159-34=125$ man-made
+entries: an offset of $\ln(219/125)=\ln219-\ln125=5.3891-4.8283=0.5608$ towards ``natural'' \tagC. The learned bias $b$
+can absorb it; it is one reason $b$ exists.
+
+\begin{sourcenote}[: what changes in the code and docs]
+\code{to_manmade} is still built and still computed by \code{forward_pixel}; under matching its output is replaced
+before the loss, so its 257 parameters receive no gradient (with \code{zero_grad(set_to_none=True)} AdamW skips them,
+weight decay included). \code{load_namer} reads \code{config["level1"]} from the checkpoint (default \code{"head"}) and
+accepts a checkpoint without \code{l1_bias}, so N001's checkpoints still load. The model's docstring now describes
+both forms, and the proposal's ``As built'' list records level~1 by matching; the proposal's design text (``Level 1 does
+not use the library at all'') and the publication schematic (\cref{fig:namer:schematic}) still show the old head. The
+code and \file{configs/namer/N001b.json} are what runs.
+\end{sourcenote}
+
+\paragraph{What level 1 by matching does not change.} Natural spectra are planted in both splits, so level-1 accuracy
+on natural plantings is not an unseen-spectrum test; but the planted natural entry is left out of $S_{\text{nat}}$
+(\code{exclude}), so a natural mix cannot be recognised as its own spectrum either. And the planted man-made test
+spectra at evaluation are matched only against \emph{training-split} man-made entries, because the class scores read
+the training library (\cref{sec:namer:pass}).
+
+%======================================================================
+\section{One training step, end to end}\label{sec:namer:step}
+
+This section is where the pieces stop being separate. One step of \code{NamerRun.train} loops over the three sensors;
+for each it draws one batch of tiles, plants, encodes, scores and back-propagates its loss divided by 3. Here is one
+sensor's share at illustrative EnMAP sizes: $B=16$ tiles of $128\times128$, 512 pixels per tile so $P=8192$
+\tagM{configs/namer/N001b.json}; $N=200$ live bands \tagA\ (EnMAP's list has 224; a batch keeps those valid in more than
+half its pixels, and the true count depends on the tiles); $L=378$ library entries \tagC; $C=7$; $D=64$; $d=32$; 4
+heads; $G=53$. The shapes in \cref{tab:namer:step1,tab:namer:step2} were recorded by forward hooks on the real code with
+random data at these sizes \tagC.
+
+\begin{table}[htbp]
+\centering\small
+\begin{tabular}{@{}lp{0.42\linewidth}l@{}}
+\toprule
+\# & operation (file, function) & output shape\\
+\midrule
+1 & decode tiles: int16 $\times10^{-4}$, $-32768$ invalid (\code{decode}) & \shape{(16, 224, 128, 128)}\\
+2 & keep live bands; bank to the same bands (\code{forward}) & \shape{(16, 200, 128, 128)}; bank \shape{(378, 200)}\\
+3 & box sums: ring mean, ring count (\code{ring_and_noise}) & \shape{(16, 200, 128, 128)}, \shape{(16, 1, 128, 128)}\\
+4 & noise $\sigma$ from horizontal differences & \shape{(16, 200)}\\
+5 & allowed pixels: all bands valid, $\ge20$ ring pixels, 7 from the edge & \shape{(16, 128, 128)} bool\\
+6 & pick 512 per tile with replacement; gather $\vect{b}$, $\vect{r}$, $\sigma$ & \shape{(8192, 200)} each\\
+7 & kind per sample (0.5, 0.25, 0.25); entry; fill & \shape{(8192,)} each\\
+8 & $\vect{t}$ = bank rows (zeros for plain); gain $\vect{g}$; noise & \shape{(8192, 200)} each\\
+9 & $\vect{x}=\vect{g}\odot(a\vect{t}+(1-a)\vect{b})+\vect{n}$, $\vect{r}'=\vect{g}\odot\vect{r}$ & \shape{(8192, 200)} each\\
+\bottomrule
+\end{tabular}
+\caption{One step, part 1: the generator, for one sensor. The tile tensor alone is $16\times200\times128\times128
+=52{,}428{,}800$ numbers, 200\,MiB in float32 \tagC.}
+\label{tab:namer:step1}
+\end{table}
+
+\begin{table}[htbp]
+\centering\small
+\begin{tabular}{@{}lp{0.42\linewidth}l@{}}
+\toprule
+\# & operation & output shape\\
+\midrule
+10 & stem + frozen BN on $\vect{x}$ (\cref{tab:namer:stemshapes}) & $\vect{z}_x$: \shape{(8192, 64)}\\
+11 & stem + frozen BN on $\vect{r}'$ & $\vect{z}_r$: \shape{(8192, 64)}\\
+12 & concatenate $[\vect{z}_x,\vect{z}_r,\vect{z}_x-\vect{z}_r]$ & \shape{(8192, 192)}\\
+13 & pixel MLP & $\vect{h}$: \shape{(8192, 256)}\\
+14 & \code{to_embed}, unit length; \code{to_fill}, sigmoid & $\vect{z}$: \shape{(8192, 128)}; $\hat a$: \shape{(8192,)}\\
+15 & stem + frozen BN on all 378 library spectra & \shape{(378, 64)}\\
+16 & library MLP, unit length & $\mat{E}$: \shape{(378, 128)}\\
+17 & $\mat{S}=\mat{Z}\mat{E}\T/\tau$ & \shape{(8192, 378)}, 3,096,576 numbers\\
+18 & own entry $\to-\infty$ (every planted sample) & \shape{(8192, 378)}\\
+19 & class index per entry: train man-made 0--6, natural 7, test $-1$ & \shape{(378,)}\\
+20 & pool: logsumexp over each class's columns & \shape{(8192, 8)}\\
+21 & level 1: $\operatorname{LSE}$(cols 0--6) $-$ col 7 $+\,b$ & $\ell$: \shape{(8192,)}\\
+22 & level 2: cols 0--6 & \shape{(8192, 7)}\\
+23 & BCE($\ell$, man-made), all samples & scalar\\
+24 & CE(level 2, class), man-made samples only ($\approx4096$ rows) & scalar\\
+25 & $0.5\times$ mean $|\hat a-a|$, all samples & scalar\\
+26 & $(L_1+L_2+0.5L_f)/3$, backward & --\\
+\bottomrule
+\end{tabular}
+\caption{One step, part 2: the model and the losses, for one sensor. The stem runs three times per sensor (rows 10, 11,
+15), nine times per step. After all three sensors: clip the gradient norm to 1, one AdamW step, one scheduler step.}
+\label{tab:namer:step2}
+\end{table}
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}[
+  font=\footnotesize, >={Stealth[length=2mm]},
+  b/.style={draw, rounded corners=2pt, align=center, inner sep=3pt, minimum height=7mm},
+  gen/.style={b, fill=gray!8, draw=maskgrey},
+  st/.style={b, fill=spec!12, draw=spec},
+  px/.style={b, fill=spat!8, draw=spat},
+  lb/.style={b, fill=green!8, draw=green!45!black},
+  mt/.style={b, fill=attn!10, draw=attn},
+  ls/.style={b, fill=boxwarn, draw=loss, text=loss!70!black},
+  sh/.style={font=\scriptsize\ttfamily, text=gray!70!black}]
+% generator
+\node[gen, text width=60mm] (tiles) at (0,0) {16 tiles, live bands\\ \texttt{(16, 200, 128, 128)}};
+\node[gen, text width=60mm, below=4mm of tiles] (plant) {ring mean, noise $\sigma$, pick 512 per tile, plant\\
+$\vect{x}=\vect{g}\odot(a\vect{t}+(1-a)\vect{b})+\vect{n}$,\quad $\vect{r}'=\vect{g}\odot\vect{r}$};
+\node[lb, text width=36mm] (bank) at (6.2,0) {library bank\\ \texttt{(378, 200)}};
+\draw[->] (tiles) -- (plant);
+\draw[->, dashed] (bank.south west) to[bend left=10] node[sh, above, sloped] {$\vect{t}$ rows} (plant.north east);
+% stems
+\node[st, text width=26mm, below left=6mm and -26mm of plant] (sx) {stem + BN on $\vect{x}$\\ \texttt{(8192, 64)}};
+\node[st, text width=26mm, right=4mm of sx] (sr) {stem + BN on $\vect{r}'$\\ \texttt{(8192, 64)}};
+\node[st, text width=36mm] (st) at (6.2,-2.65) {stem + BN on $\vect{t}_j$\\ \texttt{(378, 64)}};
+\draw[->] (plant.south -| sx.north) -- node[sh, left] {\texttt{(8192, 200)}} (sx);
+\draw[->] (plant.south -| sr.north) -- (sr);
+\draw[->] (bank) -- (st);
+\draw[<->, spec, dashed] (sr.east) -- node[sh, above] {shared} (st.west);
+% towers
+\node[px, text width=60mm, below=5mm of sx.south west, anchor=north west] (cat)
+  {$[\vect{z}_x,\vect{z}_r,\vect{z}_x-\vect{z}_r]$ \texttt{(8192, 192)} $\to$ pixel MLP $\to\vect{h}$ \texttt{(8192, 256)}};
+\node[px, text width=24mm, below=4mm of cat.south west, anchor=north west] (fill) {$\hat a$, sigmoid\ \texttt{(8192,)}};
+\node[px, text width=28mm, right=3mm of fill] (emb) {$\vect{z}$, unit\ \texttt{(8192, 128)}};
+\node[b, draw=maskgrey, dashed, text=maskgrey, text width=18mm, right=4mm of emb] (old)
+  {\texttt{to\_manmade}\ not used};
+\draw[->, maskgrey, dashed] (cat.east) -| (old.north);
+\node[lb, text width=36mm] (lm) at (6.2,-4.6) {library MLP, unit\\ $\mat{E}$ \texttt{(378, 128)}};
+\draw[->] (sx.south) -- (sx.south |- cat.north);
+\draw[->] (sr.south) -- (sr.south |- cat.north);
+\draw[->] (cat.south -| emb.north) -- (emb);
+\draw[->] (cat.south -| fill.north) -- (fill);
+\draw[->] (st) -- (lm);
+% matching
+\node[mt, text width=100mm] (S) at (2.6,-8.1) {$\mat{S}=\mat{Z}\mat{E}\T/\tau$ \texttt{(8192, 378)};\quad own entry $\to-\infty$;\quad
+pool by class (logsumexp) $\to$ \texttt{(8192, 8)}: columns 0--6 man-made classes, column 7 natural};
+\draw[->] (emb.south) -- (emb.south |- S.north);
+\draw[->] (lm.south) -- (lm.south |- S.north);
+\node[mt, text width=46mm, below left=6mm and -50mm of S] (l2) {level 2: $\softmax$ of columns 0--6\\ \texttt{(8192, 7)}};
+\node[mt, text width=50mm, right=4mm of l2] (l1) {level 1: $\operatorname{LSE}(\text{0--6})-\text{col 7}+b$\\ $\ell$ \texttt{(8192,)},\ $P(M)=\sigma(\ell)$};
+\draw[->] (S.south -| l2.north) -- (l2);
+\draw[->] (S.south -| l1.north) -- (l1);
+\node[ls, text width=46mm, below=4mm of l2] (ce) {CE, man-made rows ($\approx$4096)};
+\node[ls, text width=50mm, below=4mm of l1] (bce) {BCE, all 8192 rows};
+\draw[->] (l2) -- (ce); \draw[->] (l1) -- (bce);
+\node[ls, text width=40mm, left=4mm of ce] (fl) {$0.5\,|\hat a-a|$, all rows};
+\draw[->] (fill.west) -| (fl.north);
+\end{tikzpicture}
+\caption{Tensor shapes through one training step for one sensor, with \textbf{level~1 by matching} (the route through
+column 7 of the pooled scores). Grey: the generator; teal: the shared stem, run three times; blue: the pixel tower;
+green: the library tower; plum: matching; amber: losses. The dashed grey head is N001's linear level~1, still built,
+no longer read. $B=16$, $P=8192$, $N=200$ \tagA, $L=378$.}
+\label{fig:namer:shapes}
+\end{figure}
+
+\begin{worked}[label={we:namer:pool}]{From one row of $\mat{S}$ to both levels}
+Shrink the library to six entries, $\tau$ folded into the scores \tagA: $e_1$ plastic 4.0 (the planted one), $e_2$
+plastic 3.0, $e_3$ metal 2.0, $e_4$ concrete 1.0 (test split), $e_5$ soil 2.5, $e_6$ water 0.0. The sample is man-made,
+class plastic.
+\begin{align*}
+\text{row 18 (exclude }e_1) &: (-\infty,\ 3.0,\ 2.0,\ 1.0,\ 2.5,\ 0.0)\\
+\text{row 19 (classes)} &: (\text{plastic},\ \text{plastic},\ \text{metal},\ -1,\ \text{nat},\ \text{nat})\\
+S_{\text{plastic}} &= \ln(e^{-\infty}+e^{3}) = 3.0,\qquad S_{\text{metal}}=2.0,\qquad S_{\text{concrete}}=-\infty\\
+S_{\text{nat}} &= \ln(e^{2.5}+e^{0}) = \ln(12.1825+1) = \ln13.1825 = 2.5789\\
+\ell &= \ln(e^{3}+e^{2})-2.5789 = \ln(20.0855+7.3891)-2.5789\\
+&= 3.3133-2.5789 = 0.7344\\
+P(M) &= \sigma(0.7344) = 1/(1+e^{-0.7344}) = 1/(1+0.4798) = 0.6758\\
+P(\text{plastic}\mid M) &= e^{3}/(e^{3}+e^{2}) = 20.0855/27.4746 = 0.7311
+\end{align*}
+The test-split concrete entry $e_4$ is encoded but belongs to no class, so it plays no part; a class with no entry in
+play scores $-\infty$ and gets probability 0.
+\end{worked}
+
+%======================================================================
+\section{The loss, the optimiser and the schedule}\label{sec:namer:loss}
+
+\begin{equation}
+\mathcal{L}=\underbrace{\operatorname{BCE}(\ell,M)}_{\text{every sample}}
++\underbrace{\operatorname{CE}(S_{0..6},c)}_{\text{man-made samples}}
++0.5\,\underbrace{|\hat a-a|}_{\text{every sample}}
+\label{eq:namer:loss}
+\end{equation}
+(\file{namer/train.py}, \code{loss}; \code{fill_weight} 0.5). \emph{BCE}, binary cross-entropy, is the loss for a
+yes/no answer, $-[y\ln p+(1-y)\ln(1-p)]$; CE is minus the log of the right class's probability. Under matching $\ell$ is
+\cref{eq:namer:l1}; under the old head it was \code{to_manmade}'s output. The fill term is on \emph{every} sample,
+natural mixes and plain pixels too (plain target 0), not on man-made samples only as the proposal said; its ``As built''
+list records the change. A fill head that learns ``nothing was added'' is level-1 evidence.
+
+Two chance levels anchor any loss curve. A level-1 answer that knows nothing outputs $p=\frac12$:
+$\operatorname{BCE}=-\ln\frac12=\ln2=0.6931$. A class answer that knows nothing over 7 classes: $\ln7=1.9459$. The
+untrained namer at the sizes of \cref{sec:namer:step} gives BCE 0.7344 and CE 1.9941 on random data \tagC, close to both.
+The CPU smoke run of the first code (EnMAP and SpectralEarth smoke shards, 120 steps, linear level~1) moved the class
+CE from 1.81 to 1.02, level-2 accuracy at fill 1.0 from 0.62 to 0.65 on EnMAP, and left BCE ``still $\sim$0.68 (too
+short to judge)'' \tagM{research/experiments/spectral-namer/N001/README.md}: level~1 had not left chance, an early sign
+of what epoch~1 then confirmed.
+
+\paragraph{Per step.} Each sensor's loss is multiplied by its weight (1) and divided by the number of sensors (3)
+before \code{backward()}, so gradients from the three sensors add up within one step. Then the gradient norm is clipped
+to 1, AdamW \citep{loshchilov2019decoupled} steps, and the scheduler steps. On a GPU the forward runs under bfloat16
+autocast; the class scores are computed in float32 (\code{z.float()}, \code{e.float()}). A step sees up to
+$3\times16\times512=24{,}576$ samples, about 491.5 million over $40\times500=20{,}000$ steps.
+
+\paragraph{Two learning rates.} The stem and its BatchNorm (parameter names starting \code{stem.} or \code{norm.}) learn
+at $0.3\times$ the base rate $3\times10^{-4}$, that is $9\times10^{-5}$; everything else, including $\ln\tau$ and $b$,
+at $3\times10^{-4}$. The stem already knows spectra from V2; a slower rate keeps that knowledge while the new towers,
+which start from random weights, catch up. Weight decay is 0.01 for both groups.
+
+\paragraph{Warm-up and cosine.} The scheduler multiplies both rates by
+\begin{equation}
+\lambda(s)=\min\Big(1,\frac{s+1}{500}\Big)\times\frac12\Big(1+\cos\Big(\pi\min\big(1,\tfrac{s}{20000}\big)\Big)\Big),
+\end{equation}
+a linear warm-up over 500 steps times a half cosine over the whole run.
+
+\begin{worked}[label={we:namer:lr}]{The schedule at a few steps}
+\begin{align*}
+s=0 &: \min(1,1/500)=0.002,\ \cos0=1,\ \lambda=0.002\times1=0.002,\ \text{lr}=6.0\times10^{-7},\\
+s=249 &: 250/500=0.5,\ \tfrac12(1+\cos(0.0391))=0.99962,\ \lambda=0.49981,\ \text{lr}=1.499\times10^{-4},\\
+s=10000 &: 1\times\tfrac12(1+\cos(\pi/2))=\tfrac12(1+0)=0.5,\ \text{lr}=1.5\times10^{-4},\ \text{stem }4.5\times10^{-5},\\
+s=15000 &: \tfrac12(1+\cos(3\pi/4))=\tfrac12(1-0.70711)=0.14645,\ \text{lr}=4.39\times10^{-5}.
+\end{align*}
+The script prints the same \tagC.
+\end{worked}
+
+\paragraph{One BatchNorm, nine kinds of batch: why it is frozen.} In the first version of the code the post-stem
+BatchNorm was in training mode during training. Each sensor's \code{forward} encodes the pixels, the rings and the whole
+library in three separate calls, so it saw nine kinds of batch per step, each normalised by its own statistics. Its
+stored running mean is an exponential average with momentum 0.1, $\text{running}\leftarrow0.9\,\text{running}+0.1\,
+\text{batch}$; in steady state the call $k$ places from the end of a step carries weight $0.1\times0.9^k/(1-0.9^9)$,
+and $1-0.9^9=1-0.3874=0.6126$. The last call, AVIRIS-NG's library, weighs $0.1/0.6126=0.1632$; by kind, pixels 0.299,
+rings 0.332, library 0.369 (\file{research/textbook/tools/compute_namer_submission_output.txt}) \tagC. Evaluation and
+inference would then normalise all three by that one blend: \cref{ch:finetune}'s BatchNorm see-saw in a new form, a
+train/evaluation mismatch found by reading the code and never measured. \textbf{It was fixed before N001 ran} (code
+bundle \texttt{namer2}): the norm never leaves evaluation mode; its running statistics stay V2's and its scale and shift
+(128 numbers) still train, in the stem's group.
+
+%======================================================================
+\section{The library, the classes and the splits}\label{sec:namer:splits}
+
+\paragraph{The bank.} \code{build_bank} (\file{namer/bank.py}) resamples the family library to one band list with the
+library's own resampler (Gaussian spectral responses of width $1.1\times$ the band spacing), fills bands a spectrum does
+not cover by linear interpolation along wavelength (and the nearest end beyond its range), keeps entries with at least
+90\% finite bands, maps each to a class, and keeps the first entry of every repeated name. The result is a
+\code{LibraryBank}: \code{refl} \shape{(L, N)}, \code{cls} \shape{(L,)} with $-1$ for natural, \code{test}
+\shape{(L,)}, the names, and the held-out class.
+
+\paragraph{The classes.} \file{namer/classes.py}: natural chapters $\to$ natural; building and pavement $\to$
+concrete/asphalt; roofing dissolved by name (fiberglass, rubber, clear roof $\to$ plastic; cedar, shake, wood $\to$
+wood/paper; metal, tin, steel, aluminium $\to$ metal; tar, felt, asphalt, shingle, tile $\to$ concrete/asphalt; any
+other roofing $\to$ concrete/asphalt); glass left out (one spectrum, ``cannot be tested''). No roofing entry of the
+shipped library maps to metal: it holds no metal roofing.
+
+\paragraph{Held-out spectra.} A man-made entry is in the test split if the first 8 hexadecimal digits of the SHA-1 hash
+of its name, read as a number and divided by $2^{32}-1=4{,}294{,}967{,}295$, fall below 0.2 (\code{_is_test}). Test
+spectra are never planted in training and are not candidates in the class scores, in training or in evaluation. A hash
+rather than a random draw means every band list agrees on the split without sharing a file.
+
+\begin{worked}[label={we:namer:hash}]{Two metals, two sides}
+\begin{align*}
+\text{``Copper Metal''}: &\quad \texttt{1600007b} = 369{,}098{,}875,\\
+&\quad 369{,}098{,}875/4{,}294{,}967{,}295 = 0.0859 < 0.2\ \Rightarrow\ \text{test};\\
+\text{``Aluminum Metal''}: &\quad \texttt{d13908a4} = 3{,}510{,}175{,}908,\\
+&\quad 3{,}510{,}175{,}908/4{,}294{,}967{,}295 = 0.8173\ \Rightarrow\ \text{train}.
+\end{align*}
+\end{worked}
+
+\paragraph{De-duplication.} Some library names repeat (``Copper Metal'' three times, ``Galvanized Steel Metal''
+twice). The hash sends repeats to one side, so the test split stays clean, but in training, leaving one ``Galvanized
+Steel Metal'' out left its namesake in the class score, a near-copy that defeats the leave-out. Since the N001 code
+bundle (\texttt{namer2}), \code{build_bank} keeps only the first entry per name.
+
+\begin{table}[htbp]
+\centering\small
+\begin{tabular}{lrrrr}
+\toprule
+class & entries & held out & share & train\\
+\midrule
+oil/fuel & 40 & 8 & 20\% & 32\\
+plastic & 46 & 8 & 17\% & 38\\
+textile/fabric & 14 & 3 & 21\% & 11\\
+wood/paper & 11 & 2 & 18\% & 9\\
+paint/coatings & 4 & 1 & 25\% & 3\\
+metal & 10 & 3 & 30\% & 7\\
+concrete/asphalt & 34 & 9 & 26\% & 25\\
+\midrule
+all man-made & 159 & 34 & 21\% & 125\\
+natural & 219 & -- & -- & 219\\
+\midrule
+bank & 378 & & & \\
+\bottomrule
+\end{tabular}
+\caption{The bank on EnMAP's 224-band list, one entry per name (AVIRIS-NG: 380 entries, 220 natural, 160 man-made,
+one more wood/paper entry, 34 held out) \tagC. Under level~1 by matching the 219 natural entries are class 7 in
+training.}
+\label{tab:namer:split}
+\end{table}
+
+\begin{sourcenote}[: about 20\% overall, not per class]
+The hash ignores the class, so the held-out share varies: 17\% to 30\% per class with one entry per name, as the
+docstring of \file{namer/bank.py} now says. The N001 README still says ``$\sim$20\% per class'', and its counts (408,
+174, 41) are from before the de-duplication; the code gives 378, 159, 34 on EnMAP.
+\end{sourcenote}
+
+\paragraph{A held-out class (N002): textile/fabric.} \file{configs/namer/N002.json} holds the whole textile/fabric class
+out (\code{"holdout_class": "textile_fabric"}). It is never planted in training and never a candidate; at evaluation it
+is planted, and the trainer records how often level~1 calls it man-made and how often level~2 gives it a known class
+with $P>0.5$. Pass: man-made at least 70\%, confident wrong at most 20\%. On EnMAP's bank this leaves
+$125-11=114$ man-made training entries, and the evaluation pool of unseen man-made spectra is the 34 held-out spectra
+plus textile's 11 training-split ones, 45 \tagC.
+
+\begin{sourcenote}[: textile, not paint]
+N002 first held out paint/coatings. After de-duplication paint has 4 spectra, too few to test anything, and on
+2026-10-31 the user chose textile/fabric (14 spectra) instead; \file{configs/namer/N002.json} says so. Three places
+still say paint: the proposal's ``As built'' list (``Open-set class: paint/coatings (run N002)''), its ``Splits'' text
+(``e.g. paint/coatings''), and the copy \file{research/experiments/spectral-namer/N002/config.json}, which is the old
+config. Likewise \file{configs/namer/N001.json} now holds N001b's settings (run directory \texttt{N001b},
+\texttt{"level1": "matching"}); N001's own config survives as
+\file{research/experiments/spectral-namer/N001/config.json}.
+\end{sourcenote}
+
+%======================================================================
+\section{The test it must pass}\label{sec:namer:pass}
+
+Each epoch \code{evaluate} plants test-split spectra into test shards at fills 0.1, 0.25, 0.5 and 1.0, half man-made
+and half natural mix (\code{kinds=(0.5, 0.5, 0.0)}), 40 batches with a fixed seed: up to $40\times8192=327{,}680$
+samples per sensor and fill \tagC. Level~1 can buy recall by calling more things man-made, so the fair comparison holds
+false alarms equal: read ACE's natural false-alarm rate $f$ from \file{separability_<sensor>.json}
+($1-$\code{level1_natural_called_natural}), cut the namer's logits at the $(1-f)$ quantile of its natural plantings, and
+count the man-made plantings above the cut:
+\begin{lstlisting}
+cut = torch.quantile(torch.cat(nat_logits), 1 - fa)
+recall = (torch.cat(mm_logits) > cut).float().mean()
+\end{lstlisting}
+
+\begin{worked}[label={we:namer:quantile}]{Recall at a fixed false-alarm rate}
+Ten natural logits, sorted: $-3,-2.5,-2,-1.5,-1,-0.5,0,0.5,1,2$; $f=0.2$ \tagA. The 0.8 quantile, with linear
+interpolation as in \cref{sec:material:mask}, sits at position $0.8\times(10-1)=7.2$, between 0.5 and 1.0:
+\begin{align*}
+\text{cut} &= 0.5+0.2\times(1.0-0.5) = 0.5+0.1 = 0.6 .
+\end{align*}
+Five man-made logits $-1, 0.4, 0.7, 1.5, 3$: above 0.6 are three, so recall $=3/5=0.6$ \tagC.
+\end{worked}
+
+\begin{table}[htbp]
+\centering\small
+\begin{tabular}{lcccc}
+\toprule
+sensor & ACE natural right & $f$ & ACE man-made recall & namer needs\\
+\midrule
+PRISMA & 0.8342 & 0.1658 & 0.7724 & $\ge0.8724$\\
+EnMAP & 0.7851 & 0.2149 & 0.6635 & $\ge0.7635$\\
+AVIRIS-NG & 0.8134 & 0.1866 & 0.7603 & $\ge0.8603$\\
+\bottomrule
+\end{tabular}
+\caption{Level~1's bars at fill 0.25: ACE $+0.10$ at ACE's own false-alarm rate, from the three separability JSONs
+\tagC.}
+\label{tab:namer:bars}
+\end{table}
+
+Level~2 must also beat ACE by 0.10, but not against these JSONs yet: their level-2 numbers were measured on the 17 old
+families and ``must be re-scored on the v1 classes \dots\ before comparing; that re-score is the first job after
+launch'' \tagM{research/experiments/spectral-namer/N001/README.md}. \file{best.pt} is the epoch with the best mean
+level-2 accuracy at fill 0.25 over the sensors, and every epoch also writes \file{ep<n>.pt} and a row of
+\file{metrics.csv} (losses, $\tau$, learning rate, and per sensor and fill the level-1 and level-2 accuracies, the
+recall at ACE's rate, and for N002 the two open-set rates).
+
+\begin{sourcenote}[: three things the proposal lists and the trainer does not do]
+It computes no bootstrap interval (the pass rule's ``interval above zero'' is a later step); it has no ``unknown''
+output (level~2 always returns its best class and \code{p_cls}; ``class unknown'' needs a threshold not yet chosen);
+and natural spectra are planted in both splits, so level-1 natural accuracy is not an unseen-spectrum test (``As
+built'').
+\end{sourcenote}
+
+%======================================================================
+\section{Inference: naming the pixels of a mask}\label{sec:namer:infer}
+
+\code{load_namer} (\file{namer/infer.py}) rebuilds the model from a checkpoint (\file{last.pt}, \file{best.pt} or
+\file{ep<n>.pt}): the normalisation curve from the stored \code{stats.*} buffers, the sizes from the stored config's
+\code{model} entry, and the level-1 mode from its \code{level1} entry (default \code{"head"}). Then
+\begin{lstlisting}
+name_pixels(model, cube, wavelengths, pixels, library_root, cache_dir, valid)
+\end{lstlisting}
+names the pixels of a boolean mask:
+\begin{enumerate}
+\item \textbf{Bands.} Keep a band if it is valid at more than half of the requested pixels
+(\code{valid[:, rows, cols].mean(axis=1) > 0.5}): 3 valid of 5 pixels is 0.6, kept; 2 of 4 is exactly 0.5, dropped.
+\item \textbf{Pixels and rings.} $\vect{x}$ is the cube at the mask's pixels, \shape{(P, N)}; the ring means are
+computed one band at a time over the whole scene (\code{ring_means}, box sums of $15\times15$ minus $5\times5$ with
+\code{uniform_filter}), so a full scene never needs a second cube in memory. The per-pixel band validity is passed to
+the stem, which masks dead bands exactly.
+\item \textbf{Library.} \code{build_bank} at the scene's bands, the \emph{whole} library, test-split spectra included:
+at inference every spectrum is fair to match against. One \code{forward_library} call encodes it.
+\item \textbf{Scores}, in batches of 4,096 pixels: \code{forward_pixel}, then \code{class_scores} with $C+1=8$ classes
+under matching (all man-made entries in their classes, natural as class 7), \code{level1_logit} for level~1 and the
+first seven columns for level~2; with the old head, 7 classes and the head's logit.
+\item \textbf{Outputs} per pixel: $P(M)=\sigma(\ell)$; the best class and its $P(k\mid M)$ from the softmax of the seven
+class scores; $\hat a$.
+\end{enumerate}
+No entry is excluded at inference: the pixel's own spectrum is unknown, so there is nothing to leave out.
+
+\paragraph{Into the AIGC table.} \file{scripts/aigc_object_table.py} is the first caller (\cref{ch:submission}). With
+\code{--namer-ckpt} it loads the vendable, passes its \code{normalized_hyperspectral_cube} (reflectance, despite the
+name; \file{docs/09-known-issues.md}), \code{band_cw_order} and validity cube to \code{name_pixels} with the committed
+anomaly mask, and then averages per 8-connected object: mean $P(M)$, the majority class and its share, mean
+$P(k\mid M)$, mean fill. The findings file labels the namer column ``preliminary'', and objects with mean $P(M)>0.5$
+count as man-made when it is compared with the family match.
+
+\begin{keypoint}
+Leave the planted spectrum out of its own class score, and a two-tower network can only lower its loss by placing a
+whole material together; read \emph{both} questions from the same cosine table, so that level~1 compares the man-made
+shelf with the natural one; and judge level~1 at the classical method's own false-alarm rate, so that recall cannot be
+bought.
+\end{keypoint}
+
+\begin{drift}
+Everything in this chapter: N001b and N002's settings (\file{configs/namer/}), the bank counts (378 / 219 / 159 / 34 on
+EnMAP), the per-class shares, the 347,685 parameters, the two early level-1 measurements, the CPU smoke numbers, and the
+pass bars. N001b's and N002's results were pending when the chapter was written (2026-10-31).
+\end{drift}
+
+%======================================================================
+\begin{confusions}
+\confusion{The namer reuses Indradhanu~V2, so it detects anomalies.}{It reuses V2's stem, 5\% of its parameters, as a
+spectral feature extractor. It names pixels something else has already flagged.}
+\confusion{Siamese means the two sides are identical.}{Only the stem is shared, 17,825 weights. After it the pixel tower
+($214{,}402$ weights, ring input, fill head) and the library tower ($115{,}328$) differ on purpose.}
+\confusion{Logsumexp is the best cosine.}{A smooth maximum: $\ln(e^7+e^6)=7.31$, not 7. Every member counts, the
+closest most.}
+\confusion{Level~1 by matching needs a new model.}{It needs one new number, $b$, and a different reading of the same
+score table. N001's head is still in the model, unused.}
+\confusion{$P(M)$ is the best man-made cosine against the best natural one.}{It is a share of softmax mass
+(\cref{eq:namer:l1share}): every entry contributes, weighted by $e^{s_j}$, and the side with more entries starts ahead by
+$\ln$ of the count ratio, which $b$ can absorb.}
+\confusion{Leaving the planted spectrum out is an evaluation trick.}{Here it is a training rule too, for man-made
+\emph{and} natural plantings, and the main departure from the proposal's per-spectrum InfoNCE.}
+\confusion{The ring is 2 to 7 pixels away.}{Beyond 2: Chebyshev distance 3 to 7, 200 pixels in the interior.}
+\confusion{20\% of every class is held out.}{About 21\% of the man-made spectra overall on EnMAP (34 of 159); 17\% to
+30\% per class.}
+\confusion{N002 holds out paint.}{It did in the first config. It holds out textile/fabric (14 spectra) since the user's
+decision of 2026-10-31.}
+\confusion{A frozen BatchNorm does not learn.}{Its running statistics are frozen; its scale and shift still train.}
+\end{confusions}
+
+\begin{checkyourself}
+\item\label{ex:namer:1} In \cref{we:namer:ring}, make the halo 0.60 and the target 0.90. What is the ring mean, and why?
+\item\label{ex:namer:2} With $a_{\min}=0.02$ instead of 0.05, what share of fills is at most 0.25, and what is the mean
+  fill? Use \cref{eq:namer:loguniform} and the mean formula.
+\item\label{ex:namer:3} Plant $\vect{t}=(0.30,0.10)$ into $\vect{b}=(0.20,0.40)$ at $a=0.5$ with $\vect{g}=(1.1,0.9)$
+  and no noise.
+\item\label{ex:namer:4} In \cref{we:namer:classscore}, suppose metal had only $e_1$ and $e_2$. With $e_1$ left out,
+  compute $S_{\text{metal}}$, $P(\text{metal})$ and the loss.
+\item\label{ex:namer:5} Count the parameters of a namer with \code{hidden} 128 and \code{embed} 64, everything else as
+  N001b. (Hint: only the towers change.)
+\item\label{ex:namer:6} At PRISMA fill 0.25 the namer, cut at $f=0.1658$, recalls 85\% of man-made plantings. Does
+  level~1 pass? What recall would it need?
+\item\label{ex:namer:7} Show that the level-2 gradient entries $q_j-\mathbf{1}[j\in c]w_j$ always sum to zero.
+\item\label{ex:namer:8} In \cref{we:namer:l1}, add a second natural entry, water, with $s=5.5$. Compute $\ell$, $P(M)$,
+  the BCE for a man-made truth, and the four gradients. Which side gained from the extra entry?
+\item\label{ex:namer:9} Bands at 1790, 1800, 1960, 1970\,nm. Compute their widths, and the bins they fall in.
+\item\label{ex:namer:10} Level~1 by matching with $b=0$ on a bank of 219 natural and 125 man-made entries: a pixel has
+  the same score $s$ against every entry. What is $P(M)$? What $b$ would make it $\frac12$?
+\end{checkyourself}
+
+\nextchapter{ch:submission}

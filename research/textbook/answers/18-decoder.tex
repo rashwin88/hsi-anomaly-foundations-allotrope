@@ -1,0 +1,71 @@
+\answersfor{ch:decoder}
+
+\begin{solution}{ex:decoder:1}
+Scale $s = 2/4 = 0.5$, so the positions are the same as in \cref{we:decoder:lerp}:
+\begin{align*}
+d = 0:&\quad u = -0.25 \to 0, & \text{value} &= 2,\\
+d = 1:&\quad u = 0.25, & \text{value} &= 0.75 \cdot 2 + 0.25 \cdot 10 = 1.5 + 2.5 = 4,\\
+d = 2:&\quad u = 0.75, & \text{value} &= 0.25 \cdot 2 + 0.75 \cdot 10 = 0.5 + 7.5 = 8,\\
+d = 3:&\quad u = 1.25, & \text{value} &= 10 \ (\text{last value}).
+\end{align*}
+Row: $[2, 4, 8, 10]$.
+
+For the grid, first each row: $[0, 4] \to [0, 1, 3, 4]$ (as in the chapter) and $[8, 12] \to [8, 9, 11,
+12]$ (since $0.75 \cdot 8 + 0.25 \cdot 12 = 6 + 3 = 9$ and $0.25 \cdot 8 + 0.75 \cdot 12 = 2 + 9 = 11$).
+Then down each column with weights $0, 0.25, 0.75, 1$ on the lower row:
+\begin{align*}
+\text{out row 1} &= 0.75 \cdot [0,1,3,4] + 0.25 \cdot [8,9,11,12]\\
+&= [0+2,\ 0.75+2.25,\ 2.25+2.75,\ 3+3] = [2, 3, 5, 6],\\
+\text{out row 2} &= 0.25 \cdot [0,1,3,4] + 0.75 \cdot [8,9,11,12]\\
+&= [0+6,\ 0.25+6.75,\ 0.75+8.25,\ 1+9] = [6, 7, 9, 10].
+\end{align*}
+\[
+\begin{pmatrix} 0 & 1 & 3 & 4\\ 2 & 3 & 5 & 6\\ 6 & 7 & 9 & 10\\ 8 & 9 & 11 & 12 \end{pmatrix}.
+\]
+\end{solution}
+
+\begin{solution}{ex:decoder:2}
+$C = 1$, $r = 2$: output channel 0 takes input channels $0..3$, placed row-major in a 2 $\times$ 2 block:
+offset 0 at $(0,0)$, 1 at $(0,1)$, 2 at $(1,0)$, 3 at $(1,1)$. So the output is
+$\begin{pmatrix} 9 & 8\\ 7 & 6\end{pmatrix}$. Nothing was computed; the four numbers were moved.
+\end{solution}
+
+\begin{solution}{ex:decoder:3}
+Output $(31, 127, 0)$: $h = \lfloor 127/4 \rfloor = 31$, $i = 127 \bmod 4 = 3$, $w = \lfloor 0/4 \rfloor = 0$,
+$j = 0 \bmod 4 = 0$. Channel $= 31 \cdot 16 + 4 \cdot 3 + 0 = 496 + 12 = 508$, at position $(31, 0)$.
+
+Input channel 37 at $(2, 3)$: output channel $c = \lfloor 37/16 \rfloor = 2$, offset $37 - 32 = 5$, so
+$i = \lfloor 5/4 \rfloor = 1$ and $j = 5 \bmod 4 = 1$. Destination: $(c, Y, X) = (2,\ 4 \cdot 2 + 1,\ 4
+\cdot 3 + 1) = (2, 9, 13)$.
+\end{solution}
+
+\begin{solution}{ex:decoder:4}
+The last convolution outputs $D \times 16 = 24 \times 16 = 384$ channels. Before pixel shuffle one patch
+holds $384 \times 32 \times 32 = 384 \times 1024 = 393{,}216$ numbers. The decoder's output is
+$24 \times 128 \times 128 = 24 \times 16{,}384 = 393{,}216$ numbers: the same, as a permutation requires.
+\end{solution}
+
+\begin{solution}{ex:decoder:5}
+With 256 $\times$ 256 the stage grids are $64, 32, 16, 8$ (\cref{ex:encoder:1}).
+\begin{enumerate}
+\item mask: \shape{(2, 165, 256, 256)};
+\item normalise: \shape{(2, 165, 256, 256)};
+\item compress: \shape{(2, 32, 256, 256)};
+\item encode: stage 1 has $64 \times 64 = 4096$ tokens, of which $\lfloor 0.65 \times 4096 \rfloor =
+\lfloor 2662.4 \rfloor = 2662$ are hidden and $1434$ kept; F1 \shape{(2, 32, 64, 64)}, F2 \shape{(2, 64,
+32, 32)}, F3 \shape{(2, 160, 16, 16)}, F4 \shape{(2, 256, 8, 8)};
+\item decode: everything at F1's 64 $\times$ 64, concatenation \shape{(2, 1024, 64, 64)}, last
+convolution \shape{(2, 512, 64, 64)}, pixel shuffle \shape{(2, 32, 256, 256)};
+\item decompress: \shape{(2, 165, 256, 256)};
+\item denormalise: \shape{(2, 165, 256, 256)}.
+\end{enumerate}
+The parameter count is the same as for 128-pixel patches; only the shapes and the work change.
+\end{solution}
+
+\begin{solution}{ex:decoder:6}
+\begin{align*}
+\hat{x} &= \sigma \hat{z} + \mu = 0.1 \times 1.3 + 0.25 = 0.13 + 0.25 = 0.38,\\
+\abs{\hat{x} - x} &= \abs{0.38 - 0.36} = 0.02 .
+\end{align*}
+An error of 0.02 reflectance units in this band.
+\end{solution}

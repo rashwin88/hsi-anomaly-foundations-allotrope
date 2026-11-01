@@ -1,0 +1,24 @@
+\glossentry{Segmentation}{Giving every pixel a label (water, cloud, ...) rather than one label per image.}
+\glossentry{Segmentation head}{A small network on the shared encoder's features that outputs one logit per class per pixel; in Indradhanu a SegFormerDecoder of width 128 with 5 outputs, 371,536 parameters.}
+\glossentry{Head}{A small network added on top of shared features to produce one kind of output; the model has a reconstruction decoder and a segmentation head on one encoder.}
+\glossentry{Logit}{A raw real-valued score, read as the log-odds of yes; the sigmoid turns it into a probability.}
+\glossentry{Log-odds}{The logarithm of p/(1-p); it runs over all real numbers as p runs from 0 to 1.}
+\glossentry{Sigmoid}{The function 1/(1+exp(-z)) mapping a logit to a probability; one per class when classes can overlap.}
+\glossentry{Softmax}{The function turning K logits into K probabilities that sum to 1; right when exactly one class is true.}
+\glossentry{Multi-label}{A classification problem in which any number of classes can be true at once, such as thin cloud over water.}
+\glossentry{Bernoulli distribution}{The distribution of a single yes/no outcome with probability p of yes: P(t) = $p^t(1-p)^{1-t}$.}
+\glossentry{Likelihood}{The probability a model gives to the observed labels, viewed as a function of the model's predictions.}
+\glossentry{Binary cross-entropy}{The negative log-likelihood of 0/1 labels under predicted probabilities, averaged over pixels; its gradient with respect to the logit is p - t.}
+\glossentry{Dice coefficient}{Twice the overlap of two sets divided by the sum of their sizes; 1 for identical sets, 0 for disjoint ones.}
+\glossentry{Soft Dice loss}{One minus a differentiable Dice coefficient computed from probabilities, with +1 smoothing; it gives each class a full-sized term however rare.}
+\glossentry{Class imbalance}{A class covering a tiny share of pixels; per-pixel losses then let a model ignore it almost for free.}
+\glossentry{Intersection over union}{The size of the overlap of predicted and target sets divided by the size of their union; related to Dice by D = 2J/(1+J).}
+\glossentry{Known mask}{A per-class, per-pixel flag saying whether a label is trusted; unknown pixels are left out of the loss and the IoU.}
+\glossentry{Label policy}{The fixed rules (no-data, cloud class, cirrus level 1, overlaps, dry scenes) that decide which EnMAP labels are known; set from the audit before training.}
+\glossentry{Quality layer}{A per-pixel mask the provider's processor computes with automatic tests, such as EnMAP's cloud or cirrus layer; not drawn by people.}
+\glossentry{Label audit}{Checking labels without ground truth by testing whether what is labelled looks physically like its class, and finding what predicts failures.}
+\glossentry{Plausible cloud}{A labelled cloud pixel that is bright (visible mean above 0.2) and flat (min/max of four window means at least 0.7).}
+\glossentry{NDSI}{Normalised difference snow index, (green - SWIR)/(green + SWIR); high for snow, which is dark near 1600 nm where cloud stays bright.}
+\glossentry{Surface-driven label}{A cirrus label whose pixels differ from clear land mainly in the shortwave infrared, so it follows the ground rather than a cloud.}
+\glossentry{Water vapour column}{The mass of water in the air above each square centimetre of ground, in g/cm2; 0.75 g/cm2 would condense to a 7.5 mm layer.}
+\glossentry{Cirrus}{Thin, high ice cloud; EnMAP grades it in levels 0 to 3, and level 1 is treated as unknown.}

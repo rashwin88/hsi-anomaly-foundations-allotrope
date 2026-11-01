@@ -1,0 +1,77 @@
+\answersfor{ch:uncertainty}
+
+\begin{solution}{ex:uncertainty:1}
+The loss at each scale:
+\begin{align*}
+b=0.25:&\quad 0.5/0.25 + \ln 0.25 = 2.0 + (-1.386) = 0.614\\
+b=0.5:&\quad 0.5/0.5 + \ln 0.5 = 1.0 + (-0.693) = 0.307\\
+b=1.0:&\quad 0.5/1.0 + \ln 1.0 = 0.5 + 0 = 0.500
+\end{align*}
+The lowest is at $b=0.5$, the error itself. The derivative $d\ell/db=-\abs{r}/b^2+1/b$:
+\begin{align*}
+b=0.25:&\quad -0.5/0.0625 + 1/0.25 = -8 + 4 = -4\\
+b=0.5:&\quad -0.5/0.25 + 1/0.5 = -2 + 2 = 0\\
+b=1.0:&\quad -0.5/1 + 1/1 = -0.5 + 1 = 0.5
+\end{align*}
+Negative to the left of the minimum, zero at it, positive to the right; and steeper on the overconfident side.
+\end{solution}
+
+\begin{solution}{ex:uncertainty:2}
+Ranks (0 = smallest). $b$ sorted: $0.1<0.2<0.3<0.4<0.5$, so $u=(2,0,4,1,3)$. $e$ sorted:
+$0.05<0.25<0.30<0.40<0.45$, so $v=(1,0,2,3,4)$. Both means are 2.
+\[
+u-\bar u=(0,-2,2,-1,1),\qquad v-\bar v=(-1,-2,0,1,2).
+\]
+Dot product: $(0)(-1)+(-2)(-2)+(2)(0)+(-1)(1)+(1)(2) = 0+4+0-1+2 = 5$.
+Lengths: each is $\sqrt{4+1+0+1+4}=\sqrt{10}$, product $10$. So $\rho=5/10=0.50$.
+
+Check: $d=u-v=(1,0,2,-2,-1)$, $\sum d^2 = 1+0+4+4+1=10$,
+$\rho=1-\frac{6\times10}{5\times24}=1-\frac{60}{120}=1-0.5=0.50$. A head this good would pass FT06's
+criterion 1 ($\rho\ge0.5$) with nothing to spare.
+\end{solution}
+
+\begin{solution}{ex:uncertainty:3}
+With width 32:
+\begin{align*}
+\text{projections}&: 32\times32+32=1{,}056;\quad 64\times32+32=2{,}080\\
+&\phantom{:}\ 160\times32+32=5{,}152;\quad 256\times32+32=8{,}224\\
+\text{sum of projections}&: 1{,}056+2{,}080=3{,}136;\ 3{,}136+5{,}152=8{,}288\\
+&\phantom{:}\ 8{,}288+8{,}224=16{,}512\\
+\text{fuse }(128\to32)&: 128\times32+32=4{,}096+32=4{,}128\\
+\text{refine}&: 32\times32\times9+32=9{,}216+32=9{,}248\\
+\text{sub-pixel}&: 32\times16\times9+16=4{,}608+16=4{,}624\\
+\text{total}&: 16{,}512+4{,}128=20{,}640;\ 20{,}640+9{,}248=29{,}888\\
+&\phantom{:}\ 29{,}888+4{,}624=34{,}512.
+\end{align*}
+\end{solution}
+
+\begin{solution}{ex:uncertainty:4}
+Ratio 1.07: $3.0/1.07=2.804$, and $2.804^2=7.86$. That is above 6.76, so the target keeps its place in this
+example, consistent with set1 losing less than set2.
+
+Ratio 1.19 with the square root: the residual is divided by $\sqrt{1.19}=1.091$, so the squared score is
+divided by $1.091\times1.091=1.19$, about 16\% lower ($1-1/1.19=0.16$). With residual$/b$ it was divided by
+$1.19^2=1.416$, about 29\% lower.
+\end{solution}
+
+\begin{solution}{ex:uncertainty:5}
+One error: $\ell(\sigma)=r^2/(2\sigma^2)+\log\sigma$. Differentiate:
+\begin{align*}
+\frac{d\ell}{d\sigma} &= \frac{r^2}{2}\cdot(-2)\sigma^{-3}+\frac1\sigma = -\frac{r^2}{\sigma^3}+\frac1\sigma.
+\intertext{Set to zero and multiply by $\sigma^3$:}
+0 &= -r^2+\sigma^2 \quad\Rightarrow\quad \sigma^\star=\abs{r}.
+\end{align*}
+$N$ errors sharing $\sigma$: the average loss is $\frac{1}{2\sigma^2}\cdot\frac1N\sum r_i^2+\log\sigma$, so by
+the same steps $\sigma^{\star2}=\frac1N\sum_i r_i^2$: the root-mean-square error. The Laplace gives the
+\emph{mean absolute} error; the Gaussian gives the \emph{root mean square}. For errors $0.1, 0.3, 0.2, 0.4$:
+mean absolute $1.0/4=0.25$; mean square $(0.01+0.09+0.04+0.16)/4=0.30/4=0.075$, root $0.274$. The RMS is pulled
+up more by the largest error.
+\end{solution}
+
+\begin{solution}{ex:uncertainty:6}
+The target/ring ratio of $b$ grew with training (set2 1.12 to 1.19): the head learned more of the
+``something odd next door'' signal, which predicts errors well, so Spearman rose, and divides targets away, so
+detection fell. The epoch-1 square-root row is not evidence because the square-root variant was picked after
+seeing epoch-1 results on the same bench that grades it (selection risk), and its pAUC of 0.176 is still below
+the 0.180 bar anyway.
+\end{solution}

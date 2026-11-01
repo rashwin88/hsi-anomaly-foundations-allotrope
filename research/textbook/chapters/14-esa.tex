@@ -1,0 +1,565 @@
+\chapter{Efficient self-attention with spatial reduction}\label{ch:esa}
+
+\begin{onething}
+Keep the questions detailed but summarise the answers: queries stay at full resolution, while
+keys and values are first shrunk by a strided convolution, so that every stage of the encoder
+attends over the same $4\times4$ summary of 16 tokens instead of over every token.
+\end{onething}
+
+\Cref{ch:attention} built attention and ended on its cost: an $N\times N$ score matrix, over a
+million entries at stage~1. This chapter derives that cost exactly, in multiply-adds and in bytes,
+then shows the single modification SegFormer makes \citep{xie2021segformer}, borrowed from the
+Pyramid Vision Transformer \citep{wang2021pyramid}: spatial-reduction attention. The code is
+\file{app/foundation_models/components/efficient_self_attention.py}. Every number in the chapter
+is printed by \file{research/textbook/tools/compute_13-15.py}.
+
+\section{The cost of plain attention, counted}\label{sec:esa:cost}
+
+\subsection{Multiply-adds}
+
+We count work in \emph{multiply-adds}\index{multiply-add} (MACs): one multiplication followed by
+one addition, the basic step of every dot product. A dot product of two length-$d$ vectors is
+$d$ MACs.
+
+Take one attention module on one patch with $N$ tokens of width $C$, split into $h$ heads of
+width $d = C/h$ (\cref{sec:attention:heads}). Its steps cost:
+\begin{align*}
+  \text{each of } \mat{Q}, \mat{K}, \mat{V} &: N \text{ tokens} \times C\cdot C \text{ MACs} = NC^2 && \text{a } C\times C \text{ matrix per token}\\
+  \mat{Q}\mat{K}\T \text{ per head} &: N\cdot N \text{ entries} \times d \text{ MACs} = N^2 d\\
+  \mat{A}\mat{V} \text{ per head} &: N \text{ rows} \times d \text{ columns} \times N \text{ terms} = N^2 d\\
+  \text{output projection} &: NC^2 .
+\end{align*}
+Add them, using $h\cdot d = C$ to sum the two per-head steps over the $h$ heads:
+\begin{equation}\label{eq:esa:plaincost}
+  \text{MACs}_\text{plain} = \underbrace{4NC^2}_{\text{four projections}} + \underbrace{2N^2C}_{\text{scores and blend}} .
+\end{equation}
+The first term grows in proportion to $N$; the second with $N^2$. At stage~1 the second wins
+heavily.
+
+\begin{worked}[label={we:esa:plaincost}]{The cost of plain attention at stage 1}
+Stage 1 has $N = 1024$ tokens of width $C = 32$. Work each term out.
+\begin{align*}
+  C^2 &= 32\times32 = 1{,}024\\
+  4NC^2 &= 4\times1024\times1{,}024 = 4\times1{,}048{,}576 = 4{,}194{,}304\\
+  N^2 &= 1024\times1024 = 1{,}048{,}576\\
+  2N^2C &= 2\times1{,}048{,}576\times32 = 2\times33{,}554{,}432 = 67{,}108{,}864\\
+  \text{total} &= 4{,}194{,}304 + 67{,}108{,}864 = 71{,}303{,}168 .
+\end{align*}
+About 94\% of the work ($67.1/71.3$) is the score matrix and the blend.
+\end{worked}
+
+\subsection{Memory}
+
+The score tensor has shape \shape{(B, h, N, N)} and the softmax weights another tensor of the same
+shape. Training must keep the weights in memory until the backward pass (\cref{ch:trainloop})
+needs them. Each float32 number is 4 bytes.
+
+\begin{worked}[label={we:esa:plainmem}]{The memory of one stage-1 score tensor}
+Per patch and per head, the scores are $1024\times1024 = 1{,}048{,}576$ numbers, and
+\[
+  1{,}048{,}576 \times 4 \text{ bytes} = 4{,}194{,}304 \text{ bytes} = 4 \text{ MiB}
+\]
+(a MiB is $2^{20} = 1{,}048{,}576$ bytes). The v0.2.0 pretraining configuration uses a batch of
+$B = 128$ patches\tagM{configs/hyperspectral_segformer_exp_2.json} and stage 1 has $h = 2$ heads,
+so one block's weights tensor would be
+\begin{align*}
+  128 \times 2 \times 4{,}194{,}304 \text{ bytes} &= 256 \times 4{,}194{,}304 \text{ bytes}\\
+  &= 1{,}073{,}741{,}824 \text{ bytes} = 1{,}024 \text{ MiB} = 1 \text{ GiB},
+\end{align*}
+and stage 1 has two blocks, each storing scores and weights. Several gigabytes for one stage of
+one batch, before counting anything else.
+\end{worked}
+
+\subsection{Why the obvious fixes fail}
+
+\begin{enumerate}
+  \item \emph{Use fewer, bigger tokens.} Stage 1 could cut the patch into $8\times8$ blocks
+  instead of $4\times4$ ($N = 256$). But then every output token describes 64 pixels instead of
+  16, and the fine detail that small anomalies live in is gone from the whole encoder.
+  \item \emph{Attend only to nearby tokens.} Restrict each token to a window of neighbours. The
+  cost falls, but a token in one corner can no longer see the other corner, and the context that
+  makes a dark block surprising (``this is a desert'') may be outside the window.
+  \item \emph{Average the keys and values over blocks.} Closer, but the averaging is fixed: it
+  cannot learn that, inside a block, the edge pixels matter more than the middle ones.
+\end{enumerate}
+Spatial-reduction attention keeps every query (so every token still gets its own update), keeps
+global reach (every query sees a summary of the whole patch), and makes the summarising
+\emph{learned}.
+
+\begin{analogy}
+You have a precise question about a thousand-page report. Rather than reading all thousand pages
+you read a sixteen-paragraph executive summary, one paragraph per chapter. Your question is as
+specific as it was; only the material you consult has been condensed. And the summary was written
+by someone who learned, over many reports, which parts of each chapter are worth keeping: that is
+the learned convolution. Where the analogy stops: a person reads one summary once, while here
+each of the 1{,}024 questions consults the same 16-paragraph summary, and every block writes a
+fresh summary of its own.
+\end{analogy}
+
+\section{The strided convolution that summarises}\label{sec:esa:conv}
+
+\subsection{Kernel equal to stride}
+
+Recall from \cref{ch:shapes} that a 2-D convolution with kernel size $k$ and stride $s$ slides a
+$k\times k$ window across the grid in steps of $s$, and that its output side length is
+\begin{equation}\label{eq:esa:outsize}
+  H_\text{out} = \left\lfloor \frac{H + 2p - k}{s} \right\rfloor + 1
+\end{equation}
+for padding $p$. The reduction uses $k = s = R$ and no padding ($p = 0$). Then
+\begin{align*}
+  H_\text{out} &= \left\lfloor \frac{H - R}{R} \right\rfloor + 1 && p = 0,\ k = s = R\\
+  &= \left\lfloor \frac{H}{R} - 1 \right\rfloor + 1 && \text{split the fraction}\\
+  &= \frac{H}{R} && \text{when } R \text{ divides } H .
+\end{align*}
+With kernel equal to stride the windows tile the grid exactly, with no overlap and no gap: each
+output position summarises one $R\times R$ block of input tokens. (If $R$ did not divide $H$, the
+floor would drop the last partial block: $H = 30$, $R = 8$ gives $\lfloor 22/8\rfloor + 1 = 3$, and
+the last six rows would be ignored. For this model it always divides; see
+\cref{sec:esa:sixteen}.)
+
+\begin{definition}[Spatial-reduction convolution]
+For token features $x_{c,i,j}$ (channel $c$, grid row $i$, column $j$) the reduced token at
+summary position $(u, v)$ has channels
+\begin{equation}\label{eq:esa:conv}
+  y_{c',u,v} = b_{c'} + \sum_{c=1}^{C}\sum_{a=0}^{R-1}\sum_{b=0}^{R-1} W_{c',c,a,b}\; x_{c,\,Ru+a,\,Rv+b},
+  \qquad c' = 1,\dots,C .
+\end{equation}
+\end{definition}\index{spatial reduction}\index{convolution!strided}
+Every output channel looks at every input channel at every one of the $R^2$ positions of its
+block. That is $C\cdot C\cdot R^2$ weights plus $C$ biases, a count we use in
+\cref{sec:esa:params}.
+
+\paragraph{Average pooling is one special case.} Choose $W_{c',c,a,b} = 1/R^2$ when $c' = c$
+and 0 otherwise, and every bias $b_{c'} = 0$. Then \cref{eq:esa:conv} becomes
+$y_{c,u,v} = \frac{1}{R^2}\sum_{a,b} x_{c,Ru+a,Rv+b}$, the plain average of the block, channel by
+channel. The learned convolution can do this, or anything else linear: weight the centre more,
+pick one corner, or mix channels.
+
+\begin{worked}[label={we:esa:toyconv}]{Summarising a $4\times4$ grid with $R = 2$}
+Take a grid of $4\times4$ tokens with a single channel ($C = 1$):
+\[
+  \begin{pmatrix} 1 & 2 & 0 & 1\\ 3 & 2 & 1 & 0\\ 0 & 0 & 4 & 4\\ 0 & 0 & 4 & 4 \end{pmatrix}.
+\]
+With $R = 2$ the output is $4/2 = 2$ by 2. The four blocks are the four $2\times2$ quarters.
+
+\emph{Averaging kernel} $\begin{pmatrix}0.25 & 0.25\\ 0.25 & 0.25\end{pmatrix}$, bias 0:
+\begin{align*}
+  \text{top-left: } 0.25(1 + 2 + 3 + 2) &= 0.25\times8 = 2.0\\
+  \text{top-right: } 0.25(0 + 1 + 1 + 0) &= 0.25\times2 = 0.5\\
+  \text{bottom-left: } 0.25(0 + 0 + 0 + 0) &= 0.0\\
+  \text{bottom-right: } 0.25(4 + 4 + 4 + 4) &= 0.25\times16 = 4.0
+\end{align*}
+\emph{``Pick the top-left'' kernel} $\begin{pmatrix}1 & 0\\ 0 & 0\end{pmatrix}$, bias 0: the outputs
+are the top-left entries of the blocks, $1, 0, 0, 4$.
+
+Two different summaries of the same grid. Training chooses the kernel, and with $C$ channels in
+and out it chooses a different mix for each output channel. Sixteen tokens became four; with
+$R = 8$ at stage 1, 1024 become 16.
+\end{worked}
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}[cell/.style={minimum size=7mm, draw=white, line width=0.8pt, font=\small}]
+  \foreach \r/\row in {0/{1,2,0,1},1/{3,2,1,0},2/{0,0,4,4},3/{0,0,4,4}}{
+    \foreach \v [count=\c from 0] in \row {
+      \pgfmathtruncatemacro{\p}{\v*18+6}
+      \node[cell, fill=spat!\p] at (\c*0.7, -\r*0.7) {\v};
+    }
+  }
+  \draw[spat!80!black, line width=1.2pt] (-0.35,0.35) rectangle (1.05,-1.05);
+  \draw[spat!80!black, line width=1.2pt] (1.05,0.35) rectangle (2.45,-1.05);
+  \draw[spat!80!black, line width=1.2pt] (-0.35,-1.05) rectangle (1.05,-2.45);
+  \draw[spat!80!black, line width=1.2pt] (1.05,-1.05) rectangle (2.45,-2.45);
+  \node[font=\small, align=center] at (1.05,0.8) {$4\times4$ tokens, $N = 16$};
+  \draw[-{Latex}, thick] (2.8,-1.05) -- node[above, font=\small, align=center]{conv\\$k = s = 2$} (4.3,-1.05);
+  \foreach \u/\v/\val in {0/0/2.0,1/0/0.5,0/1/0.0,1/1/4.0}{
+    \pgfmathtruncatemacro{\p}{\val*18+6}
+    \node[cell, minimum size=10mm, fill=spat!\p] at (5.0+\u*1.0, -0.55-\v*1.0) {\val};
+  }
+  \node[font=\small, align=center] at (5.5,0.8) {$2\times2$ summary};
+  \node[font=\small, align=center] at (5.5,-2.5) {$N/R^2 = 4$ tokens};
+  \draw[-{Latex}, thick] (6.8,-1.05) -- node[above, font=\small, align=center]{LN, then\\$\mat{W}_K$, $\mat{W}_V$} (8.6,-1.05);
+  \node[font=\small, align=left, anchor=west] at (8.7,-1.05) {4 keys,\\4 values};
+\end{tikzpicture}
+\caption{The toy reduction of \cref{we:esa:toyconv} with the averaging kernel. Each output token
+summarises one $R\times R$ block of the input (outlined); the queries are still made from all 16
+input tokens.}
+\label{fig:esa:toyconv}
+\end{figure}
+
+\subsection{LayerNorm after the reduction}
+
+The summarised tokens pass through a LayerNorm\index{LayerNorm} before they are projected into
+keys and values (\file{efficient_self_attention.py}, line 111). \Cref{ch:block} derives LayerNorm
+in full; for now, it rescales each token so that its $C$ numbers have mean 0 and variance 1, then
+applies a learned per-channel scale and shift. Here it keeps the summary tokens on the same scale
+as the full-resolution tokens the queries come from, which matters because \cref{sec:attention:scale}
+assumed unit-variance components when it chose the divisor $\sqrt d$.
+
+\section{The data flow, with shapes at every step}\label{sec:esa:flow}
+
+\begin{lstlisting}
+# x: (B, N, C), N = H * W    (efficient_self_attention.py, lines 125-195)
+Q = self.q(x)                                  # (B, N, C)
+Q = Q.reshape(B, N, h, d).transpose(1, 2)      # (B, h, N, d): ALL tokens
+r = x.transpose(1, 2)                          # (B, C, N)
+r = r.reshape(B, C, H, W)                      # (B, C, H, W): a grid
+r = self.reduction(r)                          # (B, C, H/R, W/R): conv
+r = r.flatten(2).transpose(1, 2)               # (B, N/R^2, C): sequence
+r = self.reduction_norm(r)                     # (B, N/R^2, C): LayerNorm
+K = self.k(r).reshape(B, -1, h, d).transpose(1, 2)  # (B, h, N/R^2, d)
+V = self.v(r).reshape(B, -1, h, d).transpose(1, 2)  # (B, h, N/R^2, d)
+S = Q @ K.transpose(-2, -1) * d ** -0.5        # (B, h, N, N/R^2)
+A = softmax(S, dim=-1)                         # (B, h, N, N/R^2)
+O = A @ V                                      # (B, h, N, d)
+O = O.transpose(1, 2).reshape(B, N, C)         # (B, N, C)
+O = self.proj(O)                               # (B, N, C)
+\end{lstlisting}
+(This is a condensed transcription; the source spells each step out on its own line with the same
+shapes in its comments.) Why the \code{transpose} before the \code{reshape}? Memory order: a
+\shape{(B, N, C)} tensor stores token 0's $C$ numbers, then token 1's; a grid \shape{(B, C, H, W)}
+must store channel 0's $H\cdot W$ numbers first. A reshape alone would scramble them
+(\cref{ch:shapes}).
+
+The key sentence for reading the scores: \emph{entry $(b, m, i, j)$ of $\mat{S}$ is how much
+full-resolution token $i$ should attend, in head $m$, to summary token $j$, which stands for an
+$R\times R$ block of the grid.} Fine-grained questions, spatially aggregated answers. The output
+still has one vector per original token: nothing was lost on the query side.
+\index{attention!efficient self-attention}\index{efficient self-attention}
+
+\subsection{Every stage}
+
+For a $128\times128$ patch, the stage widths, heads and ratios
+$C = (32, 64, 160, 256)$, $h = (2, 2, 5, 8)$, $R = (8, 4, 2, 1)$ give these shapes
+\par\noindent\tagM{research/experiments/indradhanu-finetune/FT04-final-joint/config.json}:
+
+\begin{center}
+\small
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{lllll}
+\toprule
+step & stage 1 & stage 2 & stage 3 & stage 4\\
+ & $C{=}32, h{=}2, R{=}8$ & $C{=}64, h{=}2, R{=}4$ & $C{=}160, h{=}5, R{=}2$ & $C{=}256, h{=}8, R{=}1$\\
+\midrule
+input $\vect{x}$ & $(B, 1024, 32)$ & $(B, 256, 64)$ & $(B, 64, 160)$ & $(B, 16, 256)$\\
+$\mat{Q}$ split & $(B, 2, 1024, 16)$ & $(B, 2, 256, 32)$ & $(B, 5, 64, 32)$ & $(B, 8, 16, 32)$\\
+grid & $(B, 32, 32, 32)$ & $(B, 64, 16, 16)$ & $(B, 160, 8, 8)$ & not built\\
+after conv & $(B, 32, 4, 4)$ & $(B, 64, 4, 4)$ & $(B, 160, 4, 4)$ & no conv\\
+sequence, LN & $(B, 16, 32)$ & $(B, 16, 64)$ & $(B, 16, 160)$ & $(B, 16, 256)$\\
+$\mat{K}, \mat{V}$ split & $(B, 2, 16, 16)$ & $(B, 2, 16, 32)$ & $(B, 5, 16, 32)$ & $(B, 8, 16, 32)$\\
+scores $\mat{S}$ & $(B, 2, 1024, 16)$ & $(B, 2, 256, 16)$ & $(B, 5, 64, 16)$ & $(B, 8, 16, 16)$\\
+$\mat{A}\mat{V}$ & $(B, 2, 1024, 16)$ & $(B, 2, 256, 32)$ & $(B, 5, 64, 32)$ & $(B, 8, 16, 32)$\\
+output & $(B, 1024, 32)$ & $(B, 256, 64)$ & $(B, 64, 160)$ & $(B, 16, 256)$\\
+\bottomrule
+\end{tabular}
+\end{center}
+At stage 4, $R = 1$ and the module has no reduction layer at all (the \code{if} at line 103 only
+builds it for $R > 1$); keys and values come straight from the 16 tokens, which is ordinary full
+attention. The script runs a random input through each stage's module and gets the output shapes
+in the last row\tagC.
+
+\begin{worked}[label={we:esa:toyattn}]{One query against the four summary tokens}
+Continue \cref{we:esa:toyconv} with the averaging summary $(2.0, 0.5, 0.0, 4.0)$. Keep $C = 1$,
+one head ($d = 1$, so the scale is $1/\sqrt1 = 1$), and identity projections. (We skip the
+LayerNorm here: with a single channel it would map every token to the same number, which is
+\cref{ex:esa:5}.) Take the query of the top-left token, whose value is 1.
+
+\emph{Scores,} query times each key: $1\times2.0 = 2.0$, $1\times0.5 = 0.5$, $1\times0.0 = 0.0$,
+$1\times4.0 = 4.0$.
+
+\emph{Stable softmax.} Subtract the maximum 4.0: $(-2.0, -3.5, -4.0, 0.0)$. Exponentiate:
+\begin{align*}
+  e^{-2.0} = 0.1353,\quad e^{-3.5} = 0.0302,\quad e^{-4.0} = 0.0183,\quad e^{0} = 1.0000 .
+\end{align*}
+Add: $0.1353 + 0.0302 + 0.0183 + 1.0000 = 1.1838$. Divide:
+\begin{align*}
+  0.1353/1.1838 = 0.1143,\quad 0.0302/1.1838 = 0.0255,\\
+  0.0183/1.1838 = 0.0155,\quad 1.0000/1.1838 = 0.8447 .
+\end{align*}
+\emph{Blend the values:}
+\begin{align*}
+  0.1143\times2.0 &= 0.2286\\
+  0.0255\times0.5 &= 0.0128\\
+  0.0155\times0.0 &= 0.0000\\
+  0.8447\times4.0 &= 3.3788\\
+  \text{sum} &= 3.6202 .
+\end{align*}
+The top-left token is pulled strongly toward the bright bottom-right block, which it can see only
+through its one summary token. The full layer does this for all 16 queries, so the score matrix is
+$16\times4 = 64$ entries instead of $16\times16 = 256$: a factor of $R^2 = 4$.
+\end{worked}
+
+\coursefig[0.95\linewidth]{iw-13-esa}{Spatial reduction at stage 1, as the course draws it.
+Queries keep all 1{,}024 tokens; keys and values are first shrunk by a strided convolution
+(kernel = stride = $R = 8$) to a $4\times4$ grid of 16 summary tokens. The score matrix is
+$1024\times16$ instead of $1024\times1024$, 64 times smaller (the hatched square is not drawn to
+scale). With $R = 8, 4, 2, 1$ every stage attends over the same $4\times4$
+summary.}{fig:esa:course}
+
+\section{The 16-token summary}\label{sec:esa:sixteen}
+
+\begin{keypoint}
+The ratios $R = (8, 4, 2, 1)$ were chosen so that every stage, however fine its own grid, attends
+over the same $4\times4$ summary of the whole patch.
+\end{keypoint}
+
+The token grid halves in side at each stage ($128/4 = 32$, then 16, 8, 4; \cref{ch:encoder}) and
+the ratio halves too, so the summary side never changes:
+\begin{align*}
+  \text{stage 1: } 32/8 &= 4 && 4\times4 = 16 \text{ summary tokens}\\
+  \text{stage 2: } 16/4 &= 4 && 4\times4 = 16\\
+  \text{stage 3: } \phantom{1}8/2 &= 4 && 4\times4 = 16\\
+  \text{stage 4: } \phantom{1}4/1 &= 4 && 4\times4 = 16 .
+\end{align*}
+In symbols: the stage-$s$ grid side is $128/(4\cdot2^{s-1})$ and $R_s = 8/2^{s-1}$, so the summary
+side is $\frac{128}{4\cdot2^{s-1}}\cdot\frac{2^{s-1}}{8} = \frac{128}{32} = 4$, independent of $s$.
+For a patch of side $P$ it would be $P/32$: a $256\times256$ patch would give an $8\times8$ summary
+of 64 tokens at every stage.
+
+\begin{center}
+\begin{tabular}{cccccrrr}
+\toprule
+stage & grid & $N$ & $R$ & summary & $N/R^2$ & score entries & plain would be\\
+\midrule
+1 & $32\times32$ & 1024 & 8 & $4\times4$ & 16 & $1024\times16 = 16{,}384$ & 1{,}048{,}576\\
+2 & $16\times16$ & 256 & 4 & $4\times4$ & 16 & $256\times16 = 4{,}096$ & 65{,}536\\
+3 & $8\times8$ & 64 & 2 & $4\times4$ & 16 & $64\times16 = 1{,}024$ & 4{,}096\\
+4 & $4\times4$ & 16 & 1 & $4\times4$ & 16 & $16\times16 = 256$ & 256\\
+\bottomrule
+\end{tabular}
+\end{center}
+The score matrix shrinks by exactly $R^2$: $64\times$ at stage 1, $16\times$ at stage 2, $4\times$
+at stage 3, and not at all at stage 4, where 16 tokens is already the target.
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}
+\begin{axis}[ybar, width=0.85\linewidth, height=6cm, ymode=log, log origin=infty,
+  ymin=100, ymax=3e6, bar width=14pt,
+  symbolic x coords={stage 1,stage 2,stage 3,stage 4}, xtick=data,
+  ylabel={score entries per head per patch}, legend style={at={(0.98,0.97)},anchor=north east,font=\small},
+  nodes near coords, every node near coord/.append style={font=\scriptsize, rotate=90, anchor=west},
+  enlarge x limits=0.18]
+\addplot[fill=maskgrey!60, draw=maskgrey] coordinates {(stage 1,1048576) (stage 2,65536) (stage 3,4096) (stage 4,256)};
+\addplot[fill=attn!70, draw=attn] coordinates {(stage 1,16384) (stage 2,4096) (stage 3,1024) (stage 4,256)};
+\legend{plain $N\times N$, reduced $N\times N/R^2$}
+\end{axis}
+\end{tikzpicture}
+\caption{Score entries per head per patch, plain against spatially reduced, on a logarithmic axis
+(each gridline is ten times the one below). The reduction factor $R^2$ is 64, 16, 4 and 1.}
+\label{fig:esa:scorebars}
+\end{figure}
+
+\section{What the reduction saves, in work and memory}\label{sec:esa:savings}
+
+\subsection{Multiply-adds with the reduction}
+
+Write $N' = N/R^2$ for the number of summary tokens. Redo \cref{eq:esa:plaincost} step by step:
+\begin{align*}
+  \mat{Q} &: NC^2 && \text{all } N \text{ tokens, unchanged}\\
+  \text{reduction conv} &: N' \text{ outputs} \times C \text{ channels} \times C R^2 \text{ MACs}\\
+  &\phantom{:} = N'R^2C^2 = NC^2 && \text{since } N'R^2 = N\\
+  \mat{K}, \mat{V} &: 2N'C^2 && \text{only } N' \text{ summary tokens}\\
+  \mat{Q}\mat{K}\T,\ \mat{A}\mat{V} &: 2NN'C && N' \text{ keys instead of } N\\
+  \text{output projection} &: NC^2 .
+\end{align*}
+So
+\begin{equation}\label{eq:esa:redcost}
+  \text{MACs}_\text{reduced} = 3NC^2 + 2N'C^2 + 2NN'C \qquad (R > 1).
+\end{equation}
+A curiosity: the reduction convolution costs exactly $NC^2$, the same as one projection, at every
+stage. The LayerNorm adds a few operations per number and is left out.
+
+\begin{worked}[label={we:esa:redcost}]{The cost of reduced attention at stage 1}
+$N = 1024$, $N' = 16$, $C = 32$, $C^2 = 1{,}024$.
+\begin{align*}
+  3NC^2 &= 3\times1024\times1{,}024 = 3\times1{,}048{,}576 = 3{,}145{,}728\\
+  2N'C^2 &= 2\times16\times1{,}024 = 32{,}768\\
+  2NN'C &= 2\times1024\times16\times32 = 2\times524{,}288 = 1{,}048{,}576\\
+  \text{total} &= 3{,}145{,}728 + 32{,}768 + 1{,}048{,}576 = 4{,}227{,}072 .
+\end{align*}
+Against the plain 71{,}303{,}168 of \cref{we:esa:plaincost}:
+$71{,}303{,}168 / 4{,}227{,}072 = 16.9$ times less work. The score-and-blend part alone fell from
+67{,}108{,}864 to 1{,}048{,}576, the full factor of 64; the projections, which do not shrink,
+now dominate.
+\end{worked}
+
+The script evaluates both formulas at every stage\tagC:
+\begin{center}
+\begin{tabular}{crrrr}
+\toprule
+stage & plain MACs & reduced MACs & of which conv & ratio\\
+\midrule
+1 & 71{,}303{,}168 & 4{,}227{,}072 & 1{,}048{,}576 & 16.9\\
+2 & 12{,}582{,}912 & 3{,}801{,}088 & 1{,}048{,}576 & 3.3\\
+3 & 7{,}864{,}320 & 6{,}062{,}080 & 1{,}638{,}400 & 1.3\\
+4 & 4{,}325{,}376 & 4{,}325{,}376 & 0 & 1.0\\
+\bottomrule
+\end{tabular}
+\end{center}
+After the reduction the four stages cost roughly the same. Without it, stage 1 alone would cost
+nearly three times the other three stages together (71.3 million MACs against
+$12.6 + 7.9 + 4.3 = 24.8$ million, all plain).
+
+\subsection{Memory with the reduction}
+
+\begin{worked}[label={we:esa:redmem}]{The stage-1 score tensor, reduced}
+Per patch and head: $1024\times16 = 16{,}384$ numbers, times 4 bytes $= 65{,}536$ bytes
+$= 64$ KiB, against 4 MiB plain. For the batch of 128 with 2 heads:
+\begin{align*}
+  128\times2\times65{,}536 \text{ bytes} = 256\times65{,}536 \text{ bytes} = 16{,}777{,}216 \text{ bytes} = 16 \text{ MiB},
+\end{align*}
+against 1{,}024 MiB plain. The same factor of 64.
+\end{worked}
+
+\section{What the reduction costs in parameters}\label{sec:esa:params}
+
+The convolution of \cref{eq:esa:conv} has one weight for every (output channel, input channel,
+kernel row, kernel column) and one bias per output channel; the LayerNorm has a scale and a shift
+per channel:
+\begin{equation}\label{eq:esa:convparams}
+  \text{reduction conv} = C\cdot C\cdot R\cdot R + C,\qquad \text{reduction LN} = 2C .
+\end{equation}
+Add the four projections of \cref{eq:attention:params}:
+\begin{equation}\label{eq:esa:params}
+  \text{ESA}(C, R) = \underbrace{4C^2 + 4C}_{\text{q, k, v, proj}} + \underbrace{C^2R^2 + C + 2C}_{\text{only if } R > 1} .
+\end{equation}
+
+\begin{worked}[label={we:esa:params1}]{The stage-1 attention module, parameter by parameter}
+$C = 32$, $R = 8$.
+\begin{align*}
+  \text{one projection: } 32\times32 + 32 &= 1{,}024 + 32 = 1{,}056\\
+  \text{four projections: } 4\times1{,}056 &= 4{,}224\\
+  \text{reduction conv: } 32\times32\times8\times8 + 32 &= 1{,}024\times64 + 32 = 65{,}536 + 32 = 65{,}568\\
+  \text{reduction LN: } 2\times32 &= 64\\
+  \text{total: } 4{,}224 + 65{,}568 + 64 &= 69{,}856 .
+\end{align*}
+\emph{Check.} Building \code{EfficientSelfAttention(32, 2, 8)} the script reports 69{,}856, with
+\code{q}, \code{k}, \code{v}, \code{proj} at 1{,}056 each, \code{reduction} at 65{,}568 and
+\code{reduction_norm} at 64\tagC.
+\end{worked}
+
+The same arithmetic at every stage, checked against the built modules\tagC:
+\begin{center}
+\begin{tabular}{crrrrrr}
+\toprule
+stage & $C$ & $R$ & projections & conv $C^2R^2 + C$ & LN $2C$ & ESA total\\
+\midrule
+1 & 32 & 8 & 4{,}224 & $65{,}536 + 32 = 65{,}568$ & 64 & 69{,}856\\
+2 & 64 & 4 & 16{,}640 & $65{,}536 + 64 = 65{,}600$ & 128 & 82{,}368\\
+3 & 160 & 2 & 103{,}040 & $102{,}400 + 160 = 102{,}560$ & 320 & 205{,}920\\
+4 & 256 & 1 & 263{,}168 & none & none & 263{,}168\\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\paragraph{The surprise.} At stage 1 the reduction convolution is $65{,}568/69{,}856 = 93.9\%$ of
+the attention module, about fifteen times all four projections together
+($65{,}568/4{,}224 = 15.5$). The reason is in \cref{eq:esa:convparams}: $C^2R^2 = (CR)^2$. At
+stage 1, $CR = 32\times8 = 256$; at stage 2, $CR = 64\times4 = 256$ again, which is why the two
+convolutions are almost the same size ($256^2 = 65{,}536$ weights each). Stage 1 has the narrowest
+tokens and yet one of the larger attention modules. The 64-fold saving in compute is bought with
+parameters; it is a trade, not a free lunch.
+
+\begin{drift}
+The widths, heads and ratios above are those of the FT04 configuration
+(\file{research/experiments/indradhanu-finetune/FT04-final-joint/config.json}, read 2026-10-29).
+Indradhanu Heavy triples the widths to $(96, 192, 480, 768)$ with heads $(3, 6, 10, 12)$
+\tagM{indradhanu workings/68-indradhanu-heavy-pretraining.md}; its stage-1 reduction convolution is
+$96\times96\times64 + 96 = 589{,}920$ parameters\tagC, nine times FT04's (\cref{ch:heavy}).
+\end{drift}
+
+\section{The fallback: when the grid is incomplete}\label{sec:esa:fallback}
+
+The reduction rebuilds a full 2-D grid from the token sequence, which requires $N = H\cdot W$
+exactly. During masked training (\cref{ch:masking}) stage 1 removes the tokens it will be asked to
+predict before the blocks run. With the mask ratio 0.65
+\par\noindent\tagM{research/experiments/indradhanu-finetune/FT04-final-joint/config.json},
+\par\noindent about
+\[
+  1024\times(1 - 0.65) = 1024\times0.35 = 358.4 \approx 358
+\]
+tokens survive, and 358 tokens cannot be arranged into a $32\times32$ grid. The code checks first
+(\file{efficient_self_attention.py}, line 144):
+\begin{lstlisting}
+can_reduce = (self.reduction_ratio > 1) and (N == H * W)
+if can_reduce:
+    ...                   # grid, conv, flatten, LayerNorm: K/V over N / R^2 tokens
+else:
+    reduced_x = x         # (B, N, C): K/V over all surviving tokens
+\end{lstlisting}
+So \emph{whenever tokens have been removed, stage 1 runs plain full attention over the
+survivors.}\index{efficient self-attention!fallback}
+
+\begin{worked}[label={we:esa:fallback}]{Is the fallback affordable?}
+Per head and patch, with 358 survivors:
+\[
+  358\times358 = 128{,}164 \text{ score entries}.
+\]
+Compare: plain attention over all 1024 tokens, 1{,}048{,}576 (the fallback is
+$128{,}164/1{,}048{,}576 = 12.2\%$ of it, about one eighth); reduced attention over all 1024 tokens,
+16{,}384 (the fallback is $128{,}164/16{,}384 = 7.8$ times more). Removing 65\% of the tokens
+shrinks $N^2$ by $0.35^2 = 0.1225$, which is why it is affordable.
+\end{worked}
+
+\begin{sourcenote}[: the fallback comment uses an old mask ratio]
+The comment above the check (\file{efficient_self_attention.py}, lines 142--143) says ``With
+\textasciitilde512 tokens after 50\% masking, full attention costs 512*512 = 262K''. That was the
+mask ratio when the code was written. The FT04 configuration uses 0.65, giving about 358 survivors
+and $358^2 = 128{,}164$ entries per head. The reasoning in the comment is right; its numbers are
+dated. The course (IW13) already notes this.
+\end{sourcenote}
+
+Two consequences follow from reading the code, and both are worth knowing.
+\begin{enumerate}
+  \item \emph{The model is not the same machine with and without a mask.} A forward pass with a
+  \code{keep_mask} at stage 1 uses full attention there; one without uses the reduction. This is
+  intended and documented, but it means masked and unmasked outputs are produced by slightly
+  different computations (\cref{ch:inference} shows how inference uses both).
+  \item \emph{In a masked pass the stage-1 reduction layers are idle.} The \code{else} branch never
+  touches \code{self.reduction} or \code{self.reduction_norm}, so a masked forward pass gives them
+  no gradient. Their 65{,}632 parameters ($65{,}568 + 64$) are trained only by passes in which all
+  1024 stage-1 tokens are present. Stages 2--4 never remove tokens, so their reductions always run.
+\end{enumerate}
+
+\begin{confusions}
+\confusion{Which of query, key and value stay at full resolution?}{Only the queries. Every token
+must receive its own updated vector, so there must be one query per token. Keys and values are
+what is consulted, and those are summarised.}
+\confusion{Does the reduction lose information?}{On the answer side, yes: fine spatial detail
+within each $R\times R$ block is blended. The bet, validated by the SegFormer authors across many
+tasks, is that queries need to be precise while answers can be summarised. The next stage of the
+encoder works at a coarser grain anyway.}
+\confusion{Is the reduction the same as pooling?}{It is learned pooling. Average pooling is one
+setting of its weights (\cref{we:esa:toyconv}); training is free to find a better one, and to mix
+channels while it summarises.}
+\confusion{Does $R = 1$ at stage 4 mean attention is switched off?}{No. $R = 1$ means no reduction,
+which is ordinary full attention over the 16 tokens. The module has no reduction layer at that
+stage.}
+\confusion{Does the fallback make masked training less accurate?}{It makes stage 1 less compressed,
+if anything: full attention over the survivors sees more detail than a summary would. The cost is
+compute, and that is small because most tokens are gone.}
+\confusion{Why does ESA have more parameters at stage 1 than its width suggests?}{Because the
+reduction convolution has $(CR)^2$ weights and $CR = 256$ at stage 1. The projections grow as
+$C^2$; the convolution grows as $C^2R^2$.}
+\end{confusions}
+
+\begin{checkyourself}
+\item\label{ex:esa:1} Stage 2 has $N = 256$ tokens on a $16\times16$ grid, $C = 64$, $h = 2$,
+$R = 4$. Write the shape after each step of the data flow for a batch of $B$ patches, from the
+input to the output projection.
+\item\label{ex:esa:2} Count the parameters of the stage-3 reduction convolution and LayerNorm by
+hand ($C = 160$, $R = 2$), and then the whole stage-3 attention module. Compare with 205{,}920.
+\item\label{ex:esa:3} For a $256\times256$ patch, give the token grid, the number of summary
+tokens and the score-matrix size per head at each of the four stages. By what factor has stage 1's
+score matrix grown compared with a $128\times128$ patch?
+\item\label{ex:esa:4} Evaluate \cref{eq:esa:plaincost,eq:esa:redcost} by hand for stage 2
+($N = 256$, $N' = 16$, $C = 64$) and check them against the table in \cref{sec:esa:savings}.
+\item\label{ex:esa:5} Show that LayerNorm on a token with a single channel ($C = 1$) always returns
+its learned shift $\beta$, whatever the input. Why does this not matter for the real model?
+\item\label{ex:esa:6} With the older mask ratio 0.5, how many stage-1 tokens survive, how many
+score entries does the fallback compute per head, and what fraction is that of plain attention over
+all 1024 tokens?
+\end{checkyourself}
+
+\nextchapter{ch:block}

@@ -1,0 +1,113 @@
+\answersfor{ch:trainloop}
+
+\begin{solution}{ex:trainloop:1}
+$L'(w) = 2(w - 3)$, $\eta = 0.25$, $w_0 = 0$.
+\begin{align*}
+\text{Step 1: } g &= 2(0 - 3) = -6, & w_1 &= 0 - 0.25 \times (-6) = 1.5\\
+\text{Step 2: } g &= 2(1.5 - 3) = -3, & w_2 &= 1.5 - 0.25 \times (-3) = 2.25\\
+\text{Step 3: } g &= 2(2.25 - 3) = -1.5, & w_3 &= 2.25 - 0.25 \times (-1.5) = 2.625
+\end{align*}
+The distances to 3 are $-3, -1.5, -0.75, -0.375$: each is multiplied by $1 - 2\eta = 1 - 0.5 =
+0.5$. One step lands exactly on 3 when the factor is 0, that is $1 - 2\eta = 0$, $\eta = 0.5$:
+from $w_0 = 0$, $w_1 = 0 - 0.5 \times (-6) = 3$. (For this loss the curvature is $L'' = 2$, and
+the one-step learning rate is $1/L''$.)
+\end{solution}
+
+\begin{solution}{ex:trainloop:2}
+$g = 2$, $g^2 = 4$, $\beta_1 = 0.9$, $\beta_2 = 0.999$.
+
+\textbf{$t = 1$.}
+\begin{align*}
+m_1 &= 0.9 \times 0 + 0.1 \times 2 = 0.2\\
+v_1 &= 0.999 \times 0 + 0.001 \times 4 = 0.004\\
+\hat{m}_1 &= 0.2 / 0.1 = 2\\
+\hat{v}_1 &= 0.004 / 0.001 = 4, \quad \sqrt{4} = 2\\
+\text{step} &= 10^{-3} \times 2/2 = 10^{-3}
+\end{align*}
+\textbf{$t = 2$.}
+\begin{align*}
+m_2 &= 0.9 \times 0.2 + 0.1 \times 2 = 0.18 + 0.2 = 0.38\\
+v_2 &= 0.999 \times 0.004 + 0.001 \times 4 = 0.003996 + 0.004 = 0.007996\\
+\hat{m}_2 &= 0.38 / 0.19 = 2\\
+\hat{v}_2 &= 0.007996 / 0.001999 = 4, \quad \sqrt{4} = 2\\
+\text{step} &= 10^{-3} \times 2/2 = 10^{-3}
+\end{align*}
+Bias correction recovers the true mean (2) and mean square (4) exactly for a constant gradient,
+and the step is $\eta$.
+
+\textbf{Without correction at $t = 1$:} $m_1/\sqrt{v_1} = 0.2/\sqrt{0.004} = 0.2/0.063246 =
+3.1623$, so the step would be $3.16 \times 10^{-3}$, more than three times too large
+($\sqrt{1000}/10 = 31.62/10 = 3.162$).
+\end{solution}
+
+\begin{solution}{ex:trainloop:3}
+$\eta(t) = 10^{-6} + 0.0004995\,(1 + \cos(\pi t/200))$.
+
+\textbf{$t = 25$:} $\pi \times 25/200 = \pi/8$, $\cos(\pi/8) = 0.923880$.
+\begin{align*}
+1 + 0.923880 &= 1.923880\\
+0.0004995 \times 1.923880 &= 0.00096098\\
+0.000001 + 0.00096098 &= 0.00096198 = 9.620 \times 10^{-4}
+\end{align*}
+\textbf{$t = 175$:} $\pi \times 175/200 = 7\pi/8$, $\cos(7\pi/8) = -0.923880$.
+\begin{align*}
+1 - 0.923880 &= 0.076120\\
+0.0004995 \times 0.076120 &= 0.000038022\\
+0.000001 + 0.000038022 &= 0.000039022 = 3.902 \times 10^{-5}
+\end{align*}
+\textbf{Rate of change.} $d\eta/dt = -\frac{\pi}{400}(0.000999)\sin(\pi t/200)$. Since $\sin(\pi/8) =
+\sin(7\pi/8) = 0.382683$, the rate is the same at both epochs: $-0.0078540 \times 0.000999
+\times 0.382683 = -3.00 \times 10^{-6}$ per epoch. The cosine curve is symmetric about $t = 100$.
+In \emph{relative} terms, though, the change at $t = 175$ is far larger: $3.0 \times 10^{-6}$ is
+0.3\% of $9.6 \times 10^{-4}$ but 7.7\% of $3.9 \times 10^{-5}$.
+\end{solution}
+
+\begin{solution}{ex:trainloop:4}
+$\norm{(1, 2, 2)} = \sqrt{1 + 4 + 4} = \sqrt{9} = 3$.
+
+\textbf{To 1.5:} $\min(1, 1.5/3) = 0.5$, so $\vect{g} \to (0.5, 1, 1)$, whose length is
+$\sqrt{0.25 + 1 + 1} = 1.5$.
+
+\textbf{To 5:} $\min(1, 5/3) = 1$: unchanged, $(1, 2, 2)$.
+
+\textbf{Would clipping at 1.0 change this repository's training?} Adam divides each parameter's
+gradient by a running estimate of its size, so if every step's gradient were clipped by the same
+factor, $\hat{m}/\sqrt{\hat{v}}$ would be unchanged and so would training. Clipping changes
+things only on the steps where the gradient norm is unusually large: it shrinks those gradients
+before they enter $m$ and $v$, so one wild batch moves the parameters and inflates $v$ less.
+Whether a threshold of 1.0 is ever active depends on the typical whole-model gradient norm,
+which the repository does not log; you would measure it before choosing a threshold.
+\end{solution}
+
+\begin{solution}{ex:trainloop:5}
+\textbf{Rows} (height 400):
+\begin{align*}
+0 + 128 &= 128 \le 400 \text{ keep } 0;\quad 64 + 128 = 192 \text{ keep } 64;\quad 128 + 128 = 256 \text{ keep } 128;\\
+192 + 128 &= 320 \text{ keep } 192;\quad 256 + 128 = 384 \le 400 \text{ keep } 256;\\
+320 + 128 &= 448 > 400 \text{: snap to } 400 - 128 = 272, \text{ stop.}
+\end{align*}
+Rows $[0, 64, 128, 192, 256, 272]$: 6.
+
+\textbf{Columns} (width 300): as in \cref{we:trainloop:plan}, $[0, 64, 128, 172]$: 4.
+
+\textbf{Patches:} every row with every column, $6 \times 4 = 24$. The real generator returns the
+same \tagC.
+
+\textbf{A duplicate:} any height where $(\text{height} - 128)$ is a multiple of 64, for example
+192: rows 0 and 64 are kept ($64 + 128 = 192 \le 192$), then row 128 gives $256 > 192$ and snaps
+to $192 - 128 = 64$, already present. Heights 128, 256 and 320 do the same.
+\end{solution}
+
+\begin{solution}{ex:trainloop:6}
+Near 0.2 a bfloat16 number has 8 significant bits, so neighbouring representable values are
+$2^{-3} \times 2^{-7} = 2^{-10} = 0.000977$ apart: 0.2001953, then 0.2011719. Both 0.2 and
+0.2004 round to 0.2001953, so their difference, 0.0004, becomes exactly 0. A good model's errors
+are of this size, so a loss computed in bfloat16 would be blind to precisely the errors training
+is trying to remove.
+
+The SpectralEarth trainer runs only the model's forward pass under bfloat16 autocast and
+converts the output to float32 (\code{out.float()}) before the loss. The truth is never rounded,
+and the subtraction, absolute value, angle and averaging run in float32. (The prediction itself
+still carries the rounding of the network's last bfloat16 operations, in the network's
+normalised units.)
+\end{solution}

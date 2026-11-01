@@ -1,0 +1,56 @@
+{
+  "_description": "N002: N001b with one man-made class (textile/fabric, 14 spectra) held out entirely - the open-set test (docs/proposals/spectral-namer.md: called man-made >= 70%, a confident (> 0.5) known class <= 20%). Textile replaced paint (4 spectra after de-duplication), user 2026-10-31.",
+  "run_dir": "/opt/dlami/nvme/runs/N002",
+  "init_from": "/opt/dlami/nvme/models/FTH3_ep5.pt",
+  "library_root": "/opt/allotrope/data/family_library",
+  "holdout_class": "textile_fabric",
+  "model": {
+    "hidden": 256,
+    "embed": 128
+  },
+  "sources": [
+    {
+      "name": "enmap",
+      "train_dir": "/opt/dlami/nvme/ft/enmap/train",
+      "test_dir": "/opt/dlami/nvme/ft/enmap/test",
+      "band_list_path": "/opt/dlami/nvme/ft/band_lists/enmap_224.json"
+    },
+    {
+      "name": "prisma",
+      "train_dir": "/opt/dlami/nvme/ft/prisma/train",
+      "test_dir": "/opt/dlami/nvme/ft/prisma/test"
+    },
+    {
+      "name": "aviris_ng",
+      "train_dir": "/opt/dlami/nvme/ft/aviris_ng/train",
+      "test_dir": "/opt/dlami/nvme/ft/aviris_ng/test",
+      "band_list_path": "/opt/dlami/nvme/ft/band_lists/aviris_ng_372.json"
+    }
+  ],
+  "tiles_per_batch": 16,
+  "pixels_per_tile": 512,
+  "loader_workers": 4,
+  "kinds": [
+    0.5,
+    0.25,
+    0.25
+  ],
+  "a_min": 0.05,
+  "gain": 0.1,
+  "fill_weight": 0.5,
+  "lr": 0.0003,
+  "stem_lr_scale": 0.3,
+  "weight_decay": 0.01,
+  "warmup_steps": 500,
+  "epochs": 40,
+  "steps_per_epoch": 500,
+  "eval_fills": [
+    0.1,
+    0.25,
+    0.5,
+    1.0
+  ],
+  "eval_batches": 40,
+  "ace_baseline_dir": "/opt/allotrope/research/experiments/spectral-namer",
+  "level1": "matching"
+}

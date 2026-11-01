@@ -1,0 +1,58 @@
+== fine-tuned Heavy (FTH3 config.json model_config), parameter count
+   trainable 35,315,314
+   stats: 0
+   spectral_in: 17,825
+   spectral_out: 6,337
+   norm: 128
+   encoder: 29,580,288
+   decoder: 4,279,616
+   seg_head: 1,431,120
+   state-dict entries without stats.*: 35,315,645
+== parity (FTH3 README)
+   product sum 0.7569 mean 0.18923; evaluator sum 0.75683 mean 0.18921
+   gaps [5e-05, -2e-05, 1e-05, 3e-05]
+   objects 418/909 = 0.4598, 449/909 = 0.4939, gain 31
+== threads (FTH3 README, cpu_timing.py)
+   Heavy total: 1819 -> 454, x4.01
+   Heavy predict: 1629 -> 402, x4.05
+   Heavy segment: 185 -> 47, x3.94
+   Heavy score: 4 -> 4, x1.00
+   FT04 total: 1058 -> 274, x3.86
+   FT04 predict: 920 -> 236, x3.90
+   FT04 segment: 133 -> 32, x4.16
+   minutes Heavy 30.3 -> 7.6; FT04 17.6 -> 4.6; Heavy/FT04 at 16: 1.66
+   Amdahl p from speed-up 4 between 2 and 16 threads: 0.9231
+   predicted speed-up 2 -> 16: 4.00
+   predicted speed-up 2 -> 24: 4.67
+   p from measured 4.007: 0.9234
+== FT08 leak on a 4x4 / 6x6 token tile
+   4x4: leaks 8 of 16
+   h
+ [[0 0 1 1]
+ [0 0 1 1]
+ [1 1 0 0]
+ [1 1 0 0]] 
+   s
+ [[0 1 0 1]
+ [1 0 1 0]
+ [0 1 0 1]
+ [1 0 1 0]] 
+   leak
+ [[0 1 1 0]
+ [1 0 0 1]
+ [1 0 0 1]
+ [0 1 1 0]]
+   6x6: leaks 18 of 36
+== separability (read only)
+   prisma fill 0.1: n 19728, L1 mm 0.6096, nat 0.7822, L2 0.3846, L2|L1 0.6309, product 0.3846
+   prisma fill 0.25: n 19728, L1 mm 0.7724, nat 0.8342, L2 0.5523, L2|L1 0.7151, product 0.5523
+   prisma fill 0.5: n 19728, L1 mm 0.8456, nat 0.8551, L2 0.6121, L2|L1 0.7238, product 0.6121
+   prisma fill 1.0: n 19728, L1 mm 0.8703, nat 0.8596, L2 0.6374, L2|L1 0.7325, product 0.6374
+   enmap fill 0.1: n 14796, L1 mm 0.4842, nat 0.7173, L2 0.2263, L2|L1 0.4674, product 0.2263
+   enmap fill 0.25: n 14796, L1 mm 0.6635, nat 0.7851, L2 0.4396, L2|L1 0.6625, product 0.4396
+   enmap fill 0.5: n 14796, L1 mm 0.8022, nat 0.8434, L2 0.5770, L2|L1 0.7193, product 0.5770
+   enmap fill 1.0: n 14796, L1 mm 0.8711, nat 0.8664, L2 0.6368, L2|L1 0.7311, product 0.6368
+   aviris_ng fill 0.1: n 14796, L1 mm 0.5870, nat 0.7683, L2 0.3565, L2|L1 0.6074, product 0.3565
+   aviris_ng fill 0.25: n 14796, L1 mm 0.7603, nat 0.8134, L2 0.5278, L2|L1 0.6942, product 0.5278
+   aviris_ng fill 0.5: n 14796, L1 mm 0.8384, nat 0.8459, L2 0.5908, L2|L1 0.7046, product 0.5908
+   aviris_ng fill 1.0: n 14796, L1 mm 0.8696, nat 0.8541, L2 0.6174, L2|L1 0.7100, product 0.6174

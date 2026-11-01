@@ -1,0 +1,18 @@
+ord h s a 104 115 97
+sorted ['hyperspectral_segformer_mae', 'spectral_stem_finetune'] {'indradhanu': 'spectral_stem_finetune'}
+sorted2 ['a_spectral_stem', 'hyperspectral_segformer_mae'] {'indradhanu': 'hyperspectral_segformer_mae'}
+allclose tol at 460.0 0.004600010000000001
+allclose tol at 2450.0 0.024500010000000003
+grid vs itself True shifted 0.01 nm False shifted 0.001 nm True
+band 2400.0 nearest distance 5.0 True
+band 2452.0 nearest distance 12.0 True
+band 2470.0 nearest distance 30.0 False
+manifest count 5886451 BatchNorm buffers 65 parameters 5886386
+groups {'spectral_in': 14721, 'spectral_out': 4257, 'norm': 64, 'encoder': 3331072, 'decoder': 2164736, 'seg_head': 371536} 5886386
+excluded buffers {'trained_wl': 733, 'stats.wl': 202, 'stats.mean': 202, 'stats.std': 202}
+spread all 0.038297084310253526 2.088931871468374 spread land 0.02 4.0
+excluded_percent 21.429 15.385
+n 256 pad 0 starts [0, 64, 128]
+n 300 pad 20 starts [0, 64, 128, 192]
+coverage of row 100 2.0 row 10 1.0 row 300 1.0
+mean cloud prob 0.51

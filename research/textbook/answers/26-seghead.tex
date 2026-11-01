@@ -1,0 +1,85 @@
+\answersfor{ch:seghead}
+
+\begin{solution}{ex:seghead:1}
+Closed form with $d = 64$, $K = 5$:
+\begin{align*}
+  13d^2 &= 13 \times 4{,}096 = 53{,}248\\
+  (518 + 144 \times 5)\,d &= (518 + 720) \times 64 = 1{,}238 \times 64 = 79{,}232\\
+  16K &= 80\\
+  P &= 53{,}248 + 79{,}232 + 80 = 132{,}560.
+\end{align*}
+Layer by layer:
+\begin{align*}
+  32 \to 64:&\quad 32 \times 64 + 64 = 2{,}048 + 64 = 2{,}112\\
+  64 \to 64:&\quad 64 \times 64 + 64 = 4{,}096 + 64 = 4{,}160\\
+  160 \to 64:&\quad 160 \times 64 + 64 = 10{,}240 + 64 = 10{,}304\\
+  256 \to 64:&\quad 256 \times 64 + 64 = 16{,}384 + 64 = 16{,}448\\
+  \text{fuse } 256 \to 64:&\quad 256 \times 64 + 64 = 16{,}448\\
+  \text{refine 1}:&\quad 9 \times 64 \times 64 + 64 = 36{,}864 + 64 = 36{,}928\\
+  \text{refine 2}:&\quad 9 \times 64 \times 80 + 80 = 46{,}080 + 80 = 46{,}160.
+\end{align*}
+Sum: $2{,}112 + 4{,}160 = 6{,}272$; $+ 10{,}304 = 16{,}576$; $+ 16{,}448 = 33{,}024$; $+ 16{,}448 = 49{,}472$; $+ 36{,}928 = 86{,}400$;
+$+ 46{,}160 = 132{,}560$. The two agree.
+\end{solution}
+
+\begin{solution}{ex:seghead:2}
+Sigmoid for water: $1/(1 + e^{-1}) = 1/(1 + 0.368) = 1/1.368 = 0.731$, and the same for thin cloud, independently.
+
+Softmax: the exponentials are $e^{1} = 2.718$ (twice) and $e^{-3} = 0.0498$ (three times).
+\begin{align*}
+  \text{sum} &= 2.718 + 2.718 + 0.0498 + 0.0498 + 0.0498 = 5.436 + 0.149 = 5.585\\
+  \text{water} &= 2.718 / 5.585 = 0.487.
+\end{align*}
+The softmax must split the belief between water and thin cloud; the sigmoids give each 0.731.
+\end{solution}
+
+\begin{solution}{ex:seghead:3}
+For $t = 1$, $p = 0.2$: $\ell = -\ln 0.2 = 1.6094$; gradient $p - t = 0.2 - 1 = -0.8$ (push the logit up).
+For $t = 0$, $p = 0.2$: $\ell = -\ln(1 - 0.2) = -\ln 0.8 = 0.2231$; gradient $0.2 - 0 = 0.2$ (push down, gently).
+
+Numerical check for the first pixel. With $t = 1$, $\ell(z) = -\ln\sigma(z) = \ln(1 + e^{-z})$.
+\begin{align*}
+  z = -1.376:&\quad e^{1.376} = 3.959;\quad \ell = \ln(4.959) = 1.6014\\
+  z = -1.396:&\quad e^{1.396} = 4.039;\quad \ell = \ln(5.039) = 1.6174\\
+  \text{slope} &= (1.6014 - 1.6174) / 0.02 = -0.0160 / 0.02 = -0.80,
+\end{align*}
+matching $p - t = -0.8$.
+\end{solution}
+
+\begin{solution}{ex:seghead:4}
+Water term with pixel 3 at $p = 0.2$ (label 0):
+\begin{align*}
+  \text{BCE terms} &= 0.1054,\ 0.1054,\ -\ln(0.8) = 0.2231\\
+  \mathrm{BCE} &= (0.1054 + 0.1054 + 0.2231)/3 = 0.4339 / 3 = 0.1446\\
+  \textstyle\sum p &= 0.9 + 0.1 + 0.2 = 1.2;\quad \sum pt = 0.9;\quad \sum t = 1\\
+  \mathcal{L}_{\text{Dice}} &= 1 - \frac{2.8}{1.2 + 1 + 1} = 1 - \frac{2.8}{3.2} = 1 - 0.875 = 0.125\\
+  \text{water term} &= 0.1446 + 0.125 = 0.2696.
+\end{align*}
+Soft Dice of the $2 \times 2$ mask with the top-right probability at 0.9:
+\begin{align*}
+  \textstyle\sum pt &= 0.8 + 0.9 = 1.7\\
+  \textstyle\sum p &= 0.8 + 0.9 + 0.3 + 0.1 = 2.1;\quad \sum t = 2\\
+  Q &= \frac{2 \times 1.7 + 1}{2.1 + 2 + 1} = \frac{4.4}{5.1} = 0.863\\
+  \mathcal{L}_{\text{Dice}} &= 1 - 0.863 = 0.137,
+\end{align*}
+down from 0.261, as the positive gradient of \cref{sec:seghead:dice} predicted.
+\end{solution}
+
+\begin{solution}{ex:seghead:5}
+\begin{align*}
+  \text{union} &= 8 + 10 - 6 = 12\\
+  J &= 6 / 12 = 0.50\\
+  D &= \frac{2 \times 6}{8 + 10} = \frac{12}{18} = 0.667\\
+  \frac{2J}{1 + J} &= \frac{2 \times 0.5}{1 + 0.5} = \frac{1}{1.5} = 0.667. \quad\checkmark
+\end{align*}
+\end{solution}
+
+\begin{solution}{ex:seghead:6}
+Flatness $0.22 / 0.36 = 0.61$, below 0.7: not flat, so not plausible, although it is bright ($0.24 > 0.2$). It looks more like bright soil than
+cloud.
+
+$812 / 1000 = 0.812$\,g/cm$^2$, not below 0.75: the scene is not dry and its cloud labels are used.
+
+``Water vapour below 1.0'' achieves $66.6 / 15.7 = 4.2$ suspect labels per plausible one, slightly worse than the adopted 4.6. It removes 4 points
+more suspect labels (66.6\% against 62.6\%) but touches 15.2\% of tiles instead of 5.6\% and removes more plausible labels (15.7\% against 13.6\%).
+\end{solution}

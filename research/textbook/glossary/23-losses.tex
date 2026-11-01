@@ -1,0 +1,26 @@
+\glossentry{Loss}{A function that maps the network's output and the truth to one non-negative number, smaller meaning better; training changes the parameters to make it smaller.}
+\glossentry{Loss mask}{The 0/1 map of graded pixels: hidden from the encoder, valid, and away from invalid regions. It is the product of the pixel prediction mask and the eroded validity mask.}
+\glossentry{Graded pixel}{A pixel whose loss-mask value is 1, so that it contributes to the loss.}
+\glossentry{Residual (error)}{The difference between the reconstruction and the truth, band by band, at one pixel.}
+\glossentry{L1 norm}{The sum of the absolute values of a vector's entries.}
+\glossentry{Masked mean absolute error (L1 loss)}{The mean of the absolute errors over all bands of all graded pixels; Indradhanu's brightness term, in reflectance units.}
+\glossentry{Mean squared error (MSE)}{The mean of the squared errors; its gradient is proportional to the error, so large errors dominate it.}
+\glossentry{Sign function}{The function returning +1 for a positive number, -1 for a negative one and 0 for zero; the derivative of the absolute value away from zero.}
+\glossentry{Robust loss}{A loss whose pull from any single observation is bounded, so outliers cannot dominate it; L1 is robust, squared error is not.}
+\glossentry{Median}{The middle value of sorted observations; the constant prediction that minimises the sum of absolute errors.}
+\glossentry{Boolean indexing}{Selecting the entries of a tensor where a True/False tensor is True, producing a flat list; used to pull out the graded pixels.}
+\glossentry{40 percent rule}{The trainer's rule that drops any patch with less than 40 percent valid pixels before the loss is computed.}
+\glossentry{Spectral angle}{The angle between two spectra treated as vectors, arccos of their dot product over the product of their lengths, in radians; it measures shape and ignores brightness.}
+\glossentry{Spectral Angle Mapper (SAM)}{The remote-sensing method that classifies a spectrum by its spectral angle to library spectra; in this book also the name of the angle used as a loss.}
+\glossentry{Scale invariance}{The property that multiplying a spectrum by a positive constant leaves its spectral angle to any other spectrum unchanged.}
+\glossentry{Chain rule}{The rule that the derivative of a function of a function is the product of the two derivatives, summed over every path when there are several variables.}
+\glossentry{Quotient rule}{The derivative of a/b is (a'b - ab')/b squared.}
+\glossentry{Backpropagation}{Computing the gradient of the loss with respect to every parameter by applying the chain rule backwards from the loss through each layer.}
+\glossentry{atan2}{The two-argument arctangent, giving the angle of the point (x, y) from the positive x-axis; used by SAMLoss to compute the spectral angle with finite derivatives.}
+\glossentry{Machine epsilon (float32)}{The relative spacing of float32 numbers near 1, 2 to the power -24 below 1; it makes cosines of angles under about 0.00024 rad round to exactly 1.}
+\glossentry{NaN}{Not a Number: the floating-point result of undefined operations such as infinity times zero or arccos of a value above 1; it spreads through every later computation.}
+\glossentry{Numerical guard}{A clamp or small added constant (epsilon) that keeps a computation away from a division by zero, a negative square root or an infinite derivative.}
+\glossentry{Combined loss}{Indradhanu's training objective, L1 plus lambda(t) times the mean spectral angle over graded pixels.}
+\glossentry{SAM weight (lambda)}{The multiplier on the spectral-angle term; it both schedules and converts radians into the scale of reflectance.}
+\glossentry{Ramp}{The schedule lambda(t) = lambda-max times min(1, t/R): a linear rise over R epochs, held constant within each epoch, then flat.}
+\glossentry{Two-pass validation}{Validation that hides a random half of the tokens, then the complementary half, so every valid pixel is graded exactly once from a prediction that did not see it.}

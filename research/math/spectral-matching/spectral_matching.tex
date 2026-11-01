@@ -1,0 +1,1324 @@
+% Spectral matching on a learned background - a mathematical note for Allotrope.
+% Build:  C:/Users/FITT/tools/tectonic/tectonic.exe spectral_matching.tex   (XeTeX via Tectonic)
+% Numbers marked [computed] come from compute_numbers.py in this folder (output in compute_numbers_output.txt).
+\documentclass[11pt,a4paper]{article}
+
+\usepackage[margin=2.5cm]{geometry}
+\usepackage{amsmath,amsthm}
+\usepackage{iftex}
+\ifXeTeX
+  \usepackage{libertinus}          % Libertinus Serif / Sans / Math (unicode-math)
+\else
+  \usepackage{amssymb}
+  \usepackage[T1]{fontenc}
+  \usepackage{newpxtext,newpxmath}
+\fi
+\usepackage{mathtools}
+\ifXeTeX\newcommand{\B}[1]{\symbf{#1}}\else\usepackage{bm}\newcommand{\B}[1]{\bm{#1}}\fi
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{tabularx}
+\usepackage{enumitem}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta,calc,patterns,decorations.pathreplacing}
+\usepackage{pgfplots}
+\pgfplotsset{compat=1.17}
+\usepackage{caption}
+\captionsetup{font=small,labelfont=bf}
+\usepackage[colorlinks=true,linkcolor=blue!50!black,citecolor=green!35!black,urlcolor=blue!50!black]{hyperref}
+\usepackage[capitalise,noabbrev]{cleveref}
+
+\setlist{itemsep=2pt,topsep=4pt}
+\setlength{\parskip}{3pt}
+
+% ---- theorem styles --------------------------------------------------------------------------------------------
+\theoremstyle{plain}
+\newtheorem{proposition}{Proposition}[section]
+\newtheorem{lemma}[proposition]{Lemma}
+\newtheorem{corollary}[proposition]{Corollary}
+\theoremstyle{definition}
+\newtheorem{definition}[proposition]{Definition}
+\newtheorem{example}[proposition]{Worked example}
+\newtheorem{model}[proposition]{Model}
+\theoremstyle{remark}
+\newtheorem{remark}[proposition]{Remark}
+
+\crefname{model}{Model}{Models}
+\crefname{example}{Worked example}{Worked examples}
+\crefname{remark}{Remark}{Remarks}
+\crefname{definition}{Definition}{Definitions}
+\crefname{proposition}{Proposition}{Propositions}
+
+% ---- notation ---------------------------------------------------------------------------------------------------
+\newcommand{\R}{\mathbb{R}}
+\newcommand{\E}{\mathbb{E}}
+\newcommand{\Var}{\operatorname{Var}}
+\newcommand{\Cov}{\operatorname{Cov}}
+\newcommand{\tr}{\operatorname{tr}}
+\newcommand{\spn}{\operatorname{span}}
+\newcommand{\rng}{\operatorname{range}}
+\newcommand{\x}{\B{x}}
+\newcommand{\bvec}{\B{b}}
+\newcommand{\bh}{\hat{\B{b}}}
+\newcommand{\tv}{\B{t}}
+\newcommand{\rv}{\B{r}}
+\newcommand{\ev}{\B{e}}
+\newcommand{\nv}{\B{n}}
+\newcommand{\dv}{\B{d}}
+\newcommand{\zv}{\B{z}}
+\newcommand{\uv}{\B{u}}
+\newcommand{\one}{\B{1}}
+\newcommand{\Sm}{\B{S}}
+\newcommand{\Wm}{\B{W}}
+\newcommand{\Um}{\B{U}}
+\newcommand{\Hm}{\B{H}}
+\newcommand{\Jm}{\B{J}}
+\newcommand{\Pm}{\B{P}}
+\newcommand{\Lm}{\B{L}}
+\newcommand{\Dm}{\B{D}}
+\newcommand{\Gm}{\B{G}}
+\newcommand{\Id}{\B{I}}
+\newcommand{\ip}[2]{\langle #1,#2\rangle_{\Sm}}
+\newcommand{\nrm}[1]{\lVert #1\rVert}
+\DeclareUrlCommand\repo{\urlstyle{tt}}
+\def\UrlBreaks{\do\/\do\_\do\-\do\.\do\=\do\:}
+\Urlmuskip=0mu plus 0.2mu
+\setlength{\emergencystretch}{2.5em}
+% evidence tags
+\newcommand{\meas}{\textsuperscript{\textsf{\scriptsize[M]}}}
+\newcommand{\comp}{\textsuperscript{\textsf{\scriptsize[C]}}}
+\newcommand{\assm}{\textsuperscript{\textsf{\scriptsize[A]}}}
+
+\title{Spectral matching on a learned background\\[4pt]
+  \large Detection, identification and abstention for sub-pixel targets in the Allotrope residual}
+\author{Allotrope research note \quad\textperiodcentered\quad research/math/spectral-matching}
+\date{29 October 2026; \cref{sec:namer-built} added 31 October 2026}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+\noindent
+This note sets out the mathematics of naming the material of a flagged anomaly when the background is predicted
+by a masked foundation model (Indradhanu Heavy) rather than estimated from a ring of neighbours. It derives the
+residual model, shows that residual Mahalanobis (RM) is a generalised likelihood ratio test for an unrestricted
+signal and that family matching is its restriction to library subspaces. It then treats known-target detection
+and fill estimation on the residual, families as subspaces, the leakage of the target into its own predicted
+background, calibrated abstention, the size of each error source, a learned namer as a Bayes classifier under
+a generator (with the namer built on 31 October 2026 set against it), and the sample sizes a material benchmark needs. Numbers come from this repository and are tagged:
+\meas\ measured in a project experiment (path given), \comp\ computed for this note by
+\repo{compute_numbers.py} from the shipped library and constants, \assm\ assumed.
+\end{abstract}
+
+\tableofcontents
+\bigskip
+
+\paragraph{Sources read and relied on.} Where a statement rests on one of these the path is given in the text. I
+checked each cited constant against the code (window sizes, sample sizes, $d=30$, the $p^\ast$ rule, the code
+widths $D$) and say so where it matters.
+{\small\raggedright
+\begin{itemize}[leftmargin=1.2em,itemsep=0pt]
+\item Plans: \repo{docs/proposals/spectral-matching-fresh-start.md} (parked plan),
+  \repo{docs/proposals/spectral-matching-foundation-model.md} (earlier proposal),
+  \repo{docs/lld/spectral-family-match.md}, \repo{spectal_match_sample/WALKTHROUGH.md}.
+\item Code: \repo{app/utils/anomaly_detection/residual_mahalanobis.py};
+  \repo{app/spectral_match/} (\repo{family_match.py}, \repo{sam.py}, \repo{resample.py});
+  \repo{backend/allotrope/action_types/_spectral_library_match_run.py};
+  \repo{app/foundation_models/components/} (\repo{pixel_normalization.py}, \repo{spectral_reduced.py});
+  \repo{app/evaluation/implant.py}, \repo{app/evaluation/significance.py}.
+\item Experiments under \repo{research/experiments/}: \repo{indradhanu-finetune/FT06-uncertainty},
+  \repo{FT07-gated} (records FT08), \repo{FTH1-heavy-joint}, \repo{FTH3-heavy-joint-more2};
+  \repo{decoder-capacity}, \repo{bench-resolution}, \repo{atm-correction} (each its \repo{README.md}).
+\end{itemize}}
+
+% =================================================================================================================
+\section{Setting and notation}
+\label{sec:setting}
+
+\subsection{Sensors, bands and normalisation}
+
+A pixel spectrum is a vector $\x\in\R^{N}$ sampled at band centres $\lambda_1,\dots,\lambda_N$ with full widths
+at half maximum $w_1,\dots,w_N$. The native band sets differ: PRISMA 234 bands in the shards (239 in the
+vendable before filtering), EnMAP 224, AVIRIS-NG 372 good bands, SpectralEarth 202
+(\repo{docs/03-data-pipeline.md}). The product's common grid is 165 bands at 10\,nm over 460--2450\,nm with the
+water and CO$_2$ windows removed (\repo{app/models/dataset/vendables.py}, \verb|build_common_wavelength_grid|).
+Indradhanu reads native bands through its wavelength-aware stem, so the analysis below is written for a generic
+$N$; numerical examples use the 165-band grid.
+
+\begin{definition}[Normalisation by wavelength]
+\label{def:wlstats}
+Let $\mu(\lambda)$ and $\sigma(\lambda)$ be the mean and standard deviation curves of surface reflectance,
+measured once on SpectralEarth's training split and stored in the checkpoint
+(\verb|WavelengthStats|, \repo{pixel_normalization.py}). For a band list,
+$\B\mu=(\mu(\lambda_n))_n$, $\Dm=\operatorname{diag}(\sigma(\lambda_n))$, with linear interpolation between measured
+wavelengths and end values held outside them. The normalised spectrum is
+\[
+  \zv(\x) = \Dm^{-1}(\x-\B\mu).
+\]
+\end{definition}
+
+The map $\zv$ is affine and the same for every scene, every pixel and every library spectrum. Two consequences
+are used throughout.
+
+\begin{proposition}[Mixing survives normalisation]
+\label{prop:affine}
+If $\x = a\tv + (1-a)\bvec + \nv$ then $\zv(\x) = a\,\zv(\tv) + (1-a)\,\zv(\bvec) + \Dm^{-1}\nv$, and every
+difference transforms linearly: $\zv(\tv)-\zv(\bvec) = \Dm^{-1}(\tv-\bvec)$.
+\end{proposition}
+\begin{proof}
+$\Dm^{-1}(a\tv+(1-a)\bvec+\nv-\B\mu) = a\Dm^{-1}(\tv-\B\mu)+(1-a)\Dm^{-1}(\bvec-\B\mu)+\Dm^{-1}\nv$ because
+$a+(1-a)=1$. The mean cancels in a difference.
+\end{proof}
+
+Per-scene, per-band min-max scaling is also affine within one scene, but its coefficients depend on that scene's
+extremes, so a library spectrum has no defined image under it; the earlier proposal records this as the reason
+HyperSL cannot be used for library matching. Under \cref{def:wlstats} the library and the image are mapped by the
+same operator, which is what makes residual-domain matching possible at all. For scale: on the 165-band grid the
+reflectance standard deviation runs from 0.035 (blue) to 0.100, median 0.077, and the mean curve has median
+0.155 (\repo{app/constants/hyperspectral.json})\comp. One normalised unit is therefore about 0.08 reflectance.
+This file is the 165-grid statistic, a stand-in for SpectralEarth's \verb|stats.json|, which is not in the repo.
+
+\subsection{The library through the sensor}
+
+A library entry is a reflectance curve $\rho(\lambda)$ on the 2151-channel ASD axis (350--2500\,nm,
+\repo{data/family_library/}). The sensor's band $n$ integrates it against its spectral response $s_n$:
+\[
+  t_n=\frac{\int s_n(\lambda)\rho(\lambda)\,d\lambda}{\int s_n(\lambda)\,d\lambda},\qquad
+  s_n(\lambda)=\exp\!\Big(-\frac{(\lambda-\lambda_n)^2}{2\varsigma_n^2}\Big),\quad
+  \varsigma_n=\frac{w_n}{2\sqrt{2\ln 2}},
+\]
+truncated at $3\varsigma_n$ and set to NaN if fewer than three library samples fall in the window
+(\repo{app/spectral_match/resample.py}; derivation in \repo{WALKTHROUGH.md} chapter 2). In matrix form
+$\tv=\B{\mathcal S}\rho$ with $\B{\mathcal S}$ row-stochastic. Because $\B{\mathcal S}$ is linear and
+row-stochastic, it commutes with mixing: resampling a mixture equals mixing the resampled spectra. The shipped
+family library has 411 spectra in 17 families, 176 man-made in 10 families (counted from the directory;
+it matches the LLD); 352 of the 411 are finite on all 165 grid bands at 10\,nm FWHM\comp.
+
+\subsection{The mixing model and the point-spread function}
+
+\begin{model}[Linear sub-pixel mixing]
+\label{mod:mix}
+At pixel $p$,
+\[
+  \x_p = a_p\,\tv + (1-a_p)\,\bvec_p + \nv_p,\qquad a_p\in[0,1],
+\]
+with $\tv$ the target spectrum, $\bvec_p$ the local background (what $p$ would show without the target), $a_p$
+the fill and $\nv_p$ sensor noise, $\Cov(\nv_p)=\B\Sigma_n$.
+\end{model}
+
+The fill is not the geometric area fraction. With a target occupying the ground region $\Omega$ and a system
+point-spread function $h$ (pixel aggregation convolved with optics and motion),
+\[
+  a_p=\int_\Omega h(\B{c}_p-\B u)\,d\B u ,
+\]
+so one object produces a field of fills $\{a_q\}$ over a neighbourhood. The implant model
+(\repo{app/evaluation/implant.py}, \verb|psf_weights|) uses a Gaussian of standard deviation $\sigma_{\rm PSF}=1.4$\,px,
+normalised so that the footprint's mean weight is one.
+
+\begin{example}[How far a target spreads]
+\label{ex:psf}
+With $\sigma_{\rm PSF}=1.4$\,px a target filling exactly one pixel delivers only 7.5\% of its energy to that pixel;
+the rest spreads over roughly a $5\times5$ neighbourhood\comp. Under \verb|psf_weights|' normalisation the mean
+weight on the one-pixel halo is 0.78 for a $1\times1$ object, 0.64 for $2\times2$ and 0.49 for $4\times4$\comp.
+The comment in \repo{implant.py} records that real PRISMA bench objects have a halo-to-object contrast of 0.74\meas,
+so $\sigma=1.4$ reproduces the halo of small real objects. Read literally as a sensor PSF ($\mathrm{FWHM}\approx3.3$\,px,
+about 100\,m), that is pessimistic for PRISMA; part of the measured halo is probably label misregistration (the
+bench ground truth may be offset by about one pixel). I keep $\sigma=1.4$ as an effective spread, not a claim about
+the optics.
+\end{example}
+
+% =================================================================================================================
+\section{The learned background}
+\label{sec:learned}
+
+\subsection{The hidden-pixel prediction and the residual}
+
+Indradhanu is a masked autoencoder. In the product, each pixel is predicted in one of two complementary
+checkerboard passes over $4\times4$-pixel tokens, from a context $C(p)$ that excludes $p$'s own token
+(\repo{spectral_stem_inferencer.py}, \verb|_checkerboard_keep_mask|; \repo{decoder-capacity/visible_vs_hidden.py}
+calls this ``the product two-pass''). Write
+\[
+  \bh_p = f_\theta\big(\x_{C(p)}\big).
+\]
+
+\begin{definition}[Residual and background-prediction error]
+$\rv_p=\x_p-\bh_p$ is the residual and $\ev_p=\bvec_p-\bh_p$ the background-prediction error, with
+$\B\Sigma_e=\Cov(\ev)$ over background pixels.
+\end{definition}
+
+Substituting \cref{mod:mix},
+\begin{equation}
+  \rv_p = a_p(\tv-\bvec_p) + \ev_p + \nv_p .
+  \label{eq:resid}
+\end{equation}
+An equivalent form that avoids the unknown $\bvec_p$ is exact as well:
+\begin{equation}
+  \rv_p = a_p\,\dv_p + (1-a_p)\,\ev_p + \nv_p,\qquad \dv_p:=\tv-\bh_p .
+  \label{eq:resid2}
+\end{equation}
+(Expand $a\tv+(1-a)\bvec-\bh = a(\tv-\bh)+(1-a)(\bvec-\bh)$.) Equation \eqref{eq:resid2} is the one to compute
+with, since $\dv_p$ is known once a library spectrum is chosen. On background pixels $\rv=\ev+\nv$, so
+$\B\Sigma_r=\B\Sigma_e+\B\Sigma_n$.
+
+\begin{remark}[Clutter-limited, not noise-limited]
+\label{rem:noise}
+EnMAP's stated SNR is 354 (VNIR) and 260 (SWIR) (LLD section 4). At reflectance 0.15 that is a noise standard
+deviation of $4$--$6\times10^{-4}$, or $0.005$--$0.008$ normalised units\comp. The measured hidden-pixel
+background error of FT04 is $0.057$--$0.139$ mean absolute normalised units per band on the four PRISMA bench
+scenes (\repo{decoder-capacity/README.md}, table 2)\meas. So $\B\Sigma_n\ll\B\Sigma_e$ by one to two
+orders of magnitude, and every detector below is limited by how well the model predicts the background,
+not by photon noise.
+\end{remark}
+
+\subsection{Residual Mahalanobis as a generalised likelihood ratio}
+
+RM (\repo{residual_mahalanobis.py}) takes the eigendecomposition $\hat{\B\Sigma}_r=\Um\B\Lambda\Um^\top$ of the
+residual covariance over up to 200{,}000 valid pixels (fixed seed), keeps the top $d=30$ components, and whitens:
+\[
+  \Wm=\B\Lambda_d^{-1/2}\Um_d^\top\in\R^{d\times N},\qquad
+  \mathrm{RM}(p)=\big\lVert \Wm\big(\rv_p-\bar{\rv}_{\mathcal R(p)}\big)\big\rVert^2 ,
+\]
+where $\bar{\rv}_{\mathcal R(p)}$ is the mean over a ring, the $61\times61$ window minus the central $21\times21$
+(the PRISMA setting), falling back to the global mean when the ring holds fewer than $2d=60$ valid pixels.
+(The code subtracts the ring mean in whitened coordinates; since $\Wm$ is linear the two are the same.)
+
+\begin{proposition}[RM is the GLRT for an unrestricted signal]
+\label{prop:rm-glrt}
+Suppose $\Wm\rv_p\sim\mathcal N(\Wm\B s+\Wm\B m,\Id_d)$ with known local mean $\B m$, and test
+$H_0:\B s=0$ against $H_1:\B s\in\R^N$ arbitrary. Then $2\log\Lambda=\mathrm{RM}(p)$, distributed
+$\chi^2_d$ under $H_0$.
+\end{proposition}
+\begin{proof}
+Under $H_1$ the maximum of the likelihood over $\B s$ is attained at any $\B s$ with
+$\Wm\B s=\Wm(\rv_p-\B m)$, which makes the exponent zero. Under $H_0$ the exponent is
+$-\tfrac12\nrm{\Wm(\rv_p-\B m)}^2$. The difference of log-likelihoods, doubled, is RM. Its law under $H_0$ is
+that of a sum of $d$ squared standard normals.
+\end{proof}
+
+RM therefore asks ``is the residual unusual in \emph{any} direction of the leading residual subspace?''. Two
+properties of this choice matter for matching.
+
+\begin{remark}[What RM does not see]
+\label{rem:rm-blind}
+RM projects onto the $d=30$ \emph{largest}-variance residual directions before whitening. Within them, the
+low-variance directions are amplified, which is the sense in which it ``rewards errors in directions the background
+never takes'' (its docstring). But a residual component in $\rng(\Um_d)^\perp$, the 135 or more smallest-variance
+directions on the 165-band grid, contributes nothing. That is a deliberate regularisation (full-band RX was
+near-singular and was dropped in 2026-05), and it is harmless for detection when targets share the leading
+residual directions. For identification it may not be: \cref{sec:families} shows that the parts of library spectra
+that separate families carry a few per cent of their energy, and nothing guarantees that part lies inside
+$\rng(\Um_d)$. A family test should use its own whitening (as \repo{family_match.py} does, full band with a ridge)
+rather than inherit RM's truncation.
+\end{remark}
+
+\begin{proposition}[The price of not knowing the direction]
+\label{prop:price}
+If the signal is known to lie in a $q$-dimensional subspace $\rng(\Hm)$, the GLRT is
+$\nrm{\Pm_{\Wm\Hm}\Wm\rv}^2\sim\chi^2_q(\delta)$ with noncentrality $\delta=\nrm{\Wm\B s}^2$. At
+$P_{\rm FA}=10^{-3}$ and $P_D=0.5$ the required noncentrality is\comp
+\begin{center}
+\begin{tabular}{@{}lcccc@{}}
+\toprule
+dimension $q$ & 1 & 3 & 10 & 30 (RM)\\
+\midrule
+$\chi^2_q$ threshold & 10.83 & 16.27 & 29.59 & 59.70\\
+required $\delta$ & 10.83 & 14.24 & 20.53 & 30.59\\
+\bottomrule
+\end{tabular}
+\end{center}
+\end{proposition}
+\begin{proof}
+Same argument as \cref{prop:rm-glrt} with $\B s=\Hm\B\theta$: the maximiser projects $\Wm\rv$ onto
+$\rng(\Wm\Hm)$. The table is $\chi^2$ and noncentral-$\chi^2$ quantiles.
+\end{proof}
+
+Restricting from ``any of 30 directions'' to a rank-3 family subspace lowers the required SNR by a factor
+$30.6/14.2\approx2.1$, a factor $1.47$ in fill, under the Gaussian model. Family matching is RM restricted to library
+directions; the restriction buys sensitivity and, more importantly, a name.
+
+% =================================================================================================================
+\section{Known-target detection on the residual}
+\label{sec:known}
+
+Fix one candidate target spectrum $\tv$, so $\dv=\tv-\bh_p$ is known. From \eqref{eq:resid2},
+\begin{equation}
+  \rv=a\,\dv+\B w,\qquad \B w=(1-a)\ev+\nv\sim\mathcal N(\B 0,\Sm),
+  \label{eq:lin}
+\end{equation}
+with $\Sm=(1-a)^2\B\Sigma_e+\B\Sigma_n\approx\B\Sigma_r$ for the small fills of interest. Write
+$\ip{\B u}{\B v}=\B u^\top\Sm^{-1}\B v$ and $\nrm{\B u}_{\Sm}^2=\ip{\B u}{\B u}$.
+
+\subsection{Fill estimate and its bound}
+
+\begin{proposition}[Fill estimate and Cram\'er-Rao bound]
+\label{prop:fill}
+The maximum-likelihood estimate of $a$ in \eqref{eq:lin} is
+\[
+  \hat a=\frac{\ip{\dv}{\rv}}{\nrm{\dv}_{\Sm}^2},\qquad \E\hat a=a,\qquad
+  \Var\hat a=\frac{1}{\nrm{\dv}_{\Sm}^2},
+\]
+and $\Var\hat a$ equals the Cram\'er-Rao bound, so $\hat a$ is efficient.
+\end{proposition}
+\begin{proof}
+The log-likelihood is $-\tfrac12\nrm{\rv-a\dv}_{\Sm}^2$ up to a constant, a quadratic in $a$ minimised at
+$\hat a$. Linearity gives $\E\hat a=a$ and $\Var\hat a=\dv^\top\Sm^{-1}\Sm\Sm^{-1}\dv/\nrm{\dv}^4_{\Sm}$. The Fisher
+information is $\nrm{\dv}_{\Sm}^2$, so the bound is attained.
+\end{proof}
+
+\begin{proposition}[The $0\le a\le1$ constraint]
+\label{prop:clip}
+The constrained MLE is $\tilde a=\min(1,\max(0,\hat a))$, and $|\tilde a-a|\le|\hat a-a|$ for every realisation,
+so its mean squared error is never larger. It is biased upward near $a=0$:
+$\E\tilde a-a=\mathcal I^{-1/2}\big[\phi_{\mathcal N}(\kappa)-\kappa\,\Phi(-\kappa)\big]$ with Fisher information
+$\mathcal I=\nrm{\dv}^2_{\Sm}$, $\kappa=a\sqrt{\mathcal I}$, $\phi_{\mathcal N}$ and $\Phi$ the standard normal density and
+distribution function, ignoring the upper clip.
+\end{proposition}
+\begin{proof}
+The likelihood is a concave quadratic in $a$, so on an interval its maximiser is the projection of the
+unconstrained one. Projection onto a convex set containing $a$ is non-expansive. The bias is $\E\max(0,\hat a)-a$
+for $\hat a\sim\mathcal N(a,1/\mathcal I)$: $\E\max(0,\hat a)=a\Phi(\kappa)+\mathcal I^{-1/2}\phi_{\mathcal N}(\kappa)$.
+\end{proof}
+
+\begin{proposition}[Bias from a wrong signature]
+\label{prop:mismatch}
+If the true target is $\tv'=\tv+\B\delta_t$ and the estimator uses $\tv$, then
+\[
+  \E\hat a = a\Big(1+\frac{\ip{\dv}{\B\delta_t}}{\nrm{\dv}^2_{\Sm}}\Big),
+\]
+and the noise-free cosine between $\rv$ and $\dv$ in the $\Sm^{-1}$ metric is
+$\ip{\dv}{\dv+\B\delta_t}/(\nrm{\dv}_{\Sm}\nrm{\dv+\B\delta_t}_{\Sm})$.
+\end{proposition}
+\begin{proof}
+Substitute $\rv=a(\dv+\B\delta_t)+\B w$ into $\hat a$.
+\end{proof}
+
+A mismatch orthogonal to $\dv$ in the $\Sm^{-1}$ metric does not bias the fill but lowers the cosine; a mismatch
+along $\dv$ is indistinguishable from a different fill. This is the formal content of the LLD's finding that the
+finite-target matched filter's fill estimate is ``unbiased and at the theoretical limit on synthetic data''
+(\cref{prop:fill}) yet ``collapsed towards 0 on the Gudalur sheets and underestimated oil by about 0.8'' on real
+materials\meas: there the library spectrum is not the deployed material, and $\ip{\dv}{\B\delta_t}<0$.
+
+\subsection{Detectors: matched filter, ACE, and the GLRT for unknown fill and scale}
+
+\begin{proposition}[Matched filter]
+\label{prop:mf}
+$T_{\rm MF}=\ip{\dv}{\rv}/\nrm{\dv}_{\Sm}\sim\mathcal N(a\nrm{\dv}_{\Sm},1)$. The detection SNR is
+$\mathrm{SNR}=a^2\nrm{\dv}^2_{\Sm}=a^2\,\dv^\top\Sm^{-1}\dv$, and
+\[
+  P_D=Q\big(Q^{-1}(P_{\rm FA})-a\nrm{\dv}_{\Sm}\big),\qquad
+  a_{\min}=\frac{Q^{-1}(P_{\rm FA})-Q^{-1}(P_D)}{\nrm{\dv}_{\Sm}} .
+\]
+For one-sided $a\ge0$ the GLRT is $\max(0,T_{\rm MF})^2$, which is why the shipped ACE is signed.
+\end{proposition}
+
+When $\Sm$ is replaced by a sample covariance from $K$ background pixels the statistic is Kelly's GLRT or the
+adaptive matched filter of Robey et al.; with $K=2\times10^5$ samples and $N\le372$ the estimation loss
+(a factor of roughly $(K-N)/K$ in SNR) is negligible.
+
+\begin{proposition}[ACE is the GLRT for unknown fill and unknown scale]
+\label{prop:ace}
+If $\Sm=\sigma^2\Sm_0$ with $\Sm_0$ known and $\sigma^2$ unknown under both hypotheses, the GLRT for
+$H_0:a=0$ versus $H_1:a\neq0$ reduces to
+\[
+  T_{\rm ACE}=\frac{(\dv^\top\Sm_0^{-1}\rv)^2}{(\dv^\top\Sm_0^{-1}\dv)(\rv^\top\Sm_0^{-1}\rv)}=\cos^2\angle\big(\Sm_0^{-1/2}\dv,\Sm_0^{-1/2}\rv\big),
+\]
+which is invariant to $\sigma$ (CFAR), and $T_{\rm ACE}\sim\mathrm{Beta}(\tfrac12,\tfrac{N-1}{2})$ under a Gaussian
+$H_0$ \cite{KrautScharf1999}.
+\end{proposition}
+\begin{proof}
+Whiten by $\Sm_0^{-1/2}$; write $\tilde{\rv},\tilde{\dv}$. Under $H_1$, maximising over $a$ leaves the residual
+$\nrm{\Pm^\perp_{\tilde{\dv}}\tilde{\rv}}^2$ and maximising over $\sigma^2$ gives $\hat{\sigma}^2_1=\nrm{\Pm^\perp\tilde{\rv}}^2/N$;
+under $H_0$, $\hat{\sigma}^2_0=\nrm{\tilde{\rv}}^2/N$. The GLR is $(\hat{\sigma}^2_0/\hat{\sigma}^2_1)^{N/2}$, a monotone
+function of $\nrm{\Pm_{\tilde{\dv}}\tilde{\rv}}^2/\nrm{\tilde{\rv}}^2$. Under a white Gaussian $H_0$ the squared cosine of a
+spherically symmetric vector with a fixed axis is $\mathrm{Beta}(\tfrac12,\tfrac{N-1}2)$.
+\end{proof}
+
+The shipped matcher computes ACE against $\tv-\B m$ with $\B m$ the $13\times13$-minus-$5\times5$ ring mean and
+$\Sm_0$ the whole-scene pixel covariance with a ridge of $10^{-3}$ times its mean eigenvalue (\repo{family_match.py},
+\verb|whitener|, \verb|ace|). It is a classical detector: no learned background. The residual-domain version
+replaces $\B m$ by $\bh_p$ and the scene covariance by $\B\Sigma_r$. \Cref{sec:leak} is about what that substitution
+costs.
+
+\subsection{Worked numbers: what fill is detectable?}
+
+\begin{example}[A metal roof over grass]
+\label{ex:metal}
+Take $\tv$ = galvanised sheet metal (USGS GDS334) and $\bvec=0.7\times$cheatgrass $+0.3\times$ an alfisol soil, both
+from the shipped library on the 165-band grid. Then $\overline{|\tv-\bvec|}=0.170$ reflectance per band,
+$2.18$ normalised units, and $\nrm{\Dm^{-1}(\tv-\bvec)}^2=904$\comp.
+\end{example}
+
+The residual covariance is not isotropic: RM exists because ``a scene's normal residuals are large along a few shared
+directions''. I use a two-level model\assm,
+\[
+  \Sm=\sigma_e^2\Big[(1-\varepsilon)\tfrac{N}{k}\,\Um_k\Um_k^\top+\varepsilon\tfrac{N}{N-k}\big(\Id-\Um_k\Um_k^\top\big)\Big],
+  \qquad \tr\Sm=N\sigma_e^2,
+\]
+with a fraction $1-\varepsilon$ of the error energy in $k=10$ shared directions. If a fraction $\varphi$ of $\nrm{\dv}^2$
+lies outside $\rng(\Um_k)$ (its \emph{foreignness}), then
+$\nrm{\dv}^2_{\Sm}=\nrm{\dv}^2\big[(1-\varphi)/\lambda_{\rm in}+\varphi/\lambda_{\rm out}\big]$ with
+$\lambda_{\rm in}=(1-\varepsilon)N\sigma_e^2/k$, $\lambda_{\rm out}=\varepsilon N\sigma_e^2/(N-k)$. For a Gaussian
+error, mean $|e|=\sigma_e\sqrt{2/\pi}$, so the measured mean absolute errors $0.05$, $0.10$, $0.14$ give
+$\sigma_e=0.063,0.125,0.175$. The foreignness of real objects' difference from their ring, relative to the scene's
+top-10 spectral subspace, has median $0.006$ (comment in \repo{implant.py}, bench-v2 diagnosis)\meas; for library
+families against the top-10 subspace of the library's natural spectra it is $0.000$--$0.024$\comp, in agreement.
+
+\begin{table}[ht]
+\centering\small
+\caption{Minimum detectable fill $a_{\min}$ (\cref{prop:mf}, $P_{\rm FA}=10^{-3}$, $P_D=0.5$, required SNR $9.55$)
+for the metal-over-grass difference of \cref{ex:metal}, two-level covariance with $\varepsilon=0.1$,
+$k=10$\comp. Measured inputs\meas: background error level; $\varphi=0.006$.}
+\label{tab:amin}
+\begin{tabular}{@{}lcccc@{}}
+\toprule
+mean $|e|$ (normalised) & $\varphi=0.006$ & $\varphi=0.05$ & $\varphi=0.2$ & $\varphi=1$ \\
+\midrule
+0.05 (set1-like) & 0.018 & 0.009 & 0.005 & 0.002\\
+0.10 & 0.037 & 0.018 & 0.009 & 0.004\\
+0.14 (set2/set4-like) & 0.051 & 0.025 & 0.013 & 0.006\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{figure}[ht]
+\centering
+\begin{tikzpicture}
+\begin{loglogaxis}[width=0.72\textwidth,height=6cm,xlabel={foreignness $\varphi$ of $\dv$ with respect to the shared error subspace},
+  ylabel={$a_{\min}$},grid=major,grid style={gray!20},legend pos=north east,legend style={font=\small},
+  xmin=0.001,xmax=1,ymin=0.001,ymax=0.1]
+\addplot[thick,blue!70!black] table[x=phi,y=a005]{figdata/amin_phi.dat};
+\addplot[thick,orange!80!black] table[x=phi,y=a010]{figdata/amin_phi.dat};
+\addplot[thick,red!70!black] table[x=phi,y=a014]{figdata/amin_phi.dat};
+\addplot[dashed,gray] coordinates {(0.006,0.001) (0.006,0.1)};
+\node[font=\scriptsize,gray!70!black,anchor=west,align=left] at (axis cs:0.0066,0.0016) {real objects:\\ median $\varphi=0.006$};
+\legend{mean $|e|=0.05$,mean $|e|=0.10$,mean $|e|=0.14$}
+\end{loglogaxis}
+\end{tikzpicture}
+\caption{Gaussian-theory minimum detectable fill against foreignness (\cref{tab:amin}). Real objects sit at the far
+left, where the target hides in the same directions as the model's own error.}
+\label{fig:amin}
+\end{figure}
+
+\paragraph{The reality check.}
+The bench numbers let us estimate the signal real targets carry. FT04's hidden-pixel error is $0.18$--$0.22$ on target
+pixels against $0.06$--$0.14$ on background (\repo{decoder-capacity/README.md})\meas. Treating the two as adding in
+quadrature (exact for root-mean-square of independent parts, heuristic for mean absolute values), the target part is
+$\sqrt{0.218^2-0.057^2}=0.21$ (set1), $0.17$ (set2), $0.12$ (set3), $0.13$ (set4) per band. Divided by the metal
+example's $2.18$, the average bench target is ``worth'' a metal-over-grass fill of $0.06$--$0.10$. Even at
+$\varphi=0.006$, \cref{tab:amin} then predicts $P_D\ge0.75$ at $P_{\rm FA}=10^{-3}$ in every scene (set3, the worst:
+$a\approx0.057$ against $a_{\min}\approx0.047$ at mean $|e|=0.13$) and near-certain detection on set1. The measurement says otherwise: Heavy (FTH3 epoch 5)
+catches 16.0\% of objects at the top 0.1\% and 49.4\% at the top 1\%, pAUC$_{\le1\%}$ 0.189
+(\repo{FTH3-heavy-joint-more2/README.md})\meas. The Gaussian $a_{\min}$ is a lower bound that is wrong by an order of
+magnitude, for identifiable reasons:
+\begin{enumerate}
+\item \textbf{Tails.} The null of the statistic is heavy-tailed (RM is ``chi-squared-like, heavy right tail''). With a
+unit-variance Student-$t_3$ null the $10^{-3}$ threshold moves from $3.09$ to $5.90$, a factor $3.6$ in required SNR;
+$t_5$ gives $2.2$\comp.
+\item \textbf{Non-stationarity.} The error is largest exactly where targets are: FT06's predicted error scale sits at
+the 77th--90th percentile of the scene on target pixels (\repo{FT06-uncertainty/b_at_targets_output.txt})\meas. A
+global $\Sm$ understates local clutter there.
+\item \textbf{Alignment.} Real objects have $\varphi\approx0.006$; most of their signal lies in the directions the error
+already occupies (\cref{fig:amin}, left edge).
+\item \textbf{Leakage and spread.} The model partly reconstructs the target (\cref{sec:leak}) and the PSF spreads it
+(\cref{ex:psf}).
+\end{enumerate}
+The practical conclusion: detectability must be calibrated empirically, by implants at controlled fill
+(bench-v2), and per-scene percentile thresholds (\cref{sec:decision}) are a necessity rather than a convenience.
+
+For the fill estimate itself, \cref{prop:fill} gives $\mathrm{sd}(\hat a)=1/\nrm{\dv}_{\Sm}=0.012$ at mean
+$|e|=0.10$, $\varphi=0.006$\comp: precise in principle. The real failures of fill estimation are bias
+(\cref{prop:mismatch}), not variance.
+
+% =================================================================================================================
+\section{Families as subspaces}
+\label{sec:families}
+
+\subsection{How low-rank is a family?}
+
+Let $\Hm_k^{\rm lib}=[\tv_{k1},\dots,\tv_{km_k}]$ hold family $k$'s resampled spectra in normalised units. On the
+165-band grid each man-made family is nearly rank one: the leading singular direction holds 0.89 (textile) to
+0.99 (wood/paper) of the energy, and 2--4 directions hold 99\%\comp\ (\cref{tab:rank}). A family is ``one shape at
+varying brightness, plus a little''. That is good for detection, and it is also the root of the confusion problem:
+the shapes of different families are close.
+
+\begin{table}[ht]
+\centering\small
+\caption{Man-made families of the shipped library on the 165-band grid, normalised units\comp. Rank$_{99}$: number of
+singular directions holding 99\% of the energy (uncentred).}
+\label{tab:rank}
+\begin{tabular}{@{}lccc@{\qquad}lccc@{}}
+\toprule
+family & $m_k$ & top-1 share & rank$_{99}$ & family & $m_k$ & top-1 share & rank$_{99}$\\
+\midrule
+building & 11 & 0.940 & 2 & paint & 8 & 0.965 & 2\\
+glass & 1 & 1.000 & 1 & pavement & 15 & 0.977 & 2\\
+metal & 13 & 0.949 & 2 & plastic & 38 & 0.930 & 4\\
+oil & 30 & 0.947 & 3 & roofing & 27 & 0.917 & 4\\
+textile & 14 & 0.893 & 4 & wood/paper & 7 & 0.987 & 2\\
+\bottomrule
+\end{tabular}
+\par\smallskip\footnotesize $m_k$ counts entries finite on all 165 bands (oil 30 of 40, plastic 38 of 39, wood/paper 7 of 8).
+\end{table}
+
+\subsection{Simplex ACE is ACE over the family's convex hull}
+
+The shipped man-made family score is the squared norm of the projection of the whitened difference
+$\zv=\Wm(\x-\B m)$ onto the cone $\{\sum_j\alpha_j\Wm(\tv_{kj}-\B m):\alpha\ge0\}$, solved by NNLS, divided by
+$\nrm{\zv}^2$ (\verb|family_scores|).
+
+\begin{proposition}[The cone of differences]
+\label{prop:cone}
+$\big\{\sum_j\alpha_j(\tv_{kj}-\B m):\alpha_j\ge0\big\}=\big\{A(\bar{\tv}-\B m):A\ge0,\ \bar{\tv}\in\operatorname{conv}\{\tv_{kj}\}\big\}$.
+Hence Simplex ACE equals $\max_{\bar{\tv}\in\operatorname{conv}}\max_{A\ge0}$ of the signed ACE against $\bar{\tv}$, and the
+NNLS mass $A=\sum_j\alpha_j$ is a fill estimate for the best convex mixture.
+\end{proposition}
+\begin{proof}
+For $A=\sum\alpha_j>0$ set $\bar{\tv}=\sum(\alpha_j/A)\tv_{kj}$; then $\sum_j\alpha_j(\tv_{kj}-\B m)=A(\bar{\tv}-\B m)$.
+Conversely any $A(\bar{\tv}-\B m)$ with convex weights $c_j$ is $\sum (Ac_j)(\tv_{kj}-\B m)$. For a closed convex cone
+$\mathcal K$, $\nrm{\Pi_{\mathcal K}\zv}^2/\nrm{\zv}^2=\max_{\B v\in\mathcal K}\cos^2_+(\zv,\B v)$ (Moreau), and every ray
+of $\mathcal K$ is one $\bar{\tv}$.
+\end{proof}
+
+So Simplex ACE lets the deployed material be any convex mixture of the family's lab spectra, at any non-negative
+fill; it can never score below the best single member (the LLD's unit test). It cannot represent a brightness change
+of the target \emph{relative to} its mixture weights unless the family contains spectra at several brightnesses,
+which \cref{tab:rank} says it effectively does.
+
+\subsection{The matched subspace detector with nuisance subspaces}
+
+\begin{proposition}[Matched subspace detector with interference \cite{ScharfFriedlander1994}]
+\label{prop:msd}
+Let $\rv=\Hm\B\theta+\Jm\B\psi+\B w$ with $\B w\sim\mathcal N(0,\sigma^2\Sm_0)$, signal subspace $\Hm$ (rank $q$),
+interference subspace $\Jm$ (rank $j$), both unknown in amplitude. Whitening by $\Sm_0^{-1/2}$ (tildes) and writing
+$\Pm_{\tilde{\Jm}}^\perp$ for the projection away from $\tilde{\Jm}$, $\Hm_\perp=\Pm^\perp_{\tilde{\Jm}}\tilde{\Hm}$, the GLRT is
+\[
+  T_{\rm MSD}=\frac{\nrm{\Pm_{\Hm_\perp}\Pm^\perp_{\tilde{\Jm}}\tilde{\rv}}^2}{\nrm{\Pm^\perp_{[\tilde{\Hm}\ \tilde{\Jm}]}\tilde{\rv}}^2}
+  \cdot\frac{N-q-j}{q}\ \sim\ F_{q,\,N-q-j}\quad\text{under }H_0,
+\]
+and with $\sigma$ known the numerator alone, divided by $\sigma^2$, is $\chi^2_q$. The scale-invariant form normalised by
+$\nrm{\Pm^\perp_{\tilde{\Jm}}\tilde{\rv}}^2$ instead is the adaptive subspace detector \cite{KrautScharfMcWhorter2001}, the
+subspace ACE.
+\end{proposition}
+
+\begin{proposition}[Illumination gain and offset are a known interference subspace]
+\label{prop:nuisance}
+Let the observed target be $g\tv+c\one$ (gain from slope, shadow or BRDF; offset from adjacency or haze), so
+$\x=a(g\tv+c\one)+(1-a)\bvec+\nv$. Then, exactly,
+\[
+  \x-\bh = ag\,(\tv-\bh)+a(g-1)\,\bh+ac\,\one+(1-a)\ev+\nv .
+\]
+The nuisance directions $\bh$ and $\one$ are known at each pixel, so $\Jm=[\bh,\one]$ (mapped by $\Dm^{-1}$ in normalised
+units) and \cref{prop:msd} applies. Only the product $ag$ is identifiable; fill and target brightness are confounded.
+\end{proposition}
+\begin{proof}
+Expand: $ag\tv-ag\bh+ag\bh-a\bh+ac\one+(1-a)\bvec-\bh+a\bh = ag\tv+ac\one+(1-a)\bvec-\bh$, which is $\x-\bh$ less
+$\nv$. Scaling $g\mapsto\gamma g$, $a\mapsto a/\gamma$ leaves $ag$ and changes only the interference amplitude
+$a(g-1)$, which is a free parameter.
+\end{proof}
+
+Projecting out $\bh$ costs one degree of freedom and removes the target's component along its own background, which
+for a dark target on a bright background is most of the target. This is the trade every brightness-robust detector
+makes, made explicit; the cheaper alternative is to rely, as Simplex ACE does, on the family containing several
+brightnesses.
+
+\subsection{Energy decomposition and the projection angle}
+
+In whitened coordinates $\tilde{\rv}$, for family subspace $\tilde{\Hm}_k$,
+\[
+  \nrm{\tilde{\rv}}^2=E_k^{\rm expl}+E_k^{\rm unex},\quad
+  E_k^{\rm expl}=\nrm{\Pm_{\tilde{\Hm}_k}\tilde{\rv}}^2,\quad
+  E_k^{\rm unex}=\nrm{\Pm^\perp_{\tilde{\Hm}_k}\tilde{\rv}}^2,\qquad
+  \cos^2\theta_k=\frac{E_k^{\rm expl}}{\nrm{\tilde{\rv}}^2}=\mathrm{ACE}_k ,
+\]
+the family-explained and unexplained energies and the projection angle $\theta_k$.
+RM is the total whitened energy in 30 leading directions; the family score is the share explained by $q_k\le4$
+directions; the unexplained energy is the lack-of-fit used for abstention in \cref{sec:decision}. Under a white
+Gaussian null the squared cosine to a fixed $q$-dimensional subspace is $\mathrm{Beta}(q/2,(N-q)/2)$, mean $q/N$: on 165
+bands, $0.006$ for $q=1$ and $0.018$ for $q=3$, with 99.5th percentiles $0.047$ and $0.076$\comp. A family of larger
+effective rank collects more null energy, which is why raw scores of different families are not comparable.
+
+\subsection{Why SAM fails on mixed pixels}
+
+\begin{proposition}[SAM on a two-component mixture]
+\label{prop:sam}
+Let $\x=a\tv+(1-a)\bvec$ with $\theta_{bt}=\angle(\bvec,\tv)$. Then $\x$ lies in $\spn\{\bvec,\tv\}$ and
+\[
+  \tan\angle(\x,\bvec)=\frac{a\nrm{\tv}\sin\theta_{bt}}{(1-a)\nrm{\bvec}+a\nrm{\tv}\cos\theta_{bt}},\qquad
+  \angle(\x,\tv)=\theta_{bt}-\angle(\x,\bvec).
+\]
+For small $a$, $\angle(\x,\bvec)\approx a\,(\nrm{\tv}/\nrm{\bvec})\sin\theta_{bt}$: the pixel stays within a few degrees of
+its background, so any library entry close to the background beats the target.
+\end{proposition}
+\begin{proof}
+Place $\bvec$ on the first axis of the plane; $\tv$ has coordinates $\nrm{\tv}(\cos\theta_{bt},\sin\theta_{bt})$. Take the
+coordinates of $\x$ and read off the angle.
+\end{proof}
+
+\begin{figure}[ht]
+\centering
+\begin{tikzpicture}
+\begin{axis}[width=0.74\textwidth,height=6cm,xlabel={fill $a$},ylabel={spectral angle (deg)},
+  grid=major,grid style={gray!20},legend style={font=\small,at={(0.5,-0.28)},anchor=north,legend columns=3,
+  /tikz/every even column/.append style={column sep=6pt}},xmin=0,xmax=1,ymin=0,ymax=25]
+\addplot[thick,blue!70!black] table[x=a,y=theta_t]{figdata/sam_mixing.dat};
+\addplot[thick,dashed,blue!70!black] table[x=a,y=best_manmade]{figdata/sam_mixing.dat};
+\addplot[thick,green!50!black] table[x=a,y=best_natural]{figdata/sam_mixing.dat};
+\addplot[gray,densely dotted,forget plot] coordinates {(0.85,0) (0.85,25)};
+\node[font=\scriptsize,anchor=east,align=right] at (axis cs:0.84,21) {target's family\\nearest from $a=0.85$};
+\legend{angle to the true target, nearest man-made entry, nearest natural entry}
+\end{axis}
+\end{tikzpicture}
+\caption{SAM on galvanised metal mixed into a grass/soil background, against all 352 complete library entries on the
+165-band grid\comp. The nearest entry is non-photosynthetic vegetation ($2.5$--$2.9^\circ$) for every fill up to $0.5$; some
+man-made entry is nearest from $a=0.775$, the target's own family only from $a=0.85$. The LLD measured 6\% right at 30\% fill on the planted set\meas.}
+\label{fig:sam}
+\end{figure}
+
+Subtracting a background estimate removes the problem at its source: $\x-\bh=a(\tv-\bh)+(1-a)\ev+\nv$ points along the
+target difference whatever $a$ is, up to error. That is the case for matching on the residual, and for the ring-mean
+subtraction the shipped matcher already does.
+
+\subsection{How far apart are families?}
+
+\begin{table}[ht]
+\centering\small
+\caption{Smallest principal angle between rank-3 family subspaces in normalised units\comp, raw, and after projecting out
+a 10-dimensional ``background'' subspace (top-10 principal directions of the library's centred natural spectra, the
+analogue of \texttt{implant.background\_subspace}).}
+\label{tab:angles}
+\begin{tabular}{@{}lcc@{}}
+\toprule
+pair & raw & after removing background-10\\
+\midrule
+metal vs roofing & $3.70^\circ$ & $49.8^\circ$\\
+metal vs plastic & $2.04^\circ$ & $43.2^\circ$\\
+plastic vs textile & $4.53^\circ$ & $32.7^\circ$\\
+paint vs plastic & $5.92^\circ$ & $19.4^\circ$\\
+pavement vs building & $0.51^\circ$ & $10.0^\circ$\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Two readings of \cref{tab:angles}. Raw family subspaces are a few degrees apart; the fraction of a unit target's energy
+that separates two families is $\sin^2$ of the angle, $8\times10^{-5}$ (pavement/building) to $0.011$ (paint/plastic).
+Once the directions natural surfaces share are removed, the families are well separated, but that part carries only
+0.0--2.4\% of a family's difference from the natural mean (its foreignness, \cref{sec:known})\comp. Identification lives in
+a few per cent of the signal energy. Every error source in \cref{sec:errors} has to be compared with that few per cent,
+not with the whole signal.
+
+% =================================================================================================================
+\section{Leakage: when the background prediction partly reconstructs the target}
+\label{sec:leak}
+
+\subsection{Scalar leakage}
+
+\begin{model}[Proportional leakage]
+\label{mod:leak}
+$\bh_p=\bvec_p+l\,a_p(\tv-\bvec_p)-\ev_p$ with leakage fraction $l\in[0,1]$.
+\end{model}
+
+\begin{proposition}
+\label{prop:leak}
+Under \cref{mod:leak}, $\rv_p=a_p(1-l)(\tv-\bvec_p)+\ev_p+\nv_p$ and $\dv_p=\tv-\bh_p=(1-la_p)(\tv-\bvec_p)+\ev_p$. Hence
+(i) the detection SNR is multiplied by $(1-l)^2$ and $a_{\min}$ by $1/(1-l)$; (ii) in the noise-free limit
+$\hat a\to a(1-l)/(1-la)$, a downward bias; (iii) the direction of the residual is unchanged, so scale-invariant
+statistics (ACE, Simplex ACE, family percentiles) lose only through SNR.
+\end{proposition}
+\begin{proof}
+Substitute into $\rv=\x-\bh$ and into \cref{prop:fill} with $\ev=\nv=0$: $\hat a=a(1-l)\nrm{\B u}^2/((1-la)\nrm{\B u}^2)$
+for $\B u=\tv-\bvec$.
+\end{proof}
+
+For $l=0.1,0.3,0.5$ the SNR falls to $0.81,0.49,0.25$ of its leak-free value\comp\ (\cref{fig:leak}).
+
+\begin{figure}[ht]
+\centering
+\begin{tikzpicture}
+\begin{axis}[width=0.62\textwidth,height=5.4cm,xlabel={leakage fraction $l$},ylabel={ratio to leak-free},
+  grid=major,grid style={gray!20},legend pos=south west,legend style={font=\small},xmin=0,xmax=0.95,ymin=0,ymax=1.02]
+\addplot[thick,red!70!black] table[x=l,y=snr_ratio]{figdata/leakage.dat};
+\addplot[thick,blue!70!black] table[x=l,y=bias_a02]{figdata/leakage.dat};
+\addplot[thick,dashed,blue!70!black] table[x=l,y=bias_a005]{figdata/leakage.dat};
+\fill[orange!25,opacity=0.6] (axis cs:0.08,0) rectangle (axis cs:0.22,1.02);
+\node[font=\scriptsize,anchor=south] at (axis cs:0.15,0.03) {4-px tokens};
+\legend{SNR $(1-l)^2$, $\hat a/a$ at $a=0.2$, $\hat a/a$ at $a=0.05$}
+\end{axis}
+\end{tikzpicture}
+\caption{Cost of proportional leakage (\cref{prop:leak}). The band is the linear-interpolator estimate for a one-pixel
+target and 4-px tokens (\cref{ex:leak})\comp.}
+\label{fig:leak}
+\end{figure}
+
+\subsection{Operator leakage and a leakage-free subspace}
+
+The learned predictor need not leak proportionally. Linearise $f_\theta$ around the target-free context: with
+$\B J_{pq}=\partial\bh_p/\partial\x_q$ and the target's contribution $a_q(\tv-\bvec_q)\approx a_q(\tv-\bvec_p)$ at visible
+neighbours $q\in C(p)$,
+\begin{equation}
+  \bh_p\approx\bh_p^{(0)}+a_p\Lm_p(\tv-\bvec_p),\qquad \Lm_p=\sum_{q\in C(p)}\B J_{pq}\,\frac{a_q}{a_p}.
+  \label{eq:L}
+\end{equation}
+So $\rv_p=a_p(\Id-\Lm_p)(\tv-\bvec_p)+\ev_p+\nv_p$. Since $p$ is hidden, $\B J_{pp}=0$: leakage happens only through
+the fills $a_q$ at visible neighbours, the PSF halo and any part of the object larger than a token.
+
+\begin{proposition}[Projected identifiability]
+\label{prop:ident}
+Under \eqref{eq:L}, families $j$ and $k$ are distinguishable from $\rv_p$ only through $(\Id-\Lm_p)\Hm_j$ and
+$(\Id-\Lm_p)\Hm_k$, and the matched statistic must be formed against the leaked library
+$(\Id-\Lm_p)(\tv-\bh_p)$, not against $\tv-\bh_p$. If $\Lm_p=\Pm_{\mathcal M}$ is the projection onto a subspace the model can
+render, the usable signal is $a_p^2\nrm{\Pm^\perp_{\mathcal M}(\tv-\bvec)}^2_{\Sm}$, and the two families are identifiable
+iff the smallest principal angle between $\Pm^\perp_{\mathcal M}\Hm_j$ and $\Pm^\perp_{\mathcal M}\Hm_k$ is non-zero.
+\end{proposition}
+
+\Cref{tab:angles} is the toy version with $\mathcal M$ = the natural background subspace: projection makes families
+\emph{more} separable in angle while removing almost all of their energy. A model that leaked exactly its background
+subspace would leave a residual in which naming is easier per unit energy and detection is much harder.
+
+\begin{proposition}[The decoder's range bounds leakage]
+\label{prop:range}
+For the reduced-attention stem the output layer is linear in a $D$-dimensional code:
+$\hat z_n=\B u(\lambda_n)^\top\B\zeta+c(\lambda_n)$ in normalised units
+(\verb|WavelengthLinearDecoder|, \repo{spectral_reduced.py}), so $\bh=\B\mu+\Dm(\Um\B\zeta+\B c)$. Let $\B Q$ project
+onto $\rng(\Dm\Um)^\perp$. Then $\B Q\Lm_p=0$ exactly, and
+\[
+  \B Q\rv_p=\B Q\big(\x_p-\B\mu-\Dm\B c\big),
+\]
+independent of the network. $D=32$ for FT04 and $D=64$ for Heavy (\verb|compressed_channels| in the FT04 and FTH1/FTH3
+configs; verified).
+\end{proposition}
+\begin{proof}
+Any two predictions differ by $\Dm\Um(\B\zeta-\B\zeta')\in\rng(\Dm\Um)$, so the leaked term is in $\rng(\Dm\Um)$ and
+$\B Q$ annihilates it. Also $\B Q\bh=\B Q(\B\mu+\Dm\B c)$.
+\end{proof}
+
+So the residual splits into a part where the model both suppresses background and can leak ($\rng(\Dm\Um)$), and a part
+where it does neither and the ``learned'' residual is the raw pixel less a fixed offset. FT04's measured floor, the
+residual energy outside $\rng(\Dm\Um)$, is 2--10\% on background and 2--10\% on targets
+(\repo{decoder-capacity/README.md}, table 1)\meas: the complement is leak-proof but carries little target. Heavy's floor
+(with $D=64$) has not been measured.
+
+\subsection{The halo seen through the mask}
+
+FT06 trained a head to predict the expected error scale (call it $\beta_p$) at hidden pixels. On targets $\beta$
+exceeds its own 3--8\,px surroundings by a factor $1.05/1.12/1.04$ (epoch 1) and $1.07/1.19/1.13$ (epoch 3) on sets 1, 2, 4
+(\repo{FT06-uncertainty/README.md})\meas. A hidden target that the context could not see would give a ratio of one; the
+excess is direct evidence that $\sum_q\B J_{pq}a_q\neq0$, i.e. leakage through the halo. The geometry is easy to compute.
+
+\begin{example}[Halo exposure and a leakage estimate]
+\label{ex:leak}
+A one-pixel target with $\sigma_{\rm PSF}=1.4$\,px, averaged over its 16 positions in a $4\times4$ token: 52\% of its energy
+stays in its own (hidden) token and 40\% (range 30--47\%) lands in the four edge-neighbour tokens, which are visible when its
+token is hidden. With $8\times8$-pixel cells (FT08's $2\times2$-token blocks) the visible share falls to 24\% on average, but
+ranges from 1.6\% to 46\%: a target near a cell edge leaks as much as before\comp. If the predictor were the mean of the 16
+pixels bordering the hidden token, its leakage would be $l=0.22$ (range 0.19--0.23); if it were the mean of all 64 pixels of
+the four neighbour tokens, $l=0.08$ (0.06--0.10)\comp. A learned predictor sits somewhere in or near that range; by
+\cref{prop:leak} that costs 16--39\% of SNR.
+\end{example}
+
+\begin{proposition}[When wider masks pay]
+\label{prop:wider}
+Let cell size $c$ give leakage $l_c$ and background-error variance $\sigma^2_{e,c}$ along the target direction. Moving from
+$c_1$ to $c_2$ raises the detection SNR iff
+\[
+  \Big(\frac{1-l_{c_2}}{1-l_{c_1}}\Big)^2>\frac{\sigma^2_{e,c_2}}{\sigma^2_{e,c_1}} .
+\]
+\end{proposition}
+\begin{proof}
+SNR $=a^2(1-l)^2\nrm{\tv-\bvec}^2/\sigma^2_e$ along a fixed direction; take the ratio.
+\end{proof}
+
+With $l_4=0.22$ and $l_8\approx0.22\times0.24/0.40=0.13$ (scaling leakage with halo exposure\assm), the left side is
+$(0.87/0.78)^2=1.24$: FT08 would gain if hiding 8-px blocks raised background error by less than 24\%. FT08 measured a
+resolved loss, pAUC $-0.0058$ $[-0.0106,-0.0010]$ (\repo{FT07-gated/README.md})\meas, and its README attributes it to more
+background residual (``normal texture inside a block is rebuilt less exactly''). That is consistent with the inequality failing,
+but $\sigma_{e,8}/\sigma_{e,4}$ was not measured directly; it is a cheap measurement (\cref{sec:open}).
+
+\begin{remark}[The classical ring leaks too]
+The ring estimate is not leak-free either. Under \verb|psf_weights| the mean weight on the 2--3\,px ring that
+\verb|contrast_z| uses is 0.32 for a $1\times1$ object, 0.20 for $2\times2$, 0.12 for $4\times4$\comp: ring-based contrast and
+ring-mean matching see $(1-l_{\rm ring})$ of the signal with $l_{\rm ring}$ of that size. The shipped matcher's $13\times13$
+minus $5\times5$ ring starts at 3\,px, so its leakage is smaller. Learned and ring backgrounds trade leakage against how
+well they predict $\bvec_p$.
+\end{remark}
+
+% =================================================================================================================
+\section{Decision and abstention}
+\label{sec:decision}
+
+\subsection{Posterior over families plus ``unknown''}
+
+Let $k\in\{0,1,\dots,K\}$ with $0$ meaning ``none of the library''. For a pixel with residual $\rv$,
+\[
+  P(k\mid\rv)\propto\pi_k\int p(\rv\mid k,a,\B\theta)\,p(a,\B\theta\mid k)\,da\,d\B\theta .
+\]
+A Laplace approximation of the integral gives the profile likelihood (the GLRT statistic) minus a penalty of
+$\tfrac{q_k}{2}\log(\cdot)$ for the family's effective dimension. Without that penalty the family with more freedom wins on
+noise alone; this is the LLD's observation that ``uncapped, about 1,900 minerals out-vote the about 180 man-made spectra
+by sheer number of chances'', fixed there by capping each family at 40 spaced entries and by never forming a cone of natural
+spectra. Chow's rule \cite{Chow1970} names $\hat k=\arg\max_k P(k\mid\rv)$ if $\max_k P(k\mid\rv)\ge1-c$ and abstains
+otherwise; with an explicit class 0 it abstains by naming 0.
+
+The densities are not known well enough to compute these posteriors, and the scene-to-scene variation of the null is large.
+The shipped matcher therefore replaces likelihoods by \emph{calibrated} scores.
+
+\subsection{Per-scene calibration and the false-name bound}
+
+\begin{definition}[Calibrated family score]
+For each family $k$, compute its score $T_k$ on $N_0$ background pixels sampled from the scene (anomalies grown by 3\,px
+excluded; $N_0=10{,}000$; \verb|NULL_N|, \verb|EXCLUDE_BUFFER_PX|). The calibrated score of pixel $p$ is the share of
+null scores strictly below its own,
+$\pi_k(p)=\#\{i:T_k(y_i)<T_k(p)\}/N_0$ (\verb|calibrate|). Name the best family if
+$\max_k\pi_k(p)\ge p^\ast=1-\alpha/F$, with $F$ the number of man-made families.
+\end{definition}
+
+\begin{proposition}[False-name rate on ordinary pixels]
+\label{prop:alpha}
+If $p$ is exchangeable with the null sample (an ordinary background pixel of the same scene) and scores have no ties,
+$P(\pi_k(p)\ge p^\ast)\le1-p^\ast+1/N_0$ for each $k$, and the probability that $p$ receives some man-made name is at
+most $F(1-p^\ast)+F/N_0=\alpha+F/N_0$.
+\end{proposition}
+\begin{proof}
+Under exchangeability the rank of $T_k(p)$ among the $N_0+1$ values is uniform on $\{1,\dots,N_0+1\}$. The event
+$\pi_k\ge p^\ast$ requires the rank to be among the top $N_0-\lceil p^\ast N_0\rceil+1$, of probability
+$(N_0(1-p^\ast)+1)/(N_0+1)$ at most. Take the union over the $F$ man-made families.
+\end{proof}
+
+At the default $\alpha=5\%$, $F=10$, $p^\ast=0.995$: each family's bar sits at 50 null exceedances, and the realised
+per-family false-name rate has a sampling standard deviation of $7\times10^{-4}$, 14\% of its target $0.005$\comp; with
+$N_0=10^5$ it would be 4\%. The LLD measured the realised rate at a quarter to a half of $\alpha$\meas: the union bound is
+loose because family scores are strongly correlated (\cref{tab:angles}).
+
+\begin{remark}[Why the bound says nothing about false alarms]
+\label{rem:fa}
+The exchangeability in \cref{prop:alpha} is with \emph{ordinary} pixels. The pixels the matcher is asked about are
+anomaly-flagged, unusual by construction, and the bound does not apply: on the four PRISMA scenes 9--24\% of false alarms were
+named man-made at $\alpha=5\%$ (LLD section 5)\meas. A calibration that does apply is to draw the null from the
+\emph{candidate} population itself (the top-percentile pixels), which is about 98\% non-target (false alarms outnumber targets
+about 50:1). If a fraction $\pi$ of that null is target, then for any threshold $\eta$,
+$P_{\rm non\text{-}target}(T>\eta)\le P_{\rm null}(T>\eta)/(1-\pi)$, so contamination at $\pi=0.02$ inflates the guaranteed
+rate by at most 2\%. This conditional calibration controls false names on false alarms, which is the product's actual failure.
+\end{remark}
+
+\subsection{Why a fixed absolute threshold fails}
+
+\begin{proposition}
+Let a scene's residual error be $c\,\ev_0$ with $\ev_0$ from a fixed distribution. A matched-filter threshold $\eta$ fixed across
+scenes has false-alarm rate $P(T_{\rm MF}>\eta/c)$ in the unwhitened case, which moves by orders of magnitude for the scale
+changes seen across scenes. ACE removes $c$ but not the dependence on the shape of the null (dimension, tail weight,
+non-stationarity).
+\end{proposition}
+
+The project rule (\repo{docs/05-detectors.md}, ``Thresholding is percentile, never absolute'': a calm lake has residuals near 0.01,
+a fire-affected scene near 0.1) is the same statement for anomaly scores. Family matching inherits it, per family, because
+the null also depends on the family's effective rank (\cref{sec:families}).
+
+\subsection{Open-set recognition}
+
+Naming is open-set: most anomalies are in no library. Three tests, each calibrated, separate the outcomes:
+\begin{enumerate}
+\item \emph{detection}: the pixel is anomalous (RM percentile, upstream);
+\item \emph{attribution}: $\max_k\pi_k\ge p^\ast$ (the shipped rule);
+\item \emph{fit}: the unexplained whitened energy $\nrm{\Pm^\perp_{\tilde{\Hm}_k}\tilde{\rv}}^2$ is not larger than the best family
+leaves on implanted targets of that family at similar fill (a lack-of-fit test; under a Gaussian $H_k$ it is
+$\chi^2_{N-q}$-like and the real reference must come from implants);
+\end{enumerate}
+plus a margin to the runner-up family. A pixel that passes 1 and 2 but fails 3 is ``man-made-like, not this family'';
+one that fails 2 is ``man-made, type unconfirmed''. This is the open-space-risk idea of \cite{Scheirer2013} with the open space
+measured by lack of fit. Note one asymmetry in the product: the worker shows natural-family names whether or not they pass
+$p^\ast$ (\verb|named = answered or group == "natural"| in \repo{_spectral_library_match_run.py}).
+
+% =================================================================================================================
+\section{Error sources and their scale}
+\label{sec:errors}
+
+Each source enters the statistic through \eqref{eq:resid} as either a change of target direction (which costs identification) or
+extra residual energy (which costs detection). The yardstick from \cref{sec:families} is the separation between families: a few
+degrees, a few per cent of the energy.
+
+\subsection{Atmospheric correction residuals}
+
+Model the corrected reflectance as $\x^{\rm obs}=\Gm\x+\B o$ with $\Gm=\operatorname{diag}(g(\lambda_n))$ and $g,\B o$ smooth in
+wavelength. If the learned background is approximately equivariant\assm, $\bh(\Gm\x+\B o)\approx\Gm\bh(\x)+\B o$ (it is trained on
+many scenes with different residual corrections), then
+\[
+  \rv^{\rm obs}\approx a\,\Gm(\tv-\bvec)+\Gm\ev+\Gm\nv :
+\]
+the offset cancels in the residual (it does not cancel for SAM on raw pixels), and the gain distorts the target direction.
+
+\begin{proposition}[Angle bound for a gain error]
+\label{prop:kant}
+For positive diagonal $\Gm$ with $\kappa=g_{\max}/g_{\min}$ and any $\dv\ne0$,
+\[
+  \cos\angle(\Gm\dv,\dv)\ \ge\ \frac{2\sqrt\kappa}{1+\kappa},\qquad
+  1-\cos^2\angle(\Gm\dv,\dv)\le\Big(\frac{\kappa-1}{\kappa+1}\Big)^2 .
+\]
+\end{proposition}
+\begin{proof}
+Put $\B u=\Gm^{1/2}\dv$. Then $\dv^\top\Gm\dv=\B u^\top\B u$, $\nrm{\Gm\dv}^2=\B u^\top\Gm\B u$, $\nrm{\dv}^2=\B u^\top\Gm^{-1}\B u$,
+and Kantorovich's inequality $(\B u^\top\Gm\B u)(\B u^\top\Gm^{-1}\B u)\le\frac{(1+\kappa)^2}{4\kappa}\nrm{\B u}^4$ gives
+$\cos^2\ge4\kappa/(1+\kappa)^2$.
+\end{proof}
+
+For $\kappa=1.02,1.05,1.1,1.2$ the worst-case angle is $0.57^\circ,1.40^\circ,2.73^\circ,5.22^\circ$\comp. A random smooth
+$\pm5\%$ gain (a cubic Legendre curve squashed into $[0.95,1.05]$) applied to 200 library-minus-background differences gave a
+median of $0.61^\circ$ and a 95th percentile of $1.29^\circ$\comp, well inside the bound. The bound is Euclidean; in whitened
+coordinates the low-variance directions are stretched and the angle can be larger.
+
+What size are the gains? The atmospheric-correction work measured land MAE against the vendor L2 product of 0.0146 (EnMAP vs
+PACO), 0.0241 (PRISMA vs ASI L2C) and 0.0081 (AVIRIS-NG vs JPL), reduced by harmonisation to 0.0094 and 0.0128 for EnMAP and
+PRISMA (\repo{research/experiments/atm-correction/README.md})\meas. Against a median reflectance of 0.155 an MAE of 0.015 is
+about 10\%; read as a pure gain error\assm\ that is $\kappa\approx1.1$--$1.2$, a $3$--$5^\circ$ worst-case rotation. That is the
+same size as the raw separation of metal from roofing ($3.7^\circ$) and larger than metal from plastic ($2.0^\circ$) or pavement
+from building ($0.5^\circ$). \textbf{An atmospheric-correction gain error at the level we measure is enough, by itself, to move a
+target across a family boundary.} These MAEs are processor-against-processor, not against ground truth; since the models were
+trained on vendor L2, they are the relevant error for deployment from L1.
+
+\subsection{Band-set mismatch and resampling}
+
+If a band's true centre is $\lambda_n+\Delta$ but the library is resampled at $\lambda_n$, the error is
+$t_n(\Delta)-t_n\approx\Delta\,(s_n*\rho')(\lambda_n)$, bounded by $|\Delta|\max|\rho'|$ because the normalised response
+integrates to one. Over the 352 complete library entries on the 165-band grid\comp:
+
+\begin{center}\small
+\begin{tabular}{@{}lccc@{}}
+\toprule
+perturbation & SAM change, median & SAM change, max & max rel.\ change, median\\
+\midrule
+centre shift 1\,nm & $0.11^\circ$ & $0.52^\circ$ & 1.2\%\\
+centre shift 2\,nm & $0.21^\circ$ & $1.04^\circ$ & 2.5\%\\
+centre shift 5\,nm & $0.52^\circ$ & $2.55^\circ$ & 6.1\%\\
+FWHM 8 or 12\,nm instead of 10 & $0.03^\circ$ & $0.20^\circ$ & -\\
+FWHM 15\,nm instead of 10 & $0.06^\circ$ & $0.50^\circ$ & -\\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Spectral calibration errors of a nanometre or two cost a tenth to a fifth of a degree for a typical entry: an order of magnitude
+below the gain error. Width errors are smaller still. Two practical failure modes matter more than accuracy: bands with no FWHM
+(PRISMA's null FWHM makes the band invalid, LLD gotcha) and per-pixel nodata on a kept band (such a pixel is not scored).
+
+\subsection{Library-to-image domain gap}
+
+Write the deployed material as $\tv'=\tv+\B\delta_t$ (weathering, dust, mixtures within the object, BRDF). \Cref{prop:mismatch}
+gives its effect on fill and cosine. Its size is best read off the one real test with field spectra: on the Gudalur sheets,
+Simplex ACE names 27\% of answered pixels correctly with the library alone and about 78\% with the sheets' own field spectra
+added (LLD section 5)\meas, and the absorption-feature check that was right 62\% of the time on planted targets was right 0\% of
+the time on the real sheets\meas. Of all error sources this is the largest, and it is the one synthetic tests cannot measure.
+
+\subsection{The decoder's output floor}
+
+By \cref{prop:range}, the part of the background the model can never predict is $\B Q(\bvec-\B\mu-\Dm\B c)$. For FT04 ($D=32$) it
+is 2--10\% of residual energy on background and on targets; mean absolute floor $0.013$--$0.033$ (background) and $0.022$--$0.043$
+(targets), against actual residuals of $0.048$--$0.122$ and $0.149$--$0.204$ (\repo{decoder-capacity/README.md})\meas. The
+decoder-capacity study's conclusion follows: over 90\% of the error is in which code the decoder predicts, not in what it can
+render. For matching the floor is a nuisance subspace of known range: project it out (or whiten it separately) and it cannot be
+mistaken for a family.
+
+\subsection{Summary}
+
+\begin{table}[ht]
+\centering\small
+\caption{Error sources against the identification yardstick (family separation of $0.5$--$6^\circ$ raw).}
+\label{tab:errors}
+\begin{tabularx}{\textwidth}{@{}lXl@{}}
+\toprule
+source & how it enters & size\\
+\midrule
+sensor noise & residual energy & $0.005$--$0.008$ norm.\ units\comp; negligible\\
+background-prediction error & residual energy; sets $\Sm$ & $0.05$--$0.14$ mean abs\meas\\
+leakage & SNR $\times(1-l)^2$; direction $\Id-\Lm$ & $l\approx0.08$--$0.22$ (estimate)\comp\\
+atmospheric gain & rotation of $\tv-\bvec$ & $\le2.7^\circ$ at $\kappa=1.1$; $\kappa\approx1.1$--$1.2$\assm\\
+atmospheric offset & cancels in the residual & (hits SAM on raw pixels)\\
+band centre / width & rotation of $\tv$ & $0.1$--$0.2^\circ$ typical at 1--2\,nm\comp\\
+library-to-image gap & rotation and bias & dominant: 27\% vs 78\% right at Gudalur\meas\\
+decoder floor & fixed nuisance subspace & 2--10\% of residual energy (FT04)\meas\\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+% =================================================================================================================
+\section{The learned namer}
+\label{sec:namer}
+
+\subsection{The generator as a sampling distribution}
+
+The parked plan (\repo{spectral-matching-fresh-start.md}) trains a namer on synthetic mixtures. Formalise the generator $G$ as a
+joint law over
+\begin{gather*}
+  (k,\ \tv,\ a,\ \x_{C},\ \Gm,\B o,\ \nv)\sim p_G:\qquad
+  k\sim\pi_G,\qquad \tv\sim\text{library}_k\ (\text{augmented}),\\
+  a\sim p_G(a)\ \ (\text{e.g.\ log-uniform on }[0.05,0.5]),
+\end{gather*}
+a real background patch $\x_C$ from the shards, implanted through the PSF (\verb|implant_tile|), a smooth gain and offset, and
+noise; $k=0$ is ``none'' ($a=0$). The namer sees an input $\B\upsilon=\Upsilon(\x_p,\x_C)$, for instance
+$(\x_p,\bh_p,\rv_p)$ in normalised units plus a scene summary of $\B\Sigma_r$. To simulate leakage faithfully, $\bh_p$ must be
+computed by running Heavy on the \emph{implanted} context; feeding a $\bh$ from the clean patch would teach a leak-free world.
+
+\subsection{Objective and its minimiser}
+
+\begin{proposition}[Bayes classifier under the generator]
+\label{prop:bayes}
+Over measurable $q(\cdot\mid\B\upsilon)$, the expected cross-entropy $\E_G[-\log q(k\mid\B\upsilon)]$ is minimised by
+$q^\ast=p_G(k\mid\B\upsilon)$; the squared-loss fill head is minimised by $\E_G[a\mid\B\upsilon,k\neq0]$. The classifier
+$\arg\max_kq^\ast$ is Bayes-optimal for 0-1 loss under $G$, and with a reject cost $c$ Chow's rule on $q^\ast$ is optimal.
+\end{proposition}
+\begin{proof}
+Conditional on $\B\upsilon$, $\E[-\log q(k\mid\B\upsilon)]=H(p_G(\cdot\mid\B\upsilon))+\mathrm{KL}(p_G\|q)$, minimised at $q=p_G$
+(Gibbs). The conditional mean minimises squared error. The 0-1 and Chow statements are the standard Bayes and reject-option
+results.
+\end{proof}
+
+\begin{proposition}[What the input must contain]
+\label{prop:suff}
+Under the Gaussian residual model $\rv\mid k,a,\B\theta\sim\mathcal N(a\Hm_k\B\theta,\Sm)$ with $\Sm$ known, the statistics
+$\{\Hm_k^\top\Sm^{-1}\rv\}_k$ and $\rv^\top\Sm^{-1}\rv$ are jointly sufficient for $(k,a,\B\theta)$. A namer given $\rv$ without
+$\Sm$ cannot form them and cannot be calibrated across scenes.
+\end{proposition}
+\begin{proof}
+The log-likelihood is $-\tfrac12\rv^\top\Sm^{-1}\rv+a\B\theta^\top\Hm_k^\top\Sm^{-1}\rv-\tfrac12a^2\B\theta^\top\Hm_k^\top\Sm^{-1}\Hm_k\B\theta$;
+it depends on $\rv$ only through the listed statistics (Fisher-Neyman factorisation).
+\end{proof}
+
+Hence either feed the whitened residual $\Sm^{-1/2}\rv$ (with the scene's whitening), or keep the learned model as the ``score each
+family'' box and leave scene-wise percentile calibration and the $p^\ast$ decision after it, as the earlier proposal recommends.
+The second is safer: the calibration of \cref{sec:decision} then holds whatever the network learned.
+
+\subsection{The generator-versus-reality gap}
+
+Let $P$ be the real joint law. For any classifier $h$ and a loss bounded in $[0,1]$,
+\[
+  |R_P(h)-R_G(h)|\le\mathrm{TV}(P,G) .
+\]
+The bound is loose but names the two parts of the gap:
+\begin{itemize}
+\item \emph{Label shift.} $\pi_P$ is dominated by ``none'' (about 50 false alarms per target among candidates). If only priors
+differ, $p_P(k\mid\B\upsilon)\propto p_G(k\mid\B\upsilon)\,\pi_P(k)/\pi_G(k)$ \cite{Saerens2002}: correct the posterior, do
+not retrain.
+\item \emph{Conditional shift.} Real false alarms (field edges, glint, shoreline, haze) are not generated by $G$, and real deployed
+materials are not library spectra (the domain gap of \cref{sec:errors}). This part cannot be corrected by reweighting. The cheapest
+partial fix is to take ``none'' examples from the real top-percentile candidates of training scenes, whose label noise (about 2\%
+target) is tolerable, rather than from untouched pixels.
+\end{itemize}
+A classifier two-sample test measures the gap directly: train a discriminator to tell synthetic implants from real candidate
+pixels; an AUC well above 0.5 on held-out scenes means the namer will be trained on a world it will not see. A namer trained on linear
+mixtures and scored on linear-mixture plantings flatters itself by construction, which is why the earlier proposal's pass rule weights
+the Gudalur and oil sets.
+
+\subsection{As built (31 October 2026)}
+\label{sec:namer-built}
+
+A namer was built on 31 October 2026 (\repo{app/spectral_match/namer/}; design \repo{docs/proposals/spectral-namer.md}, two levels: man-made or
+natural, then one of seven material classes). It departs from the plan above in four ways that bear on the propositions.
+
+\paragraph{The generator.} $a\sim$ log-uniform on $[0.05,1]$ (not $[0.05,0.5]$), so $P(a\le q)=\ln(q/0.05)/\ln20$ and $\E[a]=0.95/\ln20=0.317$\comp; $\tv$ a
+man-made training-split library spectrum (probability $\frac12$), a natural one ($\frac14$) or none ($\frac14$, $a=0$); a single-pixel linear mix with no PSF;
+$\x=\Gm(a\tv+(1-a)\bvec)+\nv$ with $\Gm$ diagonal, a clipped quadratic in the band index within $\pm10\%$, and $\nv$ Gaussian with a per-tile, per-band $\sigma$
+equal to the RMS of horizontal neighbour differences over $\sqrt2$. The context $\x_C$ is summarised by the ring mean $\rv$ over Chebyshev distances 3 to 7 (200
+pixels), with $\rv'=\Gm\rv$, not by Heavy's $\bh$. Leakage (\cref{sec:leak}) therefore does not enter the namer; the conditional shift of the gap bound does, in full.
+
+\paragraph{The input.} $\B\upsilon=(\x,\rv')$ through Indradhanu~V2's wavelength-aware stem (Heavy's global per-wavelength normalisation, then its post-stem
+BatchNorm, frozen at V2's running statistics so that training and evaluation normalise pixels, rings and library spectra alike), as
+$[\zv_x,\zv_r,\zv_x-\zv_r]$. The library keeps one entry per name, so a repeated name cannot leave a near-copy of the planted spectrum in its class. No scene covariance is supplied, so by \cref{prop:suff} the namer cannot form the whitened statistics and its outputs
+cannot be calibrated across scenes on their own. The recommendation after \cref{prop:suff} stands: keep scene-wise percentile calibration after the network. The
+inference API returns raw probabilities only.
+
+\paragraph{The objective.} Binary cross-entropy for $M$ on every sample; $0.5\,|\hat a-a|$ on every sample; and, on man-made samples, cross-entropy over
+\emph{class} scores $S_k=\ln\sum_{j\in k}e^{z_j}$, $z_j=\cos(\zv,\B\omega_j)/\tau$, over the training-split library with the planted entry's $z_j$ set to $-\infty$. Since
+$e^{S_k}/\sum_{k'}e^{S_{k'}}=\sum_{j\in k}q_j$ for the entry softmax $q$, this is the class marginal of a per-entry softmax, and \cref{prop:bayes} applies at the
+class level: the minimiser is $p_{G'}(k\mid\B\upsilon,M)$, where $G'$ is the generator \emph{with the planted entry removed from the candidate set}. That is the
+leave-one-out posterior, the quantity that generalises to spectra outside the library; with the entry kept, the minimiser would reward recognising the sample.
+
+\paragraph{The test.} Level-1 recall on held-out spectra at ACE's own natural false-alarm rate from the separability check (fill 0.25: $f=0.166$, $0.215$, $0.187$
+on PRISMA, EnMAP, AVIRIS-NG), required to exceed ACE's by 0.10 (bars $0.872$, $0.764$, $0.860$)\comp; level-2 accuracy likewise, once ACE is re-scored on the seven
+classes; an open-set run holding one class (paint/coatings) out. The level-1 head is trained on planted man-made library spectra, so it is a two-class
+discriminator under $G$, not the lack-of-fit test of \cref{sec:decision}'s open-set list. Results were pending when this section was written (run N001, H100,
+from 31 October 2026 11:30 UTC). Derivations at teaching pace: the step-by-step volume, chapter ``The namer as built''.
+
+% =================================================================================================================
+\section{Measuring it}
+\label{sec:measure}
+
+\subsection{An OSM-labelled benchmark}
+
+The parked plan's judge is a benchmark built from OpenStreetMap tags over held scene footprints
+(\verb|landuse=greenhouse_horticulture|, \verb|plant:source=solar|, \verb|surface=asphalt|/\verb|concrete|,
+\verb|roof:material=*|, harbour and water features). Let $\mathcal O_k$ be the objects of family $k$, $n_k=|\mathcal O_k|$. At a fixed
+coverage (share of objects answered) report per family
+\[
+  \mathrm{Acc}_k=\frac1{n_k}\sum_{o\in\mathcal O_k}\B 1[\hat k(o)=k],\qquad
+  \B C_{jk}=\frac1{n_j}\#\{o\in\mathcal O_j:\hat k(o)=k\},
+\]
+the confusion matrix including the ``unconfirmed'' and ``natural'' outcomes, and the false-name rate on ordinary pixels and on false
+alarms separately (\cref{rem:fa}). Methods are compared at equal coverage, as the LLD's rules require. If a fraction $\epsilon_L$ of
+OSM material tags is wrong and wrong tags are answered at chance among $K$ families, the observed accuracy is
+$(1-\epsilon_L)\mathrm{Acc}_k+\epsilon_L/K$, so differences between methods shrink by the factor $1-\epsilon_L$ and the required sample
+grows by $1/(1-\epsilon_L)^2$.
+
+\subsection{Paired bootstrap over objects}
+
+\repo{app/evaluation/significance.py} resamples each scene's objects with replacement, the same draw for both methods, recomputes
+both measures and takes the 2.5--97.5 percentiles of the difference; background pixels are not resampled. The bench-resolution
+study notes that scene-level uncertainty is not covered, so the interval is a lower bound on the real uncertainty
+(\repo{research/experiments/bench-resolution/README.md})\meas. For per-family accuracy the same scheme applies with objects of
+family $k$ in place of anomaly objects and $\B 1[\hat k=k]$ in place of ``caught''.
+
+\subsection{Minimum detectable improvement}
+
+\begin{proposition}[Paired proportions]
+\label{prop:mcnemar}
+Let two methods be scored on the same $n$ objects with discordance rate $\pi_d$ (share of objects on which exactly one is right).
+The difference in accuracy has standard error $\approx\sqrt{\pi_d/n}$, and the smallest difference detectable with power $1-\beta$ at
+two-sided level $\alpha$ is
+\[
+  \Delta_{\min}\approx(z_{1-\alpha/2}+z_{1-\beta})\sqrt{\pi_d/n},\qquad
+  n\approx(z_{1-\alpha/2}+z_{1-\beta})^2\,\pi_d/\Delta^2 .
+\]
+\end{proposition}
+\begin{proof}
+The per-object difference takes values $\pm1$ on discordant objects and 0 otherwise; its variance is $\pi_d-\Delta^2\approx\pi_d$
+for small $\Delta$. Apply the normal approximation (McNemar's test).
+\end{proof}
+
+\begin{example}[Sizing a family benchmark]
+\label{ex:mde}
+Check against the bench first: FTH1 vs FTB1 caught-top-1\% intervals are about $\pm1.9$ points on 909 objects
+(\repo{FTH1-heavy-joint/README.md})\meas, which by \cref{prop:mcnemar} means $\pi_d\approx0.085$\comp. Two namers disagree more than
+two anomaly models; take $\pi_d=0.2$\assm. With $z_{0.975}+z_{0.8}=2.80$\comp:
+
+\begin{center}\small
+\begin{tabular}{@{}lccc@{}}
+\toprule
+objects per family $n_k$ & 30 & 100 & 300\\
+\midrule
+$\Delta_{\min}$ at $\pi_d=0.2$ & 23 pts & 12.5 pts & 7.2 pts\\
+95\% half-width of one accuracy near 0.5 & 18 pts & 9.8 pts & 5.7 pts\\
+\bottomrule
+\end{tabular}
+\end{center}
+
+To resolve a 10-point per-family gain needs about 160 objects per family at $\pi_d=0.2$ (80 at $\pi_d=0.1$, 235 at $0.3$)\comp. Objects
+from the same scene are correlated; with $m$ objects per scene and intra-scene correlation $\rho$ the effective size is
+$n/(1+(m-1)\rho)$, which at $m=20$, $\rho=0.1$\assm\ is $n/2.9$. ``Hundreds to thousands of objects per family'', as the parked plan
+hopes for, is the right order; tens per family can only show large effects.
+\end{example}
+
+% =================================================================================================================
+\section{Open questions and the cheapest experiments}
+\label{sec:open}
+
+Ordered by cost; none needs a GPU instance beyond the laptop, and most need no training.
+
+\begin{enumerate}
+\item \textbf{Does RM's truncation discard what identifies families?} (\cref{rem:rm-blind}.) Implant library differences into bench
+tiles and measure the share of their whitened energy outside RM's top-30 residual subspace. CPU, an hour.
+\item \textbf{How much does Heavy leak, and where?} (\cref{sec:leak}.) Implant library spectra at controlled fill, size and position
+relative to the token grid; run Heavy with and without the implant; estimate $\Lm_p$ from $\bh^{\rm with}-\bh^{\rm without}$. Gives $l$ by
+size and position and the direction of leakage. Laptop GPU, a few hours.
+\item \textbf{Background error against cell size.} Measure $\sigma_{e,4}$ and $\sigma_{e,8}$ along implanted target directions on FT04
+and FT08 to test \cref{prop:wider}. Laptop GPU, an hour; it explains FT08's loss or refutes the explanation.
+\item \textbf{Heavy's output floor.} Rerun \repo{decoder-capacity/spectral_floor.py} on FTH3 epoch 5 ($D=64$). Minutes.
+\item \textbf{Residual-domain family matching.} In \verb|match_families|, replace the ring mean by $\bh$ and the scene covariance by
+$\B\Sigma_r$ (optionally projecting the floor and the learned-leakage directions out). Score on the planted set, Gudalur and oil under
+the LLD's protocol. CPU, about a day.
+\item \textbf{Gain sensitivity.} Apply smooth $\pm5\%$ and $\pm10\%$ gains to the planted set and measure the drop in right names.
+\Cref{prop:kant} predicts it is comparable to family separation. CPU, hours.
+\item \textbf{Lack-of-fit abstention and a candidate-conditional null.} Add test 3 of the open-set list and calibrate against the
+candidate population (\cref{rem:fa}); measure false names on false alarms on the four PRISMA scenes. CPU, hours.
+\item \textbf{OSM density.} The parked plan's first check: count OSM material-tagged objects inside held scene footprints by
+family, and compare with \cref{ex:mde}'s 100--300 per family. Laptop, a few hours. It decides whether the benchmark can be the judge.
+\item \textbf{Generator gap.} The classifier two-sample test of \cref{sec:namer}, synthetic implants against real candidates on held-out
+scenes. Laptop GPU, hours. Worth running before any namer is trained.
+\end{enumerate}
+
+What would change the plan: if (2) shows $l\gtrsim0.5$ for small objects, naming should use the ring background or a
+heavily masked pass, not the standard two-pass $\bh$; if (6) confirms a gain sensitivity at the level of family separation, the
+atmospheric-correction harmonisation is a prerequisite for naming, not a parallel track; if (8) finds tens rather than hundreds of
+objects per family, the real benchmark can only rank families coarsely and Gudalur and oil remain the gate.
+
+% =================================================================================================================
+\begin{thebibliography}{99}\small
+
+\bibitem{Chow1970} C.~K. Chow, ``On optimum recognition error and reject tradeoff,'' \emph{IEEE Trans.\ Information Theory},
+16(1):41--46, 1970.
+
+\bibitem{DiPietro2012} R.~S. DiPietro, D.~Manolakis, R.~Lockwood, T.~Cooley, J.~Jacobson, ``Hyperspectral matched filter with false-alarm
+mitigation,'' \emph{Optical Engineering}, 51(1):016202, 2012. \emph{Note:} cited for the finite-target matched filter family that the
+LLD tried; I am not certain of the article number.
+
+\bibitem{Efron1993} B.~Efron, R.~J. Tibshirani, \emph{An Introduction to the Bootstrap}, Chapman \& Hall, 1993.
+
+\bibitem{Green1988} A.~A. Green, M.~Berman, P.~Switzer, M.~D. Craig, ``A transformation for ordering multispectral data in terms of image
+quality with implications for noise removal,'' \emph{IEEE Trans.\ Geoscience and Remote Sensing}, 26(1):65--74, 1988.
+
+\bibitem{HeinzChang2001} D.~C. Heinz, C.-I Chang, ``Fully constrained least squares linear spectral mixture analysis method for material
+quantification in hyperspectral imagery,'' \emph{IEEE Trans.\ Geoscience and Remote Sensing}, 39(3):529--545, 2001.
+
+\bibitem{Kay1993} S.~M. Kay, \emph{Fundamentals of Statistical Signal Processing}, vol.~I: \emph{Estimation Theory} (1993) and vol.~II:
+\emph{Detection Theory} (1998), Prentice Hall.
+
+\bibitem{Kelly1986} E.~J. Kelly, ``An adaptive detection algorithm,'' \emph{IEEE Trans.\ Aerospace and Electronic Systems}, 22(1):115--127, 1986.
+
+\bibitem{KeshavaMustard2002} N.~Keshava, J.~F. Mustard, ``Spectral unmixing,'' \emph{IEEE Signal Processing Magazine}, 19(1):44--57, 2002.
+
+\bibitem{KrautScharf1999} S.~Kraut, L.~L. Scharf, ``The CFAR adaptive subspace detector is a scale-invariant GLRT,'' \emph{IEEE Trans.\ Signal
+Processing}, 47(9):2538--2541, 1999.
+
+\bibitem{KrautScharfMcWhorter2001} S.~Kraut, L.~L. Scharf, L.~T. McWhorter, ``Adaptive subspace detectors,'' \emph{IEEE Trans.\ Signal
+Processing}, 49(1):1--16, 2001.
+
+\bibitem{Kruse1993} F.~A. Kruse et al., ``The spectral image processing system (SIPS) - interactive visualization and analysis of imaging
+spectrometer data,'' \emph{Remote Sensing of Environment}, 44(2--3):145--163, 1993.
+
+\bibitem{ManolakisShaw2002} D.~Manolakis, G.~Shaw, ``Detection algorithms for hyperspectral imaging applications,'' \emph{IEEE Signal Processing
+Magazine}, 19(1):29--43, 2002.
+
+\bibitem{Manolakis2003} D.~Manolakis, D.~Marden, G.~A. Shaw, ``Hyperspectral image processing for automatic target detection applications,''
+\emph{Lincoln Laboratory Journal}, 14(1):79--116, 2003.
+
+\bibitem{Manolakis2016} D.~G. Manolakis, R.~B. Lockwood, T.~W. Cooley, \emph{Hyperspectral Imaging Remote Sensing: Physics, Sensors, and
+Algorithms}, Cambridge University Press, 2016.
+
+\bibitem{McNemar1947} Q.~McNemar, ``Note on the sampling error of the difference between correlated proportions or percentages,''
+\emph{Psychometrika}, 12(2):153--157, 1947.
+
+\bibitem{NascimentoBioucas2005} J.~M.~P. Nascimento, J.~M. Bioucas-Dias, ``Vertex component analysis: a fast algorithm to unmix hyperspectral
+data,'' \emph{IEEE Trans.\ Geoscience and Remote Sensing}, 43(4):898--910, 2005.
+
+\bibitem{ReedYu1990} I.~S. Reed, X.~Yu, ``Adaptive multiple-band CFAR detection of an optical pattern with unknown spectral distribution,''
+\emph{IEEE Trans.\ Acoustics, Speech, and Signal Processing}, 38(10):1760--1770, 1990.
+
+\bibitem{Robey1992} F.~C. Robey, D.~R. Fuhrmann, E.~J. Kelly, R.~Nitzberg, ``A CFAR adaptive matched filter detector,'' \emph{IEEE Trans.\
+Aerospace and Electronic Systems}, 28(1):208--216, 1992.
+
+\bibitem{Saerens2002} M.~Saerens, P.~Latinne, C.~Decaestecker, ``Adjusting the outputs of a classifier to new a priori probabilities: a simple
+procedure,'' \emph{Neural Computation}, 14(1):21--41, 2002.
+
+\bibitem{ScharfFriedlander1994} L.~L. Scharf, B.~Friedlander, ``Matched subspace detectors,'' \emph{IEEE Trans.\ Signal Processing},
+42(8):2146--2157, 1994.
+
+\bibitem{Scheirer2013} W.~J. Scheirer, A.~de Rezende Rocha, A.~Sapkota, T.~E. Boult, ``Toward open set recognition,'' \emph{IEEE Trans.\ Pattern
+Analysis and Machine Intelligence}, 35(7):1757--1772, 2013.
+
+\bibitem{TheilerFoy2006} J.~Theiler, B.~R. Foy, ``Effect of signal contamination in matched-filter detection of the signal on a cluttered
+background,'' \emph{IEEE Geoscience and Remote Sensing Letters}, 3(1):98--102, 2006.
+
+\bibitem{Vovk2005} V.~Vovk, A.~Gammerman, G.~Shafer, \emph{Algorithmic Learning in a Random World}, Springer, 2005. (The percentile calibration
+of \cref{sec:decision} is a conformal p-value.)
+
+\bibitem{ZiemannTheiler2017} A.~K. Ziemann, J.~Theiler, ``Simplex ACE: a constrained subspace detector,'' \emph{Optical Engineering}, 2017.
+\emph{Note:} cited by \repo{family_match.py} and the LLD as ``Ziemann \& Theiler 2017''; I have not verified the volume, issue or article
+number and give none.
+
+\end{thebibliography}
+
+\paragraph{Literature used, by section.} Detection on a residual follows the Gaussian adaptive-detection framework of
+\cite{Kelly1986,Robey1992,ManolakisShaw2002,Manolakis2003,Manolakis2016,Kay1993}; RX is \cite{ReedYu1990}; ACE and subspace detectors
+\cite{KrautScharf1999,KrautScharfMcWhorter2001,ScharfFriedlander1994}; Simplex ACE \cite{ZiemannTheiler2017}; SAM \cite{Kruse1993}; unmixing,
+FCLS and endmember extraction \cite{KeshavaMustard2002,HeinzChang2001,NascimentoBioucas2005}; MNF \cite{Green1988}; signal contamination of the
+background estimate, the covariance analogue of \cref{sec:leak}, \cite{TheilerFoy2006}; finite-target filters \cite{DiPietro2012}; rejection,
+open sets, label shift and conformal calibration \cite{Chow1970,Scheirer2013,Saerens2002,Vovk2005}; resampling and paired tests
+\cite{Efron1993,McNemar1947}.
+
+\end{document}

@@ -1,0 +1,26 @@
+\glossentry{Tensor}{A rectangular block of numbers with any number of axes; a hyperspectral patch is a three-axis tensor of shape C by H by W.}
+\glossentry{Reconstruction model}{A function from an input cube to an output cube of the same shape, trained so that its output, the reconstruction, is close to its input on ordinary data.}
+\glossentry{Reconstruction}{The model's output, written x hat; its estimate of the recorded cube.}
+\glossentry{Parameter}{A number inside a model that training adjusts, such as a weight or a bias.}
+\glossentry{Autoencoder}{A reconstruction model built from an encoder that summarises the input and a decoder that rebuilds the input from the summary.}
+\glossentry{Encoder}{The half of an autoencoder that turns the input into an internal summary.}
+\glossentry{Decoder}{The half of an autoencoder that rebuilds the input from the internal summary.}
+\glossentry{Bottleneck}{The internal summary between encoder and decoder; it constrains what the model can carry from input to output.}
+\glossentry{Residual}{The recorded value minus the reconstructed value, x minus x hat, one number per band per pixel.}
+\glossentry{Anomaly score}{A single number per pixel computed from the residual spectrum; large means the model could not predict the pixel.}
+\glossentry{Loss}{A single number measuring how bad a model's output is; training lowers it.}
+\glossentry{L1 loss}{The average absolute error; its best constant guess is the median, so it is robust to rare extreme values.}
+\glossentry{L2 loss}{The average squared error; its best constant guess is the mean, so rare extreme values pull predictions towards them.}
+\glossentry{Identity function}{The function that returns its input unchanged; the perfect but useless solution to unmasked reconstruction.}
+\glossentry{Self-weight}{How much a pixel contributes to its own reconstruction; a self-weight w shrinks every residual by the factor 1 minus w.}
+\glossentry{Context}{The visible surroundings from which a hidden value is predicted.}
+\glossentry{Halo}{Raised scores around an anomaly caused by the anomaly contaminating its neighbours' predictions.}
+\glossentry{Mask}{An array of zeros and ones selecting positions; in masked reconstruction 1 means visible and 0 means hidden.}
+\glossentry{Masked autoencoder (MAE)}{An autoencoder that hides part of its input and is graded only on the hidden part, so it cannot copy.}
+\glossentry{Token}{A small block of the image, 4 by 4 pixels at Indradhanu's first stage, summarised as one vector.}
+\glossentry{Mask ratio}{The fraction of tokens hidden in a training step; 0.65 in Indradhanu's v0.2.0 training configuration.}
+\glossentry{Two-pass inference}{Running the model twice with complementary masks and keeping each pixel's prediction from the pass in which it was hidden.}
+\glossentry{Validity mask}{A 0/1 mask marking physically valid measurements, as opposed to off-swath or cloud-masked pixels.}
+\glossentry{Input mask}{In the convolutional masked models, a 0/1 channel marking pixels that are valid and visible.}
+\glossentry{SegFormer}{A hierarchical vision transformer with four scales and a light fusion decoder; the architecture behind Chakshu and Indradhanu.}
+\glossentry{Buffer}{A tensor stored in a model's state but not trained, such as normalisation statistics or BatchNorm running averages; it travels inside the checkpoint.}

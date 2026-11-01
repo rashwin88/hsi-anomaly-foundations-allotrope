@@ -23,7 +23,7 @@ export type Destination =
 
 // --- Scenes (abstractions-spec § 5.2) ---------------------------------
 
-export type SensorType = "prisma" | "landsat9" | "enmap" | "aviris_ng" | "hotsat1";
+export type SensorType = "prisma" | "landsat9" | "enmap" | "aviris_ng" | "hotsat1" | "tanager" | "generic_hsi";
 
 export interface Scene {
   id: string;                          // wire format: scene_<uuid>
@@ -247,6 +247,7 @@ export interface ModelSummary {
   default_stride: number | null;
   default_batch_size: number | null;
   valid_patch_sizes: number[];
+  band_grid?: string;      // "native" (Indradhanu V2) | "common165"
 }
 
 export interface ModelCurrentCheckpoint {

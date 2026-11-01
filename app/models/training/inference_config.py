@@ -20,7 +20,7 @@ class PixelStatsOverride(BaseModel):
     Per-scene normalisation stats that replace a checkpoint's baked-in values.
 
     Needed for uncalibrated sensors. HotSat-1 ships raw DN (~5000 +/- 400); a
-    model whose PixelNormalize buffers were fitted on Celsius (~290 +/- 10)
+    model whose PixelNormalize buffers were fitted on Celsius (Chakshu: 24.6 +/- 13.6)
     would see wildly out-of-distribution input and reconstruct noise, drowning
     any real anomaly in the residual.
 

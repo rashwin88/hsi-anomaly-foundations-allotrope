@@ -1,0 +1,100 @@
+\answersfor{ch:sortbug}
+
+\begin{solution}{ex:sortbug:1}
+\emph{Correct value at 650\,nm.} The neighbours are $(600, 0.10)$ and $(700, 0.20)$.
+\begin{align*}
+t &= \frac{650 - 600}{700 - 600} = \frac{50}{100} = 0.5\\
+y &= 0.10 + 0.5 \times (0.20 - 0.10)\\
+  &= 0.10 + 0.05\\
+  &= 0.15
+\end{align*}
+\emph{Listed 800, 700, 600.} The last listed sample is 600\,nm with value 0.10; the first is 800\,nm with value
+0.30. Check 1: is $650 > 600$? Yes, so the last listed value is returned: $0.10$.
+
+\emph{At 590\,nm.} Check 1: is $590 > 600$? No. Check 2: is $590 < 800$? Yes, so the first listed value is
+returned: $0.30$. The correct answer is the held end value below the smallest sample, $0.10$. The descending list
+gives the value at the \emph{other} end of the spectrum.
+\end{solution}
+
+\begin{solution}{ex:sortbug:2}
+\emph{Correct row.} 620\,nm lies between 600 and 700\,nm:
+\[
+t = \frac{620 - 600}{700 - 600} = \frac{20}{100} = 0.2 .
+\]
+By $y = (1-t)\,y_{600} + t\,y_{700}$, the 700\,nm band gets weight $t = 0.2$ and the 600\,nm band $1 - t = 0.8$;
+500\,nm gets 0. Row (listed order 700, 600, 500): $(0.2, 0.8, 0.0)$. Applied to $(0.40, 0.30, 0.10)$:
+\begin{align*}
+& 0.2 \times 0.40 + 0.8 \times 0.30 + 0 \times 0.10\\
+&= 0.08 + 0.24 + 0\\
+&= 0.32
+\end{align*}
+\emph{Unsorted row.} $620 > 500$, the last listed wavelength, so every column returns the last entry of its unit
+vector: $(0, 0, 1)$. Applied to the pixel: $0 \times 0.40 + 0 \times 0.30 + 1 \times 0.10 = 0.10$.
+\end{solution}
+
+\begin{solution}{ex:sortbug:3}
+\emph{Sort.} $\mathtt{wl} = (600, 800, 700)$. The smallest, 600, is at position 0; next, 700, at position 2; the
+largest, 800, at position 1. So $\mathtt{argsort} = (0, 2, 1)$ and the sorted list is $(600, 700, 800)$.
+
+\emph{Columns on the sorted list.} Grid 650 lies halfway between 600 and 700 ($t = 0.5$); grid 750 halfway between
+700 and 800 ($t = 0.5$).
+\begin{center}
+\begin{tabular}{lccc}
+\toprule
+ & sorted 0 (600) & sorted 1 (700) & sorted 2 (800) \\
+\midrule
+650\,nm & 0.5 & 0.5 & 0 \\
+750\,nm & 0 & 0.5 & 0.5 \\
+\bottomrule
+\end{tabular}
+\end{center}
+\emph{Write back.} Sorted column $i$ goes to original column $\mathtt{order}[i]$: sorted 0 $\to$ original 0
+(600), sorted 1 $\to$ original 2 (700), sorted 2 $\to$ original 1 (800). In the listed order (600, 800, 700):
+\[
+\mat{M} = \begin{pmatrix} 0.5 & 0 & 0.5 \\ 0 & 0.5 & 0.5 \end{pmatrix}.
+\]
+\emph{Apply to $(1, 3, 2)$.}
+\begin{align*}
+\text{row 1:}\quad & 0.5 \times 1 + 0 \times 3 + 0.5 \times 2 = 0.5 + 0 + 1.0 = 1.5\\
+\text{row 2:}\quad & 0 \times 1 + 0.5 \times 3 + 0.5 \times 2 = 0 + 1.5 + 1.0 = 2.5
+\end{align*}
+Check against the function itself: the pairs are $600 \to 1$, $700 \to 2$, $800 \to 3$, a straight line, so 650
+gives 1.5 and 750 gives 2.5. The sort recovered the right answer from an unsorted list.
+\end{solution}
+
+\begin{solution}{ex:sortbug:4}
+\emph{bench-v2.1.} With $p = 0.34$, $n = 2{,}817$:
+\begin{align*}
+p(1-p) &= 0.34 \times 0.66 = 0.2244\\
+0.2244 / 2{,}817 &= 0.0000797\\
+\sqrt{0.0000797} &= 0.0089 \quad\text{(0.89 points)}\\
+35.1 - 33.1 &= 2.0 \text{ points}\\
+2.0 / 0.89 &= 2.2 \text{ standard errors.}
+\end{align*}
+\emph{Real bench.} With $p = 0.30$, $n = 909$:
+\begin{align*}
+p(1-p) &= 0.30 \times 0.70 = 0.21\\
+0.21 / 909 &= 0.000231\\
+\sqrt{0.000231} &= 0.0152 \quad\text{(1.52 points)}\\
+44.2 - 15.8 &= 28.4 \text{ points}\\
+28.4 / 1.52 &= 18.7 \text{ standard errors.}
+\end{align*}
+The bug's effect is about eight times larger, in standard errors, than the largest model-to-model step on
+bench-v2.1. A gap of nearly 19 standard errors between two readings of one model on the same scenes cannot be
+noise; it can only be a difference in the data path.
+\end{solution}
+
+\begin{solution}{ex:sortbug:5}
+The tests fed ascending wavelength lists, such as $[500, 600, 700]$. On an ascending list the precondition of
+\texttt{np.interp} holds, so the sorted and unsorted code compute the same matrix and every test passes. The bug
+only appears on real PRISMA files, which list their bands descending.
+
+An assertion that makes the old code fail loudly, placed before the \texttt{np.interp} calls:
+\begin{lstlisting}
+assert np.all(np.diff(wl) > 0), "np.interp needs ascending wavelengths; sort wl first"
+\end{lstlisting}
+\texttt{np.diff(wl)} is the list of differences between neighbouring entries; all of them are positive exactly when
+the list is strictly increasing. On $(700, 600, 500)$ the differences are $(-100, -100)$ and the assertion fails.
+(The repository chose to sort instead of asserting, which also makes the function correct for any order;
+\texttt{test\_descending\_band\_lists} pins that behaviour.)
+\end{solution}

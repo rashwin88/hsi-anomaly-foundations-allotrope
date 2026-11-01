@@ -1,0 +1,12 @@
+\glossentry{Patch embedding}{The operation that cuts a feature map into blocks and computes one vector, a token, per block; in this model a strided convolution followed by LayerNorm.}
+\glossentry{Embedding}{A vector of numbers that represents something that is not itself a vector, such as a word or a block of pixels.}
+\glossentry{OverlapPatchEmbedding}{The repository's patch-embedding module: Conv2d, flatten, transpose, LayerNorm; returns the tokens and the grid height and width.}
+\glossentry{Token grid}{The H' by W' arrangement of tokens produced by a patch embedding; 32 by 32 at stage 1 for a 128 by 128 patch.}
+\glossentry{Non-overlapping windows}{Convolution windows with kernel equal to stride and no padding, so each pixel feeds exactly one token; Indradhanu's stage 1.}
+\glossentry{Overlapping windows}{Convolution windows with kernel larger than stride, so neighbouring tokens share pixels; Indradhanu's stages 2 to 4.}
+\glossentry{Information leakage}{A hidden token's pixels reaching the encoder through a visible neighbour whose window overlaps them.}
+\glossentry{Layer normalisation (LayerNorm)}{Standardising each token over its own features, then applying a learned scale and shift per feature; independent of the batch.}
+\glossentry{Encoder stage}{One level of the four-level SegFormer encoder: a patch embedding, two transformer blocks and a LayerNorm.}
+\glossentry{Embedding dimension}{The number of features per token at a stage: 32, 64, 160 and 256 for stages 1 to 4.}
+\glossentry{Vision Transformer (ViT)}{A transformer for images that cuts the image into non-overlapping patches and embeds each by a linear projection.}
+\glossentry{Coverage count}{The number of convolution windows that contain a given pixel; k/s on average along one axis.}

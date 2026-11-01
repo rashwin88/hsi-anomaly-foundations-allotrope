@@ -1,0 +1,554 @@
+\chapter{The spectral compressor}\label{ch:compressor}
+
+\begin{onething}
+Before the transformer runs, a $1\times1$ convolution with BatchNorm replaces each pixel's 165
+normalised bands with 32 learned mixtures, and afterwards a second $1\times1$ convolution, deliberately
+without any normalisation, expands 32 back to 165; the pair is a linear bottleneck, so every
+reconstructed spectrum lies in a 32-dimensional space.
+\end{onething}
+
+The spectral compressor is the only structural difference between Indradhanu and its thermal sibling
+Chakshu. It is a short module, 59 lines in
+\file{app/foundation_models/components/spectral_compressor.py}, most of them explanation. It is also
+the module whose mathematics sets a limit on everything downstream, and the reason Part~IV of this book
+(\cref{ch:ceiling}) exists. In this chapter you will compute what it does to one pixel by hand, learn
+BatchNorm properly, count its parameters, and prove that the pair of convolutions can never reproduce
+more than 32 independent spectral directions.
+
+%======================================================================
+\section{The problem: 165 channels into a 32-wide transformer}\label{sec:compressor:problem}
+
+Indradhanu's transformer is a small SegFormer configuration (``B0''), whose first stage works with
+token vectors of 32 numbers (\cref{ch:patchembed}). Hand it the 165 normalised bands directly and
+three things go wrong.
+
+\paragraph{The first layer becomes bloated.} Stage~1 begins with a $4\times4$ convolution from the input
+channels to 32 (\cref{ch:shapes}). Its weights number $C_{\text{in}}\times32\times4\times4$:
+\begin{align*}
+\text{with } C_{\text{in}} = 165:&\quad 165\times32\times16 = 5{,}280\times16 = 84{,}480,\\
+\text{with } C_{\text{in}} = 32:&\quad 32\times32\times16 = 1{,}024\times16 = 16{,}384.
+\end{align*}
+The ratio is $84{,}480/16{,}384 \approx 5.16$: five times the weights, on the layer that runs at the
+finest resolution.
+
+\paragraph{Most of the 165 numbers are near-duplicates.} Neighbouring bands on the common grid are
+10~nm apart (\cref{ch:sensors}). Over 10~nm almost nothing changes in a natural spectrum, so bands~62
+and~63 carry nearly the same value in nearly every pixel. You pay full price for information you
+already have.
+
+\paragraph{Every intermediate tensor is five times bigger.} A \shape{(B, 165, 128, 128)} activation holds
+$165/32\approx5.2$ times as many numbers as \shape{(B, 32, 128, 128)}. Memory limits the batch size, and
+the batch size limits training speed.
+
+The obvious fix, ``pick 32 of the 165 bands'', throws away whatever the unpicked bands knew. The fix
+the model uses is to \emph{mix}: build each of the 32 channels as a weighted blend of all 165 bands, with
+the blend learned.
+
+\begin{analogy}
+A sound engineer mixes a 48-track recording down to a stereo pair. They do not keep two tracks and
+throw away 46; each output channel is a blend of every track, set so that what matters survives. A
+listener's speakers later turn the stereo pair back into a room full of sound. The compressor is the
+mixdown, the decompressor is the playback, and here the mixing-desk settings are learned. The analogy
+also tells you what is lost: two instruments panned identically can never be separated again from the
+stereo pair. \Cref{sec:compressor:rank} makes that precise.
+\end{analogy}
+
+\coursefig[\linewidth]{iw-10-compressor}{The spectral bottleneck around the SegFormer. A $1\times1$
+convolution with BatchNorm mixes each pixel's 165 normalised bands into 32 channels (5{,}376
+parameters); the spatial model runs on those 32; a second $1\times1$ convolution, without
+normalisation, expands them back to 165 (5{,}445 parameters). (Course figure IW~10.1.)}{fig:compressor:overview}
+
+%======================================================================
+\section{The compressor is a matrix applied at every pixel}\label{sec:compressor:matrix}
+
+The code is short enough to quote whole:
+\begin{lstlisting}
+class SpectralCompressor(nn.Module):
+    def __init__(self, in_channels, compressed_channels):
+        super().__init__()
+        self.compress = nn.Conv2d(in_channels, compressed_channels, kernel_size=1)
+        self.norm = nn.BatchNorm2d(compressed_channels)
+
+    def forward(self, x):          # x: (B, 165, H, W)
+        x = self.compress(x)       # x: (B, 32, H, W)
+        x = self.norm(x)           # x: (B, 32, H, W)
+        return x
+
+class SpectralDecompressor(nn.Module):
+    def __init__(self, compressed_channels, out_channels):
+        super().__init__()
+        self.decompress = nn.Conv2d(compressed_channels, out_channels, kernel_size=1)
+
+    def forward(self, x):          # x: (B, 32, H, W)
+        return self.decompress(x)  # -> (B, 165, H, W)
+\end{lstlisting}
+
+\Cref{ch:shapes} showed that a $1\times1$ convolution is a linear layer applied independently at every
+pixel (\cref{eq:shapes:onebyone}). So the convolution part of the compressor is, for every pixel
+$(i,j)$,
+\begin{equation}\label{eq:compressor:conv}
+\vect{z}_{:,i,j} = \mat{W}\,\vect{x}_{:,i,j} + \vect{b},\qquad
+\mat{W}\in\R^{32\times165},\ \vect{b}\in\R^{32},
+\end{equation}
+where $\vect{x}_{:,i,j}$ is the pixel's 165 normalised band values (\cref{ch:bandpipeline}). Row $d$ of
+$\mat{W}$ is the recipe for compressed channel $d$: how much of each band goes into it. The same
+$\mat{W}$ is used at every pixel of every patch; the compressor never looks at a neighbour.
+
+\begin{worked}[label={we:compressor:mix}]{Four bands into two}
+Pretend there are 4 bands and 2 compressed channels. One pixel, already normalised:
+\[
+\vect{x} = (1.2,\ 1.0,\ -0.4,\ -0.6)\T .
+\]
+Suppose training arrived at these recipes, with zero biases:
+\[
+\mat{W} = \begin{pmatrix}0.5 & 0.5 & 0.0 & 0.0\\ 0.0 & 0.0 & 0.5 & 0.5\end{pmatrix}.
+\]
+Channel~0 uses row~0:
+\begin{align*}
+z_0 &= 0.5\times1.2 + 0.5\times1.0 + 0.0\times(-0.4) + 0.0\times(-0.6)\\
+&= 0.60 + 0.50 + 0 + 0 = 1.10.
+\end{align*}
+Channel~1 uses row~1:
+\begin{align*}
+z_1 &= 0.0\times1.2 + 0.0\times1.0 + 0.5\times(-0.4) + 0.5\times(-0.6)\\
+&= 0 + 0 - 0.20 - 0.30 = -0.50.
+\end{align*}
+So $\vect{z} = (1.10,\ -0.50)\T$. Four numbers became two, and the two still describe the shape of the
+spectrum: bright at the short-wavelength end, dark at the long. The real compressor does the same with
+165 inputs and 32 outputs, with recipes found by gradient descent (\cref{ch:trainloop}).
+\end{worked}
+
+\Cref{fig:shapes:conv1x1} in \cref{ch:shapes} draws this example.
+
+%======================================================================
+\section{BatchNorm}\label{sec:compressor:bn}
+
+The compressor's second line is \code{nn.BatchNorm2d(32)}. Batch normalisation \citep{ioffe2015batch}
+appears throughout the convolutional parts of this repository, and it behaves differently in training
+and in use, which has caused real trouble in this project (\cref{ch:finetune}). It deserves a careful
+treatment.
+
+\subsection{What it computes in training}
+
+\begin{definition}[Batch normalisation, training mode]
+Let $z_{b,d,i,j}$ be channel $d$ of the input to \code{BatchNorm2d}, for patch $b$ of the batch at pixel
+$(i,j)$. For each channel $d$ separately, \emph{batch normalisation}\index{batch normalisation}
+\begin{enumerate}
+\item computes the mean and variance of that channel over the whole batch and every pixel, that is over
+  $M = B\cdot H\cdot W$ values:
+  \begin{equation}\label{eq:compressor:bnstats}
+  \mu_d = \frac{1}{M}\sum_{b,i,j} z_{b,d,i,j},\qquad
+  \sigma_d^2 = \frac{1}{M}\sum_{b,i,j} \bigl(z_{b,d,i,j} - \mu_d\bigr)^2;
+  \end{equation}
+\item standardises every value of the channel with them, adding a small $\varepsilon$ (here $10^{-5}$)
+  so that a constant channel does not divide by zero:
+  \begin{equation}\label{eq:compressor:bnstd}
+  \hat{z}_{b,d,i,j} = \frac{z_{b,d,i,j} - \mu_d}{\sqrt{\sigma_d^2 + \varepsilon}};
+  \end{equation}
+\item rescales and shifts with two learned parameters per channel, the \emph{scale}
+  $\gamma_d$\index{batch normalisation!scale and shift} and the \emph{shift} $\beta_d$:
+  \begin{equation}\label{eq:compressor:bnaffine}
+  u_{b,d,i,j} = \gamma_d\,\hat{z}_{b,d,i,j} + \beta_d .
+  \end{equation}
+\end{enumerate}
+\end{definition}
+
+After step~2 each channel has mean $0$ and variance (almost exactly) $1$ over the batch. Step~3 lets
+training choose a different mean ($\beta_d$) and spread ($\gamma_d$) if that suits the next layer
+better; they start at $\gamma_d = 1$ and $\beta_d = 0$. The variance in \cref{eq:compressor:bnstats}
+divides by $M$, not $M-1$: it is the \emph{biased} variance.
+
+\begin{worked}[label={we:compressor:bn}]{BatchNorm on four values}
+One channel; the batch and pixels together give four values $z = 1,\ 2,\ 3,\ 6$. Take $\gamma = 1$,
+$\beta = 0$. Work on paper.
+
+Mean:
+\begin{align*}
+1 + 2 + 3 + 6 &= 12,\\
+\mu &= 12/4 = 3.
+\end{align*}
+Deviations from the mean: $1-3 = -2$, $2-3 = -1$, $3-3 = 0$, $6-3 = 3$.
+Squares: $4,\ 1,\ 0,\ 9$. Their sum:
+\[
+4 + 1 + 0 + 9 = 14.
+\]
+Biased variance:
+\[
+\sigma^2 = 14/4 = 3.5.
+\]
+Denominator:
+\[
+\sqrt{3.5 + 0.00001} = \sqrt{3.50001} = 1.87083.
+\]
+Standardised values, one per deviation:
+\begin{align*}
+-2 / 1.87083 &= -1.0690,\\
+-1 / 1.87083 &= -0.5345,\\
+0 / 1.87083 &= 0,\\
+3 / 1.87083 &= 1.6036.
+\end{align*}
+With $\gamma=1$, $\beta=0$ these are the outputs. With $\gamma = 2$, $\beta = 0.5$ instead, each is
+doubled and shifted: $2\times(-1.0690) + 0.5 = -1.6381$, $2\times(-0.5345)+0.5 = -0.5690$,
+$2\times0+0.5 = 0.5$, $2\times1.6036 + 0.5 = 3.7071$. PyTorch gives the same eight numbers\tagC.
+\end{worked}
+
+\subsection{Running statistics and evaluation mode}
+
+At inference there is often one patch, or a batch whose make-up is accidental; normalising each scene by
+its own batch statistics would make a pixel's output depend on which other patches happened to be
+processed with it. So during training BatchNorm also keeps \emph{running statistics}\index{running
+statistics}, exponential moving averages of the batch statistics, stored as buffers (not parameters;
+they are not trained by gradient descent):
+\begin{align}
+\text{running\_mean}_d &\leftarrow (1-m)\,\text{running\_mean}_d + m\,\mu_d,\label{eq:compressor:rm}\\
+\text{running\_var}_d &\leftarrow (1-m)\,\text{running\_var}_d + m\,s_d^2,\label{eq:compressor:rv}
+\end{align}
+with momentum $m = 0.1$ (PyTorch's default, used here) and starting values $0$ and $1$. Note a
+PyTorch detail: the running variance is fed the \emph{unbiased} variance
+$s_d^2 = \frac{1}{M-1}\sum(z-\mu_d)^2$, while the normalisation in training uses the biased one.
+
+In \emph{evaluation mode} (\code{model.eval()}), BatchNorm stops computing batch statistics and uses the
+running ones:
+\begin{equation}\label{eq:compressor:bneval}
+u_{b,d,i,j} = \gamma_d\,\frac{z_{b,d,i,j} - \text{running\_mean}_d}{\sqrt{\text{running\_var}_d + \varepsilon}} + \beta_d .
+\end{equation}
+Each output now depends only on its own input. Training mode and evaluation mode give the same answer
+only when the running statistics match the statistics of the data you feed.
+
+\begin{worked}[label={we:compressor:bneval}]{One training step of running statistics, then evaluation}
+Continue \cref{we:compressor:bn} with a fresh layer (running mean $0$, running variance $1$). The batch
+mean was $\mu = 3$. The unbiased variance divides the same sum of squares by $M-1 = 3$:
+\[
+s^2 = 14/3 = 4.66667.
+\]
+Update with $m = 0.1$:
+\begin{align*}
+\text{running\_mean} &= 0.9\times0 + 0.1\times3 = 0 + 0.3 = 0.3,\\
+\text{running\_var} &= 0.9\times1 + 0.1\times4.66667 = 0.9 + 0.46667 = 1.36667.
+\end{align*}
+Now switch to evaluation mode and feed the same four values ($\gamma=1$, $\beta=0$). The denominator is
+$\sqrt{1.36667 + 0.00001} = 1.16905$, and
+\begin{align*}
+(1 - 0.3)/1.16905 &= 0.7/1.16905 = 0.5988,\\
+(2 - 0.3)/1.16905 &= 1.7/1.16905 = 1.4542,\\
+(3 - 0.3)/1.16905 &= 2.7/1.16905 = 2.3096,\\
+(6 - 0.3)/1.16905 &= 5.7/1.16905 = 4.8758.
+\end{align*}
+In training mode the value $6$ became $1.6036$; in evaluation mode, after one step, it becomes $4.8758$.
+After thousands of steps on similar data the running statistics converge and the two modes agree. When
+the data in use differ from the training data, they do not. PyTorch reproduces all of these
+numbers\tagC.
+\end{worked}
+
+\subsection{The buffers travel inside the checkpoint}
+
+\code{BatchNorm2d(32)} has $2\times32 = 64$ trainable parameters ($\gamma$ and $\beta$) and three
+buffers: \code{running_mean} (32 values), \code{running_var} (32) and \code{num_batches_tracked} (one
+counter)\tagC. That is $65$ values that are saved in the checkpoint but are not parameters. Together
+with the $660$ values of normalisation statistics they account for the gap between Indradhanu's
+5{,}506{,}629 parameters and the 5{,}507{,}354 values in its state dictionary (\cref{ch:recon}).
+
+\subsection{The convolution's bias is redundant in front of BatchNorm}
+
+Here is a small fact worth deriving, because it surprises people. Add a constant $b_d$ to every value of
+channel $d$ before BatchNorm. In training mode,
+\begin{align*}
+\text{mean of } (z + b_d) &= \mu_d + b_d
+  && \text{a constant shifts the mean by itself}\\
+(z + b_d) - (\mu_d + b_d) &= z - \mu_d,
+  && \text{the shift cancels in the deviation}
+\end{align*}
+and the variance, built from deviations, is unchanged too. So the standardised value
+\cref{eq:compressor:bnstd} does not depend on $b_d$ at all. The 32 biases of the compressor's
+convolution have no effect on its training-mode output, receive zero gradient, and stay at their initial
+values; the running mean absorbs them, so they cancel in evaluation mode as well. Adding 10 to every bias
+leaves the training-mode output unchanged, as the compute script confirms\tagC. They are
+harmless, and they are still counted as parameters.
+
+\subsection{Why the compressor has a BatchNorm}
+
+The compressor's job is to hand the encoder a stable, well-scaled input. Whatever mixtures $\mat{W}$
+learns, their scale can drift during training; BatchNorm resets every compressed channel to a controlled
+mean and spread, so the first patch embedding always sees inputs of a predictable size. The module's own
+docstring: ``The compressor's job is to hand the encoder a stable distribution''.
+
+%======================================================================
+\section{The decompressor, and why it must have no normalisation}\label{sec:compressor:decomp}
+
+The decompressor maps the decoder's 32-channel output back to 165 bands at every pixel:
+\begin{equation}\label{eq:compressor:decomp}
+\hat{\vect{x}}_{:,i,j} = \mat{V}\,\hat{\vect{z}}_{:,i,j} + \vect{c},\qquad
+\mat{V}\in\R^{165\times32},\ \vect{c}\in\R^{165}.
+\end{equation}
+It is \emph{not} the inverse of the compressor. $\mat{W}$ is $32\times165$ and has no inverse; $\mat{V}$
+is a separate set of learned weights, trained together with everything else so that the whole chain
+reconstructs well. Nothing ties $\mat{V}$ to $\mat{W}$.
+
+It has no BatchNorm and no activation function, and the docstring warns against ``tidying'' that:
+``the decompressor has NO norm and NO activation \ldots the decompressor's output feeds denormalisation
+and must stay free to represent any value''. Here is what each would break.
+
+\paragraph{A BatchNorm would erase what the batch has in common.} Training-mode BatchNorm forces every
+output band to mean $\beta_d$ over the batch. But the batch's true mean in a band is information: a batch
+of patches over open water has normalised near-infrared values well below zero in every pixel. Take two
+water pixels whose true normalised value in some band is $-1.5$, and suppose the decoder predicts
+exactly that, $-1.5$ and $-1.5$. BatchNorm computes mean $-1.5$, deviations $0$ and $0$, and outputs
+$\beta$ for both. The reconstruction now says ``average brightness'' where the truth was ``dark water'',
+and the residual is large at every pixel of the batch, ordinary or not. The answer would also depend on
+which other patches shared the batch.
+
+\paragraph{An activation would clip.} A ReLU sets every negative value to zero. In normalised space a
+negative value means ``below this band's average''; after a ReLU no band could ever be reconstructed
+darker than its average.
+
+The same reasoning applies to the final layer of the old convolutional decoder, whose docstring
+(\file{app/foundation_models/components/spatial_decoder.py}) explains that BatchNorm there ``would force
+the output to zero-mean unit-variance per channel - but real thermal data is NOT zero-mean or
+unit-variance''.
+
+\begin{keypoint}
+The asymmetry is the design: the compressor normalises because the encoder needs a stable input; the
+decompressor does not, because its output must be free to take any value.
+\end{keypoint}
+
+%======================================================================
+\section{A linear bottleneck: everything passes through 32 directions}\label{sec:compressor:rank}
+
+Now the mathematics that matters most. Whatever happens between them, the compressor and decompressor
+impose a hard limit on what the model can output.
+
+\subsection{Rank, briefly}
+
+The \emph{rank}\index{rank (of a matrix)} of a matrix is the number of linearly independent columns it
+has, equivalently the dimension of the set of all vectors $\mat{A}\vect{u}$ it can produce
+(\cref{ch:linalg}). A $165\times32$ matrix has only 32 columns, so its rank is at most 32.
+
+\subsection{The output lies in a 32-dimensional space}
+
+Look again at \cref{eq:compressor:decomp}. Whatever the encoder and decoder do, and they are nonlinear
+and spatial, their output at pixel $(i,j)$ is some vector $\hat{\vect{z}}_{:,i,j}\in\R^{32}$. Write its
+entries $\hat{z}_1,\dots,\hat{z}_{32}$ and the columns of $\mat{V}$ as $\vect{v}_1,\dots,\vect{v}_{32}$.
+Then
+\begin{align}
+\hat{\vect{x}}_{:,i,j} &= \mat{V}\hat{\vect{z}}_{:,i,j} + \vect{c}
+  && \text{\cref{eq:compressor:decomp}}\notag\\
+&= \hat{z}_1\vect{v}_1 + \hat{z}_2\vect{v}_2 + \dots + \hat{z}_{32}\vect{v}_{32} + \vect{c}.
+  && \text{a matrix times a vector is a mix of its columns}\label{eq:compressor:span}
+\end{align}
+Every reconstructed spectrum, at every pixel of every scene, is the fixed vector $\vect{c}$ plus a
+mixture of the same 32 fixed spectra $\vect{v}_1,\dots,\vect{v}_{32}$. In the language of
+\cref{ch:linalg}: it lies in a 32-dimensional affine subspace of $\R^{165}$. Any part of a real spectrum
+that points outside that subspace can never be reconstructed, however good the transformer is.
+
+There is a matching limit on the way in. $\mat{W}$ has 32 rows, so at most 32 independent combinations
+of the bands reach the transformer; any change to a pixel's spectrum along a direction $\vect{n}$ with
+$\mat{W}\vect{n} = \vect{0}$ is invisible to everything after the compressor.
+
+\subsection{The chain without the transformer}
+
+If the transformer were removed and BatchNorm ignored, the chain would be
+\begin{align*}
+\hat{\vect{x}} &= \mat{V}(\mat{W}\vect{x} + \vect{b}) + \vect{c}
+  && \text{compress, then decompress}\\
+&= \mat{V}\mat{W}\,\vect{x} + (\mat{V}\vect{b} + \vect{c}).
+  && \text{multiply out the bracket}
+\end{align*}
+The $165\times165$ matrix $\mat{V}\mat{W}$ has rank at most 32. The best such matrix for reconstructing
+data, in the least-squares sense, projects onto the data's 32 leading principal components
+(\cref{ch:linalg}); the trained compressor is not constrained to find that, because it is trained jointly
+with a network that also uses spatial context.
+
+\begin{worked}[label={we:compressor:lost}]{A 3-to-2-to-3 bottleneck and what it loses}
+Three bands, two compressed channels, zero biases:
+\[
+\mat{W} = \begin{pmatrix}1 & 0 & 0\\ 0 & 0.5 & 0.5\end{pmatrix},\qquad
+\mat{V} = \begin{pmatrix}1 & 0\\ 0 & 1\\ 0 & 1\end{pmatrix}.
+\]
+Pixel $\vect{x} = (0.2,\ 0.4,\ 0.6)\T$. Compress:
+\begin{align*}
+z_1 &= 1\times0.2 + 0\times0.4 + 0\times0.6 = 0.2,\\
+z_2 &= 0\times0.2 + 0.5\times0.4 + 0.5\times0.6 = 0 + 0.2 + 0.3 = 0.5.
+\end{align*}
+Decompress, row by row of $\mat{V}$:
+\begin{align*}
+\hat{x}_1 &= 1\times0.2 + 0\times0.5 = 0.2,\\
+\hat{x}_2 &= 0\times0.2 + 1\times0.5 = 0.5,\\
+\hat{x}_3 &= 0\times0.2 + 1\times0.5 = 0.5.
+\end{align*}
+Residual:
+\[
+\vect{x} - \hat{\vect{x}} = (0.2-0.2,\ 0.4-0.5,\ 0.6-0.5) = (0,\ -0.1,\ 0.1).
+\]
+The product is
+\[
+\mat{V}\mat{W} = \begin{pmatrix}1&0&0\\0&0.5&0.5\\0&0.5&0.5\end{pmatrix},
+\]
+whose last two rows are equal, so its rank is $2$\tagC. What was lost? The difference between bands~2
+and~3. Check that the direction $\vect{n} = (0,\ 1,\ -1)\T$ is invisible to the compressor:
+\begin{align*}
+\mat{W}\vect{n} &= \bigl(1\times0 + 0\times1 + 0\times(-1),\ \ 0\times0 + 0.5\times1 + 0.5\times(-1)\bigr)\T\\
+&= (0,\ 0)\T .
+\end{align*}
+The pixel's residual $(0, -0.1, 0.1)$ is exactly $-0.1\,\vect{n}$. Every pixel whose bands~2 and~3
+differ leaves that difference in its residual, ordinary or anomalous. If an anomaly's signature were a
+band-2-versus-band-3 contrast, this model would see it in the residual, but so would it see the
+ordinary variation along $\vect{n}$, at every pixel.
+\end{worked}
+
+\Cref{we:compressor:lost} is the whole story in miniature. The bottleneck is lossy; the bet is that
+what it loses is mostly redundancy and noise. Training decides which 32 directions to keep, and keeps
+the ones that matter for reconstructing ordinary terrain. A narrow absorption feature that ordinary
+terrain rarely shows may lie largely outside them. \Cref{ch:ceiling} measures that cost and is the
+reason the project later built a cross-attention stem in place of the compressor.
+
+%======================================================================
+\section{Counting the parameters}\label{sec:compressor:count}
+
+Use $\text{in}\times\text{out}+\text{out}$ for a $1\times1$ convolution (\cref{ch:shapes}) and
+$2\times\text{channels}$ for a BatchNorm.
+
+\begin{worked}[label={we:compressor:count}]{The spectral bottleneck's 10,821 parameters}
+Compressor convolution, $165\to32$:
+\begin{align*}
+165\times32 &= 5{,}280,\\
+5{,}280 + 32 &= 5{,}312.
+\end{align*}
+Compressor BatchNorm:
+\[
+2\times32 = 64.
+\]
+Compressor total:
+\[
+5{,}312 + 64 = 5{,}376.
+\]
+Decompressor convolution, $32\to165$:
+\begin{align*}
+32\times165 &= 5{,}280,\\
+5{,}280 + 165 &= 5{,}445.
+\end{align*}
+Both:
+\[
+5{,}376 + 5{,}445 = 10{,}821.
+\]
+The \code{torchinfo} table in \file{research/model_break_down/05_hyperspectral_segformer_mae.md} lists
+\code{Conv2d: 2-1} with 5{,}312, \code{BatchNorm2d: 2-2} with 64 and \code{Conv2d: 2-19} with
+5{,}445\tagM{research/model_break_down/05_hyperspectral_segformer_mae.md}, and summing
+\code{parameters()} of the real modules gives 5{,}376 and 5{,}445\tagC. Out of 5{,}506{,}629
+parameters, the bottleneck is
+\[
+10{,}821 / 5{,}506{,}629 = 0.00197,
+\]
+under $0.2\%$ of the model.
+\end{worked}
+
+It is almost free, and it saves the $84{,}480 - 16{,}384 = 68{,}096$ weights of
+\cref{sec:compressor:problem} in stage~1 alone, plus a factor of five in memory at full resolution.
+
+%======================================================================
+\section{It is MNF-shaped, but it is not MNF}\label{sec:compressor:mnf}
+
+\Cref{ch:localrx} met the Minimum Noise Fraction transform, MNF \citep{green1988transformation}: a
+classical linear projection from many bands to few, found by an eigen-decomposition that ranks
+directions by signal-to-noise ratio. Structurally it is the same kind of object as $\mat{W}$: a
+matrix of shape (few, many). The differences are in how the matrix is found and what it serves.
+
+\begin{center}
+\begin{tabular}{lll}
+\toprule
+& MNF & \texttt{SpectralCompressor}\\
+\midrule
+matrix found by & eigen-decomposition & gradient descent\\
+optimises & signal-to-noise ratio & reconstruction loss\\
+runs & offline, per scene & learned once, all scenes\\
+learned with the network & no & yes\\
+\bottomrule
+\end{tabular}
+\end{center}
+
+The last row is the real advantage: MNF optimises a proxy, while the compressor optimises the thing the
+model is graded on, and adapts while the rest of the network adapts to it. The module docstring calls
+it ``a trainable analogue of MNF''.
+
+%======================================================================
+\section{Why $D$ is 32, not 8 and not 128}\label{sec:compressor:width}
+
+\textbf{Not much larger:} stage~1 of the encoder embeds tokens at 32 numbers, so feeding it far more
+than 32 channels inflates the first convolution only to compress again immediately.
+\textbf{Not much smaller:} squeeze too hard and real spectral structure is destroyed before the
+transformer sees it; by \cref{eq:compressor:span} the model then cannot get spectral shape right however
+long it trains.
+
+The project's training configuration (the file
+\file{configs/hyperspectral_segformer_exp_1.json}) records this as a diagnosis rule:
+\begin{lstlisting}
+"SAM_stuck_above_0.3_after_epoch_30":
+    "Compressor bottleneck too narrow (try compressed_channels=32)"
+\end{lstlisting}
+SAM is the spectral-angle error
+(\cref{ch:losses}). That is exactly the change made between versions.
+
+\begin{drift}
+\begin{tabular}{lll}
+& v0.1.0 & v0.2.0\\
+compressed channels $D$ & 24$^{a}$ & 32$^{b}$\\
+final validation loss & 0.07694 & 0.04349\\
+\end{tabular}
+
+$^{a}$\tagM{configs/hyperspectral_segformer_exp_1.json}\\
+$^{b}$\tagM{configs/hyperspectral_segformer_exp_2.json}
+
+Validation losses from course part IW10 (quoting a checkpoint manifest that is not in the repository
+tree) and, for v0.2.0, \file{research/model_break_down/05_hyperspectral_segformer_mae.md}. Total
+parameters: 5.21~M at $D=24$, 5.51~M at $D=32$\tagM{research/model_break_down/05_hyperspectral_segformer_mae.md}.
+The shipped model since 2026-10 is Indradhanu~V2 (\cref{ch:shipping}).
+\end{drift}
+
+\begin{sourcenote}[: the code default is 24, the shipped model is 32]
+Both \code{HyperspectralSegFormerMAE.__init__}
+(\file{app/foundation_models/components/hyperspectral_seg_former_mae.py}, line~55) and
+\code{HyperspectralSegFormerMAEConfig} (\file{app/models/training/training_config.py}, line~89) default
+\code{compressed_channels} to 24, and the class docstring's example says ``(e.g. 24)''. The v0.2.0
+model and its successors are built with 32 from the configuration file. If you construct the class
+without arguments you get the old, narrower bottleneck, with
+$(165\times24 + 24 + 48) + (24\times165 + 165) = 4{,}032 + 4{,}125 = 8{,}157$ compressor and
+decompressor parameters instead of 10{,}821\tagC.
+\end{sourcenote}
+
+%======================================================================
+\begin{confusions}
+\confusion{Is the decompressor the inverse of the compressor?}{No. A $32\times165$ matrix has no
+inverse. The decompressor is an independent set of learned weights; nothing ties it to the compressor
+except that both are trained to make the chain reconstruct well.}
+\confusion{Does the compressor look at neighbouring pixels?}{No. Its kernel is $1\times1$, so every
+pixel is processed alone. All spatial reasoning happens in the transformer.}
+\confusion{Is the compression lossy?}{Yes. By \cref{eq:compressor:span} every output spectrum lies in a
+32-dimensional space. The bet is that what is lost is mostly redundancy and noise; validation loss and
+detection scores test the bet.}
+\confusion{Why is it called spectral compression when the picture stays $128\times128$?}{Because only the
+band axis is compressed. Height and width are untouched.}
+\confusion{Does BatchNorm normalise each pixel's spectrum?}{No. It normalises each \emph{channel} across
+the batch and all pixels. Normalising each token across its own features is LayerNorm
+(\cref{ch:patchembed}).}
+\confusion{Are BatchNorm's running mean and variance parameters?}{No. They are buffers, updated by
+\cref{eq:compressor:rm,eq:compressor:rv}, not by gradients. They are saved in the checkpoint and used in
+evaluation mode.}
+\end{confusions}
+
+\begin{checkyourself}
+\item\label{ex:compressor:1} Compute the parameter count of \code{Conv2d(165, 24, kernel_size=1)} and of the
+whole v0.1.0 compressor (with its \code{BatchNorm2d(24)}).
+\item\label{ex:compressor:2} A BatchNorm channel receives the batch values $2,\ 4,\ 4,\ 6$ with
+$\gamma = 1$, $\beta = 0$, $\varepsilon$ negligible. Compute the training-mode outputs. Then, starting
+from running mean $0$ and running variance $1$ with momentum $0.1$, compute the running statistics after
+this one step.
+\item\label{ex:compressor:3} Give the two reasons the decompressor has no BatchNorm and no activation,
+each with a one-line example.
+\item\label{ex:compressor:4} In \cref{we:compressor:lost}, find the reconstruction of the pixel
+$\vect{x} = (0.3,\ 0.5,\ 0.5)\T$ and its residual. Explain the result using $\vect{n}$.
+\item\label{ex:compressor:5} Show that adding a constant $b$ to every input value of a BatchNorm channel
+leaves its training-mode output unchanged, using the values of \cref{we:compressor:bn} with $b = 10$.
+\item\label{ex:compressor:6} How is the compressor like MNF, and how is it different? What symptom
+suggests $D$ is too small, and what was done about it?
+\end{checkyourself}
+
+\nextchapter{ch:patchembed}

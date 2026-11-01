@@ -1,0 +1,22 @@
+six pixels fpr [0.0, 0.0, 0.3333, 0.3333, 0.3333, 0.6667, 1.0]
+six pixels tpr [0.0, 0.3333, 0.3333, 0.6667, 1.0, 1.0, 1.0]
+auc 0.7777777777777778 7/9 = 0.7777777777777778
+pauc 0.5 0.5555555555555556 5/9 = 0.5555555555555556
+pauc 0.01 0.3333333333333333
+tpr_at 0.001 0.3333333333333333
+mann-whitney 7.0 / 9
+tie fpr [0.0, 0.0, 0.5, 1.0] tpr [0.0, 0.5, 1.0, 1.0] auc 0.875 pauc0.25 0.625
+A auc 0.806 pauc0.01 0.2
+B auc 0.8470000000000001 pauc0.01 0.01
+random pauc (3 runs) [0.00522, 0.00546, 0.00566]
+McClish(0.170) 0.5829145728643216
+1 px m = 5 chance top1% 0.049 top0.1% 0.005
+domino m = 8 chance top1% 0.0773 top0.1% 0.008
+3 in a row m = 11 chance top1% 0.1047 top0.1% 0.0109
+L triomino m = 10 chance top1% 0.0956 top0.1% 0.01
+2x2 m = 12 chance top1% 0.1136 top0.1% 0.0119
+3x3 m = 21 chance top1% 0.1903 top0.1% 0.0208
+diagonal pair -> objects 2
+600000 pixels -> thresholds 124
+1000000 pixels -> thresholds 164
+2000000 pixels -> thresholds 256

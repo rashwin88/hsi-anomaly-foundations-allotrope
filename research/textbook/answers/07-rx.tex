@@ -1,0 +1,75 @@
+\answersfor{ch:rx}
+
+\begin{solution}{ex:rx:1}
+\begin{align*}
+z &= \frac{61 - 24.58}{13.57} = \frac{36.42}{13.57} = 2.684\\
+\text{RX} = z^2 &= 2.684\times2.684 = 7.20 .
+\end{align*}
+The $\chi^2_1$ threshold for a 1\% false-alarm rate is 6.63 (the square of 2.576). Since
+$7.20 > 6.63$ the pixel is beyond it; its tail probability is
+$P(\abs{z} > 2.684) = 0.0073$, about one pixel in 140. One-band RX is the squared z-score, which is
+why \code{ThermalGRXDetector} computes it directly instead of calling a matrix routine.
+\end{solution}
+
+\begin{solution}{ex:rx:2}
+$\det\Cov = 5\times2 - 2\times2 = 6$, so
+$\Cov\inv = \frac16\begin{psmallmatrix} 2 & -2\\ -2 & 5\end{psmallmatrix}$.
+
+For $\vect{d} = (1, -2)$:
+$\Cov\inv\vect{d} = \frac16(2\times1 - 2\times(-2),\ -2\times1 + 5\times(-2)) = \frac16(6, -12) = (1, -2)$,
+and $D^2 = 1\times1 + (-2)\times(-2) = 1 + 4 = 5$.
+
+For $\vect{d} = (2, 1)$:
+$\Cov\inv\vect{d} = \frac16(4 - 2,\ -4 + 5) = \frac16(2, 1) = (\tfrac13, \tfrac16)$,
+and $D^2 = 2\times\tfrac13 + 1\times\tfrac16 = \tfrac46 + \tfrac16 = \tfrac56 = 0.833$.
+
+From \cref{ex:linalg:3} the eigenvectors are $(2, 1)/\sqrt5$ with eigenvalue 6 and $(1, -2)/\sqrt5$ with
+eigenvalue 1. The first pixel lies exactly along the low-variance eigenvector, so
+$D^2 = \norm{\vect{d}}^2/1 = 5$; the second lies along the high-variance one, so
+$D^2 = \norm{\vect{d}}^2/6 = 5/6$. Same length, six times the score.
+\end{solution}
+
+\begin{solution}{ex:rx:3}
+\begin{align*}
+\Cov\inv\vect{d} &= \tfrac14\big(3\times0 - 2\times2 + 1\times0,\ -2\times0 + 4\times2 - 2\times0,\\
+&\qquad 1\times0 - 2\times2 + 3\times0\big)\\
+&=\tfrac14(-4, 8, -4) = (-1, 2, -1),
+\end{align*}
+so $D^2 = 0\times(-1) + 2\times2 + 0\times(-1) = 4$. The per-band score is $2^2/2 = 2$. Mahalanobis
+scores it twice as high because the middle band rose while its two correlated neighbours did not.
+Through the eigenvectors of \cref{we:rx:threeeig}: $\vect{u}_1\T\vect{d} = 2\times0.7071 = 1.414$,
+$\vect{u}_2\T\vect{d} = 0$, $\vect{u}_3\T\vect{d} = -1.414$, so
+$D^2 = 2/3.414 + 0 + 2/0.586 = 0.586 + 3.414 = 4.0$. A score of 4 is ordinary for $\chi^2_3$ (tail
+probability 0.26).
+\end{solution}
+
+\begin{solution}{ex:rx:4}
+With variances 1 and correlation $\rho = 0.99$ the eigenvalues are $1 \pm \rho$: $1.99$ along
+$(1, 1)/\sqrt2$ and $0.01$ along $(1, -1)/\sqrt2$. Condition number $1.99/0.01 = 199$.
+For $\vect{d} = (0.1, -0.1)$ the coordinate along $(1, -1)/\sqrt2$ is $0.2/\sqrt2 = 0.1414$, squared
+$0.02$, and along $(1, 1)/\sqrt2$ it is 0. So $D^2 = 0.02/0.01 = 2$.
+
+After loading with $\epsilon = 0.01$ the eigenvalues are $1.99 + 0.01 = 2.00$ and
+$0.01 + 0.01 = 0.02$, the condition number is $2.00/0.02 = 100$, and $D^2 = 0.02/0.02 = 1$. Loading
+halved the score of a pixel that differs only along the low-variance direction.
+\end{solution}
+
+\begin{solution}{ex:rx:5}
+23.21 is the $\chi^2_{10}$ threshold for a 1\% false-alarm rate, so a Gaussian background of
+$1000\times1000 = 1{,}000{,}000$ pixels would put $0.01\times1{,}000{,}000 = 10{,}000$ pixels above it.
+Real scenes exceed it far more often because (1) they are mixtures of surfaces, not one Gaussian
+cloud, so pixels of a minority surface sit far from the global mean (\cref{we:rx:mixture}); (2) they
+have heavy tails from edges, detector stripes, glint and haze; and (3) the mean and covariance are
+themselves estimates, contaminated by the anomalies and other outliers. This is why the product
+thresholds by percentile.
+\end{solution}
+
+\begin{solution}{ex:rx:6}
+From \cref{sec:rx:chi2}, for $C = 2$, $P(D^2 > t) = e^{-t/2}$. Set it equal to $\alpha$:
+\begin{align*}
+e^{-t/2} &= \alpha\\
+-t/2 &= \ln\alpha && \text{take natural logarithms}\\
+t &= -2\ln\alpha = 2\ln(1/\alpha) && \text{multiply by $-2$; } -\ln\alpha = \ln(1/\alpha).
+\end{align*}
+For $\alpha = 0.001$: $t = 2\ln1000 = 2\times6.9078 = 13.82$, matching the table.
+\end{solution}

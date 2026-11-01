@@ -21,6 +21,9 @@ import { createVisualization } from "../api/projectVisualizations";
 import type { ActionDetail, ActionTypeMeta } from "../types";
 import { ActionFlowChart } from "./ActionFlowChart";
 import { HistogramChart, ROCChart, SpectrumChart } from "./DiagnosticCharts";
+import { type SpectralLibraryMatchSummary } from "./spectralMatch/data";
+import { SpectralMatchModal } from "./spectralMatch/SpectralMatchModal";
+import { SegmentationViewer, isV2Segmentation } from "./SegmentationViewer";
 
 // --- Rich diagnostics (lazy-loaded from /actions/{id}/files/diagnostics.json) -
 
@@ -219,8 +222,9 @@ function ActionCard({
         </span>
       </header>
 
-      {meta?.description && (
-        <p className="action-card__description">{meta.description}</p>
+      {/* The long META.description stays in the API and the docs; the card says one line. */}
+      {meta?.short_description && (
+        <p className="action-card__description">{meta.short_description}</p>
       )}
 
       <div className="action-card__flow">
@@ -233,6 +237,8 @@ function ActionCard({
         <ActionFlowChart actionType={detail.type} height={360} />
       </div>
 
+      <details className="action-card__config">
+        <summary>Inputs and outputs</summary>
       <div className="action-card__io">
         {meta?.inputs && meta.inputs.length > 0 && (
           <div>
@@ -263,6 +269,7 @@ function ActionCard({
           </div>
         )}
       </div>
+      </details>
 
       <details className="action-card__config">
         <summary>Configuration</summary>
@@ -341,6 +348,9 @@ function ActionOutputViewer({
     );
   }
   if (detail.type === "scene_segmentation") {
+    if (isV2Segmentation(summary)) {
+      return <SegmentationViewer actionId={detail.id} summary={summary} />;
+    }
     return (
       <SceneSegmentationOutputViewer
         actionId={detail.id}
@@ -516,6 +526,7 @@ function BandFilterApplyDiagnosticsCharts({
         </span>
       </div>
       <SpectrumChart
+        directLabels
         wavelengths={wls}
         yLabel="reflectance"
         series={[
@@ -706,6 +717,7 @@ function SceneSegmentationDiagnosticsCharts({
               </span>
             </div>
             <SpectrumChart
+              directLabels
               wavelengths={wls}
               yLabel="reflectance"
               yMin={0}
@@ -3169,93 +3181,14 @@ function AnomalyDetectionPrepModal({
 
 
 // =====================================================================
-// SpectralLibraryMatchOutputViewer — splib07 match results
+// SpectralLibraryMatchOutputViewer — spectral match results
 // =====================================================================
 //
-// Inline tile + full-screen modal. The modal carries a big angle-heatmap
-// match map, a side rail with top-materials histogram + at-pixel top-K,
-// and a spectrum chart that overlays the pixel's spectrum with the top-1
-// (and optionally top-K) library candidate spectra.
-//
-// Hover-preview: a debounced /probe fires while the mouse is held over a
-// pixel; the chart shows a "preview" pair (pixel + top-1) at lower opacity.
-// Click: pins the same data at full opacity until the next click outside
-// the map.
+// The card: a thumbnail (man-made vs natural with the namer, else family or SAM) and the
+// counts, with the run's settings behind "Details". The full-screen viewer is
+// spectralMatch/SpectralMatchModal.tsx.
 //
 // Roadmap step 14.7.
-
-interface SpectralLibraryMatchSummary {
-  upstream_anomaly_detection_output_id?: string;
-  sensor_type?: string;
-  n_library_entries?: number;
-  mode?: string;
-  top_k?: number;
-  min_coverage?: number;
-  min_band_count?: number;
-  sg_window_length?: number;
-  sg_polyorder?: number;
-  chapters?: string[];
-  n_pixels?: number;
-  n_pixels_matched?: number;
-  n_pixels_no_match?: number;
-  timing_seconds?: { match?: number; total?: number };
-  family?: FamilySummary;
-}
-
-// summary.json "family" block, written by _family_match in the worker. Absent on actions
-// that predate family matching; those render SAM-only, as before.
-interface FamilySummary {
-  status: "ok" | "skipped" | "failed";
-  reason?: string;
-  error?: string;
-  alpha?: number;
-  p_star?: number;
-  n_manmade_families?: number;
-  families?: string[];
-  n_scored?: number;
-  n_not_scored?: number;
-  n_named_manmade?: number;
-  n_unconfirmed_manmade?: number;
-  n_natural?: number;
-  counts?: Record<string, number>;
-  timing_seconds?: number;
-}
-
-interface FamilyLegendItem {
-  family: string;
-  group: "manmade" | "natural" | "none";
-  label: string;
-  colour: string;
-}
-
-interface FamilyRow {
-  row: number;
-  col: number;
-  scored: boolean;
-  family: string;
-  family_group: string;
-  family_code: number;
-  confidence: number;
-  answered: boolean;
-  best_entry: string;
-}
-
-interface FamilyData {
-  byCoord: Map<number, FamilyRow>;          // key = row * bundle.width + col
-  legend: Record<string, FamilyLegendItem>; // family_code (as string) → item
-  pStar: number;
-  libIx: Map<string, number>;               // best_entry (material_id) → library row
-  libLabels: string[];
-  libRefl: Float32Array[];
-  libValid: Uint8Array[];
-}
-
-interface SpectralHistogramRow {
-  library_ix: number;
-  name: string;
-  chapter: string;
-  count: number;
-}
 
 function SpectralLibraryMatchOutputViewer({
   actionId,
@@ -3267,8 +3200,10 @@ function SpectralLibraryMatchOutputViewer({
   const s = summary as SpectralLibraryMatchSummary;
   const fam = s.family;
   const hasFamily = fam?.status === "ok";
+  const nm = s.namer;
+  const hasNamer = nm?.status === "ok";
   const matchMapUrl = `/api/actions/${encodeURIComponent(actionId)}/files/${
-    hasFamily ? "family_map.png" : "match_map.png"
+    hasNamer ? "namer_level1_map.png" : hasFamily ? "family_map.png" : "match_map.png"
   }`;
   const [modalOpen, setModalOpen] = useState(false);
 
@@ -3287,11 +3222,7 @@ function SpectralLibraryMatchOutputViewer({
 
   return (
     <div className="action-output-viewer">
-      <h4>
-        {hasFamily
-          ? "Spectral match · material family + USGS splib07"
-          : "Spectral library match · USGS splib07"}
-      </h4>
+      <h4>Spectral match</h4>
       <div className="anomaly-viewer__summary-card">
         <button
           type="button"
@@ -3301,7 +3232,13 @@ function SpectralLibraryMatchOutputViewer({
         >
           <img
             src={matchMapUrl}
-            alt={hasFamily ? "Material family map (thumbnail)" : "Top-1 match angle heatmap (thumbnail)"}
+            alt={
+              hasNamer
+                ? "Man-made vs natural map (thumbnail)"
+                : hasFamily
+                  ? "Material family map (thumbnail)"
+                  : "Top-1 match angle heatmap (thumbnail)"
+            }
             className="anomaly-viewer__thumb-img"
           />
           <span className="anomaly-viewer__thumb-overlay">
@@ -3310,40 +3247,16 @@ function SpectralLibraryMatchOutputViewer({
           </span>
         </button>
         <div className="anomaly-viewer__summary-meta">
-          {hasFamily && (
+          {nm && <NamerSummaryLines s={s} />}
+          {!hasNamer && hasFamily && (
             <p className="anomaly-viewer__summary-line">
               <strong>{fam.n_named_manmade ?? 0}</strong> named man-made ·{" "}
               {fam.n_unconfirmed_manmade ?? 0} man-made unconfirmed · {fam.n_natural ?? 0} natural
-              {fam.n_not_scored ? ` · ${fam.n_not_scored} not scored` : ""}
             </p>
           )}
-          {hasFamily && (
-            <p className="anomaly-viewer__summary-line small">
-              family: alpha {fam.alpha} · p* {fam.p_star?.toFixed(4)} ·{" "}
-              {fam.n_manmade_families} man-made families
-              {fam.timing_seconds != null && <span> · {fam.timing_seconds.toFixed(1)} s</span>}
-            </p>
-          )}
-          {fam && !hasFamily && (
-            <p className="anomaly-viewer__summary-line small">
-              family matching {fam.status}: {fam.reason ?? fam.error}
-            </p>
-          )}
-          <p className="anomaly-viewer__summary-line">
-            SAM: <strong>{s.n_pixels_matched ?? 0}</strong> matched ·{" "}
-            {s.n_pixels_no_match ?? 0} no-match · pool {s.n_library_entries ?? 0}
-          </p>
-          <p className="anomaly-viewer__summary-line small">
-            mode {s.mode ?? "?"} · top-K {s.top_k ?? "?"} · min_cov{" "}
-            {s.min_coverage ?? "?"} · min_bands {s.min_band_count ?? "?"} · SG (
-            {s.sg_window_length ?? "?"}/{s.sg_polyorder ?? "?"})
-            {s.timing_seconds?.match != null && (
-              <span> · match {s.timing_seconds.match.toFixed(2)} s</span>
-            )}
-          </p>
-          {s.chapters && s.chapters.length > 0 && (
-            <p className="anomaly-viewer__summary-line small">
-              chapters: {s.chapters.join(", ")}
+          {!hasNamer && !hasFamily && (
+            <p className="anomaly-viewer__summary-line">
+              <strong>{s.n_pixels_matched ?? 0}</strong> pixels matched
             </p>
           )}
           <button
@@ -3354,10 +3267,39 @@ function SpectralLibraryMatchOutputViewer({
             Open spectral match viewer
             <span className="anomaly-viewer__shortcut">⌘I</span>
           </button>
+          <details className="anomaly-viewer__summary-details">
+            <summary>Details</summary>
+            {hasFamily && (
+              <p className="anomaly-viewer__summary-line small">
+                family: {fam.n_named_manmade ?? 0} named man-made · {fam.n_unconfirmed_manmade ?? 0}{" "}
+                unconfirmed · {fam.n_natural ?? 0} natural
+                {fam.n_not_scored ? ` · ${fam.n_not_scored} not scored` : ""} · alpha {fam.alpha} · p*{" "}
+                {fam.p_star?.toFixed(4)} · {fam.n_manmade_families} man-made families
+                {fam.timing_seconds != null && <span> · {fam.timing_seconds.toFixed(1)} s</span>}
+              </p>
+            )}
+            {fam && !hasFamily && (
+              <p className="anomaly-viewer__summary-line small">
+                family matching {fam.status}: {fam.reason ?? fam.error}
+              </p>
+            )}
+            <p className="anomaly-viewer__summary-line small">
+              SAM: {s.n_pixels_matched ?? 0} matched · {s.n_pixels_no_match ?? 0} no-match · pool{" "}
+              {s.n_library_entries ?? 0}
+              {s.pixels_natural_skipped ? ` · ${s.pixels_natural_skipped} natural, not matched` : ""}
+            </p>
+            <p className="anomaly-viewer__summary-line small">
+              mode {s.mode ?? "?"} · top-K {s.top_k ?? "?"} · min_cov {s.min_coverage ?? "?"} ·
+              min_bands {s.min_band_count ?? "?"} · SG ({s.sg_window_length ?? "?"}/
+              {s.sg_polyorder ?? "?"})
+              {s.timing_seconds?.match != null && <span> · match {s.timing_seconds.match.toFixed(2)} s</span>}
+              {s.chapters && s.chapters.length > 0 && <> · chapters {s.chapters.join(", ")}</>}
+            </p>
+          </details>
         </div>
       </div>
       {modalOpen && (
-        <SpectralLibraryMatchModal
+        <SpectralMatchModal
           actionId={actionId}
           summary={summary}
           onClose={() => setModalOpen(false)}
@@ -3367,1156 +3309,30 @@ function SpectralLibraryMatchOutputViewer({
   );
 }
 
-function SpectralLibraryMatchModal({
-  actionId,
-  summary,
-  onClose,
-}: {
-  actionId: string;
-  summary: Record<string, unknown>;
-  onClose: () => void;
-}) {
-  const s = summary as SpectralLibraryMatchSummary;
-  const hasFamily = s.family?.status === "ok";
-  const fileUrl = (name: string) =>
-    `/api/actions/${encodeURIComponent(actionId)}/files/${name}`;
-  const rgbUrl = fileUrl("rgb.png");
-  // Family colours when family matching ran; SAM's angle heatmap otherwise.
-  const overlayUrl = fileUrl(hasFamily ? "family_map_overlay.png" : "match_map_overlay.png");
-  const histogramUrl = `/api/actions/${encodeURIComponent(actionId)}/files/histogram.json`;
-  const matchesParquetUrl = `/api/actions/${encodeURIComponent(
-    actionId,
-  )}/files/matches.parquet`;
-  const pixelSpectraNpzUrl = `/api/actions/${encodeURIComponent(
-    actionId,
-  )}/files/anomaly_pixel_spectra.npz`;
-  const libraryReflNpzUrl = `/api/actions/${encodeURIComponent(
-    actionId,
-  )}/files/library_refl.npz`;
-
-  // Esc closes; lock body scroll while open.
-  useEffect(() => {
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => {
-      window.removeEventListener("keydown", onKey);
-      document.body.style.overflow = prev;
-    };
-  }, [onClose]);
-
-  // Histogram (load once).
-  const [histogram, setHistogram] = useState<SpectralHistogramRow[] | null>(null);
-  useEffect(() => {
-    let cancelled = false;
-    fetch(histogramUrl)
-      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
-      .then((j) => { if (!cancelled) setHistogram(j?.top1_counts ?? []); })
-      .catch(() => { if (!cancelled) setHistogram([]); });
-    return () => { cancelled = true; };
-  }, [histogramUrl]);
-
-  // Preload everything the chart needs in one shot.
-  const [bundle, setBundle] = useState<{
-    wavelengths: number[];
-    matchesByCoord: Map<number, MatchRow[]>;     // key = row*W + col
-    spectraByCoord: Map<number, Float32Array>;    // pixel spectra (smoothed)
-    validityByCoord: Map<number, Uint8Array>;
-    libRefl: Float32Array[];                      // per-library row, length B
-    libValid: Uint8Array[];
-    width: number;
-    height: number;
-    matchedSet: Set<number>;                      // for snap-to-pixel lookup
-  } | null>(null);
-  const [bundleError, setBundleError] = useState<string | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const [{ readNpz }, parquetMod] = await Promise.all([
-          import("../lib/npy"),
-          import("hyparquet"),
-        ]);
-        const [pixelNpzBuf, libNpzBuf, parqBuf] = await Promise.all([
-          fetch(pixelSpectraNpzUrl).then((r) => r.arrayBuffer()),
-          fetch(libraryReflNpzUrl).then((r) => r.arrayBuffer()),
-          fetch(matchesParquetUrl).then((r) => r.arrayBuffer()),
-        ]);
-        if (cancelled) return;
-
-        const pixNpz = await readNpz(pixelNpzBuf);
-        const libNpz = await readNpz(libNpzBuf);
-
-        const wavelengths = Array.from(pixNpz.wavelengths.data as Float64Array);
-        const rows = pixNpz.rows.data as Int32Array;
-        const cols = pixNpz.cols.data as Int32Array;
-        const spectraFlat = pixNpz.spectra.data as Float32Array;
-        const validityFlat = pixNpz.valid.data as Uint8Array;
-        const [P, B] = pixNpz.spectra.shape as [number, number];
-
-        const spectraByCoord = new Map<number, Float32Array>();
-        const validityByCoord = new Map<number, Uint8Array>();
-        const matchedSet = new Set<number>();
-        // Image width comes from the cube max(cols)+1; we don't have explicit
-        // dims here but image natural dims will give us the answer when the
-        // <img> loads. Use a sentinel width derived from max col so coord
-        // keys stay unique even before the image loads.
-        let maxC = 0, maxR = 0;
-        for (let i = 0; i < P; i++) {
-          if (cols[i] > maxC) maxC = cols[i];
-          if (rows[i] > maxR) maxR = rows[i];
-        }
-        const widthKey = maxC + 2; // big enough to hash uniquely
-        for (let i = 0; i < P; i++) {
-          const key = rows[i] * widthKey + cols[i];
-          spectraByCoord.set(key, spectraFlat.subarray(i * B, (i + 1) * B));
-          validityByCoord.set(key, validityFlat.subarray(i * B, (i + 1) * B));
-          matchedSet.add(key);
-        }
-
-        // Library arrays.
-        const libRefl = libNpz.refl.data as Float32Array;
-        const libValid = libNpz.valid.data as Uint8Array;
-        const [N, LB] = libNpz.refl.shape as [number, number];
-        const libReflRows: Float32Array[] = [];
-        const libValidRows: Uint8Array[] = [];
-        for (let i = 0; i < N; i++) {
-          libReflRows.push(libRefl.subarray(i * LB, (i + 1) * LB));
-          libValidRows.push(libValid.subarray(i * LB, (i + 1) * LB));
-        }
-
-        // Parquet → matches grouped by (row,col).
-        // hyparquet's parquetReadObjects expects an AsyncBuffer; wrap the
-        // ArrayBuffer in the trivial in-memory adapter.
-        const asyncBuf = {
-          byteLength: parqBuf.byteLength,
-          async slice(start: number, end?: number) {
-            return parqBuf.slice(start, end ?? parqBuf.byteLength);
-          },
-        };
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const matches = (await (parquetMod as any).parquetReadObjects({
-          file: asyncBuf,
-        })) as MatchRow[];
-        const matchesByCoord = new Map<number, MatchRow[]>();
-        for (const m of matches) {
-          // Coerce in case the parquet reader hands back BigInt for int64
-          // columns. We rewrite the row object in-place so downstream code
-          // sees plain numbers.
-          m.row = Number(m.row);
-          m.col = Number(m.col);
-          m.rank = Number(m.rank);
-          m.library_ix = Number(m.library_ix);
-          m.angle_deg = Number(m.angle_deg);
-          m.n_bands_used = Number(m.n_bands_used);
-          const key = m.row * widthKey + m.col;
-          let bucket = matchesByCoord.get(key);
-          if (!bucket) {
-            bucket = [];
-            matchesByCoord.set(key, bucket);
-          }
-          bucket.push(m);
-        }
-        for (const bucket of matchesByCoord.values()) {
-          bucket.sort((a, b) => a.rank - b.rank);
-        }
-
-        if (cancelled) return;
-        setBundle({
-          wavelengths,
-          matchesByCoord,
-          spectraByCoord,
-          validityByCoord,
-          libRefl: libReflRows,
-          libValid: libValidRows,
-          width: widthKey, // hash basis; not the image width
-          height: maxR + 1,
-          matchedSet,
-        });
-      } catch (err) {
-        console.error("[spectral-match] bundle load failed", err);
-        if (!cancelled) setBundleError(String(err));
-      }
-    })();
-    return () => { cancelled = true; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pixelSpectraNpzUrl, libraryReflNpzUrl, matchesParquetUrl]);
-
-  // Family results, keyed like the bundle (row * bundle.width + col). Loaded after the
-  // bundle because the key basis comes from it.
-  const [famData, setFamData] = useState<FamilyData | null>(null);
-  useEffect(() => {
-    if (!hasFamily || !bundle) return;
-    let cancelled = false;
-    (async () => {
-      try {
-        const [{ readNpz }, parquetMod] = await Promise.all([
-          import("../lib/npy"),
-          import("hyparquet"),
-        ]);
-        const [parqBuf, legend, libBuf] = await Promise.all([
-          fetch(fileUrl("family_matches.parquet")).then((r) => r.arrayBuffer()),
-          fetch(fileUrl("family_legend.json")).then((r) => r.json()),
-          fetch(fileUrl("family_library_refl.npz")).then((r) => r.arrayBuffer()),
-        ]);
-        const asyncBuf = {
-          byteLength: parqBuf.byteLength,
-          async slice(start: number, end?: number) {
-            return parqBuf.slice(start, end ?? parqBuf.byteLength);
-          },
-        };
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const rows = (await (parquetMod as any).parquetReadObjects({
-          file: asyncBuf,
-        })) as FamilyRow[];
-        const byCoord = new Map<number, FamilyRow>();
-        for (const f of rows) {
-          f.row = Number(f.row);
-          f.col = Number(f.col);
-          f.family_code = Number(f.family_code);
-          f.confidence = Number(f.confidence);
-          byCoord.set(f.row * bundle.width + f.col, f);
-        }
-        const lib = await readNpz(libBuf);
-        const [N, B] = lib.refl.shape as [number, number];
-        const refl = lib.refl.data as Float32Array;
-        const valid = lib.valid.data as Uint8Array;
-        // ids / labels live in the legend, in npz row order (readNpz is numeric-only).
-        const entries = legend.library as { id: string; label: string }[];
-        if (cancelled) return;
-        setFamData({
-          byCoord,
-          legend: legend.codes,
-          pStar: Number(legend.p_star),
-          libIx: new Map(entries.map((e, i) => [e.id, i])),
-          libLabels: entries.map((e) => e.label),
-          libRefl: Array.from({ length: N }, (_, i) => refl.subarray(i * B, (i + 1) * B)),
-          libValid: Array.from({ length: N }, (_, i) => valid.subarray(i * B, (i + 1) * B)),
-        });
-      } catch (err) {
-        console.error("[spectral-match] family load failed", err);
-        if (!cancelled) setBundleError(`family results: ${String(err)}`);
-      }
-    })();
-    return () => { cancelled = true; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hasFamily, bundle]);
-
-  // Panzoom + snap-to-pixel.
-  const containerRef = useRef<HTMLDivElement | null>(null);
-  const stageRef = useRef<HTMLDivElement | null>(null);
-  const pzRef = useRef<PzInstance | null>(null);
-  const [hoverPx, setHoverPx] = useState<{ row: number; col: number } | null>(null);
-  const [pinnedPx, setPinnedPx] = useState<{ row: number; col: number } | null>(null);
-
-  // Tracks whether the rgb image has reported `onload`. Panzoom needs to
-  // bind AFTER the image has natural dimensions, otherwise it locks
-  // `bounds: true` against a 0×0 stage and wheel/drag never escape.
-  // AVIRIS-NG 4096-tall PNGs decode slowly enough that the previous
-  // mount-time binding fired too early.
-  const [rgbLoaded, setRgbLoaded] = useState(false);
-
-  // Safari + some Chrome cache states skip the `load` event for cached
-  // images — poll the ref's natural dimensions after mount to catch that.
-  useEffect(() => {
-    if (rgbLoaded) return;
-    let cancelled = false;
-    let tries = 0;
-    const tick = () => {
-      if (cancelled) return;
-      const img = rgbImgRef.current;
-      if (img && img.naturalWidth > 0) {
-        setRgbLoaded(true);
-        return;
-      }
-      if (tries++ < 50) {
-        setTimeout(tick, 50);    // up to ~2.5 s of polling
-      }
-    };
-    tick();
-    return () => { cancelled = true; };
-  }, [rgbLoaded]);
-
-  // Bind panzoom DIRECTLY to the rgb <img>, the same way ZoomablePanel
-  // does in the anomaly_scoring viewer. The overlay PNG, dots canvas
-  // and ring SVG follow the img via getBoundingClientRect() ticks on
-  // every transform event — handled by the layer-tracker effect below.
-  //
-  // This works for tall+narrow images (AVIRIS-NG) because there's no
-  // wrapping stage div whose intrinsic size collapses on extreme
-  // aspect ratios: panzoom sees the <img> element directly.
-  useEffect(() => {
-    if (!rgbLoaded) return;
-    let cancelled = false;
-    let dispose: (() => void) | null = null;
-    const setup = async () => {
-      const target = rgbImgRef.current;
-      if (!target) return;
-      const mod = await import("panzoom");
-      if (cancelled) return;
-      const inst = mod.default(target, {
-        maxZoom: 30,
-        minZoom: 1,
-        bounds: true,
-        boundsPadding: 0.2,
-        smoothScroll: false,
-        zoomDoubleClickSpeed: 1,
-      }) as unknown as PzInstance;
-      pzRef.current = inst;
-      setPzCount((c) => c + 1);
-      dispose = () => inst.dispose();
-    };
-    void setup();
-    return () => {
-      cancelled = true;
-      dispose?.();
-      pzRef.current = null;
-    };
-  }, [rgbLoaded]);
-
-  // Right-hand anomaly mask: its own panzoom on the mask canvas, linked to the rgb one so
-  // both panels always show the same window. Both stages share the rgb's aspect ratio and
-  // width, so one transform means the same thing in each.
-  const maskCanvasRef = useRef<HTMLCanvasElement | null>(null);
-  const maskPzRef = useRef<PzInstance | null>(null);
-  const [pzCount, setPzCount] = useState(0);
-  useEffect(() => {
-    if (!rgbLoaded) return;
-    let cancelled = false;
-    let dispose: (() => void) | null = null;
-    void (async () => {
-      const target = maskCanvasRef.current;
-      if (!target) return;
-      const mod = await import("panzoom");
-      if (cancelled) return;
-      const inst = mod.default(target, {
-        maxZoom: 30, minZoom: 1, bounds: true, boundsPadding: 0.2,
-        smoothScroll: false, zoomDoubleClickSpeed: 1,
-      }) as unknown as PzInstance;
-      maskPzRef.current = inst;
-      setPzCount((c) => c + 1);
-      dispose = () => inst.dispose();
-    })();
-    return () => {
-      cancelled = true;
-      dispose?.();
-      maskPzRef.current = null;
-    };
-  }, [rgbLoaded]);
-
-  useEffect(() => {
-    const a = pzRef.current;
-    const b = maskPzRef.current;
-    if (!a || !b) return;
-    let syncing = false;               // the copied transform fires its own event: drop the echo
-    const link = (src: PzInstance, dst: PzInstance) => () => {
-      if (syncing) return;
-      syncing = true;
-      const t = src.getTransform();
-      dst.zoomAbs(0, 0, t.scale);
-      dst.moveTo(t.x, t.y);
-      syncing = false;
-    };
-    const ab = link(a, b);
-    const ba = link(b, a);
-    a.on("transform", ab);
-    b.on("transform", ba);
-    return () => {
-      a.off?.("transform", ab);
-      b.off?.("transform", ba);
-    };
-  }, [pzCount]);
-
-  // Layer tracker: keep overlay/dots/ring sized + positioned to the
-  // panzoom'd rgb img. Reads img.getBoundingClientRect() relative to
-  // the stage container after every transform tick.
-  const [layerBox, setLayerBox] = useState<{
-    left: number; top: number; width: number; height: number;
-  } | null>(null);
-  useEffect(() => {
-    if (!rgbLoaded) return;
-    let raf = 0;
-    let cancelled = false;
-    const update = () => {
-      if (cancelled) return;
-      const img = rgbImgRef.current;
-      const stage = stageRef.current;
-      if (!img || !stage) return;
-      // Stage now has aspect-ratio matching rgb's natural ratio, so the
-      // img element fills it with no letter/pillar-boxing. The element
-      // rect IS the painted rect — same approach ZoomablePanel uses.
-      const ir = img.getBoundingClientRect();
-      const sr = stage.getBoundingClientRect();
-      setLayerBox({
-        left: ir.left - sr.left,
-        top: ir.top - sr.top,
-        width: ir.width,
-        height: ir.height,
-      });
-    };
-    const onTransform = () => {
-      if (raf) cancelAnimationFrame(raf);
-      raf = requestAnimationFrame(update);
-    };
-    update();
-    let intervalId: number | null = null;
-    // Hook panzoom transform events once the instance arrives.
-    const hookPanzoom = () => {
-      const inst = pzRef.current;
-      if (inst) {
-        inst.on("transform", onTransform);
-      } else {
-        intervalId = window.setTimeout(hookPanzoom, 50);
-      }
-    };
-    hookPanzoom();
-    window.addEventListener("resize", update);
-    return () => {
-      cancelled = true;
-      if (raf) cancelAnimationFrame(raf);
-      if (intervalId !== null) window.clearTimeout(intervalId);
-      window.removeEventListener("resize", update);
-    };
-  }, [rgbLoaded]);
-
-  const handleReset = () => {
-    for (const inst of [pzRef.current, maskPzRef.current]) {
-      if (!inst) continue;
-      inst.zoomAbs(0, 0, 1);
-      inst.moveTo(0, 0);
-    }
-  };
-  const handleDoubleClick = handleReset;
-
-  // The rgb.png inside the stage is what we measure to convert mouse →
-  // (row, col). Use its natural size as the source coordinate space.
-  const rgbImgRef = useRef<HTMLImageElement | null>(null);
-  const dotsCanvasRef = useRef<HTMLCanvasElement | null>(null);
-
-  // Pulse animation. Per-pixel SVG would tank rendering; a single canvas
-  // redraw at ~30 Hz is cheap even at 9k circles. Phase is global, so the
-  // dots breathe in unison — easy on the eye.
-  useEffect(() => {
-    let raf = 0;
-    const draw = (t: number) => {
-      const canvas = dotsCanvasRef.current;
-      const img = rgbImgRef.current;
-      if (!canvas || !img || !bundle || !img.naturalWidth) {
-        raf = requestAnimationFrame(draw);
-        return;
-      }
-      const W = img.naturalWidth;
-      const H = img.naturalHeight;
-      if (canvas.width !== W || canvas.height !== H) {
-        canvas.width = W;
-        canvas.height = H;
-      }
-      const ctx = canvas.getContext("2d");
-      if (!ctx) {
-        raf = requestAnimationFrame(draw);
-        return;
-      }
-      ctx.clearRect(0, 0, W, H);
-
-      // Pulse: r oscillates ~2 → 3.6 (image px) at ~1.4 Hz, alpha 0.6 → 1.0.
-      // Bigger and more aggressive than the yellow pass — red has to cut
-      // through varied RGB backgrounds, so we lean on contrast not subtlety.
-      const phase = (t / 700) % (Math.PI * 2);
-      const r = 2.6 + 1.0 * Math.sin(phase);
-      const alpha = 0.8 + 0.2 * Math.sin(phase);
-
-      // Red ring + pink-red bright core. One colour for all dots so they
-      // read as "look here," not "what is this." Material identity is on
-      // the underlying overlay PNG and in the side rail.
-      ctx.strokeStyle = `rgba(220, 38, 38, ${alpha.toFixed(3)})`;       // red-600
-      ctx.lineWidth = 0.7;
-      ctx.fillStyle = `rgba(248, 113, 113, ${(alpha * 0.65).toFixed(3)})`; // red-400
-
-      // Iterate matched-pixel rows/cols from the bundle's spectraByCoord
-      // keys. widthKey decodes back to (row, col).
-      const widthKey = bundle.width;
-      const matchedSet = bundle.matchedSet;
-      // For perf at heavy zooms we could clip to the visible rect, but
-      // 9k strokes on a 1280×1216 canvas is already <2 ms on a laptop.
-      matchedSet.forEach((key) => {
-        const row = Math.floor(key / widthKey);
-        const col = key - row * widthKey;
-        ctx.beginPath();
-        ctx.arc(col + 0.5, row + 0.5, r, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.stroke();
-      });
-      raf = requestAnimationFrame(draw);
-    };
-    raf = requestAnimationFrame(draw);
-    return () => cancelAnimationFrame(raf);
-  }, [bundle]);
-
-  // Save current view as a PNG.
-  const handleSaveView = async () => {
-    const img = rgbImgRef.current;
-    const canvas = dotsCanvasRef.current;
-    if (!img || !canvas) return;
-    // Build a flat composite at the rgb's natural size: rgb + overlay + dots.
-    const W = img.naturalWidth;
-    const H = img.naturalHeight;
-    const out = document.createElement("canvas");
-    out.width = W;
-    out.height = H;
-    const octx = out.getContext("2d");
-    if (!octx) return;
-    octx.drawImage(img, 0, 0, W, H);
-    // Re-fetch the overlay as a blob so cross-origin canvas tainting
-    // doesn't block toBlob() — same-origin fetch is fine.
-    const overlayImg = new Image();
-    overlayImg.crossOrigin = "anonymous";
-    await new Promise<void>((resolve, reject) => {
-      overlayImg.onload = () => resolve();
-      overlayImg.onerror = () => reject(new Error("overlay load failed"));
-      overlayImg.src = overlayUrl;
-    });
-    octx.drawImage(overlayImg, 0, 0, W, H);
-    octx.drawImage(canvas, 0, 0, W, H);
-    out.toBlob((blob) => {
-      if (!blob) return;
-      const a = document.createElement("a");
-      a.href = URL.createObjectURL(blob);
-      a.download = `spectral_match_${actionId.replace(/^action_/, "").slice(0, 8)}.png`;
-      a.click();
-      URL.revokeObjectURL(a.href);
-    }, "image/png");
-  };
-
-  // Export submission-ready zip (hyper bundle for splib match).
-  const [exportBusy, setExportBusy] = useState(false);
-  const [exportError, setExportError] = useState<string | null>(null);
-  const handleExport = async () => {
-    setExportBusy(true);
-    setExportError(null);
-    try {
-      const r = await fetch(
-        `/api/actions/${encodeURIComponent(actionId)}/export`,
-        { method: "POST" },
-      );
-      if (!r.ok) {
-        let detail = `HTTP ${r.status}`;
-        try {
-          const j = await r.json();
-          detail = j.detail ?? detail;
-        } catch { /* not json */ }
-        if (detail === "crs_missing") {
-          throw new Error(
-            "Scene has no CRS — submission rules require a georeferenced GeoTIFF.",
-          );
-        }
-        throw new Error(`Export failed: ${detail}`);
-      }
-      const blob = await r.blob();
-      const filename =
-        r.headers.get("Content-Disposition")
-          ?.match(/filename="([^"]+)"/)?.[1]
-        ?? `hyper_${actionId.replace(/^action_/, "").slice(0, 8)}.zip`;
-      const a = document.createElement("a");
-      a.href = URL.createObjectURL(blob);
-      a.download = filename;
-      a.click();
-      URL.revokeObjectURL(a.href);
-    } catch (err) {
-      setExportError(String((err as Error).message ?? err));
-    } finally {
-      setExportBusy(false);
-    }
-  };
-
-  // `target` is the panel's panzoom'd element: the rgb img or the mask canvas. Both are
-  // the rgb's natural size in image pixels, so one mapping serves either panel.
-  const rawPixelFromMouse = (e: React.MouseEvent<HTMLElement>, target: HTMLElement | null) => {
-    const img = rgbImgRef.current;
-    if (!img || !target || !img.naturalWidth || !img.naturalHeight) return null;
-    // With the stage's aspect-ratio matched to the rgb's natural aspect,
-    // there is no letter/pillar-boxing inside the img element — the
-    // visible pixels fill its box exactly. `getBoundingClientRect()` is
-    // then the painted rect; this is the same simple math ZoomablePanel
-    // uses for AVIRIS-NG in the anomaly_scoring viewer.
-    const rect = target.getBoundingClientRect();
-    const sx = img.naturalWidth / rect.width;
-    const sy = img.naturalHeight / rect.height;
-    const col = Math.floor((e.clientX - rect.left) * sx);
-    const row = Math.floor((e.clientY - rect.top) * sy);
-    if (row < 0 || col < 0 || row >= img.naturalHeight || col >= img.naturalWidth) {
-      return null;
-    }
-    return { row, col };
-  };
-
-  // Snap to the nearest matched pixel within a small radius (in source
-  // pixels). Search is brute force over `matchedSet` keys — at ~9k entries
-  // it's instant.
-  const SNAP_RADIUS = 6;
-  const snapToMatched = (raw: { row: number; col: number }) => {
-    if (!bundle) return null;
-    const widthKey = bundle.width;
-    // Quick check: exact match?
-    if (bundle.matchedSet.has(raw.row * widthKey + raw.col)) return raw;
-    // Else scan a small square.
-    let best: { row: number; col: number; d2: number } | null = null;
-    const r2max = SNAP_RADIUS * SNAP_RADIUS;
-    for (let dr = -SNAP_RADIUS; dr <= SNAP_RADIUS; dr++) {
-      for (let dc = -SNAP_RADIUS; dc <= SNAP_RADIUS; dc++) {
-        const d2 = dr * dr + dc * dc;
-        if (d2 > r2max) continue;
-        const r = raw.row + dr;
-        const c = raw.col + dc;
-        const key = r * widthKey + c;
-        if (bundle.matchedSet.has(key)) {
-          if (!best || d2 < best.d2) best = { row: r, col: c, d2 };
-        }
-      }
-    }
-    return best ? { row: best.row, col: best.col } : null;
-  };
-
-  const stageHandlers = (target: () => HTMLElement | null) => ({
-    onMouseMove: (e: React.MouseEvent<HTMLDivElement>) => {
-      const raw = rawPixelFromMouse(e, target());
-      setHoverPx(raw ? snapToMatched(raw) : null);
-    },
-    onMouseLeave: () => setHoverPx(null),
-    onClick: (e: React.MouseEvent<HTMLDivElement>) => {
-      const raw = rawPixelFromMouse(e, target());
-      const snapped = raw ? snapToMatched(raw) : null;
-      if (snapped) setPinnedPx(snapped);
-    },
-    onDoubleClick: handleDoubleClick,
-  });
-
-  const activePx = pinnedPx ?? hoverPx;
-  const isPinned = pinnedPx != null;
-
-  // Anomaly mask raster, built once per bundle: black = not an anomaly, white = anomaly
-  // pixel, slate = anomaly pixel with no result (family: not scored; SAM-only: no match).
-  const maskImageRef = useRef<ImageData | null>(null);
-  useEffect(() => {
-    maskImageRef.current = null;
-  }, [bundle, famData]);
-  useEffect(() => {
-    const canvas = maskCanvasRef.current;
-    const img = rgbImgRef.current;
-    if (!canvas || !img || !img.naturalWidth || !bundle) return;
-    if (hasFamily && !famData) return;
-    const W = img.naturalWidth;
-    const H = img.naturalHeight;
-    if (canvas.width !== W || canvas.height !== H) {
-      canvas.width = W;
-      canvas.height = H;
-      maskImageRef.current = null;
-    }
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-    if (!maskImageRef.current) {
-      const im = ctx.createImageData(W, H);
-      const d = im.data;
-      for (let i = 3; i < d.length; i += 4) d[i] = 255;           // opaque black
-      bundle.matchedSet.forEach((key) => {
-        const row = Math.floor(key / bundle.width);
-        const col = key - row * bundle.width;
-        if (row >= H || col >= W) return;
-        const empty = famData
-          ? famData.byCoord.get(key)?.scored === false
-          : !bundle.matchesByCoord.has(key);
-        const v = empty ? 100 : 255;
-        const o = (row * W + col) * 4;
-        d[o] = d[o + 1] = d[o + 2] = v;
-        if (empty) d[o + 2] = 140;                                  // slate, not grey
-      });
-      maskImageRef.current = im;
-    }
-    ctx.putImageData(maskImageRef.current, 0, 0);
-    if (activePx) {
-      ctx.beginPath();
-      ctx.arc(activePx.col + 0.5, activePx.row + 0.5, isPinned ? 4 : 3, 0, Math.PI * 2);
-      ctx.strokeStyle = isPinned ? "#fde68a" : "#fbbf24";
-      ctx.lineWidth = isPinned ? 1.5 : 1;
-      ctx.stroke();
-    }
-  }, [bundle, famData, hasFamily, activePx, isPinned, rgbLoaded]);
-
-  const famRow = famData && activePx && bundle
-    ? famData.byCoord.get(activePx.row * bundle.width + activePx.col) ?? null
-    : null;
-
-  // Build chart series for the active pixel.
-  const chartData = (() => {
-    if (!bundle || !activePx) return null;
-    const widthKey = bundle.width;
-    const key = activePx.row * widthKey + activePx.col;
-    const spec = bundle.spectraByCoord.get(key);
-    const val = bundle.validityByCoord.get(key);
-    const matches = bundle.matchesByCoord.get(key) ?? [];
-    if (!spec || !val) return null;
-
-    // Drop sensor-flagged zero-wavelength bands AND sort ascending.
-    const wlAll = bundle.wavelengths;
-    const idxs = wlAll
-      .map((w, i) => [w, i] as [number, number])
-      .filter(([w]) => w > 0)
-      .sort((a, b) => a[0] - b[0]);
-    const wls = idxs.map(([w]) => w);
-    const toSeries = (vals: ArrayLike<number>, validity: ArrayLike<number>) =>
-      idxs.map(([, i]) => (validity[i] ? vals[i] : NaN));
-
-    const top1 = matches[0];
-    const top1Refl = top1
-      ? bundle.libRefl[top1.library_ix]
-      : null;
-    const top1Valid = top1 ? bundle.libValid[top1.library_ix] : null;
-
-    // L2-normalise pixel and library on their joint-valid band set —
-    // matches what SAM actually consumes (cos θ = u·l / |u||l|, where the
-    // norm is over the intersection of valid bands). Without this the
-    // chart shows raw reflectance which differs in amplitude even when
-    // SAM angle is small.
-    const pixelSeriesRaw = toSeries(spec, val);
-    const libSeriesRaw =
-      top1Refl && top1Valid ? toSeries(top1Refl, top1Valid) : null;
-    const jointValid = libSeriesRaw
-      ? idxs.map(([, i], j) =>
-          val[i] && top1Valid![i] && Number.isFinite(pixelSeriesRaw[j]) &&
-          Number.isFinite(libSeriesRaw[j]),
-        )
-      : idxs.map(([, i], j) =>
-          val[i] && Number.isFinite(pixelSeriesRaw[j]),
-        );
-    const pixelNorm = Math.sqrt(
-      pixelSeriesRaw.reduce(
-        (s, v, j) => (jointValid[j] ? s + v * v : s),
-        0,
-      ),
-    ) || 1;
-    const libNorm = libSeriesRaw
-      ? Math.sqrt(
-          libSeriesRaw.reduce(
-            (s, v, j) => (jointValid[j] ? s + v * v : s),
-            0,
-          ),
-        ) || 1
-      : 1;
-    const pixelSeries = pixelSeriesRaw.map((v) => v / pixelNorm);
-    const libSeries = libSeriesRaw
-      ? libSeriesRaw.map((v) => v / libNorm)
-      : null;
-
-    // Family hint: the closest library spectrum inside the pixel's family, L2-normalised on
-    // the bands it shares with the pixel. A shape to compare by eye, not the evidence —
-    // the family score is on pixel minus its ring background.
-    const famIx = famRow?.scored && famData ? famData.libIx.get(famRow.best_entry) : undefined;
-    let famSeries: number[] | null = null;
-    if (famIx !== undefined && famData) {
-      const fr = toSeries(famData.libRefl[famIx], famData.libValid[famIx]);
-      const ok = (j: number) => Number.isFinite(fr[j]) && Number.isFinite(pixelSeriesRaw[j]);
-      const fn = Math.sqrt(fr.reduce((acc, v, j) => (ok(j) ? acc + v * v : acc), 0)) || 1;
-      famSeries = fr.map((v) => v / fn);
-    }
-
-    return {
-      wavelengths: wls,
-      series: [
-        {
-          label: "pixel (L2)",
-          color: isPinned ? "#0ea5e9" : "rgba(14,165,233,0.7)",
-          values: pixelSeries,
-        },
-        ...(famSeries && famIx !== undefined && famData
-          ? [{
-              label: `family hint: ${famData.libLabels[famIx]} (L2)`,
-              color: isPinned ? "#16a34a" : "rgba(22,163,74,0.7)",
-              values: famSeries,
-              dashed: true,
-            }]
-          : []),
-        ...(top1 && libSeries
-          ? [{
-              label: `SAM top-1: ${top1.name} (L2)`,
-              color: isPinned ? "#db2777" : "rgba(219,39,119,0.7)",
-              values: libSeries,
-              dashed: true,
-            }]
-          : []),
-      ],
-      matches,
-    };
-  })();
-
-  // Render snap-ring at the active pixel by overlaying an SVG that rides
-  // the same transform as the rgb image.
-  const ringPx = activePx;
-
-  // Both stages take the rgb's natural aspect, so equal-width panes are the same size and
-  // a panzoom transform means the same thing in each (see the link effect above).
-  const natural = rgbImgRef.current;
-  const stageAspect = natural?.naturalWidth && natural?.naturalHeight
-    ? { aspectRatio: `${natural.naturalWidth} / ${natural.naturalHeight}` }
-    : undefined;
-
-  return (
-    <div className="anomaly-viewer__modal-backdrop" onClick={onClose}>
-      <div
-        className="anomaly-viewer__modal spectral-match-modal"
-        onClick={(e) => e.stopPropagation()}
-        role="dialog"
-        aria-modal="true"
-      >
-        <header className="anomaly-viewer__modal-header">
-          <h3>
-            {hasFamily
-              ? "Spectral match · material family + USGS splib07"
-              : "Spectral library match · USGS splib07"}
-          </h3>
-          <button
-            type="button"
-            className="anomaly-viewer__modal-close"
-            onClick={onClose}
-            aria-label="Close"
-          >
-            ✕
-          </button>
-        </header>
-
-        <div className="spectral-match-modal__layout">
-          <section
-            ref={containerRef}
-            className="spectral-match-modal__map"
-          >
-            <div className="spectral-match-modal__toolbar">
-              <button
-                type="button"
-                className="spectral-match-modal__tool-btn"
-                onClick={handleReset}
-                title="Reset zoom + pan"
-              >
-                Reset
-              </button>
-              <button
-                type="button"
-                className="spectral-match-modal__tool-btn"
-                onClick={handleSaveView}
-                title="Save the current view as a PNG"
-              >
-                Save view
-              </button>
-              <button
-                type="button"
-                className="spectral-match-modal__tool-btn spectral-match-modal__tool-btn--primary"
-                onClick={handleExport}
-                disabled={exportBusy}
-                title="Download submission bundle (hyper GeoTIFF + SHP + CSV + manifest)"
-              >
-                {exportBusy ? "Exporting…" : "Export bundle"}
-              </button>
-              {exportError && (
-                <span
-                  className="spectral-match-modal__tool-error"
-                  title={exportError}
-                >
-                  {exportError.length > 60
-                    ? exportError.slice(0, 60) + "…"
-                    : exportError}
-                </span>
-              )}
-            </div>
-            <div className="spectral-match-modal__pair">
-            <div className="spectral-match-modal__pane">
-            <span className="spectral-match-modal__caption">
-              {hasFamily ? "RGB · material family" : "RGB · SAM angle"}
-            </span>
-            <div
-              ref={stageRef}
-              className="spectral-match-modal__stage"
-              style={stageAspect}
-              {...stageHandlers(() => rgbImgRef.current)}
-            >
-              <img
-                ref={rgbImgRef}
-                src={rgbUrl}
-                alt="Scene RGB"
-                className="spectral-match-modal__layer spectral-match-modal__layer--rgb"
-                draggable={false}
-                onLoad={() => setRgbLoaded(true)}
-              />
-              {/* Follower layers: position + size match the panzoom'd
-                  rgb img via layerBox (updated on every transform tick).
-                  This is the same pattern ZoomablePanel uses for GT dots. */}
-              {layerBox && (
-                <img
-                  src={overlayUrl}
-                  alt="Match angle heatmap"
-                  className="spectral-match-modal__layer spectral-match-modal__layer--overlay"
-                  draggable={false}
-                  style={{
-                    position: "absolute",
-                    left: layerBox.left,
-                    top: layerBox.top,
-                    width: layerBox.width,
-                    height: layerBox.height,
-                    pointerEvents: "none",
-                  }}
-                />
-              )}
-              {layerBox && (
-                <canvas
-                  ref={dotsCanvasRef}
-                  className="spectral-match-modal__layer spectral-match-modal__layer--dots"
-                  style={{
-                    position: "absolute",
-                    left: layerBox.left,
-                    top: layerBox.top,
-                    width: layerBox.width,
-                    height: layerBox.height,
-                    pointerEvents: "none",
-                  }}
-                />
-              )}
-              {ringPx && rgbImgRef.current && layerBox && (
-                <svg
-                  className="spectral-match-modal__layer spectral-match-modal__ring-svg"
-                  viewBox={`0 0 ${rgbImgRef.current.naturalWidth} ${rgbImgRef.current.naturalHeight}`}
-                  preserveAspectRatio="none"
-                  style={{
-                    position: "absolute",
-                    left: layerBox.left,
-                    top: layerBox.top,
-                    width: layerBox.width,
-                    height: layerBox.height,
-                    pointerEvents: "none",
-                  }}
-                >
-                  <circle
-                    cx={ringPx.col + 0.5}
-                    cy={ringPx.row + 0.5}
-                    r={isPinned ? 4 : 3}
-                    fill="none"
-                    stroke={isPinned ? "#fde68a" : "#fbbf24"}
-                    strokeWidth={isPinned ? 1.5 : 1}
-                  />
-                </svg>
-              )}
-            </div>
-            </div>
-            <div className="spectral-match-modal__pane">
-              <span className="spectral-match-modal__caption">
-                {s.mode === "all_kept" ? "Matched pixels" : "Anomaly mask"}
-              </span>
-              <div
-                className="spectral-match-modal__stage"
-                style={stageAspect}
-                {...stageHandlers(() => maskCanvasRef.current)}
-              >
-                <canvas
-                  ref={maskCanvasRef}
-                  className="spectral-match-modal__layer spectral-match-modal__layer--rgb"
-                  aria-label="Binary anomaly mask"
-                />
-              </div>
-            </div>
-            </div>
-            <p className="spectral-match-modal__hint">
-              Scroll = zoom · drag = pan (both maps) · dbl-click = reset · hover = preview · click = pin
-            </p>
-            {!bundle && !bundleError && (
-              <span className="spectral-match-modal__busy">loading…</span>
-            )}
-            {bundleError && (
-              <span
-                className="spectral-match-modal__busy"
-                style={{
-                  color: "#fca5a5",
-                  fontSize: "0.7rem",
-                  maxWidth: "60%",
-                  whiteSpace: "normal",
-                  textAlign: "right",
-                }}
-                title={bundleError}
-              >
-                {bundleError.length > 200 ? bundleError.slice(0, 200) + "…" : bundleError}
-              </span>
-            )}
-          </section>
-
-          <aside className="spectral-match-modal__rail">
-            {s.family && (
-              <section className="spectral-match-modal__panel">
-                <h5>Material family</h5>
-                {!hasFamily && (
-                  <p className="muted">
-                    Family matching {s.family.status}: {s.family.reason ?? s.family.error}
-                  </p>
-                )}
-                {hasFamily && !activePx && (
-                  <p className="muted">Hover or click an anomaly pixel.</p>
-                )}
-                {hasFamily && activePx && famData && (
-                  <FamilyVerdict row={famRow} famData={famData} />
-                )}
-                {hasFamily && (
-                  <p className="muted small">
-                    A likely material for a pixel you kept, not proof it is man-made: false
-                    alarms are unusual too, so they get man-made names more often than
-                    ordinary ground.
-                  </p>
-                )}
-              </section>
-            )}
-            <section className="spectral-match-modal__panel">
-              <h5>Spectrum</h5>
-              {!activePx && (
-                <p className="muted">Hover or click a matched pixel.</p>
-              )}
-              {activePx && !chartData && (
-                <p className="muted">Loading…</p>
-              )}
-              {activePx && chartData && (
-                <>
-                  <SpectrumChart
-                    wavelengths={chartData.wavelengths}
-                    series={chartData.series}
-                    height={220}
-                    yLabel="L2-normalised reflectance"
-                  />
-                  <p className="muted small">
-                    row {activePx.row} · col {activePx.col}
-                    {isPinned ? " · pinned" : " · preview"}
-                  </p>
-                </>
-              )}
-            </section>
-
-            <section className="spectral-match-modal__panel">
-              <h5>{hasFamily ? "SAM" : "At pixel"} · top {s.top_k ?? "?"}</h5>
-              {!activePx && <p className="muted">No probe yet.</p>}
-              {activePx && chartData && chartData.matches.length === 0 && (
-                <p className="muted">No match at this pixel.</p>
-              )}
-              {activePx && chartData && chartData.matches.length > 0 && (
-                <ol className="spectral-match-modal__match-list">
-                  {chartData.matches.map((m) => (
-                    <li key={m.rank}>
-                      <div className="spectral-match-modal__match-row">
-                        <strong>{m.name}</strong>
-                        <span className="mono small">{m.angle_deg.toFixed(2)}°</span>
-                      </div>
-                      <div className="muted small">
-                        {m.chapter}
-                        {m.asd_subtype ? ` · ${m.asd_subtype}` : ""} ·{" "}
-                        <span className="mono">{m.n_bands_used} bands</span>
-                      </div>
-                    </li>
-                  ))}
-                </ol>
-              )}
-            </section>
-
-            {hasFamily && famData && (
-              <section className="spectral-match-modal__panel">
-                <h5>Families</h5>
-                <ul className="spectral-match-modal__family-list">
-                  {Object.entries(famData.legend)
-                    .filter(([code]) => Number(code) >= -1)
-                    .map(([code, item]) => ({
-                      code, item, count: s.family?.counts?.[item.family] ?? 0,
-                    }))
-                    .filter((x) => x.count > 0)
-                    .sort((a, b) => b.count - a.count)
-                    .map(({ code, item, count }) => (
-                      <li key={code}>
-                        <span
-                          className="spectral-match-modal__swatch"
-                          style={{ background: item.colour }}
-                        />
-                        <span className="mono small">{count}</span>{" "}
-                        <strong>{item.label}</strong>{" "}
-                        <span className="muted small">({item.group})</span>
-                      </li>
-                    ))}
-                </ul>
-              </section>
-            )}
-            <section className="spectral-match-modal__panel">
-              <h5>{hasFamily ? "SAM top-1 materials" : "Top materials"}</h5>
-              {histogram == null && <p className="muted">Loading histogram…</p>}
-              {histogram && histogram.length === 0 && (
-                <p className="muted">No matches in histogram.</p>
-              )}
-              {histogram && histogram.length > 0 && (
-                <ol className="spectral-match-modal__hist-list">
-                  {histogram.slice(0, 12).map((row) => (
-                    <li key={row.library_ix}>
-                      <span className="mono small">{row.count}</span>{" "}
-                      <strong>{row.name}</strong>{" "}
-                      <span className="muted small">({row.chapter})</span>
-                    </li>
-                  ))}
-                </ol>
-              )}
-            </section>
-          </aside>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// The family result at one pixel, in the words docs/lld/spectral-family-match.md §7 asks
-// for: a name only when it cleared p*, "type unconfirmed" for man-made below it.
-function FamilyVerdict({ row, famData }: { row: FamilyRow | null; famData: FamilyData }) {
-  if (!row) return <p className="muted">Not an anomaly pixel.</p>;
-  if (!row.scored) {
-    return <p className="muted">Not scored: nodata on a band the matcher uses.</p>;
+// Card lines from summary.namer: object counts and the man-made objects' closest materials.
+function NamerSummaryLines({ s }: { s: SpectralLibraryMatchSummary }) {
+  const nm = s.namer!;
+  if (nm.status === "disabled") return null;
+  if (nm.status !== "ok") {
+    return (
+      <p className="anomaly-viewer__summary-line small">
+        Man-made / natural call {nm.status}: {nm.reason ?? nm.error}
+      </p>
+    );
   }
-  const colour = famData.legend[String(row.family_code)]?.colour;
-  const family = row.family.replace(/_/g, " / ");
-  const conf = row.confidence.toFixed(4);
-  const ps = famData.pStar.toFixed(4);
-  const hintIx = famData.libIx.get(row.best_entry);
-  const hint = hintIx !== undefined ? famData.libLabels[hintIx] : row.best_entry;
-  let headline: string;
-  let detail: string;
-  if (row.family_group === "manmade" && row.answered) {
-    headline = `Likely material: ${family}`;
-    detail = `confidence ${conf} ≥ p* ${ps}`;
-  } else if (row.family_group === "manmade") {
-    headline = "Man-made, type unconfirmed";
-    detail = `best guess ${family} · confidence ${conf} < p* ${ps}`;
-  } else {
-    headline = `Natural: ${family}`;
-    detail = `confidence ${conf}${row.answered ? ` ≥ p* ${ps}` : ""}`;
-  }
+  const classes = Object.entries(nm.class_counts ?? {})
+    .sort((a, b) => b[1] - a[1])
+    .map(([c, n]) => `${c.replace(/_/g, " / ")} ${n}`)
+    .join(", ");
   return (
     <>
-      <div className="spectral-match-modal__verdict">
-        <span className="spectral-match-modal__swatch" style={{ background: colour }} />
-        <strong>{headline}</strong>
-      </div>
-      <p className="muted small mono">{detail}</p>
-      <p className="muted small">
-        Closest spectrum in the family: {hint} (a hint, not the answer)
+      <p className="anomaly-viewer__summary-line">
+        <strong>{nm.n_objects ?? 0}</strong> objects · {nm.n_objects_manmade ?? 0} man-made ·{" "}
+        {nm.n_objects_natural ?? 0} natural
       </p>
+      {classes && (
+        <p className="anomaly-viewer__summary-line small">Closest materials: {classes}</p>
+      )}
     </>
   );
-}
-
-interface MatchRow {
-  row: number;
-  col: number;
-  rank: number;
-  library_ix: number;
-  material_id: string;
-  name: string;
-  chapter: string;
-  asd_subtype: string | null;
-  angle_deg: number;
-  n_bands_used: number;
 }

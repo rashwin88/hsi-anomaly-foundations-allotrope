@@ -17,6 +17,7 @@ from .project import Project
 from .scene import Scene
 from .user import User
 from .visualization import Visualization
+from .worker_status import WorkerStatus
 
 __all__ = [
     "Action",
@@ -32,4 +33,5 @@ __all__ = [
     "Scene",
     "User",
     "Visualization",
+    "WorkerStatus",
 ]

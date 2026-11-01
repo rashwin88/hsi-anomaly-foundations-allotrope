@@ -1,0 +1,38 @@
+uncertainty head SegFormerDecoder([32,64,160,256], 64, 1): 95632
+same, out_channels=2: 104864
+FT09 ProgressiveDecoder FT04 widths: 1504096
+FT04 SegFormerDecoder (256, 32*1 out): 2164736
+== Heavy: total 33,884,194
+   stats: 0
+   spectral_in: 17,825
+   spectral_out: 6,337
+   norm: 128
+   encoder: 29,580,288
+   decoder: 4,279,616
+   encoder.patch_embeds[0]: 98,592  patch_embeds[1]: 166,464
+   encoder.blocks[0]: 1,411,584  one block: 705,792
+== FT04 size (no seg head): total 5,514,850
+   stats: 0
+   spectral_in: 14,721
+   spectral_out: 4,257
+   norm: 64
+   encoder: 3,331,072
+   decoder: 2,164,736
+   encoder.patch_embeds[0]: 16,480  patch_embeds[1]: 18,624
+   encoder.blocks[0]: 159,232  one block: 79,616
+== per stage (one block / patch embed / final norm if any), Heavy vs FT04 size
+   stage 1: block Heavy 705,792 FT04 79,616 ratio 8.86; patch embed Heavy 98,592 FT04 16,480
+   stage 2: block Heavy 1,042,944 FT04 118,272 ratio 8.82; patch embed Heavy 166,464 FT04 18,624
+   stage 3: block Heavy 3,713,280 FT04 418,560 ratio 8.87; patch embed Heavy 830,880 FT04 92,640
+   stage 4: block Heavy 7,118,592 FT04 800,000 ratio 8.90; patch embed Heavy 3,320,064 FT04 369,408
+   encoder remainder (stage norms): Heavy 3072 FT04 1024
+== Heavy decoder children: {'linear_projections': 788480, 'fuse_conv': 1049088, 'fuse_act': 0, 'up_half': 1917440, 'up_full': 516352, 'head': 8256}
+== F002-heavy metrics.csv checks
+   train - val L1 gap, epochs 20-80: min 0.00201 max 0.00366
+   largest train-L1 rise at a block change: epoch 21 +0.00012
+   total seconds: 30689.7
+   lr epoch 1: csv 2.9988e-04  formula 2.9988e-04
+   lr epoch 40: csv 1.5050e-04  formula 1.5050e-04
+   lr epoch 60: csv 4.4788e-05  formula 4.4788e-05
+   lr epoch 80: csv 1.0000e-06  formula 1.0000e-06
+   blocks (5 epochs) whose last epoch is below its first: train 16 of 16, val 13 of 16

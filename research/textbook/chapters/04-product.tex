@@ -1,0 +1,578 @@
+\chapter{The product: scenes, projects, actions and the vendable}\label{ch:product}
+
+\begin{onething}
+Allotrope is a web application with four nouns (Scene, Project, Action, Export). Every piece of
+analysis in this book runs as an Action, Actions link into a directed acyclic graph, and every
+Action consumes one standard object, the \emph{vendable}: a cube in physical units, a validity
+cube of the same shape, and per-band bookkeeping, with no map coordinates at all.
+\end{onething}
+
+\section{Why this comes before any model}\label{sec:product:motivation}
+
+You are about to spend many chapters on detectors and neural networks. If you have only ever seen
+machine-learning code, you will picture a script that takes a file and prints a result, and you
+will then be unable to work out why the code is shaped the way it is: why a model is ``one option
+inside a step'', why a file called \code{filtered_vendable.pkl} must exist before anything can be
+scored, why renaming a class can break every stored result. Each of those follows from the
+product's structure, so this chapter lays the structure out first.
+
+A user logs in through a browser, uploads a satellite file, clicks through a chain of steps,
+drags a threshold slider, and downloads a result. Behind that sits a Postgres database, a login
+system, a React front end and a background worker process. The models are components inside it.
+
+\section{The four nouns}\label{sec:product:nouns}
+
+\begin{definition}[Scene, Project, Action, Export]\index{Scene}\index{Project}\index{Action}\index{Export}
+A \textbf{Scene} is one uploaded raw satellite acquisition, onboarded into the standard form of
+\cref{sec:product:vendable}. A \textbf{Project} is a piece of work bound to exactly one Scene. An
+\textbf{Action} is one processing step inside a Project; it reads the outputs of earlier Actions
+and writes its own outputs to its own folder (an \textbf{ActionOutput}). An \textbf{Export} is
+the deliverable: a zip bundle with a GeoTIFF, a Shapefile and a CSV naming every candidate anomaly
+with its coordinates.
+\end{definition}
+
+The relationships are worth stating exactly, because they are asked about constantly.
+\begin{itemize}
+\item One Scene can back many Projects; a Project binds to exactly one Scene. Analysing one scene
+two ways means one Scene and two Projects. Comparing two scenes means two Projects.
+\item A Project holds many Actions. An Action names its inputs by referring to earlier Actions'
+outputs.
+\end{itemize}
+
+On the wire (in every API request and response), identifiers are never bare database keys. They
+carry a type prefix, \code{scene_<uuid>}, \code{action_<uuid>}, \code{output_<uuid>}, where a
+\textbf{UUID}\index{UUID} is a $128$-bit random identifier written as $32$ hexadecimal digits.
+The helpers \code{to_prefixed} and \code{parse_prefixed_id} are in
+\file{backend/allotrope/api/wireformat.py}. A prefixed id cannot be passed where an id of another
+type is expected without the mistake being caught.
+
+\section{Actions form a directed acyclic graph}\label{sec:product:dag}
+
+\subsection{Graphs, briefly}
+
+\begin{definition}[Directed graph, path, cycle, DAG]\index{directed acyclic graph}\index{graph}
+A \textbf{directed graph} is a set of \textbf{nodes} and a set of \textbf{edges}, each edge an
+arrow from one node to another. A \textbf{path} follows arrows from node to node. A
+\textbf{cycle} is a path that returns to where it started. A \textbf{directed acyclic graph}
+(DAG) is a directed graph with no cycles.
+\end{definition}
+
+In a Project, each Action is a node, and there is an edge from Action $P$ to Action $Q$ when $Q$
+reads an output of $P$. The graph is acyclic by construction: an Action can only name outputs that
+already exist when it is created, so an arrow always points from an older Action to a newer one,
+and a path that only moves forward in time can never come back to its start.
+
+\subsection{The shipped chain, read from the source}
+
+Each Action type declares the inputs it accepts in its \code{META} object, as a list of
+\code{ActionInputSpec}s whose \code{producing_action_types} field says which earlier types may
+feed it (\file{backend/allotrope/action_types/_meta.py}). Reading those declarations gives the
+edges of \cref{fig:product:dag}:
+\begin{itemize}
+\item \code{band_filter_apply} reads the Scene itself and writes \code{filtered_vendable.pkl}.
+\item \code{scene_segmentation} (hyperspectral) reads a \code{band_filter_apply} output and
+writes \code{keep_mask.tif}, the map of pixels to keep (not cloud, not shadow).
+\code{cloud_mask} plays the same role for thermal scenes.
+\item \code{anomaly_scoring} reads a \code{band_filter_apply} output (required for hyperspectral
+scenes) and, optionally, a \code{scene_segmentation} or \code{cloud_mask} output and a
+ground-truth annotation (\file{anomaly_scoring.py}, lines 250--296). It writes one folder per
+model, \code{models/<codename>/}, holding \code{anomaly_score.tif} and \code{reconstruction.tif}
+among others.
+\item \code{anomaly_detection_prep} reads an \code{anomaly_scoring} output, rescales and combines
+the per-model score maps into \code{composite_score.tif}, and stops in the state
+\code{needs_threshold} (below).
+\item \code{spectral_library_match} (hyperspectral only) reads a committed
+\code{anomaly_detection_prep} output and names the material of each anomalous pixel.
+\item Export (\code{POST /actions/\{id\}/export}) bundles the result, recovering map coordinates
+on the way (\cref{sec:product:georef}).
+\end{itemize}
+
+\begin{figure}[htbp]\centering
+\begin{tikzpicture}[
+  act/.style={draw,rounded corners=2pt,align=center,font=\footnotesize,minimum width=3.3cm,minimum height=0.95cm,fill=white},
+  outl/.style={font=\scriptsize\ttfamily,text=spec!80!black},
+  arr/.style={-{Stealth[length=2mm]},thick}]
+\node[act,draw=spec,fill=spec!8] (scene) at (0,0) {Scene\\[-1pt]{\scriptsize raw file + onboarding vendable}};
+\node[act,draw=spec] (bf) at (0,-1.7) {\texttt{band\_filter\_apply}};
+\node[outl,right=2pt of bf] {filtered\_vendable.pkl};
+\node[act] (seg) at (-3.2,-3.4) {\texttt{scene\_segmentation}\\[-1pt]{\scriptsize or \texttt{cloud\_mask} (thermal)}};
+\node[outl,below=1pt of seg] {keep\_mask.tif};
+\node[act,draw=spat,fill=spat!8] (sc) at (0,-5.1) {\texttt{anomaly\_scoring}\\[-1pt]{\scriptsize models ticked: Indradhanu, MNF-RX, \dots}};
+\node[outl,right=2pt of sc,align=left] {models/<codename>/\\anomaly\_score.tif};
+\node[act,draw=loss,fill=loss!8] (prep) at (0,-6.9) {\texttt{anomaly\_detection\_prep}\\[-1pt]{\scriptsize waits in \texttt{needs\_threshold}}};
+\node[outl,right=2pt of prep,align=left] {composite\_score.tif\\anomaly\_mask.tif (on commit)};
+\node[act] (slm) at (0,-8.7) {\texttt{spectral\_library\_match}\\[-1pt]{\scriptsize hyperspectral only}};
+\node[outl,right=2pt of slm,align=left] {family\_matches.parquet, family\_map.tif\\matches.parquet, match\_map.tif};
+\node[act,draw=maskgrey] (ex) at (0,-10.3) {Export\\[-1pt]{\scriptsize zip: GeoTIFF + Shapefile + CSV}};
+\node[act,draw=maskgrey,dashed] (gt) at (-4.1,-6.9) {annotation\\[-1pt]{\scriptsize ground truth (optional)}};
+\draw[arr] (scene) -- (bf);
+\draw[arr] (bf) -| (seg);
+\draw[arr] (bf) -- (sc);
+\draw[arr] (seg) |- (sc);
+\draw[arr,dashed,maskgrey] (gt) -- (sc);
+\draw[arr] (sc) -- (prep);
+\draw[arr] (prep) -- (slm);
+\draw[arr] (slm) -- (ex);
+\draw[arr,maskgrey] (scene.west) -- (-6.3,0) -- node[pos=0.5,sloped,above,font=\scriptsize]{raw file re-read for coordinates at export} (-6.3,-10.3) -- (ex.west);
+\end{tikzpicture}
+\caption{The shipped Action graph, edges read from each Action type's declared inputs. Each box
+writes its outputs (monospace) to its own folder. \texttt{anomaly\_scoring} has two possible
+parents besides the optional annotation, so the structure is a graph, not a chain; Indradhanu is
+one model ticked \emph{inside} \texttt{anomaly\_scoring}. Export re-reads the raw scene file to
+recover map coordinates.}\label{fig:product:dag}
+\end{figure}
+
+\coursefig[\linewidth]{iw-05-chain}{The same chain as drawn in the Indradhanu course (part 5),
+emphasising that Indradhanu is one option inside the \texttt{anomaly\_scoring} Action, not an
+Action of its own.}{fig:product:coursechain}
+
+\begin{sourcenote}[: the chain's outputs in the source]
+The course figure lists \code{matches.parquet} as the output of \code{spectral_library_match}.
+The current source writes that file and \code{match_map.tif}, and also the per-family answer
+\code{family_matches.parquet} and \code{family_map.tif}
+(\file{backend/allotrope/action_types/_spectral_library_match_run.py}, lines 46--47); the
+project instructions call the family map ``the answer''. The companion volume on spectral matching
+covers both. Second, the docstring of \file{anomaly_detection_prep.py} (line 22) says the
+threshold is locked by ``a separate \code{anomaly_detection_commit} action''. In the current
+source the commit is an API endpoint, \code{POST /actions/\{id\}/anomaly_detection_commit}, in
+\file{backend/allotrope/api/action_threshold.py}; it writes \code{anomaly_mask.tif}, which
+\code{spectral_library_match} then reads.
+\end{sourcenote}
+
+\subsection{An order in which a graph can run: topological sorting}
+
+A DAG always has at least one order in which every node comes after all of its parents, called a
+\textbf{topological order}\index{topological order}. Such an order is what lets a user (or a
+script) create Actions one at a time, each with its inputs already finished. The standard way to
+find one is Kahn's algorithm: repeatedly pick a node with no unfinished parents, list it, and
+remove its outgoing arrows.
+
+\begin{worked}[label={we:product:topo}]{A topological order for one Project}
+A Project has six Actions: $B$ (\code{band_filter_apply}), $G$ (\code{scene_segmentation}),
+$S$ (\code{anomaly_scoring}), $P_1$ and $P_2$ (two \code{anomaly_detection_prep} Actions trying
+different weightings on the same scoring run) and $M$ (\code{spectral_library_match}, from
+$P_2$). The edges are
+\[ B \to G,\quad B \to S,\quad G \to S,\quad S \to P_1,\quad S \to P_2,\quad P_2 \to M. \]
+Count each node's parents (its \textbf{in-degree}):
+\[ B{:}\,0,\quad G{:}\,1,\quad S{:}\,2,\quad P_1{:}\,1,\quad P_2{:}\,1,\quad M{:}\,1. \]
+Run Kahn's algorithm on paper.
+\begin{enumerate}
+\item Only $B$ has in-degree $0$. List $B$; remove $B \to G$ and $B \to S$. Now
+$G{:}\,0$, $S{:}\,1$.
+\item Only $G$ has in-degree $0$. List $G$; remove $G \to S$. Now $S{:}\,0$.
+\item List $S$; remove $S \to P_1$ and $S \to P_2$. Now $P_1{:}\,0$, $P_2{:}\,0$.
+\item Two choices. List $P_1$ (it has no outgoing arrows).
+\item List $P_2$; remove $P_2 \to M$. Now $M{:}\,0$.
+\item List $M$.
+\end{enumerate}
+One valid order is $B, G, S, P_1, P_2, M$. Another is $B, G, S, P_2, M, P_1$: step 4 had a
+choice, so topological orders are not unique. What every order shares is that $S$ comes after
+both $B$ and $G$, because $S$ has two parents.
+\end{worked}
+
+There is no scheduler and no automatic re-run in the product: a user creates each Action. The graph
+is the record of what was derived from what, which is why scoring once and trying several
+thresholds (two prep Actions sharing one scoring parent, as above) costs one expensive run.
+
+\section{Two processes and one queue}\label{sec:product:queue}
+
+Two programs run. The \textbf{api} is the web server: it handles requests, reads and writes the
+database, and hands out work, but never does heavy computation. The \textbf{worker} does the
+analysis and has no web interface. They communicate through a \code{jobs} table in Postgres:
+there is no Redis, no Celery and no message broker.
+
+\begin{itemize}
+\item The api inserts a job row with status \code{queued}.
+\item A worker \emph{claims} one with \code{SELECT \dots\ FOR UPDATE SKIP LOCKED}
+(\file{backend/allotrope_worker/claim.py}), sets it to \code{running} and commits immediately.
+``Skip locked'' means two workers asking at once never get the same row: each skips rows another
+transaction is holding.
+\item While it works, the worker writes a \textbf{heartbeat}\index{heartbeat} timestamp to the row
+at a fixed interval.
+\item A \textbf{reaper}\index{reaper} flips any \code{running} job whose last heartbeat is older
+than a timeout to \code{failed} (\file{backend/allotrope_worker/reaper.py}), so a crashed worker
+does not leave a job ``running'' forever.
+\end{itemize}
+
+\begin{worked}[label={we:product:heartbeat}]{When is a job reaped?}
+The defaults are a heartbeat every $5$ seconds and a timeout of $60$ seconds\tagM{backend/allotrope_worker/runner.py},
+overridable by the environment variables \code{WORKER_HEARTBEAT_INTERVAL_SEC} and
+\code{WORKER_HEARTBEAT_TIMEOUT_SEC}. A job's last heartbeat was written at 10:00:00 and the worker
+then crashed. The reaper computes a cutoff of ``now minus $60$ s'' and reaps rows whose heartbeat is
+older than the cutoff.
+\begin{itemize}
+\item At 10:00:59 the cutoff is 09:59:59. The heartbeat (10:00:00) is newer: kept.
+\item At 10:01:01 the cutoff is 10:00:01. The heartbeat is older: reaped to \code{failed}.
+\end{itemize}
+How many heartbeats must a healthy worker miss before that happens?
+\[ 60 / 5 = 12 \text{ intervals.} \]
+The source comment asks for the timeout to be at least about three heartbeat intervals ``to absorb
+jitter''; the defaults give twelve.
+\end{worked}
+
+The consequence you will feel: \textbf{the api can be perfectly healthy while the worker is dead}.
+The api's health check talks to the database, not the worker. This has happened twice in this
+repository's history, and jobs sat in \code{queued} forever. When something does not run, check
+the worker first.
+
+\subsection{The step that waits for a person}
+
+\code{anomaly_detection_prep} is the one Action type that does not finish in \code{complete}. It
+writes its composite score map and stops in \code{needs_threshold}, waiting for a person to drag a
+threshold slider in the viewer. Each ``Apply'' recomputes a preview mask; the commit endpoint locks
+the threshold and writes \code{anomaly_mask.tif}. \Cref{sec:problem:threshold} gave the reason:
+no fixed cut-off works across scenes, so the cut is a human judgement made per scene.
+
+\subsection{Where the code lives, and the lazy-import rule}
+
+\begin{table}[htbp]\centering
+\caption{The layers. The rule in the last column is enforced by review, not by tooling.}\label{tab:product:layers}
+\small
+\begin{tabular}{@{}llp{0.48\linewidth}@{}}\toprule
+Layer & Path & Rule\\\midrule
+Portable science & \texttt{app/} & numpy, torch, rasterio only. No database, no web framework.\\
+Shared backend & \texttt{backend/allotrope/} & database models, routes, authentication, the Action registry; used by api and worker.\\
+Worker only & \texttt{backend/allotrope\_worker/} & the claim loop, heartbeat, reaper and job handlers.\\\bottomrule
+\end{tabular}
+\end{table}
+
+The models' architectures, trainers and inferencers live in \code{app/}. They know nothing about
+users, jobs, HTTP or Postgres, which is why the same model code runs under a training script on a
+rented GPU machine and under the worker in a container.
+
+Action modules come in pairs: \code{anomaly_scoring.py} (light: name, metadata, configuration
+validation) and \code{_anomaly_scoring_run.py} (heavy: the implementation). Action modules must not
+import \code{app.*}, \code{torch} or \code{rasterio} at the top of the file, only inside their
+functions. The reason: the api imports every Action module at start-up to list the available
+Actions, and a top-level \code{import torch} would drag hundreds of megabytes of deep-learning
+library into the web server to render a drop-down menu. A side effect worth remembering: a broken
+import in a worker-only module does not stop the api starting, so the api stays green while the
+worker cannot start.
+
+\section{Where Indradhanu lives}\label{sec:product:models}
+
+Indradhanu is not an Action. It is one selectable model \emph{inside} \code{anomaly_scoring}: the
+user ticks one or more models by name in the scoring dialog, and the Action loops over them
+(\code{for codename in cfg["model_codenames"]:}), writing each model's outputs to its own
+\code{models/<codename>/} folder. You can run Indradhanu and MNF-RX in one Action and compare their
+score maps side by side.
+
+Every foundation model carries an Indic codename, and the backend selects models \emph{by
+codename}, not by class name.
+
+\begin{table}[htbp]\centering
+\caption{The foundation-model roster (Indradhanu course, part 5; project instructions).}\label{tab:product:codenames}
+\small
+\begin{tabular}{@{}llll@{}}\toprule
+Codename & Meaning & Architecture & Sensor\\\midrule
+Pratibimba & reflection & spatial autoencoder & thermal\\
+Antardhana & disappearance & masked autoencoder & thermal\\
+Tirohita & vanished & masked autoencoder, L1 loss & thermal\\
+Asanskrita & unrefined & unnormalised variant & thermal\\
+Drashta & seer & normalised masked autoencoder & thermal\\
+Chakshu & the eye & \texttt{segformer\_mae} & thermal\\
+Indradhanu & rainbow (``Indra's bow'') & \texttt{hyperspectral\_segformer\_mae} & hyperspectral\\\bottomrule
+\end{tabular}
+\end{table}
+
+A codename becomes a running model through three cooperating pieces: a \textbf{manifest}
+(\code{current.json}) beside the weights file under \code{allotrope_models/<architecture>/}
+saying which file is current; the \textbf{resolver}
+(\file{backend/allotrope/foundation_models/resolver.py}), a static table of what each architecture
+can do (which scoring methods to offer, default patch size and stride, where its normalisation
+statistics live); and the \textbf{inferencer factory}
+(\file{app/foundation_models/inferencers/inferencer_factory.py}) mapping the architecture to the
+Python class that runs it. Adding a model means four registrations: the architecture class, the
+trainer factory, the inferencer factory, and a resolver capabilities entry plus a manifest. The
+fourth is the one people forget, and it fails silently: the model catalogue skips architectures
+with no capabilities entry, so a model that trained perfectly never appears in the picker.
+
+\begin{drift}
+\emph{Manifest values quoted by the Indradhanu course (part 5).} \code{current.json} for
+\code{hyperspectral_segformer_mae} listed file
+\code{hyperspectral_segformer_mae_v0.2.0_epoch200.pt}, version v0.2.0, epoch $200$, $5{,}507{,}354$
+parameters, encoder widths $[32, 64, 160, 256]$, compression width $D = 32$, decoder width $256$,
+validation loss $0.04349$\tagM{indradhanu workings/05-where-it-lives.md}. The manifest itself is
+not in this checkout (only the \code{.pt} file is), so these could not be re-read for this book.
+Since 2026-10-29 the shipped hyperspectral model is Indradhanu V2 (``Indradhanu Heavy''), whose
+resolver entry reads native bands (\cref{ch:sensors}, \cref{ch:shipping,ch:heavy}).
+\end{drift}
+
+\section{The vendable}\label{sec:product:vendable}
+
+Raw satellite files are unpleasant (\cref{ch:sensors}): every vendor its own layout, quality flags
+packed into bits, some files reflectance and some raw counts, detector quirks everywhere. If every
+detector had to cope with all of that, every detector would change whenever a sensor was added.
+So the first thing the system does with a scene is convert it, once, into a standard object.
+
+\begin{definition}[Vendable]\index{vendable}
+A \textbf{vendable} is the standard in-memory form of a scene: a cube in physical units, a
+validity cube of the same shape, and per-band metadata. It is produced by a
+\textbf{DatasetBuilder}\index{DatasetBuilder} from a raw file. Every detector, model and Action
+consumes a vendable; nothing downstream reads a raw sensor file. The classes are in
+\file{app/models/dataset/vendables.py}.
+\end{definition}
+
+Read the odd name as ``the thing this scene can \emph{vend}'': what it dispenses to anything that
+asks, once cleaned up.
+
+\begin{analogy}
+A shipping port receives cargo in every kind of packaging (sacks, crates, barrels, loose bales) and
+repacks it into standard containers. After that, cranes, trucks and ships need to handle one shape
+only, and a new kind of cargo needs a new repacking procedure, not new trucks. The vendable is the
+container; the dataset builders are the repacking sheds. The analogy also predicts the vendable's
+best-known limitation: a container's label says what is inside, not where it came from on a map,
+and the vendable likewise carries no geographic location (\cref{sec:product:georef}).
+\end{analogy}
+
+\subsection{Three variants and their fields}
+
+\begin{table}[htbp]\centering
+\caption{The three vendable classes.}\label{tab:product:variants}
+\small
+\begin{tabular}{@{}lp{0.26\linewidth}p{0.25\linewidth}@{}}\toprule
+Class & Sensors & Cube holds\\\midrule
+\texttt{VendableHyperspectralDataset} & PRISMA, AVIRIS-NG (and SpectralEarth patches) & reflectance\\
+\texttt{VendableEnmapHyperspectralDataset} & EnMAP & reflectance, plus five quality masks\\
+\texttt{VendableThermalDataset} & Landsat 9, HotSat-1 & Celsius (HotSat-1: raw DN)\\\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[htbp]\centering
+\caption{Fields of \texttt{VendableHyperspectralDataset}
+(\texttt{app/models/dataset/vendables.py}, lines 141--178).}\label{tab:product:fields}
+\small
+\begin{tabular}{@{}llp{0.42\linewidth}@{}}\toprule
+Field & Type, shape & Meaning\\\midrule
+\texttt{normalized\_hyperspectral\_cube} & array \shape{(C, H, W)} & reflectance; what a model sees\\
+\texttt{validity\_cube} & array \shape{(C, H, W)} & 1 real measurement, 0 not\\
+\texttt{spectral\_family\_order} & list of $C$ enums & detector of each band (VNIR or SWIR)\\
+\texttt{band\_cw\_order} & list of $C$ floats & centre wavelength of each band, nm\\
+\texttt{band\_fwhm\_order} & list of floats & FWHM of each band; empty on the common grid\\
+\texttt{band\_validity\_by\_position} & list of $C$ ints & per-band validity flag\\
+\texttt{band\_level\_validity\_score} & list of $C$ floats & percentage of valid pixels per band\\\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{figure}[htbp]\centering
+\begin{tikzpicture}[font=\footnotesize]
+% the two big arrays as stacked slabs
+\foreach \k in {4,3,2,1,0}{
+  \draw[spec,fill=spec!10] (0.12*\k,0.12*\k) rectangle ++(3.3,2.2);}
+\node[align=center,font=\scriptsize] at (1.65,1.1) {\texttt{normalized\_}\\\texttt{hyperspectral\_cube}\\\texttt{(C, H, W)}};
+\foreach \k in {4,3,2,1,0}{
+  \draw[maskgrey!80!black,fill=maskgrey!12] (4.2+0.12*\k,0.12*\k) rectangle ++(2.6,2.2);}
+\node[align=center,font=\scriptsize] at (5.5,1.1) {\texttt{validity\_cube}\\\texttt{(C, H, W)}\\0/1};
+% per-band lists
+\foreach \y/\t/\c in {2.9/band\_cw\_order/spec,2.25/band\_fwhm\_order/spec,1.6/spectral\_family\_order/spat,0.95/band\_validity\_by\_position/maskgrey!80!black,0.3/band\_level\_validity\_score/maskgrey!80!black}{
+  \node[anchor=west,text=\c,font=\scriptsize] at (7.9,\y) {\texttt{\t}};
+  \foreach \i in {0,...,7}{\draw[\c] (7.95+0.22*\i,\y-0.4) rectangle ++(0.2,0.16);}
+  \node[anchor=west,font=\scriptsize] at (9.75,\y-0.32) {$\times C$};}
+\draw[decorate,decoration={brace,amplitude=4pt,mirror}] (0,-0.3) -- (7.3,-0.3)
+  node[midway,below=5pt,align=center]{two arrays of the same shape: values and validity};
+\draw[decorate,decoration={brace,amplitude=4pt,mirror}] (7.9,-0.3) -- (10.4,-0.3)
+  node[midway,below=5pt,align=center]{per-band lists};
+\end{tikzpicture}
+\caption{The hyperspectral vendable as a data structure: two arrays of identical shape (the
+reflectance cube and its validity cube) and five lists with one entry per band. There is no field
+for map coordinates.}\label{fig:product:vendable}
+\end{figure}
+
+\begin{sourcenote}[: the EnMAP class is not a subclass]
+The Indradhanu course (part 4) says EnMAP has ``a subclass'' of
+\code{VendableHyperspectralDataset} with five extra quality masks. In the source,
+\code{VendableEnmapHyperspectralDataset} is a separate class deriving directly from Pydantic's
+\code{BaseModel} (\file{app/models/dataset/vendables.py}, line 233), with the same core fields
+re-declared plus the masks, a land/water class layer and the two detectors' channel indices. Code
+that checks \code{isinstance(v, VendableHyperspectralDataset)} will therefore \emph{not} accept an
+EnMAP onboarding vendable. (After \code{band_filter_apply}, the EnMAP builder's output on the
+common grid is the same class as every other hyperspectral vendable.)
+\end{sourcenote}
+
+\subsection{Two vendables in a scene's life}
+
+A hyperspectral scene has two vendables. Scene onboarding builds the \textbf{onboarding vendable},
+with all the sensor's native bands. The \code{band_filter_apply} Action builds the
+\textbf{filtered vendable}, on the common grid, and pickles it to \code{filtered_vendable.pkl}
+(\cref{ch:bandpipeline} is that Action's pipeline). Indradhanu v0.2.0 and the classical detectors
+read the filtered one; spectral matching reads the onboarding one, because it needs native bands
+and their FWHM. If \code{band_filter_apply} has not run, the scoring Action refuses a hyperspectral
+scene with \code{"anomaly_scoring on a hyperspectral scene needs input_band_filter_output_id."}
+Thermal scenes skip band filtering and are scored from the onboarding vendable.
+
+\coursefig[0.95\linewidth]{iw-04-vendable}{How a vendable reaches Indradhanu (course figure,
+Indradhanu part 4). Of the filtered vendable's fields the model uses the cube and the validity
+cube; a pixel is spatially valid if it is valid in at least one band.}{fig:product:coursevendable}
+
+\subsection{Per-band and per-pixel validity, computed}
+
+Two summaries of the validity cube $\mat{V}$ appear everywhere. The \emph{per-band} score, stored in
+\code{band_level_validity_score}, is the percentage of pixels valid in band $c$:
+\begin{equation}\label{eq:product:bandscore}
+s_c = 100 \times \frac{1}{HW}\sum_{i=0}^{H-1}\sum_{j=0}^{W-1} \mat{V}[c,i,j].
+\end{equation}
+The \emph{per-pixel} map used by the scoring code is
+\begin{equation}\label{eq:product:spatial}
+m(i,j) = \begin{cases} 1 & \text{if } \sum_{c=0}^{C-1}\mat{V}[c,i,j] > 0,\\ 0 & \text{otherwise.}\end{cases}
+\end{equation}
+
+\begin{worked}[label={we:product:validity}]{Both summaries on a 3-band, 2-by-2 validity cube}
+A validity cube after the band pipeline (all-or-nothing per pixel) has
+\[
+\mat{V}[0] = \begin{pmatrix}1&1\\0&1\end{pmatrix},\quad
+\mat{V}[1] = \begin{pmatrix}1&1\\0&1\end{pmatrix},\quad
+\mat{V}[2] = \begin{pmatrix}1&1\\0&1\end{pmatrix}.
+\]
+\emph{Per band}, by \cref{eq:product:bandscore} with $HW = 4$:
+\begin{align*}
+s_0 &= 100 \times (1 + 1 + 0 + 1)/4 = 100 \times 3/4 = 75.0,
+\end{align*}
+and likewise $s_1 = s_2 = 75.0$.
+
+\emph{Per pixel}, by \cref{eq:product:spatial}, sum down the bands at each position:
+\begin{align*}
+(0,0):\ 1 + 1 + 1 &= 3 > 0 \Rightarrow 1, & (0,1):\ 1 + 1 + 1 &= 3 \Rightarrow 1,\\
+(1,0):\ 0 + 0 + 0 &= 0 \Rightarrow 0, & (1,1):\ 1 + 1 + 1 &= 3 \Rightarrow 1.
+\end{align*}
+So $m = \begin{pmatrix}1&1\\0&1\end{pmatrix}$, and the fraction of valid pixels is $3/4$, the
+same $75\%$, as it must be when validity is all-or-nothing.
+\end{worked}
+
+\subsection{The contract a model receives}
+
+From the filtered vendable, the scoring code builds exactly two tensors for a hyperspectral model
+(\file{_anomaly_scoring_run.py}, lines 285--286):
+\begin{lstlisting}
+scene_tensor = torch.from_numpy(cube_np).float()                 # (165, H, W) reflectance
+mask_tensor  = torch.from_numpy(spatial_valid[None]).float()     # (1, H, W)   1.0 valid
+\end{lstlisting}
+\code{[None]} inserts a new axis of size $1$ at the front, turning \shape{(H, W)} into
+\shape{(1, H, W)}. Notice what is \emph{not} in the contract: no wavelengths, no coordinates, no
+sensor name. The model does not know which satellite took the picture; that is the payoff of the
+common grid.
+
+\begin{sourcenote}[: a naming collision]
+The field is called \code{normalized_hyperspectral_cube}, but ``normalized'' here means ``cleaned
+and standardised by the intake pipeline'' (physical units, BSQ layout, common grid). It is
+\emph{not} the per-band z-score of \cref{ch:bandpipeline}, which happens inside the model at run
+time. The vendable's values are reflectance, around $0.02$ to $0.30$.
+\end{sourcenote}
+
+\section{No spatial reference, on purpose}\label{sec:product:georef}
+
+A vendable does not know where on Earth it is. There is no coordinate reference system, no
+latitude or longitude, no transform field. To see what is missing, you need one definition.
+
+\begin{definition}[Affine geotransform]\index{affine transform}
+A \textbf{geotransform} maps a pixel's column $j$ and row $i$ to map coordinates $(x, y)$ in some
+coordinate reference system (CRS):
+\begin{equation}\label{eq:product:affine}
+\begin{pmatrix} x \\ y \end{pmatrix} =
+\begin{pmatrix} a & b \\ d & e \end{pmatrix}
+\begin{pmatrix} j \\ i \end{pmatrix} +
+\begin{pmatrix} c \\ f \end{pmatrix}.
+\end{equation}
+$a$ and $e$ are the pixel width and height in map units, $b$ and $d$ are rotation terms (usually
+$0$), and $(c, f)$ is the map position of the top-left corner. The \textbf{identity transform} has
+$a = e = 1$ and $b = c = d = f = 0$, so $(x, y) = (j, i)$: ``pixel $(0,0)$ is at $(0,0)$ and each
+pixel is one unit''. Meaningless as geography.
+\end{definition}
+
+The matrix-times-vector product in \cref{eq:product:affine} means: the first output is
+$a \cdot j + b \cdot i$, the second is $d \cdot j + e \cdot i$; then add $c$ and $f$.
+
+\begin{worked}[label={we:product:affine}]{Pixel to map, with a real transform and with the identity}
+A scene in a UTM projection (map units are metres) has $30$ m pixels, top-left corner at
+$x = 500{,}000$, $y = 2{,}000{,}000$, and no rotation (illustrative values\tagA). Rows increase
+southwards, so $e = -30$. The transform is $a = 30$, $b = 0$, $c = 500{,}000$, $d = 0$,
+$e = -30$, $f = 2{,}000{,}000$. Where is the pixel at row $i = 10$, column $j = 20$?
+\begin{align*}
+x &= a\,j + b\,i + c = 30 \times 20 + 0 \times 10 + 500{,}000 = 600 + 0 + 500{,}000 = 500{,}600,\\
+y &= d\,j + e\,i + f = 0 \times 20 + (-30) \times 10 + 2{,}000{,}000 = -300 + 2{,}000{,}000 = 1{,}999{,}700.
+\end{align*}
+With the identity transform the same pixel lands at $(x, y) = (20, 10)$: twenty metres east and ten
+north of wherever $(0,0)$ is in the file's CRS. Opened in a GIS, an intermediate GeoTIFF therefore
+lands as a tiny image near the origin (for a geographic CRS, off the coast of West Africa). That is
+not a bug.
+\end{worked}
+
+Every GeoTIFF an Action writes carries the identity transform. The real georeferencing is
+recovered once, at export, by re-reading the original raw file (\code{app/georef/}). Carrying
+geographic metadata through every step would mean every step had a chance to corrupt it; deriving it
+once, from the source, at the end, means it is right. PRISMA is the awkward case: its L2D product is
+swath data with a latitude and longitude per pixel, and the export fits an axis-aligned
+affine transform to those, discarding the swath's curvature (\file{docs/03-data-pipeline.md}). A
+scene whose georeferencing cannot be resolved fails at export, not at analysis, with the error
+\code{422 crs_missing}.
+
+Practical consequences: do not add a transform field to the vendable expecting it to be filled in,
+and do not trust the coordinates of an intermediate \code{.tif}.
+
+\section{Vendables are pickled: class names are a wire format}\label{sec:product:pickle}
+
+\code{band_filter_apply} writes the filtered vendable to disk with Python's \code{pickle} module,
+and later Actions (and the api) read it back. A pickle stores an object's data together with the
+\emph{full import path} of its class, for example
+\code{app.models.dataset.vendables.VendableHyperspectralDataset}. Loading the file imports that
+exact path. Rename the class or move the module, and every vendable already on disk becomes
+unloadable: not corrupted, unreadable, because the recorded path no longer exists. The module's own
+docstring says it: ``Treat the class names and module path as a wire format.'' Adding a field is
+safe; renaming or moving one is a breaking change, like changing a database schema.
+
+\section{The thermal vendable and its two cloud masks}\label{sec:product:thermal}
+
+\code{VendableThermalDataset} holds \code{normalized_thermal_cube} (degrees Celsius) and a
+validity cube, plus two kinds of cloud information kept apart on purpose: a \code{cloud_mask}
+modelled from the scene's own temperature distribution (a five-component Gaussian mixture,
+\file{docs/03-data-pipeline.md}) and the provider's \code{QA_PIXEL}-derived masks
+(\cref{we:sensors:qa}). The provider's mask is authoritative but conservative and not always
+present; the modelled one is always available and adapts to the scene. Merging them would throw
+away their disagreement, which is often the interesting part.
+
+\begin{sourcenote}[: HotSat-1 units are silently dropped]
+The anomaly-detection course (part 5) notes, and the source confirms, that the HotSat-1 builder
+passes a \code{units} value that \code{VendableThermalDataset} does not declare. Pydantic models
+ignore undeclared fields by default, so the value is discarded, and the scoring code's check
+\code{getattr(vendable, "units", None)} finds nothing. The guard meant to treat HotSat's raw DN
+differently from Celsius (\cref{ch:bandpipeline}) is therefore not in effect through this path.
+Source over comments.
+\end{sourcenote}
+
+\begin{confusions}
+\confusion{Can one Project cover several Scenes?}{No. A Project binds to exactly one Scene. Two
+scenes, two Projects.}
+\confusion{Is the Action graph a workflow engine?}{Lighter than that. Actions name their inputs;
+there is no scheduler and no automatic re-run. A user creates each Action.}
+\confusion{Why is scoring separate from thresholding?}{Scoring is deterministic and expensive;
+thresholding is a judgement call and cheap. Splitting them lets you try several thresholds on one
+scoring run.}
+\confusion{Is Indradhanu a service I can call?}{No. It is a Python class loaded inside the worker,
+on demand, for the duration of one scoring job, as one of the models ticked in
+\texttt{anomaly\_scoring}.}
+\confusion{Is the vendable the file on disk or the object in memory?}{Both, at different moments.
+It is a Python object; \texttt{filtered\_vendable.pkl} is that object pickled.}
+\confusion{The intermediate GeoTIFF sits at (0,0). Is georeferencing broken?}{No. Action outputs
+carry the identity transform by design; coordinates are recovered at export from the raw file.}
+\confusion{The api is healthy but nothing runs. Why?}{Almost always the worker: crashed or
+crash-looping, often on an import error. The api's health check does not look at the worker.}
+\end{confusions}
+
+\begin{checkyourself}
+\item\label{ex:product:1} A user wants to analyse one scene with two band-filter settings, score each
+with Indradhanu and MNF-RX in one scoring Action, and try two thresholds on each scoring run. How many
+Scenes, Projects and Actions (counting only \texttt{band\_filter\_apply}, \texttt{anomaly\_scoring}
+and \texttt{anomaly\_detection\_prep}) are needed if each band-filter setting has its own Project?
+\item\label{ex:product:2} For the graph with edges $B \to G$, $B \to S$, $G \to S$, $S \to P$,
+$P \to M$, $S \to Q$, write the in-degree of each node and give two different topological orders.
+Explain why adding an edge $M \to B$ is impossible in the product.
+\item\label{ex:product:3} A validity cube of shape $(2, 2, 3)$ has $\mat{V}[0] = \mat{V}[1] =
+\begin{pmatrix}1&0&1\\1&1&0\end{pmatrix}$. Compute $s_0$ and the per-pixel map $m$, and the fraction
+of valid pixels.
+\item\label{ex:product:4} With the transform of \cref{we:product:affine}, where is pixel row $i = 0$,
+column $j = 0$? Row $100$, column $0$? And which pixel is at map position
+$x = 501{,}500$, $y = 1{,}998{,}500$? (Invert \cref{eq:product:affine} by hand.)
+\item\label{ex:product:5} With heartbeat interval $5$ s and timeout $60$ s, a worker freezes for
+$45$ seconds and then resumes. Is its job reaped? What if the operator sets the timeout to $12$ s?
+\end{checkyourself}
+
+\nextchapter{ch:bandpipeline}

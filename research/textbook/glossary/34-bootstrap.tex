@@ -1,0 +1,19 @@
+\glossentry{Sampling distribution}{The spread of values a statistic would take across many fresh datasets of the same kind.}
+\glossentry{Standard error}{The standard deviation of a statistic's sampling distribution; sigma / sqrt(n) for the mean of n independent values.}
+\glossentry{Covariance}{The expected product of two quantities' deviations from their means; positive when they rise and fall together.}
+\glossentry{Variance of a difference}{Var(A - B) = Var A + Var B - 2 Cov(A, B); small when A and B move together.}
+\glossentry{Bootstrap}{Estimating a statistic's sampling distribution by recomputing it on many samples drawn with replacement from the data.}
+\glossentry{With replacement}{Drawing so that each pick can be any item, including ones already picked; some items appear several times, some not at all.}
+\glossentry{Bootstrap sample}{One draw of n items with replacement from the n data items.}
+\glossentry{Percentile interval}{The 2.5th to 97.5th percentiles of the bootstrap values: a 95 percent interval.}
+\glossentry{Linear interpolation (percentiles)}{np.percentile's rule: the q-th percentile of n sorted values sits at position (n - 1) q / 100, interpolated between neighbours.}
+\glossentry{Design effect}{1 + (m - 1) rho: how much within-group correlation inflates the variance of a mean over groups of m correlated values.}
+\glossentry{Effective sample size}{The number of independent values that would give the same variance: n m / (1 + (m - 1) rho) for n groups of m.}
+\glossentry{Object bootstrap}{Resampling labelled objects rather than pixels, because an object's pixels are not independent evidence.}
+\glossentry{Per-pixel contribution c(p)}{max(0, m - FPR(p)) / m, with FPR(p) the share of background scoring at or above target pixel p; its mean over target pixels is the pAUC.}
+\glossentry{Object pAUC parts}{The pair (sum of c over an object's pixels, its pixel count) from which a bootstrap rebuilds pAUC.}
+\glossentry{Paired bootstrap}{A bootstrap that applies the same draw to both scorers being compared, so that which objects were drawn cancels in the difference.}
+\glossentry{P(B>A)}{The share of bootstrap draws in which scorer B's measure beat scorer A's.}
+\glossentry{Resolved gain}{A difference whose 95 percent paired-bootstrap interval lies wholly above zero; the repository's rule since 2026-10-21.}
+\glossentry{Scene-level uncertainty}{Luck in which scenes are on the bench; not covered by the object bootstrap, so its intervals are lower bounds.}
+\glossentry{Bench resolution}{The smallest difference a bench can tell from noise: about plus or minus 0.005 to 0.01 pAUC on the real PRISMA bench.}

@@ -1,0 +1,1190 @@
+{
+ "pv_holdout": {
+  "before": {
+   "n": 12,
+   "mean_p_manmade": 0.248,
+   "median": 0.003,
+   "share_above_0.5": 0.333,
+   "share_above_0.35": 0.333,
+   "share_above_0.25": 0.333,
+   "class_of_manmade_calls": {
+    "oil_fuel": 4
+   }
+  },
+  "after": {
+   "n": 12,
+   "mean_p_manmade": 0.248,
+   "median": 0.003,
+   "share_above_0.5": 0.333,
+   "share_above_0.35": 0.333,
+   "share_above_0.25": 0.333,
+   "class_of_manmade_calls": {
+    "oil_fuel": 4
+   }
+  },
+  "pixels": {
+   "before": [
+    {
+     "id": "pv_prisma_20210722_18",
+     "kind": "pv",
+     "block": "main",
+     "doubtful": false,
+     "p_manmade": 0.0017993486253544688,
+     "cls": "plastic",
+     "p_cls": 0.49573665857315063
+    },
+    {
+     "id": "pv_prisma_20210722_8",
+     "kind": "pv",
+     "block": "main",
+     "doubtful": false,
+     "p_manmade": 0.001949564553797245,
+     "cls": "plastic",
+     "p_cls": 0.48530855774879456
+    },
+    {
+     "id": "pv_prisma_20210722_14",
+     "kind": "pv",
+     "block": "main",
+     "doubtful": false,
+     "p_manmade": 0.0007667438476346433,
+     "cls": "plastic",
+     "p_cls": 0.5984304547309875
+    },
+    {
+     "id": "pv_prisma_20210722_27",
+     "kind": "pv",
+     "block": "main",
+     "doubtful": false,
+     "p_manmade": 0.0026407220866531134,
+     "cls": "plastic",
+     "p_cls": 0.5070107579231262
+    },
+    {
+     "id": "pv_prisma_20210722_4",
+     "kind": "pv",
+     "block": "main",
+     "doubtful": false,
+     "p_manmade": 0.0026558858808130026,
+     "cls": "plastic",
+     "p_cls": 0.48873502016067505
+    },
+    {
+     "id": "pv_prisma_20210722_16",
+     "kind": "pv",
+     "block": "main",
+     "doubtful": false,
+     "p_manmade": 0.0031526244711130857,
+     "cls": "plastic",
+     "p_cls": 0.5159198045730591
+    },
+    {
+     "id": "pv_prisma_20210722_33",
+     "kind": "pv",
+     "block": "north-small",
+     "doubtful": false,
+     "p_manmade": 0.0005296450108289719,
+     "cls": "plastic",
+     "p_cls": 0.5575597882270813
+    },
+    {
+     "id": "pv_prisma_20210722_39",
+     "kind": "pv",
+     "block": "east-small",
+     "doubtful": false,
+     "p_manmade": 0.0011152963852509856,
+     "cls": "plastic",
+     "p_cls": 0.46398410201072693
+    },
+    {
+     "id": "pv_tanager_20250412gron_5",
+     "kind": "pv",
+     "block": "gron",
+     "doubtful": false,
+     "p_manmade": 0.818206250667572,
+     "cls": "oil_fuel",
+     "p_cls": 0.9954051971435547
+    },
+    {
+     "id": "pv_tanager_20250412gron_11",
+     "kind": "pv",
+     "block": "gron",
+     "doubtful": false,
+     "p_manmade": 0.7702018618583679,
+     "cls": "oil_fuel",
+     "p_cls": 0.994563639163971
+    },
+    {
+     "id": "pv_tanager_20250412gron_3",
+     "kind": "pv",
+     "block": "gron",
+     "doubtful": false,
+     "p_manmade": 0.7418494820594788,
+     "cls": "oil_fuel",
+     "p_cls": 0.9893524646759033
+    },
+    {
+     "id": "pv_tanager_20250412gron_14",
+     "kind": "pv",
+     "block": "gron",
+     "doubtful": false,
+     "p_manmade": 0.6348678469657898,
+     "cls": "oil_fuel",
+     "p_cls": 0.9739034175872803
+    }
+   ],
+   "after": [
+    {
+     "id": "pv_prisma_20210722_18",
+     "kind": "pv",
+     "block": "main",
+     "doubtful": false,
+     "p_manmade": 0.0018002446740865707,
+     "cls": "plastic",
+     "p_cls": 0.4954894185066223
+    },
+    {
+     "id": "pv_prisma_20210722_8",
+     "kind": "pv",
+     "block": "main",
+     "doubtful": false,
+     "p_manmade": 0.0019502791110426188,
+     "cls": "plastic",
+     "p_cls": 0.48512977361679077
+    },
+    {
+     "id": "pv_prisma_20210722_14",
+     "kind": "pv",
+     "block": "main",
+     "doubtful": false,
+     "p_manmade": 0.0007669338374398649,
+     "cls": "plastic",
+     "p_cls": 0.5982818603515625
+    },
+    {
+     "id": "pv_prisma_20210722_27",
+     "kind": "pv",
+     "block": "main",
+     "doubtful": false,
+     "p_manmade": 0.002641779836267233,
+     "cls": "plastic",
+     "p_cls": 0.5068061947822571
+    },
+    {
+     "id": "pv_prisma_20210722_4",
+     "kind": "pv",
+     "block": "main",
+     "doubtful": false,
+     "p_manmade": 0.002656573196873069,
+     "cls": "plastic",
+     "p_cls": 0.4886089265346527
+    },
+    {
+     "id": "pv_prisma_20210722_16",
+     "kind": "pv",
+     "block": "main",
+     "doubtful": false,
+     "p_manmade": 0.0031534875743091106,
+     "cls": "plastic",
+     "p_cls": 0.5157780051231384
+    },
+    {
+     "id": "pv_prisma_20210722_33",
+     "kind": "pv",
+     "block": "north-small",
+     "doubtful": false,
+     "p_manmade": 0.0005300470511429012,
+     "cls": "plastic",
+     "p_cls": 0.5571366548538208
+    },
+    {
+     "id": "pv_prisma_20210722_39",
+     "kind": "pv",
+     "block": "east-small",
+     "doubtful": false,
+     "p_manmade": 0.0011164869647473097,
+     "cls": "plastic",
+     "p_cls": 0.4634888768196106
+    },
+    {
+     "id": "pv_tanager_20250412gron_5",
+     "kind": "pv",
+     "block": "gron",
+     "doubtful": false,
+     "p_manmade": 0.8182641267776489,
+     "cls": "oil_fuel",
+     "p_cls": 0.9950190782546997
+    },
+    {
+     "id": "pv_tanager_20250412gron_11",
+     "kind": "pv",
+     "block": "gron",
+     "doubtful": false,
+     "p_manmade": 0.7702723741531372,
+     "cls": "oil_fuel",
+     "p_cls": 0.9941680431365967
+    },
+    {
+     "id": "pv_tanager_20250412gron_3",
+     "kind": "pv",
+     "block": "gron",
+     "doubtful": false,
+     "p_manmade": 0.7419026494026184,
+     "cls": "oil_fuel",
+     "p_cls": 0.9890782237052917
+    },
+    {
+     "id": "pv_tanager_20250412gron_14",
+     "kind": "pv",
+     "block": "gron",
+     "doubtful": false,
+     "p_manmade": 0.6349726319313049,
+     "cls": "oil_fuel",
+     "p_cls": 0.9734642505645752
+    }
+   ]
+  }
+ },
+ "pv_doubtful": {
+  "before": {
+   "n": 20,
+   "mean_p_manmade": 0.694,
+   "median": 0.993,
+   "share_above_0.5": 0.7,
+   "share_above_0.35": 0.7,
+   "share_above_0.25": 0.7,
+   "class_of_manmade_calls": {
+    "plastic": 14
+   }
+  },
+  "after": {
+   "n": 20,
+   "mean_p_manmade": 0.694,
+   "median": 0.993,
+   "share_above_0.5": 0.7,
+   "share_above_0.35": 0.7,
+   "share_above_0.25": 0.7,
+   "class_of_manmade_calls": {
+    "plastic": 14
+   }
+  },
+  "pixels": {
+   "before": [
+    {
+     "id": "pv_prisma_20210722_43",
+     "kind": "pv",
+     "block": "east-mid",
+     "doubtful": true,
+     "p_manmade": 0.002178726950660348,
+     "cls": "plastic",
+     "p_cls": 0.4581453204154968
+    },
+    {
+     "id": "pv_prisma_20210722_44",
+     "kind": "pv",
+     "block": "east-mid",
+     "doubtful": true,
+     "p_manmade": 0.001331521663814783,
+     "cls": "plastic",
+     "p_cls": 0.45501941442489624
+    },
+    {
+     "id": "pv_prisma_20210722_45",
+     "kind": "pv",
+     "block": "east-mid",
+     "doubtful": true,
+     "p_manmade": 0.0008958883117884398,
+     "cls": "plastic",
+     "p_cls": 0.48201143741607666
+    },
+    {
+     "id": "pv_prisma_20210722_46",
+     "kind": "pv",
+     "block": "east-mid",
+     "doubtful": true,
+     "p_manmade": 0.0006543712806887925,
+     "cls": "plastic",
+     "p_cls": 0.4870155453681946
+    },
+    {
+     "id": "pv_prisma_20210722_47",
+     "kind": "pv",
+     "block": "east-mid",
+     "doubtful": true,
+     "p_manmade": 0.0008411337621510029,
+     "cls": "plastic",
+     "p_cls": 0.49112996459007263
+    },
+    {
+     "id": "pv_prisma_20210722_48",
+     "kind": "pv",
+     "block": "east-mid",
+     "doubtful": true,
+     "p_manmade": 0.0022750478237867355,
+     "cls": "oil_fuel",
+     "p_cls": 0.47378671169281006
+    },
+    {
+     "id": "pv_tanager_20250729cab_1",
+     "kind": "pv",
+     "block": "cab",
+     "doubtful": true,
+     "p_manmade": 0.9928715825080872,
+     "cls": "plastic",
+     "p_cls": 0.9940348267555237
+    },
+    {
+     "id": "pv_tanager_20250729cab_2",
+     "kind": "pv",
+     "block": "cab",
+     "doubtful": true,
+     "p_manmade": 0.9366220235824585,
+     "cls": "plastic",
+     "p_cls": 0.9476660490036011
+    },
+    {
+     "id": "pv_tanager_20250729cab_3",
+     "kind": "pv",
+     "block": "cab",
+     "doubtful": true,
+     "p_manmade": 0.9982888102531433,
+     "cls": "plastic",
+     "p_cls": 0.9990741014480591
+    },
+    {
+     "id": "pv_tanager_20250729cab_4",
+     "kind": "pv",
+     "block": "cab",
+     "doubtful": true,
+     "p_manmade": 0.9932896494865417,
+     "cls": "plastic",
+     "p_cls": 0.9942113757133484
+    },
+    {
+     "id": "pv_tanager_20250729cab_5",
+     "kind": "pv",
+     "block": "cab",
+     "doubtful": true,
+     "p_manmade": 0.9944323897361755,
+     "cls": "plastic",
+     "p_cls": 0.9976686835289001
+    },
+    {
+     "id": "pv_tanager_20250729cab_6",
+     "kind": "pv",
+     "block": "cab",
+     "doubtful": true,
+     "p_manmade": 0.9957172274589539,
+     "cls": "plastic",
+     "p_cls": 0.9914992451667786
+    },
+    {
+     "id": "pv_tanager_20250729cab_7",
+     "kind": "pv",
+     "block": "cab",
+     "doubtful": true,
+     "p_manmade": 0.9990289211273193,
+     "cls": "plastic",
+     "p_cls": 0.9996582269668579
+    },
+    {
+     "id": "pv_tanager_20250729cab_8",
+     "kind": "pv",
+     "block": "cab",
+     "doubtful": true,
+     "p_manmade": 0.994759738445282,
+     "cls": "plastic",
+     "p_cls": 0.99776291847229
+    },
+    {
+     "id": "pv_tanager_20250729cab_9",
+     "kind": "pv",
+     "block": "cab",
+     "doubtful": true,
+     "p_manmade": 0.9988705515861511,
+     "cls": "plastic",
+     "p_cls": 0.9996216297149658
+    },
+    {
+     "id": "pv_tanager_20250729cab_10",
+     "kind": "pv",
+     "block": "cab",
+     "doubtful": true,
+     "p_manmade": 0.9970616698265076,
+     "cls": "plastic",
+     "p_cls": 0.9988241791725159
+    },
+    {
+     "id": "pv_tanager_20250729cab_11",
+     "kind": "pv",
+     "block": "cab",
+     "doubtful": true,
+     "p_manmade": 0.9758346080780029,
+     "cls": "plastic",
+     "p_cls": 0.9849398732185364
+    },
+    {
+     "id": "pv_tanager_20250729cab_12",
+     "kind": "pv",
+     "block": "cab",
+     "doubtful": true,
+     "p_manmade": 0.9988221526145935,
+     "cls": "plastic",
+     "p_cls": 0.9992449283599854
+    },
+    {
+     "id": "pv_tanager_20250729cab_13",
+     "kind": "pv",
+     "block": "cab",
+     "doubtful": true,
+     "p_manmade": 0.9983007311820984,
+     "cls": "plastic",
+     "p_cls": 0.9991223216056824
+    },
+    {
+     "id": "pv_tanager_20250729cab_14",
+     "kind": "pv",
+     "block": "cab",
+     "doubtful": true,
+     "p_manmade": 0.9887983202934265,
+     "cls": "plastic",
+     "p_cls": 0.9871090650558472
+    }
+   ],
+   "after": [
+    {
+     "id": "pv_prisma_20210722_43",
+     "kind": "pv",
+     "block": "east-mid",
+     "doubtful": true,
+     "p_manmade": 0.002181151881814003,
+     "cls": "plastic",
+     "p_cls": 0.45763471722602844
+    },
+    {
+     "id": "pv_prisma_20210722_44",
+     "kind": "pv",
+     "block": "east-mid",
+     "doubtful": true,
+     "p_manmade": 0.001332913525402546,
+     "cls": "plastic",
+     "p_cls": 0.4545445144176483
+    },
+    {
+     "id": "pv_prisma_20210722_45",
+     "kind": "pv",
+     "block": "east-mid",
+     "doubtful": true,
+     "p_manmade": 0.0008967320900410414,
+     "cls": "plastic",
+     "p_cls": 0.48155710101127625
+    },
+    {
+     "id": "pv_prisma_20210722_46",
+     "kind": "pv",
+     "block": "east-mid",
+     "doubtful": true,
+     "p_manmade": 0.0006548691890202463,
+     "cls": "plastic",
+     "p_cls": 0.4866459369659424
+    },
+    {
+     "id": "pv_prisma_20210722_47",
+     "kind": "pv",
+     "block": "east-mid",
+     "doubtful": true,
+     "p_manmade": 0.0008419228252023458,
+     "cls": "plastic",
+     "p_cls": 0.4906698763370514
+    },
+    {
+     "id": "pv_prisma_20210722_48",
+     "kind": "pv",
+     "block": "east-mid",
+     "doubtful": true,
+     "p_manmade": 0.0022767414338886738,
+     "cls": "oil_fuel",
+     "p_cls": 0.4734334349632263
+    },
+    {
+     "id": "pv_tanager_20250729cab_1",
+     "kind": "pv",
+     "block": "cab",
+     "doubtful": true,
+     "p_manmade": 0.9928741455078125,
+     "cls": "plastic",
+     "p_cls": 0.9936652183532715
+    },
+    {
+     "id": "pv_tanager_20250729cab_2",
+     "kind": "pv",
+     "block": "cab",
+     "doubtful": true,
+     "p_manmade": 0.9369457364082336,
+     "cls": "plastic",
+     "p_cls": 0.9424996376037598
+    },
+    {
+     "id": "pv_tanager_20250729cab_3",
+     "kind": "pv",
+     "block": "cab",
+     "doubtful": true,
+     "p_manmade": 0.9982888102531433,
+     "cls": "plastic",
+     "p_cls": 0.9990094900131226
+    },
+    {
+     "id": "pv_tanager_20250729cab_4",
+     "kind": "pv",
+     "block": "cab",
+     "doubtful": true,
+     "p_manmade": 0.9932916164398193,
+     "cls": "plastic",
+     "p_cls": 0.9939216375350952
+    },
+    {
+     "id": "pv_tanager_20250729cab_5",
+     "kind": "pv",
+     "block": "cab",
+     "doubtful": true,
+     "p_manmade": 0.9944341778755188,
+     "cls": "plastic",
+     "p_cls": 0.9973474740982056
+    },
+    {
+     "id": "pv_tanager_20250729cab_6",
+     "kind": "pv",
+     "block": "cab",
+     "doubtful": true,
+     "p_manmade": 0.9957180619239807,
+     "cls": "plastic",
+     "p_cls": 0.9913012385368347
+    },
+    {
+     "id": "pv_tanager_20250729cab_7",
+     "kind": "pv",
+     "block": "cab",
+     "doubtful": true,
+     "p_manmade": 0.9990289211273193,
+     "cls": "plastic",
+     "p_cls": 0.9996174573898315
+    },
+    {
+     "id": "pv_tanager_20250729cab_8",
+     "kind": "pv",
+     "block": "cab",
+     "doubtful": true,
+     "p_manmade": 0.9947612881660461,
+     "cls": "plastic",
+     "p_cls": 0.9974881410598755
+    },
+    {
+     "id": "pv_tanager_20250729cab_9",
+     "kind": "pv",
+     "block": "cab",
+     "doubtful": true,
+     "p_manmade": 0.9988705515861511,
+     "cls": "plastic",
+     "p_cls": 0.9995846152305603
+    },
+    {
+     "id": "pv_tanager_20250729cab_10",
+     "kind": "pv",
+     "block": "cab",
+     "doubtful": true,
+     "p_manmade": 0.9970620274543762,
+     "cls": "plastic",
+     "p_cls": 0.9986769556999207
+    },
+    {
+     "id": "pv_tanager_20250729cab_11",
+     "kind": "pv",
+     "block": "cab",
+     "doubtful": true,
+     "p_manmade": 0.9758751392364502,
+     "cls": "plastic",
+     "p_cls": 0.9832471013069153
+    },
+    {
+     "id": "pv_tanager_20250729cab_12",
+     "kind": "pv",
+     "block": "cab",
+     "doubtful": true,
+     "p_manmade": 0.9988222718238831,
+     "cls": "plastic",
+     "p_cls": 0.9991968274116516
+    },
+    {
+     "id": "pv_tanager_20250729cab_13",
+     "kind": "pv",
+     "block": "cab",
+     "doubtful": true,
+     "p_manmade": 0.9983009696006775,
+     "cls": "plastic",
+     "p_cls": 0.9989921450614929
+    },
+    {
+     "id": "pv_tanager_20250729cab_14",
+     "kind": "pv",
+     "block": "cab",
+     "doubtful": true,
+     "p_manmade": 0.9888045191764832,
+     "cls": "plastic",
+     "p_cls": 0.9865546226501465
+    }
+   ]
+  }
+ },
+ "background": {
+  "before": {
+   "n": 29,
+   "mean_p_manmade": 0.135,
+   "median": 0.117,
+   "share_above_0.5": 0.034,
+   "share_above_0.35": 0.103,
+   "share_above_0.25": 0.138,
+   "class_of_manmade_calls": {
+    "concrete_asphalt": 1
+   }
+  },
+  "after": {
+   "n": 29,
+   "mean_p_manmade": 0.136,
+   "median": 0.117,
+   "share_above_0.5": 0.034,
+   "share_above_0.35": 0.103,
+   "share_above_0.25": 0.138,
+   "class_of_manmade_calls": {
+    "concrete_asphalt": 1
+   }
+  },
+  "pixels": {
+   "before": [
+    {
+     "id": "bg_prisma_20210722_1",
+     "kind": "background",
+     "block": "near-main",
+     "doubtful": false,
+     "p_manmade": 0.0036681094206869602,
+     "cls": "plastic",
+     "p_cls": 0.45865267515182495
+    },
+    {
+     "id": "bg_prisma_20210722_2",
+     "kind": "background",
+     "block": "near-main",
+     "doubtful": false,
+     "p_manmade": 0.002971881767734885,
+     "cls": "plastic",
+     "p_cls": 0.5719276666641235
+    },
+    {
+     "id": "bg_prisma_20210722_3",
+     "kind": "background",
+     "block": "near-main",
+     "doubtful": false,
+     "p_manmade": 0.008850152604281902,
+     "cls": "plastic",
+     "p_cls": 0.5292217135429382
+    },
+    {
+     "id": "bg_prisma_20210722_4",
+     "kind": "background",
+     "block": "near-main",
+     "doubtful": false,
+     "p_manmade": 0.00287144654430449,
+     "cls": "plastic",
+     "p_cls": 0.59974604845047
+    },
+    {
+     "id": "bg_prisma_20210722_5",
+     "kind": "background",
+     "block": "near-main",
+     "doubtful": false,
+     "p_manmade": 0.00830878596752882,
+     "cls": "plastic",
+     "p_cls": 0.5442829132080078
+    },
+    {
+     "id": "bg_prisma_20210722_6",
+     "kind": "background",
+     "block": "near-main",
+     "doubtful": false,
+     "p_manmade": 0.0023244062904268503,
+     "cls": "plastic",
+     "p_cls": 0.6171056032180786
+    },
+    {
+     "id": "bg_prisma_20210722_7",
+     "kind": "background",
+     "block": "near-main",
+     "doubtful": false,
+     "p_manmade": 0.0016349941724911332,
+     "cls": "plastic",
+     "p_cls": 0.5463798642158508
+    },
+    {
+     "id": "bg_prisma_20210722_8",
+     "kind": "background",
+     "block": "near-main",
+     "doubtful": false,
+     "p_manmade": 0.02076820656657219,
+     "cls": "plastic",
+     "p_cls": 0.47751590609550476
+    },
+    {
+     "id": "bg_prisma_20210722_9",
+     "kind": "background",
+     "block": "near-main",
+     "doubtful": false,
+     "p_manmade": 0.012439855374395847,
+     "cls": "oil_fuel",
+     "p_cls": 0.446157306432724
+    },
+    {
+     "id": "bg_prisma_20210722_10",
+     "kind": "background",
+     "block": "near-main",
+     "doubtful": false,
+     "p_manmade": 0.013973208144307137,
+     "cls": "oil_fuel",
+     "p_cls": 0.6952322125434875
+    },
+    {
+     "id": "bg_prisma_20210722_11",
+     "kind": "background",
+     "block": "near-north",
+     "doubtful": false,
+     "p_manmade": 0.0032950115855783224,
+     "cls": "plastic",
+     "p_cls": 0.525647759437561
+    },
+    {
+     "id": "bg_prisma_20210722_12",
+     "kind": "background",
+     "block": "near-north",
+     "doubtful": false,
+     "p_manmade": 0.008723313920199871,
+     "cls": "plastic",
+     "p_cls": 0.5138012766838074
+    },
+    {
+     "id": "bg_prisma_20210722_13",
+     "kind": "background",
+     "block": "near-north",
+     "doubtful": false,
+     "p_manmade": 0.0008136228425428271,
+     "cls": "plastic",
+     "p_cls": 0.5069470405578613
+    },
+    {
+     "id": "bg_tanager_20250412gron_1",
+     "kind": "background",
+     "block": "gron",
+     "doubtful": false,
+     "p_manmade": 0.11685735732316971,
+     "cls": "wood_paper",
+     "p_cls": 0.5069186091423035
+    },
+    {
+     "id": "bg_tanager_20250412gron_2",
+     "kind": "background",
+     "block": "gron",
+     "doubtful": false,
+     "p_manmade": 0.010697274468839169,
+     "cls": "oil_fuel",
+     "p_cls": 0.69432532787323
+    },
+    {
+     "id": "bg_tanager_20250412gron_3",
+     "kind": "background",
+     "block": "gron",
+     "doubtful": false,
+     "p_manmade": 0.18409684300422668,
+     "cls": "oil_fuel",
+     "p_cls": 0.6246731281280518
+    },
+    {
+     "id": "bg_tanager_20250412gron_4",
+     "kind": "background",
+     "block": "gron",
+     "doubtful": false,
+     "p_manmade": 0.1318075805902481,
+     "cls": "oil_fuel",
+     "p_cls": 0.39722293615341187
+    },
+    {
+     "id": "bg_tanager_20250412gron_5",
+     "kind": "background",
+     "block": "gron",
+     "doubtful": false,
+     "p_manmade": 0.5957187414169312,
+     "cls": "concrete_asphalt",
+     "p_cls": 0.8025482296943665
+    },
+    {
+     "id": "bg_tanager_20250412gron_6",
+     "kind": "background",
+     "block": "gron",
+     "doubtful": false,
+     "p_manmade": 0.1539556235074997,
+     "cls": "oil_fuel",
+     "p_cls": 0.7056968212127686
+    },
+    {
+     "id": "bg_tanager_20250412gron_7",
+     "kind": "background",
+     "block": "gron",
+     "doubtful": false,
+     "p_manmade": 0.44299760460853577,
+     "cls": "concrete_asphalt",
+     "p_cls": 0.6689489483833313
+    },
+    {
+     "id": "bg_tanager_20250729cab_1",
+     "kind": "background",
+     "block": "cab",
+     "doubtful": false,
+     "p_manmade": 0.2192419171333313,
+     "cls": "oil_fuel",
+     "p_cls": 0.5614994168281555
+    },
+    {
+     "id": "bg_tanager_20250729cab_2",
+     "kind": "background",
+     "block": "cab",
+     "doubtful": false,
+     "p_manmade": 0.2504749894142151,
+     "cls": "oil_fuel",
+     "p_cls": 0.4234538972377777
+    },
+    {
+     "id": "bg_tanager_20250729cab_3",
+     "kind": "background",
+     "block": "cab",
+     "doubtful": false,
+     "p_manmade": 0.15953883528709412,
+     "cls": "concrete_asphalt",
+     "p_cls": 0.4823950231075287
+    },
+    {
+     "id": "bg_tanager_20250729cab_4",
+     "kind": "background",
+     "block": "cab",
+     "doubtful": false,
+     "p_manmade": 0.22989770770072937,
+     "cls": "oil_fuel",
+     "p_cls": 0.5010716319084167
+    },
+    {
+     "id": "bg_tanager_20250729cab_5",
+     "kind": "background",
+     "block": "cab",
+     "doubtful": false,
+     "p_manmade": 0.2057068943977356,
+     "cls": "oil_fuel",
+     "p_cls": 0.5806130766868591
+    },
+    {
+     "id": "bg_tanager_20250729cab_6",
+     "kind": "background",
+     "block": "cab",
+     "doubtful": false,
+     "p_manmade": 0.22908060252666473,
+     "cls": "oil_fuel",
+     "p_cls": 0.5308214426040649
+    },
+    {
+     "id": "bg_tanager_20250729cab_7",
+     "kind": "background",
+     "block": "cab",
+     "doubtful": false,
+     "p_manmade": 0.1748560667037964,
+     "cls": "oil_fuel",
+     "p_cls": 0.405365526676178
+    },
+    {
+     "id": "bg_tanager_20250729cab_8",
+     "kind": "background",
+     "block": "cab",
+     "doubtful": false,
+     "p_manmade": 0.2392396777868271,
+     "cls": "oil_fuel",
+     "p_cls": 0.4851078987121582
+    },
+    {
+     "id": "bg_tanager_20250729cab_9",
+     "kind": "background",
+     "block": "cab",
+     "doubtful": false,
+     "p_manmade": 0.4733036160469055,
+     "cls": "oil_fuel",
+     "p_cls": 0.598089873790741
+    }
+   ],
+   "after": [
+    {
+     "id": "bg_prisma_20210722_1",
+     "kind": "background",
+     "block": "near-main",
+     "doubtful": false,
+     "p_manmade": 0.0036819095257669687,
+     "cls": "plastic",
+     "p_cls": 0.456926167011261
+    },
+    {
+     "id": "bg_prisma_20210722_2",
+     "kind": "background",
+     "block": "near-main",
+     "doubtful": false,
+     "p_manmade": 0.0029728480149060488,
+     "cls": "plastic",
+     "p_cls": 0.5717412233352661
+    },
+    {
+     "id": "bg_prisma_20210722_3",
+     "kind": "background",
+     "block": "near-main",
+     "doubtful": false,
+     "p_manmade": 0.008896609768271446,
+     "cls": "plastic",
+     "p_cls": 0.5264334678649902
+    },
+    {
+     "id": "bg_prisma_20210722_4",
+     "kind": "background",
+     "block": "near-main",
+     "doubtful": false,
+     "p_manmade": 0.002872681012377143,
+     "cls": "plastic",
+     "p_cls": 0.599486768245697
+    },
+    {
+     "id": "bg_prisma_20210722_5",
+     "kind": "background",
+     "block": "near-main",
+     "doubtful": false,
+     "p_manmade": 0.008317355997860432,
+     "cls": "plastic",
+     "p_cls": 0.5437154173851013
+    },
+    {
+     "id": "bg_prisma_20210722_6",
+     "kind": "background",
+     "block": "near-main",
+     "doubtful": false,
+     "p_manmade": 0.0023247115314006805,
+     "cls": "plastic",
+     "p_cls": 0.617024838924408
+    },
+    {
+     "id": "bg_prisma_20210722_7",
+     "kind": "background",
+     "block": "near-main",
+     "doubtful": false,
+     "p_manmade": 0.0016383882611989975,
+     "cls": "plastic",
+     "p_cls": 0.5452457666397095
+    },
+    {
+     "id": "bg_prisma_20210722_8",
+     "kind": "background",
+     "block": "near-main",
+     "doubtful": false,
+     "p_manmade": 0.02078487165272236,
+     "cls": "plastic",
+     "p_cls": 0.47712117433547974
+    },
+    {
+     "id": "bg_prisma_20210722_9",
+     "kind": "background",
+     "block": "near-main",
+     "doubtful": false,
+     "p_manmade": 0.012456749565899372,
+     "cls": "oil_fuel",
+     "p_cls": 0.4455461800098419
+    },
+    {
+     "id": "bg_prisma_20210722_10",
+     "kind": "background",
+     "block": "near-main",
+     "doubtful": false,
+     "p_manmade": 0.01424234826117754,
+     "cls": "oil_fuel",
+     "p_cls": 0.6819084882736206
+    },
+    {
+     "id": "bg_prisma_20210722_11",
+     "kind": "background",
+     "block": "near-north",
+     "doubtful": false,
+     "p_manmade": 0.0032956411596387625,
+     "cls": "plastic",
+     "p_cls": 0.5255477428436279
+    },
+    {
+     "id": "bg_prisma_20210722_12",
+     "kind": "background",
+     "block": "near-north",
+     "doubtful": false,
+     "p_manmade": 0.008724624291062355,
+     "cls": "plastic",
+     "p_cls": 0.5137235522270203
+    },
+    {
+     "id": "bg_prisma_20210722_13",
+     "kind": "background",
+     "block": "near-north",
+     "doubtful": false,
+     "p_manmade": 0.0008138709235936403,
+     "cls": "plastic",
+     "p_cls": 0.5067922472953796
+    },
+    {
+     "id": "bg_tanager_20250412gron_1",
+     "kind": "background",
+     "block": "gron",
+     "doubtful": false,
+     "p_manmade": 0.11731638759374619,
+     "cls": "wood_paper",
+     "p_cls": 0.5046724677085876
+    },
+    {
+     "id": "bg_tanager_20250412gron_2",
+     "kind": "background",
+     "block": "gron",
+     "doubtful": false,
+     "p_manmade": 0.011033324524760246,
+     "cls": "oil_fuel",
+     "p_cls": 0.6729504466056824
+    },
+    {
+     "id": "bg_tanager_20250412gron_3",
+     "kind": "background",
+     "block": "gron",
+     "doubtful": false,
+     "p_manmade": 0.18444761633872986,
+     "cls": "oil_fuel",
+     "p_cls": 0.6232166290283203
+    },
+    {
+     "id": "bg_tanager_20250412gron_4",
+     "kind": "background",
+     "block": "gron",
+     "doubtful": false,
+     "p_manmade": 0.13209661841392517,
+     "cls": "oil_fuel",
+     "p_cls": 0.39622172713279724
+    },
+    {
+     "id": "bg_tanager_20250412gron_5",
+     "kind": "background",
+     "block": "gron",
+     "doubtful": false,
+     "p_manmade": 0.5964787602424622,
+     "cls": "concrete_asphalt",
+     "p_cls": 0.8000192046165466
+    },
+    {
+     "id": "bg_tanager_20250412gron_6",
+     "kind": "background",
+     "block": "gron",
+     "doubtful": false,
+     "p_manmade": 0.1540783941745758,
+     "cls": "oil_fuel",
+     "p_cls": 0.7050324082374573
+    },
+    {
+     "id": "bg_tanager_20250412gron_7",
+     "kind": "background",
+     "block": "gron",
+     "doubtful": false,
+     "p_manmade": 0.44443991780281067,
+     "cls": "concrete_asphalt",
+     "p_cls": 0.665050745010376
+    },
+    {
+     "id": "bg_tanager_20250729cab_1",
+     "kind": "background",
+     "block": "cab",
+     "doubtful": false,
+     "p_manmade": 0.221119686961174,
+     "cls": "oil_fuel",
+     "p_cls": 0.5553922057151794
+    },
+    {
+     "id": "bg_tanager_20250729cab_2",
+     "kind": "background",
+     "block": "cab",
+     "doubtful": false,
+     "p_manmade": 0.25173258781433105,
+     "cls": "oil_fuel",
+     "p_cls": 0.4206317365169525
+    },
+    {
+     "id": "bg_tanager_20250729cab_3",
+     "kind": "background",
+     "block": "cab",
+     "doubtful": false,
+     "p_manmade": 0.1610100418329239,
+     "cls": "concrete_asphalt",
+     "p_cls": 0.4771505892276764
+    },
+    {
+     "id": "bg_tanager_20250729cab_4",
+     "kind": "background",
+     "block": "cab",
+     "doubtful": false,
+     "p_manmade": 0.23191972076892853,
+     "cls": "oil_fuel",
+     "p_cls": 0.4953994154930115
+    },
+    {
+     "id": "bg_tanager_20250729cab_5",
+     "kind": "background",
+     "block": "cab",
+     "doubtful": false,
+     "p_manmade": 0.20725414156913757,
+     "cls": "oil_fuel",
+     "p_cls": 0.5751557946205139
+    },
+    {
+     "id": "bg_tanager_20250729cab_6",
+     "kind": "background",
+     "block": "cab",
+     "doubtful": false,
+     "p_manmade": 0.23306839168071747,
+     "cls": "oil_fuel",
+     "p_cls": 0.5190407633781433
+    },
+    {
+     "id": "bg_tanager_20250729cab_7",
+     "kind": "background",
+     "block": "cab",
+     "doubtful": false,
+     "p_manmade": 0.1780274361371994,
+     "cls": "oil_fuel",
+     "p_cls": 0.39661407470703125
+    },
+    {
+     "id": "bg_tanager_20250729cab_8",
+     "kind": "background",
+     "block": "cab",
+     "doubtful": false,
+     "p_manmade": 0.24256816506385803,
+     "cls": "oil_fuel",
+     "p_cls": 0.4763580560684204
+    },
+    {
+     "id": "bg_tanager_20250729cab_9",
+     "kind": "background",
+     "block": "cab",
+     "doubtful": false,
+     "p_manmade": 0.48121878504753113,
+     "cls": "oil_fuel",
+     "p_cls": 0.5794127583503723
+    }
+   ]
+  }
+ }
+}

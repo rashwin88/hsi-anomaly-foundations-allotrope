@@ -1,0 +1,22 @@
+\glossentry{Score map}{One number per pixel, the size of the scene, higher meaning more anomalous; the output of every detector, before any threshold.}
+\glossentry{Gaussian distribution}{The bell-shaped distribution whose density falls off as the exponential of minus half the squared number of standard deviations from the mean.}
+\glossentry{Probability density}{A curve (or surface) whose area (or volume) over a region is the probability of landing in that region.}
+\glossentry{z-score}{A value's distance from the mean in units of standard deviation, (x - mean) / sd.}
+\glossentry{Standard normal}{The Gaussian with mean 0 and standard deviation 1.}
+\glossentry{Threshold}{A score above which a pixel is flagged; chosen from the false-alarm rate one accepts.}
+\glossentry{False-alarm rate}{The fraction of normal pixels a threshold flags by mistake.}
+\glossentry{Multivariate Gaussian}{The Gaussian over vectors, set by a mean vector and covariance matrix; its exponent is minus half the Mahalanobis distance.}
+\glossentry{Mahalanobis distance}{(x - mean)T inverse-covariance (x - mean): the squared distance from the mean after whitening, so each direction is measured in its own standard deviations.}
+\glossentry{RX detector}{Reed and Yu's detector: score each pixel by its Mahalanobis distance from the background mean and covariance; global RX uses the whole scene as background.}
+\glossentry{Likelihood ratio}{The probability density of the data under one hypothesis divided by that under another; RX is the generalised likelihood ratio for an unknown shift from a Gaussian background.}
+\glossentry{Chi-square distribution}{The distribution of a sum of C squared independent standard normals; mean C, standard deviation sqrt(2C). The RX score of a Gaussian background pixel follows it.}
+\glossentry{Degrees of freedom}{The number C of squared standard normals summed in a chi-square variable; for RX, the number of dimensions scored.}
+\glossentry{Trace}{The sum of a square matrix's diagonal entries; equal to the sum of its eigenvalues.}
+\glossentry{Cofactor}{The signed determinant of the block left after deleting one row and one column of a matrix; cofactors build the inverse of a 3 x 3 matrix.}
+\glossentry{Singular matrix}{A square matrix with determinant zero, which has no inverse; a covariance is singular when the data do not vary at all along some direction.}
+\glossentry{Condition number}{The ratio of a matrix's largest to smallest eigenvalue; inverting loses roughly log10 of it in significant digits.}
+\glossentry{Machine epsilon}{The relative rounding step of a floating-point format: about 1.2e-7 for float32 and 2.2e-16 for float64.}
+\glossentry{Diagonal loading}{Adding a small multiple of the identity to a covariance before inverting (also called a ridge); every eigenvalue rises by that amount, eigenvectors unchanged.}
+\glossentry{Shrinkage}{Blending a covariance with its average eigenvalue times the identity, pulling all eigenvalues towards their mean; not used in this repository.}
+\glossentry{Mixed background}{A scene made of several distinct surfaces, whose global mean and covariance describe none of them well.}
+\glossentry{Global RX}{RX with one mean and covariance estimated from all valid pixels of the scene.}

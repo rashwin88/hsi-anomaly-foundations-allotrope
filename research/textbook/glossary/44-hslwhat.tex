@@ -1,0 +1,6 @@
+\glossentry{HyperSL}{An external spectral foundation model (Kong et al., TGRS 2025): a per-pixel masked autoencoder of 9,027,841 trainable parameters, pretrained on EnMAP and DESIS L2A spectra min-max scaled per band per scene; evaluated and not adopted (Part X).}
+\glossentry{Foundation model}{A network pretrained on a large, broad, unlabelled data set so that its representation can be reused for many tasks with little task-specific training.}
+\glossentry{Spectral tokenizer}{HyperSL's front end: three 1-D convolutions over band index (kernels 5, 9, 13, stride 1) fused by a 1 x 1 convolution, giving one 256-number token per band.}
+\glossentry{Position code}{A fixed vector added to each token to say where it sits; HyperSL's is sin and cos of (wavelength - 400) / 10 at 128 frequencies 100 to the power -2j/256.}
+\glossentry{Overall accuracy}{The share of pixels whose predicted (or cluster-mapped) class equals their true class.}
+\glossentry{Adjusted Rand index}{A pair-counting agreement between two groupings, corrected so a random grouping scores 0 and an identical one 1.}

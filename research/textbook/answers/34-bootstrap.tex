@@ -1,0 +1,82 @@
+\answersfor{ch:bootstrap}
+
+\begin{solution}{ex:bootstrap:1}
+\begin{align*}
+\mathrm{FPR}(d) &= 5 / 1{,}000 = 0.005\\
+c(d) &= (0.01 - 0.005)/0.01 = 0.005/0.01 = 0.5.
+\end{align*}
+Object 3's parts become $(0.5, 1)$, and
+\[
+\mathrm{pAUC}_A = \frac{1.2 + 1.0 + 0.5}{2 + 1 + 1} = \frac{2.7}{4} = 0.675.
+\]
+\end{solution}
+
+\begin{solution}{ex:bootstrap:2}
+The data $x = (1, 3, 8)$ have mean $12/3 = 4$. The four draws:
+\begin{align*}
+(1,1,2) &\to (1, 1, 3), & \text{mean } &5/3 = 1.667\\
+(3,2,3) &\to (8, 3, 8), & \text{mean } &19/3 = 6.333\\
+(2,2,1) &\to (3, 3, 1), & \text{mean } &7/3 = 2.333\\
+(3,3,3) &\to (8, 8, 8), & \text{mean } &24/3 = 8.000
+\end{align*}
+Mean of the four: $(1.667 + 6.333 + 2.333 + 8.000)/4 = 18.333/4 = 4.583$.
+
+Sorted: $1.667, 2.333, 6.333, 8.000$ at positions 0--3.
+\begin{align*}
+\text{2.5th: position } 3 \times 0.025 &= 0.075: \quad 1.667 + 0.075 \times (2.333 - 1.667) = 1.667 + 0.050 = 1.717\\
+\text{97.5th: position } 3 \times 0.975 &= 2.925: \quad 6.333 + 0.925 \times (8.000 - 6.333) = 6.333 + 1.542 = 7.875
+\end{align*}
+Interval $[1.717, 7.875]$ - very wide, as four draws of three numbers must be.
+\end{solution}
+
+\begin{solution}{ex:bootstrap:3}
+No. The interval $[-0.001, +0.013]$ contains zero, so under the rule it is a tie whatever the point value says.
+Half-width $(0.013 - (-0.001))/2 = 0.014/2 = 0.007$.
+\end{solution}
+
+\begin{solution}{ex:bootstrap:4}
+\begin{align*}
+\mu_A &= (0.8 + 0.3 + 0.5 + 0.4)/4 = 2.0/4 = 0.5\\
+A - \mu_A &= (0.3, -0.2, 0, -0.1)\\
+\mathrm{Var}\,A &= (0.09 + 0.04 + 0 + 0.01)/4 = 0.14/4 = 0.035\\
+\mu_B &= (0.9 + 0.3 + 0.6 + 0.6)/4 = 2.4/4 = 0.6\\
+B - \mu_B &= (0.3, -0.3, 0, 0)\\
+\mathrm{Var}\,B &= (0.09 + 0.09 + 0 + 0)/4 = 0.18/4 = 0.045\\
+\mathrm{Cov}(A, B) &= (0.3 \times 0.3 + (-0.2)(-0.3) + 0 + 0)/4\\
+&= (0.09 + 0.06)/4 = 0.15/4 = 0.0375\\
+\mathrm{Var}(A - B) &= 0.035 + 0.045 - 2 \times 0.0375 = 0.080 - 0.075 = 0.005.
+\end{align*}
+Directly: $A - B = (-0.1, 0, -0.1, -0.2)$, mean $-0.4/4 = -0.1$, deviations $(0, 0.1, 0, -0.1)$, variance
+$(0 + 0.01 + 0 + 0.01)/4 = 0.02/4 = 0.005$. Agreed; unpaired would be $0.080$, sixteen times larger.
+\end{solution}
+
+\begin{solution}{ex:bootstrap:5}
+\begin{align*}
+\text{pixels} &= 909 \times 2 = 1{,}818\\
+\text{design effect} &= 1 + (2 - 1) \times 0.9 = 1.9\\
+N_{\text{eff}} &= 1{,}818 / 1.9 = 956.8\\
+\text{understatement factor} &= \sqrt{1.9} = 1.378.
+\end{align*}
+The 1,818 pixels carry about as much evidence as 957 independent ones; a pixel bootstrap's standard error would be about
+1.38 times too small.
+\end{solution}
+
+\begin{solution}{ex:bootstrap:6}
+\begin{align*}
+A &= (1.2 + 1.0 + 0.0)/(2 + 1 + 1) = 2.2/4 = 0.55\\
+B &= (1.0 + 0.9 + 0.2)/(2 + 1 + 1) = 2.1/4 = 0.525\\
+B - A &= -0.025.
+\end{align*}
+Drawing every object exactly once reproduces the original bench, so these are the point values. \code{paired_bootstrap}
+computes the point values exactly this way, with \code{np.arange} as the ``draw''.
+\end{solution}
+
+\begin{solution}{ex:bootstrap:7}
+\begin{align*}
+\text{2.5th} &: (2{,}000 - 1) \times 0.025 = 1{,}999 \times 0.025 = 49.975\\
+\text{97.5th} &: 1{,}999 \times 0.975 = 1{,}949.025.
+\end{align*}
+Position 49.975 lies between 0-based positions 49 and 50, the 50th and 51st smallest draws (counting from 1), taking
+97.5\% of the step from the 50th to the 51st. Position 1,949.025 lies between 0-based 1,949 and 1,950, the 1,950th and
+1,951st smallest, taking 2.5\% of that step.
+\end{solution}

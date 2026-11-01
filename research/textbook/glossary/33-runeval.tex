@@ -1,0 +1,19 @@
+\glossentry{Evaluation config}{One JSON file naming the models, datasets, scorers, measures and groupings of an evaluation; run by scripts/evaluate.py.}
+\glossentry{Reading}{How a model reads a scene's bands: its own native bands by wavelength, or a resample onto a fixed grid (product165, se202).}
+\glossentry{Scorer}{A rule turning a cube and its reconstruction into a score map, such as residual Mahalanobis or exclude.}
+\glossentry{Exclude scorer}{A wrapper that runs a base scorer and sets chosen surface classes to 0 using a segmentation head's class map.}
+\glossentry{PCA-RX}{The model-free baseline: residual Mahalanobis on the cube itself (zero reconstruction), i.e. local RX on the top 30 whitened principal components.}
+\glossentry{Scene-major loop}{Loading one scene at a time and running every model on it before the next scene, so memory holds one scene and one reconstruction.}
+\glossentry{Score-map cache}{Saved score maps under a key built from the scene, the model file and the scorer settings, so new measures need no model run.}
+\glossentry{Cache key}{The path of a cached map: dataset, scene, model id, and a SHA-1 of the scorer's settings joined to the scene fingerprint.}
+\glossentry{Scene fingerprint}{An identity of a scene's source files (file size and time, or SHA-256s) included in the cache key since commit 229d423.}
+\glossentry{Hash}{A fixed-length code computed from text that changes completely when any character changes; used to build cache keys.}
+\glossentry{Float16}{A 16-bit floating-point number; half the storage of float32 but with a largest finite value of 65,504.}
+\glossentry{Chance row}{The first row of every report table: the mean over objects of each object's chance of being caught by random scores.}
+\glossentry{Model-free baseline}{A detector with no learned model, run beside the models to check that a benchmark rewards what a model adds.}
+\glossentry{Scope}{The set of surfaces and objects the product is meant to examine; excluding a class removes it from scope.}
+\glossentry{Invariant 7}{The evaluation rule that excluded pixels stay in the measures as negatives tied at 0, and labelled objects inside them stay as unfindable positives.}
+\glossentry{The 39}{The 39 of 909 real labelled objects lying wholly inside FT03's water / cloud mask; 35 are on water or shorelines, 4 under haze in set4.}
+\glossentry{NDVI}{Normalised difference vegetation index, (NIR - red) / (NIR + red) or with a visible mean; positive for vegetation, negative for water.}
+\glossentry{Haze colour test}{Near-infrared over blue reflectance: above 1 for red bare ground, below 1 for bluish haze.}
+\glossentry{Stage 3}{The reference evaluation of 2026-10-17 (configs/eval/stage3.json) that reproduced earlier numbers and exposed bench-v1's bias.}

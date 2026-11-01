@@ -1,0 +1,26 @@
+\glossentry{Pixel validity mask}{A (B, 1, H, W) array of ones and zeros: 1 where the pixel is a real measurement, 0 for cloud, no-data or swath edge.}
+\glossentry{Valid fraction}{The proportion of a token's 16 pixels that are valid, computed as the average of the 0/1 pixel mask over the token's block.}
+\glossentry{Token validity}{A token is valid when its valid fraction is strictly greater than one half; exactly half counts as invalid.}
+\glossentry{Token mask}{The (B, N) array of token validities: whether each token holds real data. A fact about the sensor, not a choice.}
+\glossentry{Keep mask}{The (B, N) array saying which tokens the encoder is shown: visible valid tokens and all invalid tokens. Equal to one minus the prediction mask.}
+\glossentry{Prediction mask}{The (B, N) array of hidden tokens, the ones the model is graded on. Only valid tokens can be in it.}
+\glossentry{Average pooling}{Sliding a window over a grid and outputting the mean of each window; on a 0/1 mask it gives the fraction of ones.}
+\glossentry{Row-major order}{Numbering grid cells row by row, left to right within each row.}
+\glossentry{Mask ratio}{The fraction of valid tokens to hide, written rho; 0.65 in the shipped training runs. The hidden count is the floor of rho times the number of valid tokens.}
+\glossentry{Effective mask ratio}{The hidden count divided by the number of valid tokens; at most the mask ratio because of the rounding down.}
+\glossentry{Permutation}{A reordering of the indices 0 to N-1 in which each index appears exactly once.}
+\glossentry{Argsort}{The permutation that sorts a list: its k-th entry is the index of the k-th smallest value.}
+\glossentry{Inverse permutation}{The permutation that undoes another: it gives, for each token, the place it occupies in the sorted order (its rank). Called ids\_restore in the original masked autoencoder.}
+\glossentry{Gather}{Reading values from named positions: output k is input at index k of the index list.}
+\glossentry{Scatter}{Writing values into named positions of a starting array; unnamed positions keep their starting value.}
+\glossentry{Selection matrix}{A matrix with one 1 per row that performs a gather by multiplication; its transpose performs the matching scatter into zeros.}
+\glossentry{Remove tokens}{Deleting hidden tokens from the sequence by a gather, so the encoder's blocks never see them.}
+\glossentry{Restore tokens}{Putting the encoded kept tokens back at their positions by a scatter into zeros; hidden positions stay zero.}
+\glossentry{max\_kept leakage}{When patches in a batch keep different numbers of tokens, every patch gathers the batch maximum, so patches that keep fewer let a few hidden tokens into the encoder.}
+\glossentry{Pixel prediction mask}{The token prediction mask copied to each token's 4 by 4 pixels by nearest-neighbour upsampling.}
+\glossentry{Loss mask}{The pixel prediction mask times the eroded validity mask: the pixels the loss is averaged over.}
+\glossentry{Binary erosion}{Keeping a pixel only when its whole square neighbourhood is in the set; shrinks the valid region by the radius.}
+\glossentry{Binary dilation}{Adding every pixel within the radius of the set; grows the invalid region. Computed as a stride-1 max pool.}
+\glossentry{Erosion radius}{Half the erosion kernel, rounded down: kernel 15 removes a 7-pixel border strip, kernel 1 removes nothing.}
+\glossentry{Max pooling}{Sliding a window over a grid and outputting the maximum of each window; on a 0/1 mask it asks whether any 1 is in reach.}
+\glossentry{Cloze test}{A reading exercise in which words are blanked out and must be filled in; the analogy for masked training.}

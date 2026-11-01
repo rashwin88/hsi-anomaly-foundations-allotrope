@@ -1,0 +1,1200 @@
+\chapter{FT01 to FT05: what each fine-tuning run taught}\label{ch:ftruns}
+\begingroup\sloppy % long provenance tags need loose lines rather than overfull ones
+
+\begin{onething}
+Six fine-tuning runs (FT01, FT02, FT02b, FT02c, FT03, FT05) and the release candidate FT04 bought better masks,
+native bands and better reconstruction on all three sensors - and no measurable gain in detection by the model
+alone. Each run was judged by criteria written before launch, and each taught one lesson: a frozen encoder's
+ceiling, a gate read at the wrong checkpoint, edges that are also targets, a target that hides the anomaly, and a
+score - residual Mahalanobis - that absorbs whatever better reconstruction changes.
+\end{onething}
+
+\section{Where the runs start}\label{sec:ftruns:start}
+
+\Cref{ch:finetune} laid out the curriculum: a \emph{probe} (train only a small head on a frozen encoder), an
+\emph{adapt} stage (continue masked reconstruction on the real sensors), a \emph{joint} stage (reconstruction and
+segmentation together), optional pseudo-labels, and finally product use of the masks. It also taught the two
+mechanical fixes that the early runs forced - the BatchNorm see-saw and mixed batches. This chapter reads the
+runs themselves, in the order they ran on an L40S GPU (\texttt{g6e.2xlarge}) between 2026-10-16 and 2026-10-18,
+as a sequence of lessons. \Cref{tab:ftruns:runs} is the map.
+
+\begin{table}[htbp]
+\centering
+\caption{The fine-tuning runs of 2026-10-16 to 18. ``Verdict'' is against the criteria each run's README fixed
+before launch.}
+\label{tab:ftruns:runs}
+\small
+\begin{tabular}{llp{5.0cm}cl}
+\toprule
+run & stage & what changed & hours & verdict \\
+\midrule
+FT01 & probe & segmentation head on frozen F001 (epoch 109), EnMAP & 1.4 & passed (water 0.82) \\
+FT02 & adapt & reconstruction on three sensors, one sensor per batch & 4.25 & gate not met \\
+FT02b & adapt & FT02 continued with mixed-sensor batches & 2.2 & gate not met \\
+FT02c & adapt & FT02b continued with an edge term & 2.2 & not met \\
+FT03 & joint & reconstruction + segmentation, mixed batches & 3.0 & passed \\
+FT05 & joint & implants in the input, clean tile as target & -- & not passed \\
+FT04 & joint & pseudo-labels on PRISMA / AVIRIS-NG, rare-class weights & -- & passed \\
+\bottomrule
+\end{tabular}
+
+\smallskip
+{\footnotesize Source: \tagM{research/experiments/indradhanu-finetune/README.md} and the run READMEs beside it.}
+\end{table}
+
+\paragraph{Why F001 stopped at epoch 113.} \Cref{ch:pretrain} described F001 as a 200-epoch run. It did not
+finish. The PRISMA bench under residual Mahalanobis read 0.861 at epoch 60 and 0.862 at epoch
+109\tagM{research/experiments/indradhanu-se-pretrain/F001-final-pretrain/README.md}. Forty-nine epochs for 0.001:
+the run was stopped at epoch 113 by decision, and every fine-tuning run starts, directly or through its parent,
+from \file{F001_ep109.pt}.
+
+\paragraph{Gates written before launch.} \index{pass criterion} Every run's README states, before launch, what
+it expects and what would count as passing. That habit is the spine of this chapter. A criterion written after
+seeing the numbers can always be made to pass; a criterion written before is a prediction that can be wrong, and
+several of the lessons below are exactly a prediction being wrong.
+
+\begin{analogy}
+A pianist moves from an upright to a concert grand. After a week of practice the scales are cleaner on every
+octave - that is reconstruction. In the recital, the only thing the audience hears, one piece is very slightly
+worse - that is detection. Cleaner scales are evidence of progress, not a guarantee of a better recital; you still
+have to play the recital. Every run below improved its scales. Very few changed the recital.
+\end{analogy}
+
+\section{FT01: the probe measures what the encoder already knows}\label{sec:ftruns:ft01}
+
+\index{probe}
+A \emph{probe} trains only the small segmentation head (\cref{ch:seghead}) on top of a frozen encoder - frozen
+meaning its parameters, BatchNorm statistics included, do not change. Whatever the head learns must already be
+present in the frozen features, so the probe measures what the encoder knows. FT01 ran 15 epochs on EnMAP in
+1.4 hours\tagM{research/experiments/indradhanu-finetune/FT01-probe/README.md}.
+
+\paragraph{Counting the head by hand.} The FT01 README calls the head ``about 372k parameters''. Predict the
+exact figure. The head is a SegFormer-style decoder (\cref{ch:decoder}) of width 128 over the encoder's four
+stages, whose channel counts are 32, 64, 160 and 256. Its layers, read from the shipped checkpoint's shapes:
+
+\begin{worked}[label={we:ftruns:seghead}]{The segmentation head's parameters}
+Recall from \cref{ch:shapes} that a convolution with $C_\text{in}$ inputs, $C_\text{out}$ outputs and a $k
+\times k$ kernel has $C_\text{out} \cdot C_\text{in} \cdot k^2$ weights and $C_\text{out}$ biases. Do each line
+on paper.
+\begin{enumerate}
+\item Four $1 \times 1$ projections to 128 channels. Weights:
+  \[
+  128 \times (32 + 64 + 160 + 256) = 128 \times 512 = 65{,}536 .
+  \]
+  Biases: $4 \times 128 = 512$. Total $65{,}536 + 512 = 66{,}048$.
+\item A $1 \times 1$ fuse convolution from the four stacked projections, $4 \times 128 = 512$ channels, to 128:
+  \[
+  128 \times 512 + 128 = 65{,}536 + 128 = 65{,}664 .
+  \]
+\item A $3 \times 3$ refine convolution, 128 to 128:
+  \[
+  128 \times 128 \times 9 + 128 = 147{,}456 + 128 = 147{,}584 .
+  \]
+\item A $3 \times 3$ output convolution, 128 to 80. Why 80? Five classes, each needing a $4 \times 4$ block of
+  pixels per quarter-resolution position for the pixel shuffle (\cref{ch:decoder}): $5 \times 16 = 80$.
+  \[
+  80 \times 128 \times 9 + 80 = 92{,}160 + 80 = 92{,}240 .
+  \]
+\end{enumerate}
+Sum:
+\begin{align*}
+66{,}048 + 65{,}664 &= 131{,}712\\
+131{,}712 + 147{,}584 &= 279{,}296\\
+279{,}296 + 92{,}240 &= 371{,}536
+\end{align*}
+The shipped checkpoint's \texttt{seg\_head.*} tensors hold exactly 371,536 numbers
+(\file{research/textbook/tools/compute_ftruns.py})\tagC. ``About 372k'' is right.
+\end{worked}
+
+\paragraph{The measure.} \index{intersection over union} The head is judged by IoU, intersection over union
+(\cref{ch:seghead}): for one class, the number of pixels both predicted and labelled, divided by the number
+predicted or labelled. If 6 pixels are labelled water, 5 are predicted water, and 4 are both,
+\[
+\text{IoU} = \frac{4}{6 + 5 - 4} = \frac{4}{7} = 0.571 .
+\]
+(The union is $6 + 5 - 4$: adding the two sets counts the overlap twice, so subtract it once.)
+
+\begin{table}[htbp]
+\centering
+\caption{FT01: per-class IoU on EnMAP's 950 test tiles. best.pt is epoch 14 (lowest segmentation validation loss).}
+\label{tab:ftruns:ft01}
+\small
+\begin{tabular}{lcccccc}
+\toprule
+epoch & water & cloud & thin cloud & shadow & snow & mean \\
+\midrule
+1 & 0.705 & 0.600 & 0.067 & 0.000 & 0.000 & 0.274 \\
+3 & 0.777 & 0.733 & 0.076 & 0.000 & 0.000 & 0.317 \\
+6 & 0.780 & 0.784 & 0.065 & 0.104 & 0.000 & 0.347 \\
+9 & 0.815 & 0.766 & 0.061 & 0.185 & 0.000 & 0.365 \\
+12 & 0.822 & 0.807 & 0.089 & 0.165 & 0.055 & 0.388 \\
+\textbf{14} & \textbf{0.822} & \textbf{0.801} & \textbf{0.091} & \textbf{0.199} & 0.175 & \textbf{0.418} \\
+15 & 0.823 & 0.800 & 0.089 & 0.193 & 0.169 & 0.415 \\
+\bottomrule
+\end{tabular}
+
+\smallskip
+{\footnotesize Source: \tagM{research/experiments/indradhanu-finetune/FT01-probe/README.md} (from \texttt{finetune\_metrics.csv}).}
+\end{table}
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}
+\begin{axis}[width=0.85\linewidth, height=6cm, xlabel={epoch}, ylabel={IoU on EnMAP test},
+  xmin=0, xmax=16, ymin=0, ymax=0.9, xtick={1,3,6,9,12,14,15},
+  legend style={at={(0.98,0.55)},anchor=east,font=\small}, grid=major, grid style={gray!20}]
+\addplot[spec, thick, mark=*] coordinates {(1,0.705) (3,0.777) (6,0.780) (9,0.815) (12,0.822) (14,0.822) (15,0.823)};
+\addplot[spat, thick, mark=square*] coordinates {(1,0.600) (3,0.733) (6,0.784) (9,0.766) (12,0.807) (14,0.801) (15,0.800)};
+\addplot[loss, thick, mark=triangle*] coordinates {(1,0.000) (3,0.000) (6,0.104) (9,0.185) (12,0.165) (14,0.199) (15,0.193)};
+\addplot[maskgrey, very thick, mark=diamond*] coordinates {(1,0.067) (3,0.076) (6,0.065) (9,0.061) (12,0.089) (14,0.091) (15,0.089)};
+\legend{water, cloud, shadow, thin cloud}
+\end{axis}
+\end{tikzpicture}
+\caption{FT01's IoU by epoch, drawn to scale from \cref{tab:ftruns:ft01}. Water, cloud and shadow climb; thin cloud
+(grey) stays between 0.06 and 0.09 for the whole run.}
+\label{fig:ftruns:ft01}
+\end{figure}
+
+The gate was ``water at least 0.6, or the plan is revisited''. Water reached 0.82 and cloud 0.80 (the README had
+expected cloud at least 0.5). The interesting row is thin cloud (\cref{fig:ftruns:ft01}). Every other class
+climbed over the 15 epochs; thin cloud sat at 0.06 to 0.09 from start to end, against an expectation of 0.3 to
+0.5. The label audit of \cref{ch:seghead} had already found that EnMAP's cirrus labels are often driven by the
+surface, not by cloud.
+
+\begin{keypoint}
+A head that cannot improve on one class while it improves on every other is usually hitting the labels' ceiling,
+not the encoder's: the encoder and head are shared by every class, so a feature limit would still let the class
+move a little.
+\end{keypoint}
+
+So the FT01 README says: do not tune later runs on thin cloud. Snow's 0.17 rests on a single test tile and is not a
+measurement.
+
+\section{FT02: better reconstruction, a gate missed by 0.006}\label{sec:ftruns:ft02}
+
+FT02 continued F001's masked reconstruction on all three sensors - EnMAP, PRISMA and AVIRIS-NG at shares 0.40 /
+0.35 / 0.25, one sensor per batch, 20 epochs of 30,000 samples, learning rate $10^{-4}$, 4.25 hours. Its three
+pass criteria, written before launch:
+\begin{enumerate}
+\item Bench mean ROC-AUC (residual Mahalanobis) at least 0.861 at the best checkpoint.
+\item No scene below F001's epoch-60 score by more than 0.03.
+\item Each sensor's test reconstruction lower at the end than after epoch 1.
+\end{enumerate}
+
+\begin{table}[htbp]
+\centering
+\caption{FT02: validation SAM (degrees) per sensor and the PRISMA bench, ROC-AUC averaged over four scenes.}
+\label{tab:ftruns:ft02}
+\small
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{lccccc}
+\toprule
+epoch & SAM EnMAP & SAM PRISMA & SAM AVIRIS-NG & res.\ Mahalanobis & combined \\
+\midrule
+F001 ep109 & -- & -- & -- & 0.862 & 0.706 \\
+1 & 4.81 & 7.30 & 7.94 & \textbf{0.864} & 0.760 \\
+8 (best.pt) & 4.17 & 5.93 & 6.07 & 0.855 & 0.824 \\
+13 & 4.16 & 6.04 & 6.49 & 0.855 & 0.809 \\
+20 (last.pt) & 4.07 & 6.31 & 6.19 & 0.853 & 0.814 \\
+\bottomrule
+\end{tabular}
+
+\smallskip
+{\footnotesize Source: \tagM{research/experiments/indradhanu-finetune/FT02-adapt/README.md}.}
+\end{table}
+
+\coursefig[0.9\linewidth]{iw-50-ft02-bench}{FT02's bench by epoch against the gate. Residual Mahalanobis (amber)
+starts above the 0.861 gate at epoch 1 and settles below it; \texttt{combined} (grey) climbs from F001's 0.706 to
+0.824. best.pt is epoch 8, chosen by validation reconstruction, not by the bench.}{fig:ftruns:ft02}
+
+\begin{worked}[label={we:ftruns:gate}]{Reading FT02's gate}
+best.pt (epoch 8) scored 0.931, 0.852, 0.757 and 0.879 on the four scenes. Add one at a time:
+\begin{align*}
+0.931 + 0.852 &= 1.783\\
+1.783 + 0.757 &= 2.540\\
+2.540 + 0.879 &= 3.419\\
+3.419 / 4 &= 0.85475 \approx 0.855
+\end{align*}
+Criterion 1 asks for 0.861: the miss is $0.861 - 0.855 = 0.006$. Criterion 2 compares each scene with F001 at epoch
+60 (0.930, 0.860, 0.775, 0.881):
+\begin{align*}
+\text{set1:}\ 0.931 - 0.930 &= +0.001 & \text{set2:}\ 0.852 - 0.860 &= -0.008\\
+\text{set3:}\ 0.757 - 0.775 &= -0.018 & \text{set4:}\ 0.879 - 0.881 &= -0.002
+\end{align*}
+The largest drop is 0.018, under 0.03: passed. Criterion 3 (SAM epoch 1 to 20): EnMAP $4.81 - 4.07 = 0.74$, PRISMA
+$7.30 - 6.31 = 0.99$, AVIRIS-NG $7.94 - 6.19 = 1.75$ degrees lower: passed. Gate: not met, by 0.006.
+\end{worked}
+
+\paragraph{Lesson 1: a gate is read at one checkpoint, chosen by a different rule.}
+\index{checkpoint selection}
+The bench peaked at epoch 1, at 0.864 - above the gate. It does not count, because the gate is read at the best
+checkpoint, and best.pt is chosen by mean validation reconstruction (the fixed ruler of \cref{ch:pretrain}), which
+kept improving until epoch 8. Reconstruction and detection pulled apart after the first epoch. Writing ``at the best
+checkpoint'' before launch was deliberate: picking whichever epoch scores best on four labelled scenes would tune the
+run to those four scenes, turning the bench into training data.
+
+\paragraph{Lesson 2: part of the change is more bands, not better weights.}
+The trained-wavelength record of \cref{ch:finetune} grew during FT02 from 202 to 733 wavelengths: AVIRIS-NG added
+337, PRISMA 177, EnMAP 17\tagM{research/experiments/indradhanu-finetune/README.md}. Check the arithmetic:
+$202 + 337 = 539$, $539 + 177 = 716$, $716 + 17 = 733$. EnMAP added few because SpectralEarth \emph{is} EnMAP, so
+most of its wavelengths were already recorded. From epoch 1 on, the bench reads all 185 bands of the PRISMA scenes,
+where F001 read 165; any comparison with F001 mixes the two effects.
+
+\paragraph{Lesson 3: \texttt{combined} nearly caught up - and that says something about residual Mahalanobis.}
+\texttt{combined} (half L1, half SAM, each divided by the scene's maximum; \cref{ch:residualmaha}) measures how
+\emph{big} a pixel's error is. F001 made large ordinary errors on PRISMA's background, which buried the targets.
+FT02 trained on PRISMA, PRISMA's validation SAM fell from 7.30 to 5.93 degrees, and the error floor dropped, so
+\texttt{combined} rose from 0.706 to 0.824. Residual Mahalanobis had already removed that floor - it subtracts the
+local mean residual and whitens by the scene's covariance - so it had little to gain. Keep this in mind: in
+\cref{sec:ftruns:absorb} it becomes the central lesson of the whole series.
+
+\paragraph{The see-saw and the decision.} The per-sensor validation did not fall smoothly: in epochs 11--12 and
+15--17 PRISMA improved while EnMAP and AVIRIS-NG got worse, then the reverse (epoch 17: PRISMA 5.04, AVIRIS-NG 8.24
+degrees). \Cref{ch:finetune} traced it to the model's one BatchNorm and fixed it with mixed batches (FT02b: see-saw
+gone, SAM 3.99 / 4.37 / 5.57, bench 0.856, gate still not met). On 2026-10-16 the user decided to \emph{build on}
+FT02 rather than discard it: reconstruction was better on every sensor and the miss was small.
+
+\begin{sourcenote}[: the warm-up that does not exist]
+FT02's README lists ``LR 1e-4 cosine (1 warm-up epoch)'', and every config sets \texttt{warmup\_epochs: 1}. The
+log of 2026-10-16 (\file{research/experiments/indradhanu-finetune/README.md}, FT02b launch entry) records: ``The
+configured 1-epoch warm-up does not exist in code (\texttt{warmup\_epochs} is never read).'' The runs had no warm-up.
+\end{sourcenote}
+
+\section{Edges: why correcting the score map fails}\label{sec:ftruns:edges}
+
+Look at a residual Mahalanobis score map of a PRISMA bench scene and you see lines: field boundaries, roads,
+coastlines. The model reconstructs a sharp boundary slightly blurred or shifted, the error on both sides is large,
+and those pixels rank among the top scores. On 2026-10-16 this was measured with rules fixed before the results
+(\file{C:/es/edges/edges.py}).
+
+\subsection{Measuring edge strength}
+
+\index{edge strength}\index{gradient!finite difference}
+An \emph{edge} is a place where brightness changes quickly from one pixel to the next. For a smooth function $f(x,
+y)$, ``how quickly'' is the \emph{gradient}, the vector of partial derivatives $(\partial f / \partial x, \partial f
+/ \partial y)$. An image has no derivatives - only values on a grid - so you replace each derivative by a
+\emph{finite difference}. Derive the central difference from the definition of the derivative:
+\begin{align}
+\frac{\partial f}{\partial x}(x, y) &= \lim_{h \to 0} \frac{f(x + h, y) - f(x - h, y)}{2h}.
+\intertext{On a pixel grid the smallest step is one pixel, $h = 1$, so drop the limit:}
+g_x(i, j) &\approx \frac{f(i, j+1) - f(i, j-1)}{2}, \qquad g_y(i, j) \approx \frac{f(i+1, j) - f(i-1, j)}{2}.
+\intertext{The \emph{gradient magnitude} is the length of the vector $(g_x, g_y)$, by Pythagoras:}
+\abs{\nabla f}(i, j) &\approx \sqrt{g_x^2 + g_y^2}. \label{eq:ftruns:gradmag}
+\end{align}
+The diagnosis used a different, related measure: average a pixel's bands into one brightness number, then take the
+\emph{largest absolute difference to any valid four-neighbour} (up, down, left, right):
+\begin{equation}
+e(i, j) = \max\big(\abs{f_{i,j} - f_{i-1,j}},\ \abs{f_{i,j} - f_{i+1,j}},\ \abs{f_{i,j} - f_{i,j-1}},\
+\abs{f_{i,j} - f_{i,j+1}}\big). \label{eq:ftruns:edge}
+\end{equation}
+These are one-sided differences, and taking the maximum instead of a Pythagorean sum is the ``$L_\infty$'' way of
+measuring a vector's size. A pixel is \emph{strong} if its $e$ is in the scene's top 10\%.
+
+\begin{worked}[label={we:ftruns:edges}]{Two edge measures on a 3 \texorpdfstring{$\times$}{x} 3 patch}
+Band means of a $3 \times 3$ patch with a field boundary running down its right side:
+\[
+\begin{matrix}
+0.10 & 0.10 & 0.30\\
+0.10 & 0.12 & 0.30\\
+0.10 & 0.10 & 0.31
+\end{matrix}
+\]
+\emph{Central differences at the centre (0.12).} Left 0.10, right 0.30, up 0.10, down 0.10:
+\begin{align*}
+g_x &= (0.30 - 0.10) / 2 = 0.20 / 2 = 0.10\\
+g_y &= (0.10 - 0.10) / 2 = 0\\
+\abs{\nabla f} &= \sqrt{0.10^2 + 0^2} = \sqrt{0.01} = 0.10
+\end{align*}
+\emph{The diagnosis's measure \eqref{eq:ftruns:edge} at the centre.}
+\begin{align*}
+\abs{0.12 - 0.10} &= 0.02 \quad\text{(up)}\\
+\abs{0.12 - 0.10} &= 0.02 \quad\text{(down)}\\
+\abs{0.12 - 0.10} &= 0.02 \quad\text{(left)}\\
+\abs{0.12 - 0.30} &= 0.18 \quad\text{(right)}\\
+e &= \max = 0.18
+\end{align*}
+The top-left pixel (0.10) has neighbours right 0.10 and down 0.10 inside the patch, so $e = 0$.
+
+\emph{Now a one-pixel target.} Replace the patch by a field of 0.10 with a single bright pixel of 0.30 at the centre.
+Central differences at the centre: $g_x = (0.10 - 0.10)/2 = 0$, $g_y = 0$, so $\abs{\nabla f} = 0$ - the
+symmetric difference cannot see a one-pixel spike. The one-sided maximum: every neighbour differs by $\abs{0.30 -
+0.10} = 0.20$, so $e = 0.20$, a strong edge. (Script check of both\tagC.)
+\end{worked}
+
+That last line is the whole trap. A small target, brighter or darker than its field, has a large difference to its
+neighbours on every side. By the diagnosis's definition it \emph{is} an edge.
+
+\begin{table}[htbp]
+\centering
+\caption{Edges and false alarms on the four PRISMA bench scenes (F001 epoch 109 and FT02 epoch 13). By chance each
+share would be 10\%, since ``strong'' is the top 10\%.}
+\label{tab:ftruns:edges}
+\small
+\begin{tabular}{lc}
+\toprule
+measurement & range over the four scenes \\
+\midrule
+top-1\% false positives on strong edges & 49--68\% \\
+ground-truth target pixels on strong edges & 29--79\% \\
+detected target pixels (hits) on strong edges & 39--91\% \\
+\bottomrule
+\end{tabular}
+
+\smallskip
+{\footnotesize Source: \tagM{research/experiments/indradhanu-finetune/FT02-adapt/README.md} (Observations, edge diagnosis).}
+\end{table}
+
+The first row says edges are the main source of false alarms - five to seven times chance. The second row is the trap.
+
+\subsection{Correcting the score map, and why it collapses}
+
+\index{score-map correction}
+The obvious fix: compare each pixel only with pixels of similar edge strength. The measured version sorted the scene
+into 20 bins by edge strength and scored each pixel by \emph{its rank minus the median rank of its bin}. A pixel on a
+strong edge then has to beat other strong-edge pixels, not the smooth field. It collapsed detection: bench mean 0.86
+to 0.67. Work why on eight pixels.
+
+\begin{worked}[label={we:ftruns:bins}]{Rank minus the median rank of its bin}
+Eight pixels, two bins. A is a real target on an edge; B, C, D are edge false alarms; E, F, G, H are a smooth field
+with small noise. Scores and bins:
+\begin{center}
+\small\setlength{\tabcolsep}{3pt}
+\begin{tabular}{lcccccccc}
+\toprule
+pixel & A & B & C & D & E & F & G & H \\
+\midrule
+score & 9 & 10 & 8 & 7 & 3 & 2 & 1 & 4 \\
+bin & strong & strong & strong & strong & smooth & smooth & smooth & smooth \\
+rank (1 = lowest) & 7 & 8 & 6 & 5 & 3 & 2 & 1 & 4 \\
+\bottomrule
+\end{tabular}
+\end{center}
+Medians of the ranks in each bin. Strong: ranks 5, 6, 7, 8; the median of four numbers is the mean of the middle two,
+$(6 + 7)/2 = 6.5$. Smooth: ranks 1, 2, 3, 4; median $(2 + 3)/2 = 2.5$.
+
+Corrected scores:
+\begin{align*}
+A:\ 7 - 6.5 &= 0.5 & B:\ 8 - 6.5 &= 1.5 & C:\ 6 - 6.5 &= -0.5 & D:\ 5 - 6.5 &= -1.5\\
+E:\ 3 - 2.5 &= 0.5 & F:\ 2 - 2.5 &= -0.5 & G:\ 1 - 2.5 &= -1.5 & H:\ 4 - 2.5 &= 1.5
+\end{align*}
+Before, the target A was second of eight. After, B and H share first place (1.5) and A ties with E, a noise pixel,
+for third. The correction promoted the top of the smooth field - pixels that were not anomalous at all - to the level
+of the strongest edges, and it pushed the target down with its edge neighbours. (Script check\tagC.)
+\end{worked}
+
+\begin{table}[htbp]
+\centering
+\caption{Earlier score-map sharpeners on F001 epoch 52; none beat plain residual Mahalanobis (D).}
+\label{tab:ftruns:postscore}
+\small
+\begin{tabular}{lcc}
+\toprule
+method, applied to the score map & bench AUC & objects caught of 909 \\
+\midrule
+\textbf{D} residual Mahalanobis, no post-processing & \textbf{0.865} & 383 \\
+F(C) difference-of-Gaussians blob boost & 0.718 & 403 \\
+E(C) local z-score of the score map (ring) & 0.790 & -- \\
+G-C suppress errors explained by a $\pm 1$\,px shift & 0.845 & -- \\
+\bottomrule
+\end{tabular}
+
+\smallskip
+{\footnotesize Source: \tagM{research/experiments/indradhanu-finetune/FT02-adapt/README.md} (\file{C:/es/postscore/}).}
+\end{table}
+
+The blob boost found 20 more objects and gave up $0.865 - 0.718 = 0.147$ of AUC to do it: it lit up many more
+non-targets on the way. The FT02 README's conclusion: edge strength, measured on the score map or the image, cannot
+tell a field boundary from a target, because at the scale of a few pixels they look the same.
+
+\subsection{An edge term under the blind spot}
+
+\index{blind spot}
+Training is a different place to act. Recall inference (\cref{ch:inference}): two complementary checkerboard masks,
+so every pixel is reconstructed while its own token - a $4 \times 4$ pixel square, stage 1's patch embedding with
+kernel 4 and stride 4 - is hidden. The model predicts the hidden token's pixels from the visible tokens around it.
+Compare the two things that look alike on the score map:
+\begin{itemize}
+\item \textbf{A field boundary} that crosses the hidden token continues on both sides of it. Its direction and its
+  contrast are visible in the neighbouring tokens. A model that has learned to continue straight boundaries sharply
+  can predict it.
+\item \textbf{A small target} sitting inside the hidden token has no continuation. Nothing in the visible tokens says
+  it is there. The model predicts the field, the error is large - and that error is the detection.
+\end{itemize}
+So a loss that rewards \emph{sharp} reconstruction of hidden pixels can teach the first and cannot teach the second.
+The score map has already lost this information: it records only how large the error was, not whether the context
+could have predicted the structure.
+
+\coursefig[\linewidth]{iw-53-edges}{(a) Edge-strength correction (amber) pushes down everything on strong edges, the
+field boundary and the target alike. (b) Under the blind spot: a boundary passing through a hidden token (grey
+hatching) can be continued from its visible ends; a target wholly inside the hidden token leaves no trace in the
+context.}{fig:ftruns:edges}
+
+\paragraph{The gradient-matching loss.} \index{gradient-matching loss}
+FT02c added \code{gradient_l1} (\code{app/foundation_models/trainers/finetune_trainer.py}) to the mixed-batch loss
+with weight \texttt{grad\_loss\_weight}. Its docstring: ``mean $\lvert d\,\hat{x} - d\,x \rvert$ over horizontal and
+vertical neighbour differences, per band, on pairs whose two pixels are both in loss\_mask \ldots\ and valid in that
+band. Blur shows up as a gradient mismatch.'' In symbols, for one band, with $P$ the set of neighbouring pairs
+$(p, q)$ both hidden, valid and eroded (\cref{ch:masking}):
+\begin{equation}
+L_\text{grad} = \frac{1}{\abs{P}} \sum_{(p,q) \in P} \Big\lvert (\hat{x}_q - \hat{x}_p) - (x_q - x_p) \Big\rvert .
+\label{eq:ftruns:gradl1}
+\end{equation}
+L1 on the values (\cref{ch:losses}) punishes blur only mildly; a loss on the differences punishes it directly.
+
+\begin{worked}[label={we:ftruns:gradl1}]{The same blur, two losses}
+A row of four hidden pixels across a boundary:
+\begin{align*}
+\text{input:}\quad & 0.10,\ 0.10,\ 0.50,\ 0.50\\
+\text{reconstruction:}\quad & 0.10,\ 0.20,\ 0.40,\ 0.50 \qquad\text{(the boundary, blurred)}
+\end{align*}
+\emph{Value L1.} Absolute differences: $0,\ 0.10,\ 0.10,\ 0$. Sum $0.20$; mean $0.20 / 4 = 0.05$.
+
+\emph{Gradient L1.} Input differences (next minus this): $0.10 - 0.10 = 0$, $0.50 - 0.10 = 0.40$, $0.50 - 0.50 =
+0$. Reconstruction differences: $0.20 - 0.10 = 0.10$, $0.40 - 0.20 = 0.20$, $0.50 - 0.40 = 0.10$. Mismatches:
+$\abs{0.10 - 0} = 0.10$, $\abs{0.20 - 0.40} = 0.20$, $\abs{0.10 - 0} = 0.10$. Sum $0.40$; mean $0.40 / 3 = 0.133$.
+
+The same blur costs 0.05 in value L1 and 0.133 in gradient L1: the edge term is what notices that a step became a
+ramp. (Script: 0.0500 and 0.1333\tagC.)
+\end{worked}
+
+\begin{sourcenote}[: where a hidden target could leak]
+It has been said that overlapping patch embeddings leak one or two pixels of a hidden token into its neighbours. In
+this model they do not, at the stage that hides tokens: stage 1's embedding is non-overlapping, kernel 4, stride 4,
+padding 0 (\code{app/foundation_models/components/seg_former_encoder.py}: ``Stage 1: kernel=4, stride=4
+(NON-OVERLAPPING - zero information leakage''), hidden tokens are restored as zeros after stage 1, and the spectral
+stem in front works on one pixel at a time. The real leak is a target that spans several tokens: some of them are
+visible in each checkerboard pass, so an edge-continuer could ``continue'' it into the hidden part.
+\end{sourcenote}
+
+\paragraph{What FT02c showed.} FT02c ran on 2026-10-16 (2.2 hours, code \texttt{9ff0484}) from FT02b's best.pt with
+\texttt{grad\_loss\_weight} 1.0 and the SAM weight held at 0.5 throughout. Its criterion: the share of top-1\% false
+alarms on strong edges down on at least 3 of 4 scenes.
+
+\begin{table}[htbp]
+\centering
+\caption{FT02c against its parent FT02b.}
+\label{tab:ftruns:ft02c}
+\small
+\begin{tabular}{lcc}
+\toprule
+ & FT02b ep9 & FT02c ep10 \\
+\midrule
+val.\ SAM, EnMAP / PRISMA / AVIRIS-NG & 3.99 / 4.37 / 5.57 & 3.93 / 4.21 / 5.41 \\
+edge term \texttt{train\_grad\_l1}, ep 1 $\to$ 10 & -- & 0.01163 $\to$ 0.01153 \\
+bench ROC-AUC, residual Mahalanobis & 0.856 & 0.855 \\
+pAUC / caught top 1\% / top 0.1\% & 0.158 / 411 / 128 & 0.159 / 413 / 131 \\
+top-1\% false alarms on edges, set1--4 & 69 / 52 / 52 / 60\% & 69 / 52 / 52 / 61\% \\
+\bottomrule
+\end{tabular}
+
+\smallskip
+{\footnotesize Source: \tagM{research/experiments/indradhanu-finetune/FT02c-edges/README.md}.}
+\end{table}
+
+The edge term barely moved: $0.01163 - 0.01153 = 0.00010$, and $0.00010 / 0.01163 = 0.0086$, about 1\% in ten
+epochs, while L1 and SAM kept falling. The edge false-alarm share is unchanged on all four scenes. Verdict: not met.
+
+\paragraph{Why the term could not be reduced.} \index{pixel shuffle}
+The decoder (\cref{ch:decoder}) fuses all encoder stages at a quarter of the resolution, $H/4$, and the pixel shuffle
+of \citet{shi2016realtime} turns \emph{one} feature vector into a whole $4 \times 4$ block of pixels
+(\code{app/foundation_models/components/seg_former_decoder.py}). Where an edge falls inside that block has to be
+encoded in that one quarter-resolution vector; with the loss switched on, it was not learned. The likely fix is
+architectural - a higher-resolution path into the decoder, masked so it cannot see hidden tokens - not a loss term.
+(That path was built later, as FT09; \cref{ch:decoderwork}.) The small reconstruction gains over FT02b are, in the
+README's words, ``more plausibly from the constant SAM weight 0.5 (FT02b ramped it from 0) than from the edge term''.
+
+\begin{keypoint}
+Edges are the main false alarm and a common shape of a true target; a correction applied to the finished score map
+cannot tell them apart, and a loss that could, in principle, was blocked by the decoder's $4 \times 4$ bottleneck.
+\end{keypoint}
+
+\section{The options not taken}\label{sec:ftruns:options}
+
+After FT02, four other directions were weighed on 2026-10-16 and set aside, each for a stated reason. Knowing what
+each would cost is what lets you pick one up later without repeating the discussion.
+
+\coursefig[\linewidth]{iw-54-options}{The four options discussed after FT02, what each would add, its main cost, and
+where it stood.}{fig:ftruns:options}
+
+\paragraph{1. A teacher (``oracle'') head - deferred.} \index{exponential moving average}\index{teacher-student}
+A \emph{teacher} is a copy of the model that sees more; a \emph{student} is the model being trained, which sees less
+and is trained to match the teacher's output. Here the teacher would read a sensor's full band list and the student a
+degraded one. The teacher would be an \emph{exponential moving average} (EMA) of the student's own weights: after
+each step, $\theta_\text{T} \leftarrow 0.999\,\theta_\text{T} + 0.001\,\theta_\text{S}$. How slow is that? Hold the
+student fixed at $s$ and subtract $s$ from both sides of the update:
+\begin{align}
+\theta_\text{T}^{(n+1)} - s &= 0.999\,\theta_\text{T}^{(n)} + 0.001\,s - s = 0.999\,\big(\theta_\text{T}^{(n)} - s\big).
+\intertext{The gap shrinks by a factor 0.999 per step, so after $n$ steps}
+\theta_\text{T}^{(n)} - s &= 0.999^n\,\big(\theta_\text{T}^{(0)} - s\big).
+\intertext{The gap halves when $0.999^n = 1/2$. Take logarithms of both sides and divide:}
+n &= \frac{\ln 2}{-\ln 0.999} = \frac{0.6931}{0.0010005} \approx 693 \text{ steps.} \label{eq:ftruns:halflife}
+\end{align}
+One step from teacher 0.50 toward student 0.80: $0.999 \times 0.50 + 0.001 \times 0.80 = 0.4995 + 0.0008 =
+0.5003$. The cost: a second forward pass per step, memory for a second copy of the weights, and one more thing that
+can drift. It was deferred because a teacher built on FT02's swings would inherit them.
+
+\paragraph{2. Per-sensor heads - not chosen.} A decoder per sensor would give each its own capacity, but it gives up
+the design's point: one set of wavelength-aware weights that reconstructs any band list, including sensors nobody has
+trained on. It also splits the data, and the effects mixed batches address (BatchNorm, gradient balance) sit
+\emph{before} any head.
+
+\paragraph{3. A synthetic-target detection head - not chosen (then).} \index{linear mixture}
+Implant artificial targets and train a head to find them. An implanted target is usually a \emph{linear mixture}: at
+one band, background 0.20, target 0.50, fraction 0.30 gives $0.70 \times 0.20 + 0.30 \times 0.50 = 0.14 + 0.15 =
+0.29$. The cost is in the word ``synthetic'': the head learns whatever the implanting recipe makes detectable - a
+perfectly linear mix, a sharp square outline - and it changes what the model is, from ``fails to reconstruct the
+unexpected'' to ``knows what a target looks like''.
+
+\paragraph{4. Regularisation - shelved.} \index{L2-SP}
+Four standard ways to stop fine-tuning drifting from pretraining: an EMA of the weights, replaying SpectralEarth in
+each batch, a lower learning rate, and \emph{L2-SP} (``L2 towards the starting point''), which adds a penalty
+\begin{equation}
+R(\vect{w}) = \frac{\alpha}{2} \sum_i \big(w_i - w_i^{0}\big)^2 \label{eq:ftruns:l2sp}
+\end{equation}
+to the loss, with $\vect{w}^0$ the pretrained weights. Differentiate with respect to one weight to see what it does
+to training: the power rule brings the 2 down, which cancels the $\tfrac12$,
+\[
+\frac{\partial R}{\partial w_i} = \alpha\,\big(w_i - w_i^0\big),
+\]
+a pull back toward the start, proportional to how far the weight has moved. With $\alpha = 0.01$ and two weights moved
+from $(0.5, -0.2)$ to $(0.6, -0.1)$: the penalty is $\frac{0.01}{2} \times (0.1^2 + 0.1^2) = 0.005 \times 0.02 =
+0.0001$, and each weight is pulled back with gradient $0.01 \times 0.1 = 0.001$. All four answer one question - ``is
+the model forgetting?'' - and FT02 did not look like forgetting: reconstruction improved on every sensor, EnMAP
+included, the sensor closest to SpectralEarth.
+
+\begin{drift}
+Status as of 2026-10-18: option 3 ran, in a different form - not as a head but as implant-denoising (FT05,
+\cref{sec:ftruns:ft05}). Option 1's teacher idea ran as a teacher for \emph{masks} (FT04's pseudo-labels,
+\cref{sec:ftruns:ft04}); cross-sensor reconstruction distillation is still deferred. Regularisation and per-sensor heads
+have no code.
+\end{drift}
+
+\section{Stage 3: FT03, masks, and why the implants had to change first}\label{sec:ftruns:stage3}
+
+\paragraph{FT03 passed.} FT03 trained reconstruction and segmentation jointly on mixed batches, from FT02c with FT01's
+head and segmentation weight 0.1, 10 epochs, 3.0 hours. All three criteria were met: water / cloud IoU 0.841 / 0.815
+(at or above FT01's 0.82 / 0.80), validation SAM within 0.1 degree of FT02c (3.92 / 4.21 / 5.48), and detection
+unchanged (PRISMA pAUC 0.158 against FT02c's 0.159)\tagM{research/experiments/indradhanu-finetune/FT03-joint/README.md}.
+Joint training changed detection by nothing measurable, as expected with a segmentation weight of 0.1.
+
+\paragraph{The head's first job: exclusion.} Class-aware scoring - a separate ``normal'' per surface class - was tried
+and not shipped: it removed cloud false alarms but water's tight statistics made water noise dominate (set1: water's
+share of false alarms 14\% to 92\%; PRISMA pAUC 0.158 to 0.134). The user's rule settled it: ``we don't detect
+anything on water and cloud.'' So the head marks them and the scorer sets them to 0 after scoring (\code{exclude} in
+\code{app/evaluation/scorers.py}). The mask comes from FT03, but it can be applied to \emph{every} model's scores.
+
+\begin{table}[htbp]
+\centering
+\caption{PRISMA bench, residual Mahalanobis, with and without water + cloud exclusion on FT03's masks.}
+\label{tab:ftruns:exclude}
+\small
+\begin{tabular}{lcccc}
+\toprule
+model & caught top 0.1\%, plain & excluded & pAUC, plain & excluded \\
+\midrule
+v0.2.0 & 14.1\% & 15.3\% & 0.159 & 0.165 \\
+F001 ep109 & 13.2\% & 14.6\% & 0.148 & 0.155 \\
+FT02c ep10 & 14.4\% & 16.1\% & 0.159 & 0.167 \\
+FT03 ep10 & 14.3\% & 16.5\% & 0.158 & 0.165 \\
+\bottomrule
+\end{tabular}
+
+\smallskip
+{\footnotesize Source: \tagM{C:/es/eval/stage3/report.md} (the \texttt{exclude(water+cloud;mask)} rows); summarised in \tagM{docs/lld/evaluation.md}.}
+\end{table}
+
+The pAUC gains are $0.165 - 0.159 = 0.006$, $0.155 - 0.148 = 0.007$, $0.167 - 0.159 = 0.008$ and $0.165 - 0.158 =
+0.007$ - between 0.006 and 0.008 for every model, including v0.2.0, which has no segmentation head and was never
+fine-tuned. The gain belongs to the mask, not to any model's reconstruction. Two costs: ROC-AUC falls, and 39 of the
+909 real objects lie wholly inside FT03's water / cloud mask. Checked later: 13 of set1's 27 are single pixels more
+than 3\,px offshore - likely vessels. The user then put \emph{vessels on water in scope: only cloud is excluded}
+(\cref{ch:runeval}). FT03 with cloud only: pAUC 0.158 to 0.166.
+
+\paragraph{The model-free detector, and what was wrong with bench-v1.} The stage-3 run also scored PCA-RX: classical
+local RX on the cube's top 30 principal components, no Indradhanu at all. On bench-v1 it caught 30.2\% at the top 1\%
+against FT03's 26.9\%; on the real objects its TPR at 0.1\% was 0.029 against FT03's 0.058 - half. bench-v1 rewarded
+something PCA-RX has more of than any model. A diagnosis compared the real objects with bench-v1's implants on two
+numbers, both starting from $\vect{d}$, an object's mean spectrum minus its ring's:
+\begin{itemize}
+\item \textbf{Foreign fraction}: the share of $\norm{\vect{d}}^2$ lying outside the scene's 10 main spectral
+  directions. Real 0.006, bench-v1 0.042 (easy tier: real 0.002, bench-v1 0.029).
+\item \textbf{Halo over object contrast}: the contrast of the one-pixel ring touching the object, over the object's
+  own. Real 0.74, bench-v1 0.60 (easy: 0.70 against 0.38). Real objects bleed into their neighbours; implants
+  stopped dead at their edge.
+\end{itemize}
+
+\coursefig[0.9\linewidth]{iw-57-what-v2-must-match}{Medians on PRISMA, real objects (grey) against bench-v1 implants
+(amber), overall and in the easy tier; the shaded band is within 25\% of the real value.}{fig:ftruns:v2match}
+
+\paragraph{Matching foreignness, derived.} \index{foreignness}
+bench-v2's fix rescales the part of $\vect{d}$ outside the scene's subspace so that the foreign fraction hits a
+target $f$, keeping the inside part (\code{match_foreignness} in \code{app/evaluation/implant.py}). Split $\vect{d} =
+\vect{i} + \vect{o}$ into its inside and outside parts; they are perpendicular, so by Pythagoras $\norm{\vect{d}}^2 =
+\norm{\vect{i}}^2 + \norm{\vect{o}}^2$. Scale the outside part by $\beta$ and demand the target share:
+\begin{align}
+\frac{\beta^2 \norm{\vect{o}}^2}{\norm{\vect{i}}^2 + \beta^2\norm{\vect{o}}^2} &= f.
+\intertext{Multiply both sides by the denominator:}
+\beta^2 \norm{\vect{o}}^2 &= f\,\norm{\vect{i}}^2 + f\,\beta^2 \norm{\vect{o}}^2.
+\intertext{Collect the $\beta^2$ terms on the left and factor:}
+\beta^2 \norm{\vect{o}}^2 (1 - f) &= f\,\norm{\vect{i}}^2.
+\intertext{Divide by $\norm{\vect{o}}^2(1-f)$:}
+\beta^2 &= \frac{f}{1 - f} \cdot \frac{\norm{\vect{i}}^2}{\norm{\vect{o}}^2}. \label{eq:ftruns:beta}
+\end{align}
+
+\begin{worked}[label={we:ftruns:beta}]{The repo's \texttt{match\_foreignness} test case}
+Scene direction = band 0, $\vect{d} = (3, 4, 0)$, target $f = 0.1$. Inside part $\vect{i} = (3, 0, 0)$ with
+$\norm{\vect{i}}^2 = 9$; outside part $\vect{o} = (0, 4, 0)$ with $\norm{\vect{o}}^2 = 16$.
+\begin{align*}
+\beta^2 &= \frac{0.1}{0.9} \times \frac{9}{16} = 0.1111 \times 0.5625 = 0.0625\\
+\beta &= \sqrt{0.0625} = 0.25\\
+\vect{d}' &= (3,\ 0.25 \times 4,\ 0) = (3, 1, 0)
+\end{align*}
+Check: outside $1^2 = 1$; total $9 + 1 = 10$; share $1 / 10 = 0.1$. (Script: $\beta = 0.25$\tagC.)
+\end{worked}
+
+The acceptance rule, fixed before the build, asked that foreignness and halo medians lie within 25\% of the real
+objects', overall and per tier. For the overall foreign fraction that band is $0.006 \times 0.75 = 0.0045$ to $0.006
+\times 1.25 = 0.0075$; bench-v1's 0.042 fails. For the easy-tier halo, $0.70 \times 0.75 = 0.525$ to $0.70 \times 1.25
+= 0.875$; bench-v1's 0.38 fails, even though its overall halo (0.60, against a band of 0.555 to 0.925) passes. That is
+why the test is per tier. bench-v2 was built and accepted the same day; \cref{ch:benchmarks} teaches it.
+
+\begin{keypoint}
+No model was trained on detection until the implants looked like real objects: the cheapest way to lower a loss that
+rewards finding bench-v1's implants is to become a better PCA-RX, which the real bench says is the wrong direction.
+\end{keypoint}
+
+\section{FT05: implant-denoising}\label{sec:ftruns:ft05}
+
+With bench-v2 accepted, option 3 ran in a new form on 2026-10-17: keep the model and the score, put anomalies into the
+\emph{input}, and keep the clean tile as the \emph{target}.
+
+\subsection{Why the old target works against detection}
+
+\index{implant-denoising}
+Every earlier run used the input as the target: hide most tokens, reconstruct them, compare with what was there.
+Anomalies in the training tiles are in the target too. An object smaller than a token is invisible to its own
+reconstruction, but an object larger than a token, or one with a blurred halo, leaks into the visible neighbouring
+tokens. A model trained on input targets is rewarded for carrying that leak into its prediction.
+
+\begin{worked}[label={we:ftruns:denoise}]{Which prediction does each target reward?}
+One band of one pixel. The background under it would be 0.20; an object makes it 0.50; the model sees part of the
+object in a neighbouring token and can predict either value. The loss is L1.
+\begin{center}
+\begin{tabular}{lcc}
+\toprule
+ & predict 0.20 & predict 0.50 \\
+\midrule
+input target 0.50 & $\abs{0.20 - 0.50} = 0.30$ & $\abs{0.50 - 0.50} = 0$ $\leftarrow$ rewarded \\
+clean target 0.20 & $\abs{0.20 - 0.20} = 0$ $\leftarrow$ rewarded & $\abs{0.50 - 0.20} = 0.30$ \\
+score &$\abs{0.50 - 0.20} = 0.30$ (found) & $\abs{0.50 - 0.50} = 0$ (missed) \\
+\bottomrule
+\end{tabular}
+\end{center}
+With the input as target, the loss prefers the prediction that hides the object from the score. With the clean tile
+as target, it prefers the prediction that exposes it. FT05 changes only the target, and that flips which prediction the
+loss rewards.
+\end{worked}
+
+\subsection{The implants and the weighted loss}
+
+\code{implant_sample} (\code{app/foundation_models/trainers/finetune_trainer.py}) runs in the data-loader workers on
+every \emph{training} tile: with probability 0.5 it writes 1 to 4 bench-v2 implants (\code{implant_tile}, the per-tile
+twin of the bench builder), keeps the clean tile as \texttt{clean.npy}, and marks every pixel within 3\,px of an
+implant as \emph{near}. The generator is seeded from the tile's key, so a tile gets the same implants every epoch.
+Implants come from two sources, \texttt{signature} and \texttt{material}; bench-v2's third source, \texttt{host}, is
+held out so that its row of bench-v2 is an out-of-recipe check.
+
+In \code{_mixed_loss} the model reads the implanted tile and is graded against the clean one, and the loss mask is
+re-weighted:
+
+\begin{lstlisting}
+loss_mask = hidden_pixels * eroded_valid       # (B, 1, H, W), as in every run
+# near: (B, 1, H, W), 1 within 3 px of an implant; implant_near_weight = 5
+loss_mask = loss_mask * (1.0 + (implant_near_weight - 1.0) * near)
+\end{lstlisting}
+
+\paragraph{How many pixels are near?} \index{dilation}
+\code{binary_dilation(gt > 0, iterations=3)} grows the implant by the default cross-shaped structuring element three
+times. Each pass adds the four direct neighbours of every marked pixel, so after $r$ passes a single pixel has grown
+into a diamond: every offset $(\Delta y, \Delta x)$ with $\abs{\Delta y} + \abs{\Delta x} \le r$. Count it ring by
+ring: the ring at distance $k \ge 1$ has $4k$ pixels (one per unit of $k$ along each of the four sides), so
+\begin{equation}
+\abs{\text{diamond}_r} = 1 + \sum_{k=1}^{r} 4k = 1 + 4 \cdot \frac{r(r+1)}{2} = 1 + 2r(r + 1). \label{eq:ftruns:diamond}
+\end{equation}
+For $r = 3$: $1 + 2 \times 3 \times 4 = 1 + 24 = 25$, which is $1 + 4 + 8 + 12$. SciPy agrees: 25 for a one-pixel
+implant and 32 for a two-pixel one\tagC.
+
+\paragraph{Why weight them, and what the weight does.} \index{weighted mean}
+\code{_masked_l1_sam} divides by the sum of the mask, so the loss is a \emph{weighted mean} over pixels. If $N$ pixels
+count, $n$ of them near an implant with weight $w$ and the rest with weight 1, the near pixels' share of the loss's
+weight is
+\begin{equation}
+\text{share}(w) = \frac{w\,n}{(N - n) + w\,n}. \label{eq:ftruns:share}
+\end{equation}
+
+\begin{worked}[label={we:ftruns:nearweight}]{Times five moves 0.15\% to 0.76\%}
+A $128 \times 128$ tile has 16,384 pixels; only the hidden ones count (mask ratio 0.65). One one-pixel implant has 25
+near pixels.
+\begin{align*}
+N &= 0.65 \times 16{,}384 = 10{,}650 \quad\text{(hidden pixels)}\\
+n &= 0.65 \times 25 = 16.25 \quad\text{(hidden near pixels, on average)}\\
+\text{share}(1) &= \frac{16.25}{10{,}650} = 0.0015 \quad (0.15\%)\\
+w\,n &= 5 \times 16.25 = 81.25\\
+(N - n) + w\,n &= 10{,}650 - 16.25 + 81.25 = 10{,}715\\
+\text{share}(5) &= \frac{81.25}{10{,}715} = 0.0076 \quad (0.76\%)
+\end{align*}
+The weight changes \emph{shares}, not the loss's overall size, because the denominator grows too. The rest of the
+tile, and the clean half of the data, keep teaching plain reconstruction. (Script: 0.00153 and 0.00758\tagC.)
+\end{worked}
+
+\coursefig[\linewidth]{iw-58-ft05-step}{One FT05 step. The loader workers (CPU) implant half the tiles and keep the clean
+copy; the model (GPU) reads the implanted tile and is graded against the clean one, $\times 5$ near the implants. The
+CPU side sets the pace.}{fig:ftruns:ft05}
+
+\subsection{The bill: a data loader that could not keep up}
+
+FT03 ran 10 epochs in 3.0 hours, about $3.0 \times 60 / 10 = 18$ minutes an epoch. FT05 ran at about 2 h 40 min =
+160 minutes an epoch, with the GPU 0--7\% busy\tagM{research/experiments/indradhanu-finetune/FT05-implant-denoise/README.md}.
+The ratio is $160 / 18 = 8.9$; since the GPU's work per epoch did not change, it could be busy at most $18 / 160 =
+0.11$ of the time. Ten epochs would take $10 \times 160 = 1{,}600$ minutes $= 26.7$ hours. All the implant work is NumPy
+on the CPU, inside the loader workers.
+
+One speed fix went in before the relaunch: the background subspace of each tile was computed by an SVD of up to
+100,000 pixels, and commit \texttt{558ff5e} replaced it by the eigenvectors of the bands-by-bands covariance - ``the
+same subspace'', 0.25\,s to about 0.02\,s per tile. Why the same? \index{singular value decomposition}
+
+\begin{worked}[label={we:ftruns:svd}]{Right singular vectors are eigenvectors of \texorpdfstring{$\mat{X}\T\mat{X}$}{XtX}}
+Let $\mat{X}$ be the centred pixels, $N$ rows (pixels) by $B$ columns (bands), with singular value decomposition
+$\mat{X} = \mat{U}\mat{S}\mat{V}\T$ ($\mat{U}\T\mat{U} = \mat{I}$, $\mat{V}\T\mat{V} = \mat{I}$, $\mat{S}$ diagonal).
+Form $\mat{X}\T\mat{X}$, using the transpose of a product $(\mat{A}\mat{B})\T = \mat{B}\T\mat{A}\T$:
+\begin{align*}
+\mat{X}\T\mat{X} &= (\mat{U}\mat{S}\mat{V}\T)\T (\mat{U}\mat{S}\mat{V}\T)
+ = \mat{V}\mat{S}\mat{U}\T\mat{U}\mat{S}\mat{V}\T
+ = \mat{V}\mat{S}^2\mat{V}\T .
+\end{align*}
+That is an eigendecomposition: the columns of $\mat{V}$ are eigenvectors of the $B \times B$ matrix $\mat{X}\T\mat{X}$,
+with eigenvalues the squared singular values. For a tile, $N = 16{,}384$ and $B = 224$, so the work moves from a
+$16{,}384 \times 224$ matrix to a $224 \times 224$ one.
+
+Check on paper with $N = 4$, $B = 2$: rows $(1, 1)$, $(-1, -1)$, $(2, -2)$, $(-2, 2)$ (each column sums to 0, so
+centred).
+\begin{align*}
+(\mat{X}\T\mat{X})_{11} &= 1^2 + (-1)^2 + 2^2 + (-2)^2 = 1 + 1 + 4 + 4 = 10\\
+(\mat{X}\T\mat{X})_{12} &= 1 \cdot 1 + (-1)(-1) + 2(-2) + (-2) \cdot 2 = 1 + 1 - 4 - 4 = -6\\
+(\mat{X}\T\mat{X})_{22} &= 1 + 1 + 4 + 4 = 10
+\end{align*}
+$\begin{psmallmatrix}10 & -6\\ -6 & 10\end{psmallmatrix}$ times $(1, -1)$ gives $(16, -16) = 16\,(1, -1)$, and times
+$(1, 1)$ gives $(4, 4) = 4\,(1, 1)$: eigenvalues 16 and 4. Their square roots, 4 and 2, are the singular values of
+$\mat{X}$ (script check\tagC).
+\end{worked}
+
+The loader was still CPU-bound after that fix. The cause, found on 2026-10-18 and recorded in
+\code{single_thread_worker}'s docstring: ``18 workers (3 sources $\times$ 6) on 8 vCPUs oversubscribed the CPU about
+8-fold; the implant transform ran 4.7\,s per tile instead of 1.8\,s'' - every worker process had its own pool of
+maths-library (BLAS) threads. With one thread per worker and 2 workers per source, FT05 resumed at epoch 6 at 43 minutes
+an epoch: $161 / 43 = 3.7$ times faster. FT04 inherited the setting.
+
+\subsection{The verdict}
+
+Pass criteria, fixed before launch: (1) the real PRISMA bench decides - not below FT03 on pAUC to 1\%, TPR at 0.1\% and
+caught top 0.1\%, and above on at least two of the three; (2) bench-v2 above FT03, with the held-out \texttt{host} row
+not falling; (3) validation SAM within 0.1 degree of FT03 (3.92 / 4.21 / 5.48) and water / cloud IoU within 0.02.
+
+\begin{worked}[label={we:ftruns:ft05crit}]{Criterion 1 at epoch 5}
+FT03 against FT05 epoch 5 on the real bench (\file{C:/es/eval/ft05_ep5/report.md}):
+\begin{align*}
+\text{pAUC:}\quad & 0.15801 - 0.15805 = -0.00004 \quad\text{(below, in the fifth decimal)}\\
+\text{TPR at 0.1\%:}\quad & 0.0594 - 0.0582 = +0.0012 \quad\text{(above)}\\
+\text{caught top 0.1\%:}\quad & 130 - 130 = 0 \quad\text{(equal)}
+\end{align*}
+Above on 1 of 3: criterion 1 not met. bench-v2 rose (32.3\% to 32.8\%; pAUC 0.164 to 0.167) and the held-out
+\texttt{host} row held (29.4\% to 29.6\%) - the pattern the pre-launch note had called ``optimistic''.
+\end{worked}
+
+FT05 finished at epoch 10 on 2026-10-18; best.pt stayed at epoch 5 (lowest validation loss), whose detection is the
+tie above. Epoch 10 then failed criterion 3: AVIRIS-NG SAM 5.67 against FT03's 5.48, $+0.19$ against a limit of 0.1.
+On bench-v2.1 (\cref{ch:sortbug}) epoch 5 caught 35.4\% against FT03's 34.9\% - a tie. Verdict: \textbf{not passed}.
+
+\begin{sourcenote}[: half of FT05's implants were garbled]
+Every \texttt{signature} implant FT05 trained on - half of them - carried the descending-wavelength \code{np.interp}
+bug of \cref{ch:sortbug}: each arrived as a flat step, though still at real contrast and foreignness. The bug was fixed
+(\texttt{b94dbfd}) after FT05's launch. The FT05 README calls a rerun with correct signatures ``the fair test'' and adds
+that ``nothing here suggests it would flip the result''. That rerun has not been made.
+\end{sourcenote}
+
+\section{The scoreboard}\label{sec:ftruns:board}
+
+Every model on every current benchmark fits in three tables. They read correctly only with chance and the model-free
+PCA-RX row beside them.
+
+\begin{table}[htbp]
+\centering
+\caption{The real PRISMA bench: 909 labelled objects in 4 scenes. Chance: 10.2\% at the top 1\%, 1.1\% at the top
+0.1\%. ``Cloud excluded'' zeroes the model's own cloud mask after scoring.}
+\label{tab:ftruns:real}
+\small\setlength{\tabcolsep}{4pt}
+\begin{tabular}{lccccc}
+\toprule
+model & caught top 1\% & top 0.1\% & pAUC to 1\% & TPR at 0.1\% & ROC-AUC \\
+\midrule
+v0.2.0 (shipped) & 44.2\% & 14.1\% & 0.159 & 0.058 & 0.854 \\
+F001 ep109 & 44.0\% & 13.2\% & 0.148 & 0.056 & 0.861 \\
+FT02c ep10 & 45.4\% & 14.4\% & 0.159 & 0.059 & 0.855 \\
+FT03 ep10 & 45.4\% & 14.3\% & 0.158 & 0.058 & 0.853 \\
+FT05 ep5 & 44.8\% & 14.3\% & 0.158 & 0.059 & 0.853 \\
+FT04 ep10 & 45.7\% & 14.9\% & 0.162 & 0.061 & 0.853 \\
+FT03, cloud excluded & 46.1\% & 15.8\% & 0.166 & 0.064 & 0.850 \\
+\textbf{FT04, cloud excluded} & 46.0\% & 15.8\% & \textbf{0.170} & \textbf{0.065} & 0.852 \\
+PCA-RX (no model) & 39.7\% & 8.1\% & 0.128 & 0.029 & 0.839 \\
+\bottomrule
+\end{tabular}
+
+\smallskip
+{\footnotesize Sources: \tagM{C:/es/eval/stage3/report.md}, \tagM{C:/es/eval/ft04/report.md},
+\tagM{research/experiments/indradhanu-finetune/FT04-final-joint/README.md}.}
+\end{table}
+
+\begin{table}[htbp]
+\centering
+\caption{Reconstruction (validation SAM, degrees; lower is better) and EnMAP test IoU for the fine-tuning runs.
+Earlier models were validated differently and are left out.}
+\label{tab:ftruns:recon}
+\small
+\begin{tabular}{lcccccc}
+\toprule
+ & \multicolumn{3}{c}{SAM (deg)} & \multicolumn{3}{c}{IoU} \\
+run & EnMAP & PRISMA & AVIRIS-NG & water & cloud & shadow \\
+\midrule
+FT01 (head only) & -- & -- & -- & 0.82 & 0.80 & 0.20 \\
+FT02b ep9 & 3.99 & 4.37 & 5.57 & -- & -- & -- \\
+FT02c ep10 & 3.93 & 4.21 & 5.41 & -- & -- & -- \\
+FT03 ep10 & 3.92 & 4.21 & 5.48 & 0.841 & 0.815 & 0.205 \\
+FT05 ep5 (best.pt) & 3.94 & 4.20 & 5.33 & 0.838 & 0.818 & -- \\
+FT05 ep10 (last.pt) & 3.90 & 4.20 & \textbf{5.67} & 0.844 & 0.814 & -- \\
+\textbf{FT04 ep10} & \textbf{3.88} & \textbf{4.11} & 5.46 & 0.839 & 0.810 & \textbf{0.223} \\
+\bottomrule
+\end{tabular}
+
+\smallskip
+{\footnotesize Source: the run READMEs, \tagM{research/experiments/indradhanu-finetune/}.}
+\end{table}
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}
+\begin{axis}[
+  xbar, bar width=5pt, width=0.8\linewidth, height=9.5cm,
+  xmin=0, xmax=50, xlabel={objects caught at the top 1\% (\%)},
+  ytick={1,...,8}, yticklabels={{PCA-RX},{FT04 + cloud},{FT04},{FT05 ep5},{FT03},{FT02c},{F001},{v0.2.0}},
+  ymin=0.4, ymax=8.6,
+  legend style={at={(0.5,1.02)},anchor=south,legend columns=2,font=\small},
+  nodes near coords, nodes near coords style={font=\tiny, /pgf/number format/fixed, /pgf/number format/precision=1,
+    /pgf/number format/fixed zerofill}]
+\addplot[fill=maskgrey!70, draw=black!50] coordinates {(44.2,8) (44.0,7) (45.4,6) (45.4,5) (44.8,4) (45.7,3) (46.0,2) (39.7,1)};
+\addplot[fill=loss!70, draw=black!50] coordinates {(35.5,8) (33.1,7) (35.1,6) (34.9,5) (35.4,4) (35.1,3) (36.2,2) (33.2,1)};
+\draw[dashed, black!60] (axis cs:10.2,0.4) -- (axis cs:10.2,8.6) node[below right,font=\tiny] {chance $\approx 10\%$};
+\legend{real PRISMA bench, bench-v2.1}
+\end{axis}
+\end{tikzpicture}
+\caption{Share of objects caught at the top 1\% on the real bench (grey) and bench-v2.1 (amber), drawn to scale from
+\cref{tab:ftruns:real} and \cref{tab:sortbug:v21}. Every model is far above chance and above PCA-RX; the models tie each
+other.}
+\label{fig:ftruns:board}
+\end{figure}
+
+\coursefig[0.9\linewidth]{iw-59-scoreboard}{The course's version of the same board: share caught at the top 1\% for
+each model and PCA-RX, on the real bench (grey) and bench-v2.1 (amber).}{fig:ftruns:courseboard}
+
+\begin{drift}
+These tables are the board of 2026-10-19 (FT04 added after its run on 2026-10-18). Later models - FT06 to FT09 and
+Indradhanu Heavy (\cref{ch:uncertainty,ch:decoderwork,ch:heavy}) - are scored on the same benches and are not shown.
+\end{drift}
+
+\paragraph{What each step bought, and how big noise is.} Take bench-v2.1's caught-at-top-1\% apart step by step,
+with the rough ruler of \cref{ch:sortbug} ($\operatorname{SE} \approx 0.9$ points for $p = 0.35$, $n = 2{,}817$):
+\begin{center}
+\small
+\begin{tabular}{llcl}
+\toprule
+step & caught & change & reading \\
+\midrule
+v0.2.0 $\to$ F001 & 35.5 $\to$ 33.1 & $-2.4$ ($2.7$ SE) & pretraining alone: slightly worse \\
+F001 $\to$ FT02c & 33.1 $\to$ 35.1 & $+2.0$ ($2.2$ SE) & three real sensors, mixed batches \\
+FT02c $\to$ FT03 & 35.1 $\to$ 34.9 & $-0.2$ & joint training: a tie \\
+FT03 $\to$ FT04 & 34.9 $\to$ 35.1 & $+0.2$ & pseudo-labels, rare-class weights: a tie \\
+FT04 $\to$ + cloud & 35.1 $\to$ 36.2 & $+1.1$ & a mask, not a model \\
+FT03 $\to$ FT05 ep5 & 34.9 $\to$ 35.4 & $+0.5$ & implant-denoising: a tie \\
+\bottomrule
+\end{tabular}
+\end{center}
+Read the two large steps together: pretraining alone cost a little on both benches (real-bench pAUC 0.159 to 0.148),
+and fine-tuning on the real sensors won it back - to where v0.2.0 already was.
+
+\section{FT04: pseudo-labels, rare classes and the release candidate}\label{sec:ftruns:ft04}
+
+FT03's segmentation head learned only from EnMAP's labels. PRISMA and AVIRIS-NG tiles went through the segmentation
+pass, but no loss read their outputs. So the head that would mask clouds on a PRISMA scene had never been graded on
+one. FT04, the ``final joint'' run, fixed that with pseudo-labels and weighted the rare classes; it ran on 2026-10-18
+from FT03's weights for 10 epochs and passed all three of its criteria.
+
+\subsection{Keep only the confident calls}
+
+\index{pseudo-label}
+A \emph{pseudo-label} is a label made by a model rather than a person. The teacher is FT03; the student is FT04.
+\code{scripts/pseudo_label.py} runs FT03's head over every PRISMA and AVIRIS-NG training tile and stores, per tile, a
+\shape{(5, 128, 128)} array of bytes, $\operatorname{round}(255 \times \sigma(z))$ for each class's logit $z$. A
+probability of 0.93 is stored as $\operatorname{round}(255 \times 0.93) = \operatorname{round}(237.15) = 237$. The raw
+probabilities are kept on purpose, so a threshold can change without re-running the teacher.
+
+\code{pseudo_targets} (\code{app/utils/segmentation/targets.py}) turns them into \emph{targets} (0 or 1 per class and
+pixel) and \emph{known} (whether that pixel enters the loss):
+
+\begin{lstlisting}
+PSEUDO_CONF = 0.9              # counts only where p > 0.9 or p < 0.1
+p = probs.astype(np.float32) / 255.0                       # (5, 128, 128)
+targets = (p > conf).astype(np.float32)
+known = ((p > conf) | (p < 1 - conf)) & valid[None]   # valid: enough finite bands
+known[2:] = False                         # thin cloud, shadow, snow: not taught
+not_water = (targets[0] > 0) & (band_mean(refl, wl, 800, 900) > 0.15)
+targets[0][not_water] = 0.0               # still known: a known NOT-water
+\end{lstlisting}
+
+In stored units, $0.9 \times 255 = 229.5$ and $0.1 \times 255 = 25.5$: ``yes'' needs a byte of 230 or more, ``no'' a
+byte of 25 or less. Only water and cloud are taught; the other classes stay unknown on PRISMA and AVIRIS-NG because
+FT01 to FT03 never got them good enough to copy.
+
+\paragraph{The water guard.} \index{water guard}
+Water is dark in the near-infrared (NIR). A pixel the teacher calls water with a mean 800--900\,nm reflectance above
+0.15 is land-bright, so it becomes a \emph{known not-water} - taught ``no'', not left out. The 0.15 is looser than the
+implant builder's water rule ($\text{NIR} < 0.08$): it vetoes only calls that are far too bright for water. The source
+records the value (the config's description: ``water guarded by NIR $\le$ 0.15'') but not how it was chosen.
+
+\begin{worked}[label={we:ftruns:pseudo}]{Four pixels through \texttt{pseudo\_targets}}
+Stored water bytes and NIR means for a $2 \times 2$ tile. Divide each byte by 255, compare with 0.9 and 0.1, then
+apply the guard.
+\begin{center}
+\small
+\begin{tabular}{lcccl}
+\toprule
+pixel & byte & $p = $ byte$/255$ & NIR & decision \\
+\midrule
+A & 240 & 0.941 & 0.04 & $> 0.9$, NIR $\le 0.15$ $\to$ target 1, known \\
+B & 128 & 0.502 & 0.05 & between 0.1 and 0.9 $\to$ unknown \\
+C & 13 & 0.051 & 0.30 & $< 0.1$ $\to$ target 0, known \\
+D & 235 & 0.922 & 0.22 & $> 0.9$ but NIR $> 0.15$ $\to$ target 0, known (not-water) \\
+\bottomrule
+\end{tabular}
+\end{center}
+Three of the four pixels teach; one says ``water'', two say ``not water''; one is left out. Pixel D is the guard at
+work. A check before launch, on 150 EnMAP tiles against EnMAP's own labels, gave the guarded pseudo-label water IoU
+0.875, and the teacher's raw confident cloud 0.82\tagM{research/experiments/indradhanu-finetune/FT04-final-joint/README.md}.
+\end{worked}
+
+\paragraph{Why there is no cloud guard.} A cloud guard, \code{cloud_plausible}, was built and dropped. It required a
+mean 450--650\,nm reflectance above 0.2 \emph{and} spectral flatness: the minimum of four window means (460--500,
+540--580, 640--680, 840--880\,nm) over their maximum at least 0.7. It rejected 69\% of EnMAP's labelled clouds on a test
+shard, and the error it targeted - ``bright desert called cloud'' on set4 - was not there: set4's ``11\% cloud'' is a
+cloud / smoke streak and haze. Haze is not flat: with window means 0.30, 0.27, 0.24, 0.18 (falling, because haze
+scatters blue most), $\min/\max = 0.18 / 0.30 = 0.60 < 0.7$, so it is rejected, though its visible mean $(0.30 + 0.27 +
+0.24)/3 = 0.27$ is bright enough. A guard that throws out most of the true class costs more than the error it blocks.
+
+\subsection{Rare classes, weighted three times}
+
+\index{binary cross-entropy!weighted}
+\texttt{seg\_class\_weights} is $[1, 1, 1, 3, 3]$ for water, cloud, thin cloud, shadow and snow. Recall the loss of
+\cref{ch:seghead}. For one class with predicted probability $p$ and target $y \in \{0, 1\}$, the binary cross-entropy is
+the negative log of the probability the model gave to the right answer:
+\begin{equation}
+\ell(y, p) = -\big(y \ln p + (1 - y)\ln(1 - p)\big). \label{eq:ftruns:bce}
+\end{equation}
+(If $y = 1$ the second term vanishes and $\ell = -\ln p$; if $y = 0$ the first vanishes and $\ell = -\ln(1-p)$.)
+\code{masked_bce_dice} averages each class's BCE over its known pixels, adds a soft Dice term, and then combines the
+classes with a weighted mean over the classes $H$ that have any known pixel in the batch:
+\begin{equation}
+L = \frac{\sum_{c \in H} w_c\,L_c}{\sum_{c \in H} w_c} . \label{eq:ftruns:wmean}
+\end{equation}
+In the code: \code{return (w * per)[has].sum() / w[has].sum()}.
+
+\begin{worked}[label={we:ftruns:wbce}]{Weighted BCE on a batch with no snow}
+To keep the arithmetic short, use the BCE part only (the Dice term is added to each $L_c$ in the same way and is
+weighted identically). Each class has two known pixels; snow has none.
+\begin{align*}
+\text{water:}\quad & y = 1, p = 0.9: -\ln 0.9 = 0.1054; \quad y = 0, p = 0.2: -\ln 0.8 = 0.2231;\\
+ & L_\text{water} = (0.1054 + 0.2231)/2 = 0.1643\\
+\text{cloud:}\quad & y = 1, p = 0.7: -\ln 0.7 = 0.3567; \quad y = 0, p = 0.1: -\ln 0.9 = 0.1054;\\
+ & L_\text{cloud} = (0.3567 + 0.1054)/2 = 0.2310\\
+\text{thin cloud:}\quad & y = 0, p = 0.4: -\ln 0.6 = 0.5108; \quad y = 1, p = 0.6: -\ln 0.6 = 0.5108;\\
+ & L_\text{thin} = 0.5108\\
+\text{shadow:}\quad & y = 1, p = 0.3: -\ln 0.3 = 1.2040; \quad y = 0, p = 0.2: -\ln 0.8 = 0.2231;\\
+ & L_\text{shadow} = (1.2040 + 0.2231)/2 = 0.7136
+\end{align*}
+Snow has no known pixel, so it drops out of numerator and denominator.
+\begin{align*}
+\text{unweighted:}\quad & (0.1643 + 0.2310 + 0.5108 + 0.7136) / 4 = 1.6197 / 4 = 0.4049\\
+\text{weighted:}\quad & (0.1643 + 0.2310 + 0.5108 + 3 \times 0.7136) / (1 + 1 + 1 + 3)\\
+ &= (0.9061 + 2.1408) / 6 = 3.0469 / 6 = 0.5078
+\end{align*}
+(Script: 0.4049 and 0.5078\tagC.) The total moved only from 0.40 to 0.51. What moved a lot is where the gradient goes:
+differentiate \eqref{eq:ftruns:wmean} with respect to one class's loss,
+\[
+\frac{\partial L}{\partial L_c} = \frac{w_c}{\sum_{h \in H} w_h},
+\]
+so shadow's share of every gradient step is $1/4 = 0.25$ unweighted and $3/6 = 0.50$ weighted - doubled.
+\end{worked}
+
+On a PRISMA or AVIRIS-NG sub-batch only water and cloud are known, both weight 1, so the weights act on EnMAP's batches
+only. Result: shadow IoU 0.205 to 0.223.
+
+\subsection{Results, and the 0.159 to 0.170 decomposition}
+
+\begin{worked}[label={we:ftruns:ft04crit}]{FT04's criteria}
+\emph{1. Masks: EnMAP IoU not below FT03 by more than 0.01.} Water $0.839 - 0.841 = -0.002$; cloud $0.810 - 0.815 =
+-0.005$. Both within 0.01: met.
+
+\emph{3. Reconstruction: SAM within 0.1 degree of FT03.} EnMAP $3.88 - 3.92 = -0.04$; PRISMA $4.11 - 4.21 = -0.10$;
+AVIRIS-NG $5.46 - 5.48 = -0.02$. All better: met.
+
+\emph{2. Detection: default not below FT03, and cloud exclusion on FT04's masks at least as good as on FT03's.}
+Default: pAUC 0.162 against 0.158, TPR at 0.1\% 0.061 against 0.058, caught top 0.1\% 14.9\% against 14.3\% - at or
+above on all three. Exclusion: 0.170 with FT04's masks against 0.166 with FT03's. Met.
+\end{worked}
+
+The run also swapped the masks between the two models, which turns two numbers into a small experiment. A
+\emph{two-by-two factorial} design varies two factors - here the reconstruction model and the mask source - in every
+combination, so each factor's effect can be read with the other held fixed. \index{factorial design}
+
+\begin{table}[htbp]
+\centering
+\caption{Real-bench pAUC to 1\% with cloud exclusion: every combination of model and mask.}
+\label{tab:ftruns:swap}
+\small
+\begin{tabular}{lcc}
+\toprule
+ & FT03's masks & FT04's masks \\
+\midrule
+FT03's reconstruction & 0.166 & 0.165 \\
+FT04's reconstruction & 0.170 & 0.170 \\
+\bottomrule
+\end{tabular}
+
+\smallskip
+{\footnotesize Source: \tagM{C:/es/eval/ft04/report.md}.}
+\end{table}
+
+\begin{worked}[label={we:ftruns:factorial}]{Main effects of model and mask}
+The \emph{main effect} of a factor is the average over the other factor of the change it causes.
+
+Model (FT03 to FT04), averaged over both masks:
+\[
+\frac{0.170 + 0.170}{2} - \frac{0.166 + 0.165}{2} = 0.170 - 0.1655 = +0.0045 .
+\]
+Masks (FT03's to FT04's), averaged over both models:
+\[
+\frac{0.165 + 0.170}{2} - \frac{0.166 + 0.170}{2} = 0.1675 - 0.168 = -0.0005 .
+\]
+The masks are interchangeable (FT04's exclude less: ROC-AUC 0.852 against 0.850, at no cost at the top). The step under
+exclusion is FT04's reconstruction, not its masks. (Script: $+0.0045$ and $-0.0005$\tagC.)
+\end{worked}
+
+Now take apart the real-bench gain of the release candidate over what shipped:
+\begin{align*}
+\text{shipped v0.2.0, default} &\quad 0.159\\
+\text{FT04, default} &\quad 0.162 \qquad \text{model: } 0.162 - 0.159 = +0.003\\
+\text{FT04 + cloud exclusion} &\quad 0.170 \qquad \text{exclusion: } 0.170 - 0.162 = +0.008\\
+\text{total} &\quad +0.011 \qquad \text{exclusion share } 0.008 / 0.011 = 0.73
+\end{align*}
+
+\coursefig[\linewidth]{iw-60-ft04}{(a) How one teacher probability becomes a target: taught ``yes'' above 0.9, ``no''
+below 0.1, nothing between, and a confident ``water'' over a bright NIR turned into a known not-water. (b) The real-bench
+pAUC from the shipped v0.2.0 to the release candidate: the model adds 0.003, cloud exclusion 0.008.}{fig:ftruns:ft04}
+
+And the comparison is not like for like: v0.2.0 was scored without exclusion. The like-for-like run was made on
+2026-10-19 (\file{configs/eval/release_like_for_like.json}): both with cloud exclusion on FT04's masks, v0.2.0 scored
+0.165 and FT04 0.170 on the real bench; on bench-v2.1 v0.2.0 + exclusion is slightly ahead (36.7\% against
+36.2\%)\tagM{research/experiments/indradhanu-finetune/FT04-final-joint/README.md}. A detection tie.
+
+\subsection{Why better reconstruction does not become better detection}\label{sec:ftruns:absorb}
+
+\index{residual Mahalanobis!scale invariance}
+The log's conclusion of 2026-10-18: ``Residual Mahalanobis absorbs what better reconstruction changes.'' Here is the
+mechanism, as mathematics. Residual Mahalanobis scores a pixel's residual $\vect{r}$ by its squared Mahalanobis distance
+in units of the background residual's covariance $\Cov$ (\cref{ch:residualmaha}), $s = \vect{r}\T\Cov\inv\vect{r}$
+(after subtracting the local mean). Suppose a better model shrinks \emph{every} residual by the same factor $c$, so
+$\vect{r} \to c\,\vect{r}$. The covariance is fitted on those residuals, and scaling every vector by $c$ scales every
+product of two components by $c^2$, so $\Cov \to c^2\Cov$ and $\Cov\inv \to c^{-2}\Cov\inv$. Then
+\begin{align*}
+s' &= (c\,\vect{r})\T (c^2\Cov)\inv (c\,\vect{r})\\
+ &= c \cdot c^{-2} \cdot c\ \vect{r}\T\Cov\inv\vect{r}\\
+ &= \vect{r}\T\Cov\inv\vect{r} = s .
+\end{align*}
+The score does not move. In one dimension, with a background spread of 0.010 and a target residual of 0.050 the target
+sits $0.050 / 0.010 = 5.0$ spreads out; a better model with spread 0.008 and target residual 0.040 gives $0.040 /
+0.008 = 5.0$ spreads - the same\tagA. Only a model that improves on the background \emph{and not} on the targets raises
+the score. That is exactly what FT05 tried to teach, without effect.
+
+\begin{keypoint}
+What the pretraining and FT01 to FT05 bought: masks (cloud exclusion, about a point for any model), native bands,
+better reconstruction and a benchmark you can trust - not detection by the model alone.
+\end{keypoint}
+
+FT04 + cloud exclusion on its own masks became the release candidate, and shipped as Indradhanu V2 - the next chapter.
+
+\section{What the runs taught}\label{sec:ftruns:lessons}
+
+\begin{enumerate}
+\item \textbf{A class that stays flat while all others climb is a label ceiling} (FT01, thin cloud).
+\item \textbf{Read a gate where you said you would}, and expect reconstruction and detection to part company (FT02).
+\item \textbf{Count bands before crediting weights}: a growing trained-wavelength record changes what the model reads
+  (FT02).
+\item \textbf{The score map cannot tell a boundary from a target}; a loss under the blind spot could, but the decoder's
+  $4 \times 4$ bottleneck blocked it (FT02c).
+\item \textbf{A shelved option is shelved for a reason}; write the reason down so the next person need not re-argue it.
+\item \textbf{Fix the benchmark before you train on it} (stage 3, bench-v1 against PCA-RX).
+\item \textbf{The target decides what the loss rewards} - and a weight changes shares, not totals (FT05).
+\item \textbf{The CPU can be the bottleneck of a GPU run} (FT05's loader).
+\item \textbf{A mask can lift every model alike; credit the mask, not the model} (exclusion; FT04's swap).
+\item \textbf{A scale-invariant score absorbs uniform improvements} (residual Mahalanobis).
+\end{enumerate}
+
+\begin{confusions}
+\confusion{FT02 forgot how to detect.}{Not shown. Reconstruction improved on every sensor, and the bench moved 0.862 to
+0.855, smaller than some single-scene swings. ``Forgetting'' would predict worse reconstruction on what F001 knew; EnMAP,
+the closest sensor to SpectralEarth, got better.}
+\confusion{Epoch 1 passed the gate, so FT02 passed.}{No. The gate names the checkpoint: the best by validation
+reconstruction. Choosing a checkpoint by the bench would turn the bench into training data.}
+\confusion{Edges are false alarms, so suppress edges.}{Edges are the main false alarm and a common shape of a true
+target. Suppressing them costs both (0.86 to 0.67).}
+\confusion{With a clean target the model never sees anomalies.}{It sees them in every implanted input. It is graded on
+what was underneath.}
+\confusion{The x5 near weight makes the loss five times bigger.}{The weighted mean divides by the weighted count. x5
+shifts the near pixels' share from 0.15\% to 0.76\%; the total stays a mean.}
+\confusion{Unknown means not-water.}{No. Unknown pixels never enter the loss. A known not-water (pixel D) is taught as 0.}
+\confusion{The 3x class weight makes the loss three times bigger.}{It is a weighted mean: the denominator grows too (6
+instead of 4). It doubles shadow's share of the gradient.}
+\confusion{Cloud exclusion is FT04's improvement.}{The mask is FT04's head, but the gain is the mask's: it lifts every
+model alike, v0.2.0 included, and FT03 scores the same with either head's masks.}
+\confusion{FT04 is the best detector.}{On the real bench by 0.003 pAUC without exclusion, and like for like with
+exclusion it ties v0.2.0. It is the release candidate because its masks, reconstruction and native bands are the best.}
+\end{confusions}
+
+\begin{checkyourself}
+\item\label{ex:ftruns:1} The segmentation head of a smaller model has encoder stages of 16, 32, 80 and 128 channels,
+  decoder width 64 and 5 classes, with the same layers as \cref{we:ftruns:seghead}. Count its parameters by hand.
+\item\label{ex:ftruns:2} Compute the edge strength \eqref{eq:ftruns:edge} and the central-difference gradient
+  magnitude \eqref{eq:ftruns:gradmag} of the right-hand centre pixel (0.30) of the patch in \cref{we:ftruns:edges}. Its
+  neighbours inside the patch are up 0.30, down 0.31, left 0.12 (treat the missing right neighbour as equal to the pixel
+  itself for the central difference).
+\item\label{ex:ftruns:3} Redo \cref{we:ftruns:gradl1} for a reconstruction $0.10, 0.10, 0.45, 0.50$. Give the value L1
+  mean and the gradient L1 mean.
+\item\label{ex:ftruns:4} A two-pixel implant has 32 pixels within 3\,px. With mask ratio 0.65, 10,650 hidden pixels and
+  weight 5, what share of a tile's loss weight do its near pixels carry? What weight would give them a 2\% share?
+\item\label{ex:ftruns:5} Stored water bytes 199, 231, 24 and 26 for four pixels with NIR 0.05, 0.18, 0.30, 0.04. Give
+  each pixel's water target and known flag.
+\item\label{ex:ftruns:6} Per-class losses water 0.2, cloud 0.2, thin cloud 0.4, shadow 0.6, no known snow. Compute the
+  unweighted and the $[1, 1, 1, 3, 3]$-weighted loss, and shadow's share of the gradient in each case.
+\item\label{ex:ftruns:7} Show that the teacher of \cref{sec:ftruns:options} closes 90\% of its gap to a fixed student
+  in about 2,300 steps.
+\end{checkyourself}
+\endgroup
+
+\nextchapter{ch:shipping}

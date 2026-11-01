@@ -1,0 +1,23 @@
+\glossentry{SpectralEarth}{DLR's collection of 539,755 EnMAP patches, 128 by 128 pixels on 202 bands, published for pretraining hyperspectral models; Indradhanu's pretraining set.}
+\glossentry{Pretraining}{Training a model on a large general data set before adapting it (fine-tuning) to the data and tasks of the product.}
+\glossentry{Patch}{A small square cut from a scene, here 128 by 128 pixels with every band, the unit a training batch is built from.}
+\glossentry{Shard}{A file (a tar archive) that bundles a fixed number of patches, 150 for SpectralEarth, read in order by the trainer.}
+\glossentry{Split by site}{Dividing data into training and test so that every image of one place lands on the same side, preventing the test score from flattering the model.}
+\glossentry{Checkpoint}{A saved file of the model's weights and the optimiser's state at the end of an epoch; best.pt is the one with the lowest validation score.}
+\glossentry{Early stopping}{Stopping a run once its validation score has not improved by a minimum relative amount for a number of epochs called the patience.}
+\glossentry{Patience}{The number of epochs without sufficient improvement after which early stopping ends a run.}
+\glossentry{Ramped weight}{A loss weight that grows over the first epochs (here the SAM weight, from 0 to 0.5 over 10 epochs); fine for training, wrong for ranking epochs.}
+\glossentry{Skip path}{The route in the reduced spectral stem that sends every band straight to the output channels, averaged over bands.}
+\glossentry{Band density}{How many bands a sensor places in a region of the spectrum; with a one-vote-per-band average it changes the stem's output for the same spectrum.}
+\glossentry{Width weighting}{Weighting each band by the nanometres of spectrum it stands for, so an average over bands approximates an integral over wavelength.}
+\glossentry{Band-list augmentation}{Training on random subsets of the bands (thinning, gaps, even grids) so that the wavelength networks learn to read many band lists.}
+\glossentry{Trained-band mask}{The rule that drops, at load time, any band farther than 15 nm from every wavelength the model has trained on.}
+\glossentry{Block}{In F001, 200 consecutive shards (30,000 patches, one epoch's worth) trained for 20 epochs before the next block replaces it.}
+\glossentry{Rotation}{Swapping one block of training data for the next while the learning-rate schedule and optimiser state continue unbroken.}
+\glossentry{Native band list}{A sensor's own band centres and pixel grid, untouched by interpolation.}
+\glossentry{Resampled band list}{Values interpolated onto a band list other than the sensor's own, such as the 165-band grid.}
+\glossentry{Datatake}{One continuous EnMAP recording; its consecutive scenes border each other, so it is kept on one side of a split.}
+\glossentry{Digital number}{The raw integer a sensor file stores (0 to 65,535 for PRISMA), converted to reflectance with per-detector scale factors.}
+\glossentry{Band-delta compression}{Storing each band as its int16 difference from the previous band, with wrap-around, then compressing with zstd; exact and about 2 times smaller.}
+\glossentry{Band alignment}{Matching a sample's bands to a target list by wavelength within 0.5 nm; unmatched targets become nodata and unmatched sources are dropped.}
+\glossentry{Nodata}{The value -32768 in a shard, marking a voxel with no valid reading; the stem skips it rather than reading it as zero.}

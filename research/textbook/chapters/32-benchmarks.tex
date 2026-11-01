@@ -1,0 +1,736 @@
+\chapter{Benchmarks: the public sets and the implant bench (contrast z, foreignness, PSF)}\label{ch:benchmarks}
+
+\begin{onething}
+No public labelled anomaly set tests a model that reads satellite reflectance by wavelength, so the repository puts
+synthetic objects into its own held-out satellite scenes - mixed in linearly, blurred by a Gaussian point-spread
+function, and solved so that their contrast $z$ and foreignness match real labelled objects \emph{as they are
+realised} - and trusts the result only once it reproduces an ordering the real labels already showed.
+\end{onething}
+
+\section{Why a bigger benchmark was needed}\label{sec:benchmarks:why}
+
+\Cref{ch:measures} gave you measures that look at the top of the ranking. On the four labelled PRISMA scenes
+(909 objects\hfil\penalty50\hfilneg\tagM{research/experiments/implant-bench/README.md}) they still could not separate the models: every
+measure tied the shipped model with the fine-tuned ones within scene-to-scene noise
+(\file{research/experiments/indradhanu-finetune/FT02b-mixed/README.md}). Four scenes and 909 objects are too few to
+see differences of the size being chased; \cref{ch:bootstrap} puts a number on ``too few''.
+
+The obvious fix is to borrow a bigger public benchmark. On 2026-10-16 the two standard ones were downloaded and
+vetted, and the record is \file{research/experiments/benchmarks/README.md}. This chapter first shows why neither
+fits, then teaches the benchmark the repository built instead, and the mathematics of each of its parts:
+linear mixing, the ring and its contrast $z$, foreignness, the Gaussian point-spread function and the strength solve.
+
+\begin{analogy}
+To test proofreaders, a publisher takes real pages and plants typos of known difficulty, some glaring, some a single
+swapped letter. Real pages keep the surrounding text honest; planted errors make every answer known. The test is only
+fair if the planted typos look like the ones writers actually make - so you study a pile of real typos first, and
+you check that the planted test ranks last year's proofreaders in the order their real work did.
+\end{analogy}
+
+\section{What a model needs from each scene}\label{sec:benchmarks:needs}
+
+The Indradhanu models read \emph{any band list by wavelength} and expect \emph{reflectance} on a 0--1 scale
+(\cref{ch:light}). So every benchmark scene must supply four things:
+\begin{enumerate}
+\item the cube;
+\item the centre wavelength of every band;
+\item a ground-truth mask;
+\item the value scale: what a stored number means physically.
+\end{enumerate}
+Miss any one and the model is either guessing or reading something it was never trained on. The evaluator enforces
+the fourth: \code{Evaluation.run} raises \code{ValueError} for any scene whose \code{units} are not
+\code{"reflectance"} (\file{app/evaluation/runner.py}).
+
+\section{HAD100}\label{sec:benchmarks:had}
+
+HAD100 was published with the AETNet paper \citep{li2023you} and is cut from the public AVIRIS-NG archive (the
+airborne sensor of \cref{ch:sensors}). The numbers below are from the benchmarks README, section 2\hfil\penalty50\hfilneg\tagM{research/experiments/benchmarks/README.md}.
+
+\begin{center}
+\small
+\begin{tabular}{p{2.8cm}p{9.6cm}}
+\toprule
+item & value \\
+\midrule
+what ships & 94 test tiles, their ground truth, and 522 anomaly-free training tiles \\
+protocol & \texttt{main.py} crops 100 test scenes of 64 $\times$ 64 from the 94 tiles (6 tiles give two crops) \\
+labels & 3,567 anomaly pixels in 460 objects (8-connected); per scene median 25.5 pixels (0.6\%) \\
+values & L1B at-sensor \textbf{radiance}, $\mu$W\,nm$^{-1}$\,cm$^{-2}$\,sr$^{-1}$, not reflectance \\
+wavelengths & 425 per tile, 376.7--2500.4 nm; they differ slightly between flight lines \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\index{radiance}\emph{Radiance} is the light arriving at the sensor, atmosphere included. \index{reflectance}\emph{Reflectance}
+is the fraction of sunlight the ground sends back, with the sun and atmosphere taken out. The crudest bridge is
+\index{top-of-atmosphere reflectance}\emph{top-of-atmosphere reflectance}:
+\begin{equation}\label{eq:benchmarks:toa}
+\rho_{\text{TOA}} = \frac{\pi L}{E_0 \cos\theta_s},
+\end{equation}
+with $L$ the radiance, $E_0$ the sun's irradiance at that wavelength and $\theta_s$ the solar zenith angle. The
+$\pi$ converts radiance (per steradian) to the flux leaving a surface that scatters equally in all directions, and
+$E_0 \cos\theta_s$ is the sunlight landing on a horizontal square metre when the sun is $\theta_s$ from overhead.
+
+\begin{worked}[label={we:benchmarks:toa}]{Top-of-atmosphere reflectance}
+Take round numbers\tagA{}: $L = 10$, $E_0 = 186$ (roughly the sun at 550 nm in the same units), $\theta_s = 30°$.
+\begin{align*}
+\pi \times 10 &= 31.42 && \text{numerator}\\
+\cos 30° &= 0.866\\
+186 \times 0.866 &= 161.1 && \text{denominator}\\
+\rho_{\text{TOA}} &= 31.42 / 161.1 = 0.195.
+\end{align*}
+\end{worked}
+
+That needs the solar zenith of every flight line, which the tiles do not carry, and it leaves the atmosphere in. The
+preferred route - fetching AVIRIS-NG L2 reflectance for HAD100's ten flight lines - needs an Earthdata login and had
+not been done when this was written.
+
+\paragraph{The leakage check.} HAD100 comes from the same archive as the 79 AVIRIS-NG flight lines the models
+trained on. If a benchmark scene were cut from a training line, a model could score well by memory. The README's
+check\hfil\penalty50\hfilneg\tagM{research/experiments/benchmarks/README.md}:
+\begin{itemize}
+\item \textbf{No exact line overlap.} None of HAD100's 10 lines is among the 79.
+\item \textbf{One near neighbour.} Line \texttt{ang20180227t082814}, near Kakinada in Andhra Pradesh, was flown on
+the same day as three training lines; one of them, 18 minutes later, ran on the parallel track immediately east. The
+outlines are about 630 m apart and do not overlap, and the four HAD100 tiles from that line sit 1,020--1,865 m from
+the nearest training footprint.
+\item Those 4 tiles become \textbf{6 of the 100 protocol scenes}: no pixel-level leakage, but near-domain proximity.
+\textbf{Report HAD100 results with and without those 6 scenes.}
+\end{itemize}
+A second trap: HAD100's own training and test tiles come from the same 10 flight lines, so training on its anomaly-free
+tiles would leak too.
+
+\section{ABU}\label{sec:benchmarks:abu}
+
+The Airport--Beach--Urban set \citep{kang2017hyperspectral} has 13 small scenes and is used by essentially every
+hyperspectral anomaly paper. It has three problems for this product (README, section 4):
+\begin{itemize}
+\item twelve scenes are AVIRIS scaled at-sensor radiance with an unknown gain, not reflectance;
+\item one scene, \texttt{beach-4}, is ROSIS-03 over Pavia, 430--860 nm only, min-max normalised to 0--1 over the whole
+cube - not a physical quantity;
+\item \textbf{no wavelengths}: the files hold \texttt{data} and \texttt{map} and nothing else, and which AVIRIS bands
+were removed was never published.
+\end{itemize}
+
+Why ``radiance'', when nobody wrote it down? The median spectra peak in the blue at about 1,800 counts and fall to
+about 20--100 near 2.4 $\mu$m\hfil\penalty50\hfilneg\tagM{research/experiments/benchmarks/README.md}:
+\begin{align*}
+20 / 1{,}800 &= 0.011, \text{ about } 1\%\\
+100 / 1{,}800 &= 0.056, \text{ about } 6\%.
+\end{align*}
+Airports and cities do not reflect only 1--6\% as much at 2.4 $\mu$m as in the blue; sunlight itself is far weaker
+there. A spectrum with the sun's shape still contains the sunlight: radiance. A model that reads bands by wavelength
+cannot run on ABU without guessing them.
+
+\paragraph{Protocols disagree too.} ``The first 50 bands'' means the first 50 of HAD100's 276 ``good'' bands
+(452--697 nm) in one paper and the first 50 of the raw 425 (377--622 nm) in another. Both are visible-only; a model
+using the short-wave infrared is handicapped against either. Quote the protocol and do not mix them in a table.
+
+\paragraph{And satellites?} The implant-bench design (\file{docs/lld/implant-bench.md}) records the search: ``no
+labelled PRISMA / EnMAP / Gaofen-5 anomaly set was found''. The four PRISMA scenes are the only labelled satellite
+anomaly scenes the repository has.
+
+\coursefig[0.9\linewidth]{ad-17-benchmarks}{What each benchmark supplies: the four things a model needs, plus
+platform. Amber cells are the reason a benchmark cannot test this product as it is.}{fig:benchmarks:public}
+
+So the options were: convert HAD100 to reflectance (a login, more work, still airborne), guess ABU's wavelengths (a
+result resting on a guess), or put known targets into the repository's own held-out satellite scenes. The rest of
+this chapter is the third.
+
+\section{The implant idea, and what real objects look like}\label{sec:benchmarks:real}
+
+An \index{implant bench}\emph{implant bench} takes real held-out scenes (\emph{hosts}) and adds synthetic objects
+whose positions are known exactly. The pieces (\file{app/evaluation/implant.py} for the core,
+\file{scripts/build_implant_bench.py} to build, \file{tests/test_evaluation/test_implant.py} for the hand-worked
+tests). On 2026-10-17 the user asked for implanted targets ``somewhat similar to the ones we do have'', in ``subtle,
+medium, easy'' categories. ``Similar'' needs measurement first, so \code{build_implant_bench.py real} measures every
+labelled PRISMA object (4-connected; an object whose ring has fewer than 8 pixels is skipped)\hfil\penalty50\hfilneg\tagM{research/experiments/implant-bench/README.md}:
+
+\begin{center}
+\begin{tabular}{lc}
+\toprule
+ & 10th / 50th / 90th percentile \\
+\midrule
+size, pixels & 1 / 2 / 10 \\
+single-pixel objects & 42\% \\
+background NDVI & $-0.02$ / 0.37 / 0.60 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Half of all real targets are one or two pixels. NDVI (normalised difference vegetation index) measures greenness;
+the script's \code{ndvi_map} uses the mean of 450--650 nm as ``visible'' and of 800--900 nm as ``near-infrared'':
+$\mathrm{NDVI} = (\mathrm{nir} - \mathrm{vis})/(\mathrm{nir} + \mathrm{vis})$.
+
+\section{The ring and the contrast $z$}\label{sec:benchmarks:z}
+
+``Subtle'' and ``easy'' need a number. The repository's is the contrast $z$, defined in the module docstring of
+\file{app/evaluation/implant.py} (lines 5--11).
+
+\begin{definition}[Ring]
+The \index{ring}\emph{ring} of an object is the set of valid pixels 2 or 3 four-neighbour steps away from it, not
+inside another object:
+\begin{lstlisting}[basicstyle=\ttfamily\footnotesize,literate={~}{{\textasciitilde}}1]
+# (H, W) bool: within 3 steps, minus within 1 step, valid only
+ring = binary_dilation(obj, iterations=3) & ~binary_dilation(obj, iterations=1) & valid
+\end{lstlisting}
+\end{definition}
+
+Each dilation step goes only up, down, left or right, so ``$k$ steps'' is \index{Manhattan distance}\emph{Manhattan
+distance} $|\Delta y| + |\Delta x| = k$, and the ring is a diamond, not a square.
+
+\paragraph{Counting the ring of a one-pixel object.} The pixels at Manhattan distance exactly $k \ge 1$ from a point
+number $4k$: on each of the diamond's four sides there are $k$ pixels, counting from one corner up to (but not
+including) the next. So
+\begin{align*}
+\text{distance 1: } & 4 \times 1 = 4 && \text{removed, too close}\\
+\text{distance 2: } & 4 \times 2 = 8\\
+\text{distance 3: } & 4 \times 3 = 12\\
+\text{ring: } & 8 + 12 = 20.
+\end{align*}
+A square ring at the same distances would be a $7 \times 7$ block minus a $3 \times 3$ one, $49 - 9 = 40$ pixels.
+The test \code{test_contrast_z_by_hand} pins 20, and the book's script agrees\tagC{}.
+
+\coursefig[0.55\linewidth]{ad-18-ring}{The diamond ring around a one-pixel object. Distance 1 (grey) is skipped;
+distances 2 (8 pixels) and 3 (12 pixels) form the 20-pixel ring (teal). The dashed square shows the 40-pixel ring a
+$3 \times 3$ dilation would have made.}{fig:benchmarks:ring}
+
+\begin{definition}[Contrast $z$]
+Let $o_b$ be the object's mean reflectance in band $b$, and $r_b$, $\sigma_b$ the mean and the population standard
+deviation of the ring in band $b$. Over the $B$ bands valid in both,
+\begin{equation}\label{eq:benchmarks:z}
+z = \frac{\frac1B\sum_b |o_b - r_b|}{\frac1B\sum_b \sigma_b}.
+\end{equation}
+\end{definition}
+
+It is the standard-score idea of \cref{ch:rx}, averaged over bands: how far the object sits from its neighbourhood, in
+units of the neighbourhood's own variation. The code adds $10^{-6}$ to the denominator so a perfectly flat ring does
+not divide by zero.
+
+\begin{worked}[label={we:benchmarks:z}]{The test's $z$, by hand}
+Two bands, one-pixel object. Band 0 is 0.1 on the 8 distance-2 pixels and 0.3 on the 12 distance-3 pixels; band 1 is
+0.5 everywhere. The object reads $(0.42, 0.5)$.
+\begin{align*}
+r_0 &= \frac{8 \times 0.1 + 12 \times 0.3}{20} = \frac{0.8 + 3.6}{20} = \frac{4.4}{20} = 0.22 \quad \text{(ring mean)}\\
+\text{deviations} &: 0.1 - 0.22 = -0.12 \ (8\times), \quad 0.3 - 0.22 = +0.08 \ (12\times)\\
+\sigma_0^2 &= \frac{8 \times 0.0144 + 12 \times 0.0064}{20} = \frac{0.1152 + 0.0768}{20} \quad \text{(divide by 20, not 19)}\\
+&= \frac{0.192}{20} = 0.0096\\
+\sigma_0 &= \sqrt{0.0096} = 0.0980\\
+r_1 &= 0.5, \quad \sigma_1 = 0\\
+|o_0 - r_0| &= |0.42 - 0.22| = 0.20, \quad |o_1 - r_1| = 0\\
+z &= \frac{(0.20 + 0)/2}{(0.0980 + 0)/2} = \frac{0.10}{0.0490} = 2.04.
+\end{align*}
+The repository's \code{contrast_z} returns 2.0412\tagC{}.
+\end{worked}
+
+\paragraph{Tiers.} On the 909 real objects $z$ has median 0.68. Its terciles cut the tiers
+(\file{app/evaluation/implant.py}, line 25):
+\begin{lstlisting}[basicstyle=\ttfamily\footnotesize]
+TIER_EDGES = (0.502, 0.934)      # z terciles of the 909 real PRISMA bench objects (2026-10-17)
+def tier_of(z): return TIERS[int(z >= 0.502) + int(z >= 0.934)]   # subtle / medium / easy
+\end{lstlisting}
+By construction a third of real objects falls in each \index{tier}\emph{tier}. ``Subtle'' means ``as hard as the
+hardest third of what analysts labelled'', not an absolute difficulty. The object of \cref{we:benchmarks:z}, at
+$z = 2.04 \ge 0.934$, is easy.
+
+\begin{keypoint}
+Real and implanted objects must be measured with the same ring and the same bands, or their $z$ values are not
+comparable and the tiers mean nothing.
+\end{keypoint}
+
+\section{Linear mixing: what an implant does to a pixel}\label{sec:benchmarks:mixing}
+
+\paragraph{Derivation.} A sensor pixel records the average light from its ground footprint. Suppose a fraction $a$
+of that footprint is covered by a material of reflectance spectrum $\vect{t}$, and the rest by the original background
+of spectrum $\vect{b}$. The light from each part is proportional to its area times its reflectance, and the pixel
+reports the area-weighted average:
+\begin{align*}
+\vect{x} &= \frac{a \cdot \vect{t} + (1 - a) \cdot \vect{b}}{a + (1 - a)} && \text{area-weighted average}\\
+&= (1 - a)\,\vect{b} + a\,\vect{t}. && \text{the areas sum to 1}
+\end{align*}
+This is the \index{linear mixing}\emph{linear mixing model} (the sub-pixel mix of \cref{ch:material}), and $a$ is the
+\index{abundance}\emph{abundance} or fill fraction. bench-v1's material implant is exactly this,
+\code{implant_material}: \code{x' = (1 - f) * x + f * t}.
+
+\paragraph{The mixing line.} Rearrange to see the geometry:
+\begin{align*}
+\vect{x} &= \vect{b} - a\,\vect{b} + a\,\vect{t} && \text{expand}\\
+&= \vect{b} + a\,(\vect{t} - \vect{b}). && \text{collect the $a$ terms}
+\end{align*}
+As $a$ runs from 0 to 1, $\vect{x}$ moves along the straight segment from $\vect{b}$ to $\vect{t}$: the
+\index{mixing line}\emph{mixing line}. The pixel's difference from the background is $\vect{x} - \vect{b} =
+a(\vect{t} - \vect{b})$, linear in $a$, so a contrast measured against an unchanged background grows in proportion to
+$a$. That is why one number, the strength, is enough to hit a target $z$.
+
+\begin{worked}[label={we:benchmarks:mix}]{A pixel on the mixing line}
+Two bands. Background $\vect{b} = (0.30, 0.20)$, material $\vect{t} = (0.10, 0.60)$\tagA{}. Then
+$\vect{t} - \vect{b} = (-0.20, +0.40)$ and:
+\begin{align*}
+a = 0.25: \quad \vect{x} &= (0.30, 0.20) + 0.25 \times (-0.20, 0.40)\\
+&= (0.30 - 0.05,\ 0.20 + 0.10) = (0.25, 0.30)\\
+a = 0.50: \quad \vect{x} &= (0.30, 0.20) + 0.50 \times (-0.20, 0.40)\\
+&= (0.30 - 0.10,\ 0.20 + 0.20) = (0.20, 0.40)
+\end{align*}
+Check with the first form at $a = 0.25$: band 0 is $0.75 \times 0.30 + 0.25 \times 0.10 = 0.225 + 0.025 = 0.25$. If
+the ring around this pixel has $\sigma = (0.05, 0.05)$ and mean $\vect{b}$, then at $a = 0.25$:
+$z = \frac{(0.05 + 0.10)/2}{0.05} = \frac{0.075}{0.05} = 1.5$, and at $a = 0.5$, $z = 3.0$: doubling $a$ doubles $z$.
+\end{worked}
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}
+\begin{axis}[width=7.5cm,height=7.5cm,xmin=0,xmax=0.4,ymin=0,ymax=0.7,xlabel={band 0 reflectance},
+  ylabel={band 1 reflectance},grid=major,grid style={gray!20}]
+\addplot[spec,very thick] coordinates {(0.30,0.20) (0.10,0.60)};
+\addplot[only marks,mark=*,mark size=2.5pt,maskgrey] coordinates {(0.30,0.20)};
+\addplot[only marks,mark=*,mark size=2.5pt,loss] coordinates {(0.10,0.60)};
+\addplot[only marks,mark=o,mark size=2.5pt,spat,thick] coordinates {(0.25,0.30) (0.20,0.40)};
+\node[anchor=west,font=\small] at (axis cs:0.305,0.20) {$\vect{b}$ (a = 0)};
+\node[anchor=west,font=\small,text=loss] at (axis cs:0.105,0.62) {$\vect{t}$ (a = 1)};
+\node[anchor=west,font=\small,text=spat] at (axis cs:0.255,0.31) {$a = 0.25$};
+\node[anchor=west,font=\small,text=spat] at (axis cs:0.205,0.41) {$a = 0.5$};
+\end{axis}
+\end{tikzpicture}
+\caption{The mixing line of \cref{we:benchmarks:mix} in the plane of two bands: every mixture of background
+$\vect{b}$ and material $\vect{t}$ lies on the straight segment between them, at a distance from $\vect{b}$
+proportional to the abundance $a$.}
+\label{fig:benchmarks:mixline}
+\end{figure}
+
+\paragraph{The signature implant.} bench-v1's second source is additive: \code{implant_signature} sets
+$\vect{x}' = \max(\vect{x} + a\,\vect{d}, 0)$, where $\vect{d} = \vect{o} - \vect{r}$ is a real object's difference
+from its ring, carried to the host's wavelengths by interpolation. The $\max(\cdot, 0)$ stops reflectance going
+negative. Both implants move the object's mean spectrum along a straight line: if $\vect{o}_0$ is the object's mean
+before implanting,
+\begin{equation}\label{eq:benchmarks:line}
+\vect{o}(s) = \vect{o}_0 + s\,\vect{\Delta}, \qquad
+\vect{\Delta} = \begin{cases} \vect{d} & \text{signature, } s = a\\ \vect{t} - \vect{o}_0 & \text{material, } s = f \le 1. \end{cases}
+\end{equation}
+For the material, $(1 - f)\vect{o}_0 + f\vect{t} = \vect{o}_0 + f(\vect{t} - \vect{o}_0)$, the mixing line again.
+
+\begin{sourcenote}[: signatures and descending wavelengths]
+Until commit b94dbfd every signature implant was garbled: PRISMA lists its bands in descending wavelength, and
+\code{np.interp} needs ascending sample points. \code{interp_spectrum} now sorts first (\file{app/evaluation/implant.py},
+lines 160--166). \Cref{ch:sortbug} tells the whole story; every signature-implant number before 2026-10-18 is void.
+\end{sourcenote}
+
+\section{Solving for the strength on the realised contrast}\label{sec:benchmarks:solve}
+
+Each object gets a target $z$, drawn from the real objects of its tier. Put \cref{eq:benchmarks:line} into
+\cref{eq:benchmarks:z}, with the ring unchanged:
+\begin{equation}\label{eq:benchmarks:zs}
+z(s) = \frac{\frac1B\sum_b |o_{0,b} + s\,\Delta_b - r_b|}{\bar\sigma}, \qquad \bar\sigma = \frac1B\sum_b \sigma_b.
+\end{equation}
+A first version of the design gave the simpler $s = z\,\bar\sigma / \overline{|\Delta|}$. That assumes $\vect{o}_0 =
+\vect{r}$: that the spot looked exactly like its ring before anything was added. Real pixels never do.
+
+\begin{sourcenote}[: \texttt{strength\_for\_z} never existed]
+The implant-bench LLD's first interface list named \code{strength_for_z} with the simple formula. That function was
+never in the source; the code has \code{solve_strength}, which solves \cref{eq:benchmarks:zs}
+(\file{app/evaluation/implant.py}, lines 80--104). The LLD now lists \code{solve_strength}.
+\end{sourcenote}
+
+\begin{worked}[label={we:benchmarks:solve}]{One band: the simple formula misses, the realised solve hits}
+Ring mean $r = 0.20$, $\sigma = 0.05$; the spot reads $o_0 = 0.22$, already 0.02 above its ring; the implant darkens,
+$\Delta = -0.10$; target $z = 1.0$.
+\begin{align*}
+\text{simple: } s &= 1.0 \times 0.05 / 0.10 = 0.5\\
+\text{realised at } s = 0.5: \ z &= |0.22 + 0.5 \times (-0.10) - 0.20| / 0.05\\
+&= |{-0.03}| / 0.05 = 0.6 \quad \text{(medium, not easy)}
+\end{align*}
+The natural $+0.02$ cancelled part of the darkening. Solve \cref{eq:benchmarks:zs} instead:
+\begin{align*}
+z(s) &= |0.02 - 0.10\,s| / 0.05 && o_0 - r = 0.02\\
+z(0) &= 0.02 / 0.05 = 0.4 && \text{the spot's own contrast}\\
+z(s) &= 0 \text{ at } s = 0.2 && \text{implant cancels the offset}\\
+0.02 - 0.10\,s &= -0.05 && \text{rising branch, } |\cdot| = 0.05\\
+s &= 0.07 / 0.10 = 0.7\\
+\text{check: } z(0.7) &= |0.22 - 0.07 - 0.20| / 0.05 = 0.05 / 0.05 = 1.0.
+\end{align*}
+The repository's \code{solve_strength} returns $s = 0.7$, $z = 1.0$; with $\Delta = +0.10$ it returns $s = 0.3$\tagC{}.
+\end{worked}
+
+\paragraph{Why the first crossing after the minimum.} Each term $|o_{0,b} + s\Delta_b - r_b|$ is the absolute value of
+a straight line in $s$: a ``V'' shape, which is \emph{convex} (the segment between any two points of its graph lies on
+or above the graph). A sum of convex functions is convex, and dividing by the positive $\bar\sigma$ keeps it convex.
+A convex function of one variable falls (or stays flat) up to its minimum and rises from then on. So $z(s)$ can dip
+below $z(0)$ and then climb for good; the useful answer is the first $s$ at or after the minimum where $z(s)$ reaches
+the target. The code evaluates $z$ on a grid of 400 strengths, finds the minimum, takes the first grid point at or
+above the target to its right, and refines by linear interpolation between that point and the one before.
+
+Two more rules follow from the shape:
+\begin{enumerate}
+\item If $z(0) > z_{\text{target}}$, the spot is already too contrasty; \code{solve_strength} returns \code{None} and
+the builder tries another spot (up to 200 times).
+\item A material may not reach the target even at full fill $f = 1$; then $f$ is capped and the lower realised $z$ is
+recorded (2\% of bench-v1's material implants\hfil\penalty50\hfilneg\tagM{research/experiments/implant-bench/README.md}).
+\end{enumerate}
+After implanting, $z$ is measured again, and \textbf{the realised $z$ and its tier are what the benchmark records}.
+One consequence: a subtle target of $z = 0.2$ can only go on a spot whose own $z(0) \le 0.2$, so subtle implants sit
+on the most uniform spots of a scene.
+
+\coursefig[0.7\linewidth]{ad-18-strength}{$z(s)$ for \cref{we:benchmarks:solve}. The simple formula's $s = 0.5$ lands at
+$z = 0.6$ (medium); the solver follows the curve through its minimum at $s = 0.2$ and crosses the target at
+$s = 0.7$.}{fig:benchmarks:strength}
+
+\section{bench-v1, and how it failed}\label{sec:benchmarks:v1}
+
+bench-v1 was built on 2026-10-17 with seed 0: six held-out test scenes per sensor as hosts, objects placed on valid,
+cloud- and water-free land at the real object density, with centres weighted so their background NDVI mix matches the
+real objects'\hfil\penalty50\hfilneg\tagM{research/experiments/implant-bench/README.md}.
+
+\begin{center}
+\begin{tabular}{lccc}
+\toprule
+sensor & hosts & objects & subtle / medium / easy \\
+\midrule
+EnMAP (224 bands) & 6 & 1,179 & 385 / 412 / 382 \\
+PRISMA (234 bands) & 6 & 1,318 & 429 / 463 / 426 \\
+AVIRIS-NG (372 bands) & 6 & 839 & 273 / 295 / 271 \\
+total & 18 & 3,336 & 1,087 / 1,170 / 1,079 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Size and contrast matched the real objects closely (size percentiles 1 / 2 / 9 against 1 / 2 / 10; per-tier $z$
+percentiles within a few hundredths); greenness did not (ring NDVI median 0.49 against 0.37, no host had the bright
+bare ground of real scene set4). 97\% of objects landed in their targeted tier.
+
+Then the stage-3 evaluation (\cref{ch:runeval}) ran a model-free detector beside the models. PCA-RX, which is local RX
+on the cube's own top 30 principal components, caught 30.2\% of bench-v1 objects at the top 1\% against the best
+model's 26.9\%, and lost by a wide margin on the real objects (pAUC 0.128 against 0.158)\hfil\penalty50\hfilneg\tagM{docs/lld/evaluation.md}. A
+benchmark on which a 1990s detector beats every model, while real labels say the opposite, is measuring something
+else. A diagnosis on the PRISMA hosts found two differences between implants and real objects: foreignness and halo.
+
+\section{Foreignness}\label{sec:benchmarks:foreign}
+
+Start from an object's difference from its ring, $\vect{d} = \vect{o} - \vect{r}$ (a vector with one entry per band).
+
+\begin{definition}[Background subspace and foreign fraction]
+The \index{background subspace}\emph{background subspace} of a scene is spanned by its top $K = 10$ principal
+directions (\code{FOREIGN_K}), the orthonormal rows of a $K \times B$ matrix $\mat{P}$ computed by
+\code{background_subspace} (\cref{ch:linalg} for principal directions). The part of $\vect{d}$ inside the subspace is
+its projection $\vect{d}_{\text{in}} = \mat{P}\T\mat{P}\vect{d}$; the rest, $\vect{d}_{\text{out}} = \vect{d} -
+\vect{d}_{\text{in}}$, is outside. The \index{foreign fraction}\emph{foreign fraction} is the share of $\norm{\vect{d}}^2$
+outside:
+\begin{equation}\label{eq:benchmarks:foreign}
+\phi(\vect{d}) = \frac{\norm{\vect{d}_{\text{out}}}^2}{\norm{\vect{d}}^2} = 1 - \frac{\norm{\mat{P}\vect{d}}^2}{\norm{\vect{d}}^2}.
+\end{equation}
+\end{definition}
+
+The second form is what \code{foreign_fraction} computes. It holds because the inside and outside parts are
+perpendicular, so by Pythagoras $\norm{\vect{d}}^2 = \norm{\vect{d}_{\text{in}}}^2 + \norm{\vect{d}_{\text{out}}}^2$,
+and because $\mat{P}$ has orthonormal rows, $\norm{\vect{d}_{\text{in}}} = \norm{\mat{P}\T\mat{P}\vect{d}} =
+\norm{\mat{P}\vect{d}}$.
+
+\begin{worked}[label={we:benchmarks:foreign}]{Foreignness of $(3, 4, 0)$}
+Three bands; the scene's single main direction is band 0, so $\mat{P} = (1, 0, 0)$. Take $\vect{d} = (3, 4, 0)$.
+\begin{align*}
+\norm{\vect{d}}^2 &= 3^2 + 4^2 + 0^2 = 9 + 16 + 0 = 25\\
+\mat{P}\vect{d} &= 1 \times 3 + 0 \times 4 + 0 \times 0 = 3, \quad \norm{\mat{P}\vect{d}}^2 = 9 && \text{inside: } (3, 0, 0)\\
+\vect{d}_{\text{out}} &= (3, 4, 0) - (3, 0, 0) = (0, 4, 0), \quad \norm{\vect{d}_{\text{out}}}^2 = 16\\
+\phi &= 16 / 25 = 0.64 = 1 - 9/25.
+\end{align*}
+\end{worked}
+
+The diagnosis medians on PRISMA\hfil\penalty50\hfilneg\tagM{docs/training/anomaly-detection/19-running-an-evaluation.md}: real objects
+\textbf{0.006}, bench-v1 implants \textbf{0.042}, seven times as foreign. Real objects are unusual \emph{mixtures of
+the scene's own materials}; bench-v1's implants pointed in directions the scene never takes. Whitening (\cref{ch:rx})
+rewards exactly that: a difference of 0.01 along a direction where the scene varies with spread 0.05 is $0.2$ spreads
+(squared, 0.04); along a direction of spread 0.002 it is 5 spreads (squared, 25), $25/0.04 = 625$ times the score.
+
+\paragraph{Hitting a target foreignness.} \code{match_foreignness} keeps $\vect{d}_{\text{in}}$ and rescales
+$\vect{d}_{\text{out}}$ by a factor $\beta$, so that $\vect{d}' = \vect{d}_{\text{in}} + \beta\,\vect{d}_{\text{out}}$
+has foreign fraction $t$. Derive $\beta$. Write $A = \norm{\vect{d}_{\text{in}}}^2$, $C = \norm{\vect{d}_{\text{out}}}^2$:
+\begin{align*}
+\phi(\vect{d}') &= \frac{\beta^2 C}{A + \beta^2 C} = t && \text{parts stay perpendicular}\\
+\beta^2 C &= t A + t \beta^2 C && \text{multiply both sides by } A + \beta^2 C\\
+\beta^2 C (1 - t) &= t A && \text{collect the } \beta^2 \text{ terms}\\
+\beta^2 &= \frac{t}{1 - t} \cdot \frac{A}{C}. && \text{divide by } C(1 - t)
+\end{align*}
+This is the formula in the docstring of \code{match_foreignness} (lines 137--148).
+
+\begin{worked}[label={we:benchmarks:match}]{Matching $(4, 0, 2)$ to foreignness 0.1}
+Same $\mat{P} = (1, 0, 0)$; $\vect{d} = (4, 0, 2)$, so $\vect{d}_{\text{in}} = (4, 0, 0)$, $A = 16$, and
+$\vect{d}_{\text{out}} = (0, 0, 2)$, $C = 4$.
+\begin{align*}
+t = 0.2: \quad \beta^2 &= \tfrac{0.2}{0.8} \times \tfrac{16}{4} = 0.25 \times 4 = 1, \quad \beta = 1 && \text{already at target}\\
+t = 0.1: \quad \beta^2 &= \tfrac{0.1}{0.9} \times 4 = 0.4444, \quad \beta = 0.6667\\
+\vect{d}' &= (4, 0, 0) + 0.6667 \times (0, 0, 2) = (4, 0, 1.3333)\\
+\text{check: } \phi &= \frac{1.3333^2}{16 + 1.3333^2} = \frac{1.7778}{17.7778} = 0.1.
+\end{align*}
+The repository's function returns $(4, 0, 1.3333)$\tagC{}.
+\end{worked}
+
+\section{The halo and the Gaussian point-spread function}\label{sec:benchmarks:psf}
+
+\begin{definition}[Halo and halo ratio]
+The \index{halo}\emph{halo} of an object is the ring of valid pixels touching it (Manhattan distance 1). Its
+\emph{halo ratio} is the halo's contrast $z$ (against the same distance-2--3 ring) over the object's.
+\end{definition}
+
+A ratio of 0 is a hard edge; near 1 the object bleeds fully into its neighbours. Real sensors blur - each pixel collects
+some light from next door - so real objects have halos: the diagnosis measured a median halo ratio of 0.74 for real
+objects against 0.60 for bench-v1 implants (diagnosis ruler; \cref{sec:benchmarks:v2} explains the re-measured
+0.643).
+
+\begin{definition}[Gaussian point-spread function]
+A \index{point-spread function}\emph{point-spread function} (PSF) is the shape a single bright point takes in the
+image. A \emph{Gaussian} PSF of standard deviation $\sigma$ pixels spreads a point at the origin so that the pixel at
+offset $(\Delta y, \Delta x)$ receives a share proportional to
+\begin{equation}\label{eq:benchmarks:gauss}
+g(\Delta y, \Delta x) = \exp\!\Big(-\frac{\Delta y^2 + \Delta x^2}{2\sigma^2}\Big).
+\end{equation}
+\end{definition}
+
+bench-v2 adds its signal through a blurred footprint. \code{psf_weights} (lines 151--157) blurs the object mask with
+\code{ndimage.gaussian_filter} and divides by the blurred mask's mean over the object, so the object keeps weight 1 on
+average and its neighbours get the tail:
+\begin{lstlisting}[basicstyle=\ttfamily\footnotesize]
+w = ndimage.gaussian_filter(obj.astype(np.float64), sigma, mode="constant")   # (H, W)
+return w / max(w[obj].mean(), 1e-12)                                          # mean 1 on obj
+\end{lstlisting}
+The build uses $\sigma = 1.4$ (\texttt{-{}-psf-sigma 1.4}, in \file{research/experiments/implant-bench/README.md} and
+the LLD's build lines), chosen by calibration builds rather than from a formula. For a one-pixel object the blurred
+mask is the Gaussian kernel itself, so after dividing by the centre value the weight at $(\Delta y, \Delta x)$ is
+exactly \cref{eq:benchmarks:gauss}. With $\sigma = 1.4$, $2\sigma^2 = 2 \times 1.96 = 3.92$.
+
+\begin{worked}[label={we:benchmarks:psf}]{The PSF weights and the abundance map on a $3 \times 3$ footprint}
+Do this one on paper with a calculator. One-pixel object at the centre of a $3 \times 3$ window.
+\begin{align*}
+\text{centre } (0,0): & \quad \exp(0) = 1\\
+\text{edge } (\pm1, 0), (0, \pm1): & \quad \exp(-1/3.92) = \exp(-0.2551) = 0.7748\\
+\text{corner } (\pm1, \pm1): & \quad \exp(-2/3.92) = \exp(-0.5102) = 0.6004
+\end{align*}
+Now the abundance. A bench-v2 material implant uses $\vect{d}_0 = \vect{t} - \vect{r}$ (library spectrum minus ring
+mean, \file{scripts/build_implant_bench.py}, line 238) and adds $s\,w(p)\,\vect{d}$ to each pixel $p$. Where the pixel
+looks like its ring, $\vect{x} \approx \vect{r}$:
+\begin{align*}
+\vect{x}' &= \vect{x} + s\,w(p)\,(\vect{t} - \vect{r}) && \text{the v2 implant}\\
+&\approx \vect{x} + s\,w(p)\,(\vect{t} - \vect{x}) && \text{use } \vect{x} \approx \vect{r}\\
+&= (1 - a(p))\,\vect{x} + a(p)\,\vect{t}, \quad a(p) = s\,w(p). && \text{the mixing model}
+\end{align*}
+So the PSF turns one strength into an \emph{abundance map}. At strength $s = 0.1$\tagA{}:
+\[
+a = 0.1 \times \begin{pmatrix} 0.6004 & 0.7748 & 0.6004\\ 0.7748 & 1 & 0.7748\\ 0.6004 & 0.7748 & 0.6004\end{pmatrix}
+= \begin{pmatrix} 0.0600 & 0.0775 & 0.0600\\ 0.0775 & 0.1000 & 0.0775\\ 0.0600 & 0.0775 & 0.0600\end{pmatrix}.
+\]
+The centre pixel is 10\% material; each edge neighbour 7.75\%; each corner 6\%. The script's \code{psf_weights} gives the
+same matrix\tagC{}.
+\end{worked}
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}[x=1.15cm,y=1.15cm]
+\foreach \y/\r in {0/{0.0600,0.0775,0.0600},1/{0.0775,0.1000,0.0775},2/{0.0600,0.0775,0.0600}}{
+  \foreach \v [count=\x from 0] in \r {
+    \pgfmathsetmacro{\shade}{\v*900}
+    \fill[loss!\shade!white] (\x,\y) rectangle ++(1,1);
+    \draw[gray!60] (\x,\y) rectangle ++(1,1);
+    \node[font=\small] at (\x+0.5,\y+0.5) {\v};
+  }
+}
+\draw[spat,very thick] (1,1) rectangle ++(1,1);
+\node[anchor=west,font=\small,align=left] at (3.3,1.5) {object pixel (indigo box): $a = s = 0.1$\\
+  edge neighbours: $a = 0.1 \times 0.7748$\\ corners: $a = 0.1 \times 0.6004$\\
+  halo = the four edge cells};
+\end{tikzpicture}
+\caption{The abundance map of \cref{we:benchmarks:psf}: a one-pixel bench-v2 implant at strength 0.1 with a Gaussian
+PSF of $\sigma = 1.4$, shown on its $3 \times 3$ footprint (darker amber = more material). The blur continues
+beyond the window, weaker with distance.}
+\label{fig:benchmarks:abund}
+\end{figure}
+
+\paragraph{The ring is lifted too: the shrink factor.} The PSF tail reaches the ring. For a one-pixel object, average
+\cref{eq:benchmarks:gauss} over the 20 ring cells (distance 2: 4 cells at $(\pm2,0),(0,\pm2)$ and 4 at
+$(\pm1,\pm1)$; distance 3: 4 at $(\pm3,0),(0,\pm3)$ and 8 at $(\pm2,\pm1),(\pm1,\pm2)$):
+\begin{align*}
+4 \times e^{-4/3.92} &= 4 \times 0.3604 = 1.4418\\
+4 \times e^{-2/3.92} &= 4 \times 0.6004 = 2.4015\\
+4 \times e^{-9/3.92} &= 4 \times 0.1007 = 0.4027\\
+8 \times e^{-5/3.92} &= 8 \times 0.2793 = 2.2343\\
+\bar w_{\text{ring}} &= (1.4418 + 2.4015 + 0.4027 + 2.2343) / 20 = 6.4803 / 20 = 0.3240.
+\end{align*}
+The script's \code{psf_weights} gives 0.3240\tagC{}. The object mean moves by $s \times 1 \times \vect{d}$; the ring mean
+by $s \times 0.3240 \times \vect{d}$; so the object's difference from its ring moves by only
+\begin{equation}\label{eq:benchmarks:shrink}
+s\,(1 - \bar w_{\text{ring}})\,\vect{d} = 0.676\,s\,\vect{d}.
+\end{equation}
+The builder passes this \code{shrink} $= 1 - \bar w_{\text{ring}}$ into the strength solve.
+
+\paragraph{The halo ratio a PSF produces, on flat ground.} With a perfectly flat background the halo and the object
+are measured against the same ring, so the ring's $\bar\sigma$ cancels in the ratio of their $z$ values:
+\begin{align*}
+\text{halo ratio} &= \frac{|w_{\text{halo}} - \bar w_{\text{ring}}|\; s\,\overline{|\vect{d}|}/\bar\sigma}
+                         {|1 - \bar w_{\text{ring}}|\; s\,\overline{|\vect{d}|}/\bar\sigma}
+  && \text{both differences scale } \vect{d}\\
+&= \frac{0.7748 - 0.3240}{1 - 0.3240} = \frac{0.4508}{0.6760} = 0.667. && s,\ \vect{d},\ \bar\sigma \text{ cancel}
+\end{align*}
+Close to the real 0.643 measured on the bench's own ruler. Real halos also carry the background's texture, which is
+why $\sigma$ was calibrated on builds, not fixed by this formula.
+
+\section{bench-v2: solve on the object as it ends up}\label{sec:benchmarks:v2}
+
+bench-v2 (2026-10-17) copies three measured properties from real objects: $z$, foreign fraction and halo ratio, with
+$z$ and foreignness drawn \emph{as a pair from one real object} of the chosen tier. They are related: subtle real
+objects are about ten times as foreign as easy ones (median 0.0238 against 0.0024 on \file{real_v2.json}'s
+ruler\hfil\penalty50\hfilneg\tagM{docs/training/anomaly-detection/20-bench-v2.md}), so drawing them independently would create objects
+that do not exist. A third source joined signature and material: a \emph{host} spectrum taken from a land pixel at
+least 100 pixels away in the same scene. The first calibration build missed, and three bugs were found.
+
+\begin{enumerate}
+\item \textbf{Measured on the wrong bands.} Foreignness and $z$ were computed over every host band, including the noisy
+water-absorption and detector-edge bands the evaluator never reads. Now \code{evaluation_bands} keeps the product's
+bands only (exclusions removed, and only bands at least 60\% finite). Measure a benchmark with the ruler that will
+grade on it.
+\item \textbf{One gap deleted a band.} \code{background_subspace} centres pixels by subtracting each band's mean. A
+plain mean with one missing value is missing: $(0.20 + \text{NaN} + 0.40)/3 = \text{NaN}$, and the whole band dropped
+out. \code{np.nanmean} gives $(0.20 + 0.40)/2 = 0.30$; centred values $-0.10$, gap, $+0.10$; the gap is then set to 0,
+``the band mean''. 130--182 of 234 PRISMA host bands had at least one gap (docstring, lines 115--118).
+\item \textbf{Solved on the signal, not on the object.} The first version matched the foreignness of the added signal.
+But the evaluator sees the realised difference
+\begin{equation}\label{eq:benchmarks:realised}
+\vect{o} - \vect{r} = (\vect{o}_0 - \vect{r}) + s \cdot \text{shrink} \cdot \vect{d}',
+\end{equation}
+and the spot's natural offset $\vect{o}_0 - \vect{r}$ is already foreign (0.009--0.045 on random un-implanted spots).
+\end{enumerate}
+
+\begin{worked}[label={we:benchmarks:realised}]{An unforeign signal on a foreign spot}
+Two bands; the scene's main direction is band 0. Natural offset $\vect{o}_0 - \vect{r} = (0.00, 0.01)$, wholly outside.
+Signal $s \cdot \text{shrink} \cdot \vect{d}' = (0.05, 0.00)$, wholly inside: its foreignness is 0.
+\begin{align*}
+\vect{o} - \vect{r} &= (0.00 + 0.05,\ 0.01 + 0.00) = (0.05, 0.01)\\
+\norm{\cdot}^2 &= 0.05^2 + 0.01^2 = 0.0025 + 0.0001 = 0.0026, \quad \text{outside } 0.0001\\
+\phi &= 0.0001 / 0.0026 = 0.038.
+\end{align*}
+The signal was perfectly unforeign; the object the evaluator sees is five times the real median (0.0071).
+\end{worked}
+
+\code{solve_realised} (lines 172--187) fixes it. It tries a ladder of signal foreignness levels,
+\code{FOREIGN_LADDER} $= (0, 0.0005, 0.001, \ldots, 0.25, 0.5)$; at each it solves the strength for the target $z$
+with \code{solve_strength} on \code{shrink * d}, measures the foreignness of the realised difference
+\cref{eq:benchmarks:realised}, and keeps the level whose realised foreignness is closest to the target on a log scale,
+$|\ln(\phi_{\text{realised}} / \phi_{\text{target}})|$. A spot whose own offset is so foreign that no level comes
+within a factor \code{tol} of the target (1.5 in bench-v2, 1.2 in bench-v2.1) is rejected and another spot tried.
+
+\begin{keypoint}
+Match a benchmark property on the object the evaluator will see, never on the ingredient you added.
+\end{keypoint}
+
+\section{Accepting a benchmark: the ordering test}\label{sec:benchmarks:accept}
+
+bench-v2 had two acceptance tests, written before the build.
+
+\paragraph{Acceptance 1 - does it look like the real objects?} Foreignness and halo medians within 25\% of the real
+objects', overall and in every tier. The calibration build on 2 PRISMA hosts passed: foreignness 0.0071 real against
+0.0081, halo 0.643 against 0.642, $z$ 0.69 against 0.74, every tier within 0.90--1.15$\times$\hfil\penalty50\hfilneg\tagM{research/experiments/implant-bench/README.md}.
+The final bench, measured on all 6 PRISMA hosts, came out at 1.10 / 1.28 / 1.27$\times$ real foreignness (subtle /
+medium / easy) - marginally over the limit in two tiers - and halo 0.93--1.07$\times$.
+
+\paragraph{Acceptance 2 - does it reproduce the real ordering?} The real bench says the fine-tuned FT03 beats PCA-RX
+(pAUC 0.158 against 0.128). bench-v2 may judge models only if it says the same.
+
+\begin{drift}
+bench-v2, \file{configs/eval/bench_v2.json}, 18 hosts, 2,913 objects, residual Mahalanobis, 2026-10-17
+\hfil\penalty50\hfilneg\tagM{research/experiments/implant-bench/README.md}. Chance: 10.1\% / 1.1\% / 0.005.
+
+\begin{center}
+\small
+\begin{tabular}{lccccc}
+\toprule
+ & caught top 1\% (0.1\%) & pAUC & easy & medium & subtle \\
+\midrule
+F001 ep109 & 29.2\% (10.2\%) & 0.145 & 48.5\% & 23.1\% & 13.1\% \\
+FT02c ep10 & 32.8\% (11.4\%) & 0.166 & 52.9\% & 27.6\% & 14.7\% \\
+FT03 ep10 & 32.3\% (11.4\%) & 0.164 & 52.7\% & 26.9\% & 14.2\% \\
+PCA-RX (no model) & 30.2\% (9.1\%) & 0.154 & 47.7\% & 24.9\% & 15.2\% \\
+\bottomrule
+\end{tabular}
+\end{center}
+(v0.2.0's row, 22.1\%, is void: a reading artefact of the sort bug, \cref{ch:sortbug}.) In objects at the top 1\%:
+FT03 $0.323 \times 2{,}913 = 940.9$, about 941; PCA-RX $0.302 \times 2{,}913 = 879.7$, about 880.
+\end{drift}
+
+Met: both fine-tuned models above PCA-RX on every headline measure (subtle is a tie). And the subtle tier, at chance on
+bench-v1, is now above it (13--15\% against 10.1\%).
+
+\coursefig[0.85\linewidth]{ad-20-three-benches}{pAUC to 1\% false alarms for FT03 (amber) and PCA-RX (teal) on three
+benchmarks. The real PRISMA bench puts FT03 first; bench-v1 reversed that order; bench-v2 restores
+it.}{fig:benchmarks:three}
+
+\coursefig[0.85\linewidth]{iw-57-what-v2-must-match}{What bench-v2 had to match: medians on PRISMA, real objects
+(grey) against bench-v1 implants (amber), overall and in the easy tier, on the diagnosis ruler; the shaded band is
+within 25\% of the real value.}{fig:benchmarks:mustmatch}
+
+\paragraph{Why the ordering test is the one that matters.} Acceptance 1 checks that the implants \emph{look} right on
+the properties somebody thought to measure. Acceptance 2 checks that the benchmark \emph{behaves} right on a fact
+nobody built into it. bench-v1 would have passed a looser acceptance 1 - its sizes and contrasts matched - and still
+ranked a classical detector first. A benchmark is a model of reality; test it on something you already know before you
+use it to learn something you do not.
+
+\section{bench-v2.1}\label{sec:benchmarks:v21}
+
+After the descending-wavelength fix (commit b94dbfd) every signature implant had to be rebuilt, and the foreignness
+tolerance was tightened from 1.5 to 1.2: bench-v2.1, built 2026-10-18 with \texttt{-{}-version 2 -{}-psf-sigma 1.4
+-{}-foreign-tol 1.2 -{}-seed 0}, 18 hosts, 2,817 objects (signature 985, material 927, host 905).
+
+\begin{drift}
+bench-v2.1, \file{configs/eval/bench_v2_1.json}, residual Mahalanobis, 2026-10-18
+\hfil\penalty50\hfilneg\tagM{research/experiments/implant-bench/README.md}.
+\begin{center}
+\small
+\begin{tabular}{lccccc}
+\toprule
+model & caught top 1\% (0.1\%) & pAUC & easy & medium & subtle \\
+\midrule
+v0.2.0 (read correctly) & 35.5\% (12.6\%) & 0.168 & 53.7\% & 29.1\% & 19.5\% \\
+F001 ep109 & 33.1\% (11.7\%) & 0.157 & 51.7\% & 26.7\% & 16.9\% \\
+FT02c ep10 & 35.1\% (12.8\%) & 0.169 & 53.7\% & 28.7\% & 18.6\% \\
+FT03 ep10 & 34.9\% (12.7\%) & 0.168 & 53.7\% & 28.3\% & 18.6\% \\
+FT05 ep5 & 35.4\% (12.8\%) & 0.170 & 54.3\% & 28.9\% & 18.8\% \\
+PCA-RX & 33.2\% (9.8\%) & 0.154 & 50.4\% & 26.9\% & 18.4\% \\
+\bottomrule
+\end{tabular}
+\end{center}
+Per-tier foreignness against real (PRISMA hosts): 1.05 / 1.15 / \textbf{1.60}$\times$; the tighter tolerance skips
+low-foreignness easy targets, so the survivors skew high. Halo 0.92--1.06$\times$.
+\end{drift}
+
+Read correctly, v0.2.0 ties or beats every new model here, as it ties them on the real bench; all models stay above
+PCA-RX at the top 0.1\% (12.6--12.8\% against 9.8\%), as on the real bench; at the top 1\% pretraining alone (F001,
+33.1\%) ties PCA-RX (33.2\%). Since 2026-10-17 vessels on water are in scope (\cref{ch:runeval}), but
+\code{place_and_implant} still removes water and cloud from the eligible area, so no bench-v2.x object sits on water.
+
+\begin{confusions}
+\confusion{HAD100 is AVIRIS-NG and we train on AVIRIS-NG, so it fits?}{Same sensor, different product: the training
+data is L2 reflectance, HAD100 ships L1B radiance.}
+\confusion{No exact flight-line overlap means no leakage worry?}{Six scenes are 1--2 km from a training swath flown the
+same day. Not pixel leakage, but not unseen ground either; report both ways.}
+\confusion{The ring is the $3 \times 3$ neighbourhood?}{It is a 20-pixel diamond at Manhattan distance 2--3 for a
+one-pixel object; distance 1 (the halo) is skipped.}
+\confusion{The tier is the one the builder aimed for?}{It is the realised one, measured after implanting.}
+\confusion{The foreignness of the added signal is the object's foreignness?}{Only on a spot identical to its ring. The
+evaluator sees natural offset plus signal (\cref{we:benchmarks:realised}).}
+\confusion{The PSF $\sigma$ and the halo ratio are the same number?}{The PSF sets the blur; the halo ratio is measured
+afterwards. $\sigma = 1.4$ gives 0.667 on flat ground and about 0.64 on real texture.}
+\confusion{bench-v2 passed, so its absolute numbers are what the product achieves?}{It passed a ranking test. Real
+objects are caught at about 45\% at the top 1\%, bench-v2's at about 32\%. Compare models within one bench.}
+\end{confusions}
+
+\begin{checkyourself}
+\item\label{ex:benchmarks:1} Count the ring of a two-pixel horizontal object (pixels at Manhattan distance 2 or 3 from
+the nearer object pixel). Count row by row.
+\item\label{ex:benchmarks:2} A ring has mean 0.30 and $\sigma$ 0.06 in each of two bands. An object reads 0.36 and
+0.27. Compute $z$ and its tier.
+\item\label{ex:benchmarks:3} One band: $r = 0.40$, $\sigma = 0.10$, $o_0 = 0.43$, $\Delta = -0.20$. What strength
+gives $z = 1.5$? What does the simple formula give, and what $z$ does it realise?
+\item\label{ex:benchmarks:4} With $\mat{P} = (1, 0, 0)$, match $\vect{d} = (3, 0, 3)$ to foreignness 0.1: find
+$\beta$ and $\vect{d}'$, and verify.
+\item\label{ex:benchmarks:5} Compute the PSF weight at offset $(2, 0)$ and $(1, 1)$ for $\sigma = 1.0$, the ring mean
+weight of a one-pixel object at $\sigma = 1.0$ (use $e^{-2} = 0.1353$, $e^{-1} = 0.3679$, $e^{-4.5} = 0.0111$,
+$e^{-2.5} = 0.0821$, $e^{-0.5} = 0.6065$), and the flat-ground halo ratio. Is the blur sharper or softer than the build's?
+\item\label{ex:benchmarks:6} A spot's natural offset is $(0.00, 0.02)$; the added signal is $(0.06, 0.00)$; band 0 is
+the scene's main direction. What is the realised foreignness, and what did the signal alone have?
+\end{checkyourself}
+
+\nextchapter{ch:runeval}

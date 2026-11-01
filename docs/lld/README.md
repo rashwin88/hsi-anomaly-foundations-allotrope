@@ -23,9 +23,13 @@ adding another.
 | `spectral-stem.md` | the swappable spectral stem (linear / gate / cross-attention / reduced attention), loader hooks, band alignment |
 | `enmap-shards.md` | EnMAP L2A at native bands with quality labels, from the inventory, for fine-tuning and a cloud/water head |
 | `spectral-family-match.md` | naming the material family of 30 m anomaly pixels: family library, Simplex ACE, calibration and the alpha / p\* bar, evaluation, integration recipe |
+| `spectral-namer-in-product.md` | the spectral namer in `spectral_library_match`: objects, natural vs man-made before matching, closest known class + tentative flag, files, export `/3`, viewer |
 | `evaluation.md` | `app/evaluation` + `scripts/evaluate.py`: models x datasets x scorers x measures from one config, score-map cache, the stage-3 reference run |
 | `implant-bench.md` | the implanted-target benchmark: contrast tiers, the strength solve, bench-v1, bench-v2, the 2026-10-18 descending-wavelength corrections and bench-v2.1 |
 | `finetune.md` | the fine-tuning trainer and segmentation head: stages, mixed batches, pseudo-labels, class weights, implants, loader workers |
+| `generic-hsi.md` | the `generic_hsi` sensor: any GDAL hyperspectral file, band-table discovery, FWHM / scale / no-data decisions, `.igm` georef, the pre-flight report |
+| `segmentation-v2.md` | `scene_segmentation` method `indradhanu_v2`: V2's head as its own step, class_map / keep_mask / class_codes.bin, scoring that reuses it instead of running the head again, the viewer |
+| `story-gif.md` | the story GIF of a match action: frames from the chain's files, the endpoint, its cache, why it is never in an export |
 
 ## How these are written
 

@@ -1,0 +1,84 @@
+\answersfor{ch:residualmaha}
+
+\begin{solution}{ex:residualmaha:1}
+With the inverse from \cref{we:residualmaha:three},
+\[
+\Cov_r\inv=\begin{pmatrix}2/3&-1/3&0\\-1/3&2/3&0\\0&0&1/4\end{pmatrix},
+\]
+and $\vect{r}=(1,1,2)$:
+\begin{align*}
+\Cov_r\inv\vect{r} &= \left(\tfrac23\cdot1-\tfrac13\cdot1,\ -\tfrac13\cdot1+\tfrac23\cdot1,\ \tfrac14\cdot2\right)
+ = \left(\tfrac13,\ \tfrac13,\ \tfrac12\right),\\
+D^2 &= 1\cdot\tfrac13+1\cdot\tfrac13+2\cdot\tfrac12 = \tfrac13+\tfrac13+1 = \tfrac53 \approx 1.667.
+\end{align*}
+Rotate and divide, with $0.7071=1/\sqrt2$:
+\begin{align*}
+y_1 &= 0.7071\,(1+1) = 1.414, & z_1 &= 1.414/1.732 = 0.8165,\\
+y_2 &= 0.7071\,(1-1) = 0, & z_2 &= 0,\\
+y_3 &= 2, & z_3 &= 2/2 = 1,\\
+D^2 &= 0.8165^2+0^2+1^2 = 0.6667+0+1 = 1.667.
+\end{align*}
+L1 is $(1+1+2)/3=4/3=1.333$, the same as $\vect{Q}$'s $(2+2+0)/3=1.333$. By size the two are equal; by
+direction the new pixel scores $1.667$, below even the ordinary pixels' $2.25$, while $\vect{Q}$ scores 8. Its
+error lies along ``A and B together'' and along band C, both directions the background already takes.
+\end{solution}
+
+\begin{solution}{ex:residualmaha:2}
+Box rows 0--1, columns 2--3: $r_0=0$, $r_1=1$, $c_0=2$, $c_1=3$.
+\begin{align*}
+S &= I[2][4]-I[0][4]-I[2][2]+I[0][2] = 10-0-7+0 = 3.
+\end{align*}
+Check: the values are $0$, $1$ (row 0) and $2$, $0$ (row 1): $0+1+2+0=3$.
+
+Ring around value row 1, column 2. Outer box rows 0--2, columns 1--3:
+\begin{align*}
+S_{\text{outer}} &= I[3][4]-I[0][4]-I[3][1]+I[0][1] = 16-0-4+0 = 12.
+\end{align*}
+Guard, the single value at row 1, column 2:
+\begin{align*}
+S_{\text{guard}} &= I[2][3]-I[1][3]-I[2][2]+I[1][2] = 9-3-7+3 = 2.
+\end{align*}
+Ring sum $12-2=10$, count $9-1=8$, mean $10/8=1.25$. Check: the eight neighbours are $2,0,1$ (row 0),
+$1,0$ (row 1, either side of the centre) and $2,1,3$ (row 2): $2+0+1+1+0+2+1+3=10$.
+\end{solution}
+
+\begin{solution}{ex:residualmaha:3}
+Mean:
+\begin{align*}
+m_a &= 8/4 = 2, & m_b &= 4/4 = 1.
+\end{align*}
+Covariance, $\frac1n\sum\vect{x}\vect{x}\T-\vect{m}\vect{m}\T$, entry by entry:
+\begin{align*}
+\sigma_{aa} &= \frac{20}{4}-2\cdot2 = 5-4 = 1,\\
+\sigma_{ab} &= \frac{6}{4}-2\cdot1 = 1.5-2 = -0.5,\\
+\sigma_{bb} &= \frac{6}{4}-1\cdot1 = 1.5-1 = 0.5.
+\end{align*}
+(One set of pixels with these sums is $a=(1,3,1,3)$, $b=(2,0,1,1)$; you can check the result directly.)
+\end{solution}
+
+\begin{solution}{ex:residualmaha:4}
+Ring:
+\begin{align*}
+31\times31-11\times11 = 961-121 = 840 \text{ pixels}.
+\end{align*}
+Fallback threshold: \code{MIN_RING_FACTOR} $\times\, d=2\times20=40$ valid ring pixels. Cost per pixel and
+channel: direct, 840 additions; with integral images, two boxes of four look-ups, 8. The reduction is
+$840/8=105$ times.
+\end{solution}
+
+\begin{solution}{ex:residualmaha:5}
+The top two directions are $\vect{u}_3$ ($\lambda=4$) and $\vect{u}_1$ ($\lambda=3$). For $(1,1,2)$:
+$z_3=2/2=1$ and $z_1=1.414/1.732=0.8165$, so $D^2=1+0.6667=1.667$, unchanged because it had no component
+along the dropped $\vect{u}_2$. For $\vect{Q}=(2,-2,0)$: $z_3=0$ and $z_1=0.7071\,(2-2)/1.732=0$, so $D^2=0$.
+Truncation gave up all sensitivity along the quietest direction, which is exactly where $\vect{Q}$, the most
+unusual pixel, differed from the background.
+\end{solution}
+
+\begin{solution}{ex:residualmaha:6}
+Five independent coin flips:
+\begin{align*}
+P(\text{all 5 to D}) &= \left(\tfrac12\right)^5 = \tfrac{1}{32},\\
+P(\text{all 5 one way or the other}) &= 2\times\tfrac{1}{32} = \tfrac{2}{32} = 0.0625.
+\end{align*}
+Still above $0.05$: even five out of five would not pass a conventional two-sided test.
+\end{solution}

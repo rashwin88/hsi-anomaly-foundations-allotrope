@@ -1,0 +1,793 @@
+\chapter{The segmentation head, BCE plus Dice, and auditing labels}\label{ch:seghead}
+\begingroup\setlength{\emergencystretch}{5em}% long provenance paths: allow loose lines rather than overfull ones
+\def\tbrk{\hfil\penalty50\hfilneg}% local: a line may break before a provenance tag, leaving the line ragged
+
+\begin{onething}
+Fine-tuning adds a small segmentation head to the shared encoder: five independent yes/no outputs per pixel (water,
+cloud, thin cloud, shadow, snow), each a sigmoid, trained with binary cross-entropy (the negative log-likelihood of a
+coin flip) plus soft Dice (an overlap score that a rare class cannot dodge), counted only over pixels whose label is
+trusted. Which labels to trust was decided by auditing the provider's labels without any ground truth.
+\end{onething}
+
+\section{Why a segmentation head}\label{sec:seghead:why}
+
+\emph{Segmentation}\index{segmentation} means giving every pixel a label, ``water'' or ``cloud'', rather than one label per
+image. The product already segments: the \code{scene_segmentation} action (\cref{ch:product}) computes spectral indices
+(NDVI for vegetation, NDWI for water, a brightness measure) and applies fixed thresholds to them
+(\file{backend/allotrope/action_types/scene_segmentation.py}). Its masks decide which pixels \code{anomaly_scoring} looks at.
+
+Thresholds on indices are blunt. Cloud edges, thin cloud and shadows slip through and get scored as anomalies: a cloud is
+something the reconstruction model rarely redraws well, so its error is large, so it looks anomalous. The obvious fix is a
+better rule (a lower brightness threshold, a second index), and it fails the same way one notch later: a hand-written rule has
+no idea what thin cloud over a dark field looks like until someone writes that case in.
+
+The fine-tuning plan (\file{docs/proposals/fine-tuning-and-segmentation.md}) instead teaches the model. Indradhanu's encoder
+has already spent a hundred epochs learning what hyperspectral scenes look like (\cref{ch:pretrain}); a small extra network on
+top of its features, a \emph{head}\index{head (network)}, can learn to outline water and cloud from labelled examples at a fraction
+of the cost of a new model. The head is judged by detection: nothing ships that lowers the PRISMA bench.
+
+The chapter has two halves. The first (\cref{sec:seghead:arch,sec:seghead:sigmoid,sec:seghead:bce,sec:seghead:dice,sec:seghead:iou,sec:seghead:known})
+builds the head and its loss, deriving each formula. The second (\cref{sec:seghead:audit}) asks which of the labels it learns
+from can be trusted, when nobody has a correct set to compare with.
+
+\section{The head: the decoder of an earlier chapter, smaller}\label{sec:seghead:arch}
+
+\subsection{What it is}
+
+In \file{app/foundation_models/components/spectral_stem_seg_former_mae.py} the head is one line:
+\begin{lstlisting}
+self.seg_head = (SegFormerDecoder(embed_dims=list(embed_dims), decoder_dim=seg_decoder_dim,
+                                  out_channels=seg_classes) if seg_classes else None)
+\end{lstlisting}
+It is the same \code{SegFormerDecoder} class that reconstructs the spectrum (\cref{ch:decoder}) \citep{xie2021segformer}, built
+with width \code{decoder_dim} $d = 128$ instead of 256 and \code{out_channels} $K = 5$ (one per class) instead of 32. Pretrained
+models have \code{seg_classes = 0}, so no head; fine-tuning sets 5.
+
+Recall the decoder's steps. The encoder (\cref{ch:encoder}) produces four feature maps at strides 4, 8, 16 and 32 with 32, 64,
+160 and 256 channels. The decoder
+\begin{enumerate}
+  \item projects each map to $d$ channels with a $1 \times 1$ convolution;
+  \item upsamples each to the stride-4 grid (bilinear) and stacks them: $4d$ channels;
+  \item fuses them back to $d$ with a $1 \times 1$ convolution and a GELU;
+  \item refines with a $3 \times 3$ convolution and a GELU;
+  \item predicts $16K$ channels with a second $3 \times 3$ convolution: one value for each of the 16 sub-pixels of a $4 \times 4$
+    block, for each of the $K$ classes;
+  \item rearranges those channels into a full-resolution map with \emph{PixelShuffle}(4) \citep{shi2016realtime}.
+\end{enumerate}
+
+\begin{table}[htbp]
+\centering
+\caption{Shapes through the segmentation head for a batch of $B$ tiles of 128 $\times$ 128 pixels.}
+\label{tab:seghead:shapes}
+\begin{tabular}{ll}
+\toprule
+step & shape\\
+\midrule
+encoder stage 1, $F_1$ & \shape{(B, 32, 32, 32)}\\
+encoder stage 2, $F_2$ & \shape{(B, 64, 16, 16)}\\
+encoder stage 3, $F_3$ & \shape{(B, 160, 8, 8)}\\
+encoder stage 4, $F_4$ & \shape{(B, 256, 4, 4)}\\
+project each to 128, upsample to 32 $\times$ 32, stack & \shape{(B, 512, 32, 32)}\\
+fuse ($1 \times 1$) & \shape{(B, 128, 32, 32)}\\
+refine 1 ($3 \times 3$) & \shape{(B, 128, 32, 32)}\\
+refine 2 ($3 \times 3$), $16 \times 5 = 80$ channels & \shape{(B, 80, 32, 32)}\\
+PixelShuffle(4): $80 = 5 \times 4 \times 4$ & \shape{(B, 5, 128, 128)}, logits\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+A \emph{logit}\index{logit} is a raw score, any real number; \cref{sec:seghead:sigmoid} turns it into a probability.
+
+\coursefig[0.9\linewidth]{iw-47-seg-head}{The head in context: the shared stem and encoder feed two heads. Pass 1 removes 65\% of
+the tokens and reconstructs; pass 2 keeps every token and segments. Which passes run depends on the training mode
+(\cref{ch:finetune}).}{fig:seghead:head}
+
+\begin{sourcenote}[: design text against code]
+The proposal's first description of the head was ``1x1 projections to a common width, upsample to 1/4, fuse, 1x1 to classes,
+bilinear to full size''. The code reuses \code{SegFormerDecoder}, which ends in two $3 \times 3$ convolutions and a PixelShuffle,
+not a $1 \times 1$ and a bilinear upsample (\file{app/foundation_models/components/seg_former_decoder.py}, lines 113--117). The
+source wins: the head predicts each pixel of a $4 \times 4$ block separately, as the reconstruction does. The proposal now says
+``3x3 refine, PixelShuffle to full size'', so the two agree today.
+\end{sourcenote}
+
+\subsection{Counting its parameters before reading them}
+
+A convolution with $C_{\text{in}}$ input channels, $C_{\text{out}}$ output channels and a $k \times k$ kernel has
+$k^2 C_{\text{in}} C_{\text{out}}$ weights plus $C_{\text{out}}$ biases (\cref{ch:shapes}). Apply it to every layer, with $d = 128$
+and $K = 5$:
+
+\begin{worked}[label={we:seghead:params}]{The head's parameter count}
+Do this on paper, one layer per line.
+\begin{align*}
+  \text{project } 32 \to 128:&\quad 32 \times 128 + 128 = 4{,}096 + 128 = 4{,}224\\
+  \text{project } 64 \to 128:&\quad 64 \times 128 + 128 = 8{,}192 + 128 = 8{,}320\\
+  \text{project } 160 \to 128:&\quad 160 \times 128 + 128 = 20{,}480 + 128 = 20{,}608\\
+  \text{project } 256 \to 128:&\quad 256 \times 128 + 128 = 32{,}768 + 128 = 32{,}896\\
+  \text{fuse } 512 \to 128 \ (1\times1):&\quad 512 \times 128 + 128 = 65{,}536 + 128 = 65{,}664\\
+  \text{refine 1 } 128 \to 128 \ (3\times3):&\quad 9 \times 128 \times 128 + 128 = 147{,}456 + 128 = 147{,}584\\
+  \text{refine 2 } 128 \to 80 \ (3\times3):&\quad 9 \times 128 \times 80 + 80 = 92{,}160 + 80 = 92{,}240.
+\end{align*}
+Add them in pairs:
+\begin{align*}
+  4{,}224 + 8{,}320 &= 12{,}544\\
+  12{,}544 + 20{,}608 &= 33{,}152\\
+  33{,}152 + 32{,}896 &= 66{,}048\\
+  66{,}048 + 65{,}664 &= 131{,}712\\
+  131{,}712 + 147{,}584 &= 279{,}296\\
+  279{,}296 + 92{,}240 &= 371{,}536.
+\end{align*}
+Building the head and counting its parameters gives 371,536 \tbrk\tagM{indradhanu workings/47-the-segmentation-head.md} exactly. The
+GELUs, the bilinear upsampling and the PixelShuffle have no parameters.
+\end{worked}
+
+\paragraph{A closed form.} Write the same count with symbols, $d$ for the width and $K$ for the classes. The four input widths sum to
+$32 + 64 + 160 + 256 = 512$.
+\begin{align*}
+  \text{projections:}&\quad (32 + 64 + 160 + 256)\,d + 4d = 512d + 4d\\
+  \text{fuse:}&\quad 4d \cdot d + d = 4d^2 + d\\
+  \text{refine 1:}&\quad 9d^2 + d\\
+  \text{refine 2:}&\quad 9 \cdot d \cdot 16K + 16K = 144Kd + 16K.
+\intertext{Collect the $d^2$ terms ($4 + 9 = 13$) and the $d$ terms ($512 + 4 + 1 + 1 = 518$):}
+  P(d, K) &= 13d^2 + (518 + 144K)\,d + 16K.
+\end{align*}
+Check it on the head, $d = 128$, $K = 5$: $13 \times 16{,}384 = 212{,}992$; $(518 + 720) \times 128 = 1{,}238 \times 128 = 158{,}464$;
+$16 \times 5 = 80$; total $212{,}992 + 158{,}464 + 80 = 371{,}536$. Check it on the reconstruction decoder, $d = 256$, $K = 32$:
+$13 \times 65{,}536 = 851{,}968$; $(518 + 4{,}608) \times 256 = 5{,}126 \times 256 = 1{,}312{,}256$; $16 \times 32 = 512$; total
+$851{,}968 + 1{,}312{,}256 + 512 = 2{,}164{,}736$, the figure \cref{ch:params} derived by hand. The head is
+$371{,}536 / 2{,}164{,}736 = 0.17$, about a sixth of the reconstruction decoder. The $d^2$ term explains the saving: halving $d$
+divides the dominant term by four.
+
+\section{Sigmoid or softmax: one yes/no per class}\label{sec:seghead:sigmoid}
+
+\subsection{The sigmoid as log-odds}
+
+A probability $p$ of ``yes'' can be rewritten as \emph{odds}, $p/(1-p)$: odds of 9 mean ``nine to one on''. The logarithm of the odds,
+the \emph{log-odds}, runs over all real numbers: very unlikely events have large negative log-odds, near-certain ones large positive.
+So a network that outputs any real number $z$ can be read as log-odds:
+\begin{align*}
+  z &= \ln\frac{p}{1-p}.
+\intertext{Solve for $p$. Exponentiate both sides:}
+  e^{z} &= \frac{p}{1-p}.
+\intertext{Multiply both sides by $1 - p$ and collect the $p$ terms:}
+  e^{z} - e^{z}p &= p \quad\Longrightarrow\quad e^{z} = p\,(1 + e^{z}).
+\intertext{Divide by $1 + e^{z}$, then divide numerator and denominator by $e^{z}$:}
+  p &= \frac{e^{z}}{1 + e^{z}} = \frac{1}{1 + e^{-z}} = \sigma(z).
+\end{align*}
+\begin{definition}[Sigmoid]\index{sigmoid}
+$\sigma(z) = 1/(1 + e^{-z})$ maps a logit $z$ to a probability in $(0, 1)$; $\sigma(0) = 0.5$, and $p > 0.5$ exactly when $z > 0$.
+\end{definition}
+
+\subsection{Multi-label is not multi-class}
+
+\begin{definition}[Multi-class and multi-label]\index{multi-label classification}
+A problem is \emph{multi-class} when exactly one of $K$ classes is true for each pixel; it is \emph{multi-label} when any number of
+them, from none to all, can be true at once.
+\end{definition}
+For multi-class problems the standard output is the \emph{softmax}\index{softmax}, which turns $K$ logits into $K$ probabilities that sum
+to 1 (\cref{ch:attention}):
+\[
+  \softmax(\vect{z})_k = \frac{e^{z_k}}{\sum_{j=1}^{K} e^{z_j}}.
+\]
+The classes here overlap: thin cloud over water is both. So the head uses $K$ independent sigmoids, one per class, with no link between
+them. It is five separate yes/no questions asked of the same features.
+
+\begin{worked}[label={we:seghead:softmax}]{Why the softmax cannot say ``water and thin cloud''}
+A pixel is thin cloud over water. Give it logits $+2.197$ for water and for thin cloud, and $-2.197$ for cloud, shadow and snow.
+Use $e^{2.197} = 9.00$ and $e^{-2.197} = 1/9 = 0.111$ (because $\ln 9 = 2.197$).
+
+Softmax:
+\begin{align*}
+  \text{sum} &= 9 + 0.111 + 9 + 0.111 + 0.111 = 18.333\\
+  \text{water} &= 9 / 18.333 = 0.491\\
+  \text{thin cloud} &= 9 / 18.333 = 0.491.
+\end{align*}
+Each must give up half its probability to the other. Sigmoids:
+\begin{align*}
+  \text{water} &= 1 / (1 + e^{-2.197}) = 1 / (1 + 0.111) = 1 / 1.111 = 0.900\\
+  \text{thin cloud} &= 0.900, \text{ independently.}
+\end{align*}
+With a softmax the head could never say ``certainly water, and certainly under thin cloud''.
+\end{worked}
+
+\paragraph{The link between the two.} A softmax over two logits $(z, 0)$ gives the first class
+\[
+  \frac{e^{z}}{e^{z} + e^{0}} = \frac{e^{z}}{e^{z} + 1} = \sigma(z).
+\]
+So one sigmoid is a two-class softmax with the second logit fixed at zero, and five sigmoids are five separate two-class problems
+(class or not-class). There is no ``land'' or ``clear'' output: land is water's ``no'' where the pixel is labelled, and clear sky is
+cloud's and thin cloud's ``no''.
+
+\subsection{The five classes}
+
+\file{app/utils/segmentation/targets.py} defines the classes and how each is read from EnMAP's quality layers:
+\begin{center}\small
+\begin{tabular}{clll}
+\toprule
+index & class & target is 1 where & notes\\
+\midrule
+0 & water & \texttt{label\_classes == 2} & 1 = land; 3 = no-data\\
+1 & cloud & \texttt{label\_cloud == 1} or \texttt{label\_classes == 0} & code 0 is EnMAP's cloud class\\
+2 & thin\_cloud & \texttt{label\_cirrus >= 2} or \texttt{label\_haze == 1} & cirrus levels 0--3\\
+3 & shadow & \texttt{label\_cloud\_shadow == 1} & \\
+4 & snow & \texttt{label\_snow == 1} & \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\section{Binary cross-entropy from the coin flip}\label{sec:seghead:bce}
+
+\subsection{The likelihood of one label}
+
+Treat one pixel and one class as a coin flip. The head says the probability of ``yes'' is $p$; the label $t$ is 1 (yes) or 0 (no). A
+\emph{Bernoulli}\index{Bernoulli distribution} variable with parameter $p$ takes value 1 with probability $p$ and 0 with probability
+$1 - p$. Both cases fit in one formula:
+\begin{equation}\label{eq:seghead:bern}
+  P(t \mid p) = p^{t}\,(1 - p)^{1 - t}.
+\end{equation}
+Check it: for $t = 1$, $p^1 (1-p)^0 = p \times 1 = p$; for $t = 0$, $p^0 (1-p)^1 = 1 \times (1 - p) = 1 - p$.
+
+\subsection{From likelihood to loss}
+
+The \emph{likelihood}\index{likelihood} of a set of labels is the probability the model gives to all of them at once. Treat the $n$ pixels
+as independent, so the probabilities multiply:
+\begin{align*}
+  \mathcal{P} &= \prod_{i=1}^{n} p_i^{t_i}(1 - p_i)^{1 - t_i}.
+\intertext{A good model makes $\mathcal{P}$ large. Products of many numbers below 1 underflow, so take the logarithm, which turns the
+product into a sum (because $\ln(ab) = \ln a + \ln b$) and the powers into factors (because $\ln a^{t} = t\ln a$):}
+  \ln\mathcal{P} &= \sum_{i=1}^{n}\bigl[t_i \ln p_i + (1 - t_i)\ln(1 - p_i)\bigr].
+\intertext{The logarithm is increasing, so maximising $\ln\mathcal{P}$ maximises $\mathcal{P}$. Training minimises, so take the negative,
+and divide by $n$ so the loss does not grow with the number of pixels:}
+  \mathrm{BCE} &= -\frac{1}{n}\sum_{i=1}^{n}\bigl[t_i \ln p_i + (1 - t_i)\ln(1 - p_i)\bigr].
+\end{align*}
+\begin{definition}[Binary cross-entropy]\index{binary cross-entropy}
+For one pixel, $\ell(p, t) = -\bigl[t\ln p + (1 - t)\ln(1 - p)\bigr]$: $-\ln p$ when the label is 1 and $-\ln(1 - p)$ when it is 0. BCE is
+the mean of $\ell$ over pixels: the negative log-likelihood of the labels under the model, per pixel.
+\end{definition}
+
+\begin{worked}[label={we:seghead:bce3}]{BCE on three pixels}
+Do this on paper with a calculator for the logarithms.
+\begin{center}
+\begin{tabular}{cccl}
+\toprule
+pixel & $t$ & $p$ & reading\\
+\midrule
+1 & 1 & 0.9 & confident and right\\
+2 & 0 & 0.5 & unsure\\
+3 & 0 & 0.9 & confident and wrong\\
+\bottomrule
+\end{tabular}
+\end{center}
+\begin{align*}
+  \ell_1 &= -\ln 0.9 = 0.1054\\
+  \ell_2 &= -\ln(1 - 0.5) = -\ln 0.5 = 0.6931\\
+  \ell_3 &= -\ln(1 - 0.9) = -\ln 0.1 = 2.3026\\
+  \text{sum} &= 0.1054 + 0.6931 + 2.3026 = 3.1011\\
+  \mathrm{BCE} &= 3.1011 / 3 = 1.0337.
+\end{align*}
+The confident mistake costs 22 times the confident success ($2.3026 / 0.1054 = 21.8$). As $p \to 1$ on a pixel whose label is 0,
+$-\ln(1 - p) \to \infty$: cross-entropy punishes confident errors without limit.
+\end{worked}
+
+\subsection{The gradient is $p - t$}
+
+The head outputs logits $z$, and $p = \sigma(z)$. Training needs $\partial\ell/\partial z$. Two steps and the chain rule
+(\cref{ch:trainloop}).
+
+\textbf{Step 1: the sigmoid's derivative.} Write $\sigma(z) = (1 + e^{-z})^{-1}$ and differentiate the outer power, then the inside:
+\begin{align*}
+  \frac{d\sigma}{dz} &= -1 \cdot (1 + e^{-z})^{-2} \cdot \frac{d}{dz}(1 + e^{-z}) = -(1 + e^{-z})^{-2}\cdot(-e^{-z})
+                      = \frac{e^{-z}}{(1 + e^{-z})^2}.
+\intertext{Split the fraction into two factors:}
+  \frac{d\sigma}{dz} &= \frac{1}{1 + e^{-z}}\cdot\frac{e^{-z}}{1 + e^{-z}}.
+\intertext{The first factor is $\sigma$. The second is $1 - \sigma$, because $1 - \frac{1}{1 + e^{-z}} = \frac{1 + e^{-z} - 1}{1 + e^{-z}}
+= \frac{e^{-z}}{1 + e^{-z}}$. So}
+  \frac{d\sigma}{dz} &= \sigma(1 - \sigma) = p(1 - p).
+\end{align*}
+
+\textbf{Step 2: the loss's derivative in $p$.} Differentiate $\ell = -t\ln p - (1-t)\ln(1-p)$ term by term (using $\frac{d}{dp}\ln p = 1/p$ and
+$\frac{d}{dp}\ln(1-p) = -1/(1-p)$):
+\[
+  \frac{\partial\ell}{\partial p} = -\frac{t}{p} + \frac{1 - t}{1 - p}.
+\]
+
+\textbf{Chain rule.} Multiply the two:
+\begin{align*}
+  \frac{\partial\ell}{\partial z} &= \Bigl(-\frac{t}{p} + \frac{1 - t}{1 - p}\Bigr)\, p(1 - p)
+\intertext{Multiply each term out; the $p$ cancels in the first and the $1 - p$ in the second:}
+  &= -t(1 - p) + (1 - t)\,p
+\intertext{Expand and cancel $tp$:}
+  &= -t + tp + p - tp = p - t.
+\end{align*}
+\begin{keypoint}
+The gradient of binary cross-entropy with respect to the logit is the prediction minus the label, $p - t$: no larger than 1 in size,
+and zero only when the prediction equals the label.
+\end{keypoint}
+For the three pixels of \cref{we:seghead:bce3}: pixel 1, $0.9 - 1 = -0.1$ (push the logit up a little); pixel 2, $0.5 - 0 = 0.5$ (push down);
+pixel 3, $0.9 - 0 = 0.9$ (push down hard). The sigmoid's own derivative, $p(1-p)$, becomes tiny as $p$ nears 0 or 1 ($0.99 \times 0.01 = 0.0099$),
+yet the loss's gradient does not: the $1/p$ and $1/(1-p)$ of the logarithm cancel it exactly. This is why sigmoid and cross-entropy are always used together.
+
+\paragraph{Numerically safe form.} Computing $\ln\sigma(z)$ for $z = -100$ underflows. PyTorch's
+\code{binary_cross_entropy_with_logits}, which \code{masked_bce_dice} calls, takes the logit directly and uses the equivalent form
+$\ell = \max(z, 0) - zt + \ln(1 + e^{-|z|})$, which never exponentiates a large positive number. Check it at $z = \ln 9 = 2.197$, $t = 0$:
+$\max(2.197, 0) - 0 + \ln(1 + e^{-2.197}) = 2.197 + \ln(1.111) = 2.197 + 0.105 = 2.303 = -\ln 0.1$, as in pixel 3.
+
+\section{Overlap: the Dice coefficient and soft Dice}\label{sec:seghead:dice}
+
+\subsection{Dice for sets}
+
+Let $A$ be the set of pixels the head calls ``cloud'' and $B$ the set the label calls ``cloud''.
+\begin{definition}[Dice coefficient]\index{Dice coefficient}
+$D(A, B) = \dfrac{2\,\abs{A \cap B}}{\abs{A} + \abs{B}}$: twice the overlap divided by the two sizes added. $D = 1$ for identical sets, $D = 0$
+for disjoint ones.
+\end{definition}
+The factor 2 makes the scale right: if $A = B$ then $\abs{A \cap B} = \abs{A}$ and $D = 2\abs{A}/(2\abs{A}) = 1$.
+
+\subsection{Soft Dice: a differentiable version}
+
+Set membership is all-or-nothing, so its gradient is zero almost everywhere. Replace each pixel's membership of $A$ by its probability
+$p_i$ and of $B$ by its label $t_i$ \citep{milletari2016vnet}:
+\begin{align*}
+  \abs{A \cap B} &\to \sum_i p_i t_i, \qquad \abs{A} \to \sum_i p_i, \qquad \abs{B} \to \sum_i t_i.
+\end{align*}
+If the $p_i$ are exactly 0 or 1 these are the set sizes again. The code adds 1 to the top and bottom (``smoothing'') so the ratio is
+defined when a class is absent from both prediction and label, and turns the coefficient into a loss by subtracting it from 1:
+\begin{equation}\label{eq:seghead:dice}
+  \mathcal{L}_{\text{Dice}} = 1 - \frac{2\sum_i p_i t_i + 1}{\sum_i p_i + \sum_i t_i + 1}.
+\end{equation}
+If a class is absent from the label and predicted absent, all sums are 0 and the loss is $1 - 1/1 = 0$: correct, with no division by zero.
+
+\begin{worked}[label={we:seghead:dice2x2}]{Soft Dice on a $2 \times 2$ mask}
+Do this on paper. Four pixels, labels and predicted probabilities:
+\begin{center}
+\begin{tabular}{c|cc}
+& left & right\\
+\midrule
+top & $t = 1$, $p = 0.8$ & $t = 1$, $p = 0.4$\\
+bottom & $t = 0$, $p = 0.3$ & $t = 0$, $p = 0.1$\\
+\end{tabular}
+\end{center}
+\begin{align*}
+  \textstyle\sum p_i t_i &= 0.8 \times 1 + 0.4 \times 1 + 0.3 \times 0 + 0.1 \times 0 = 0.8 + 0.4 = 1.2\\
+  \textstyle\sum p_i &= 0.8 + 0.4 + 0.3 + 0.1 = 1.6\\
+  \textstyle\sum t_i &= 1 + 1 + 0 + 0 = 2\\
+  \text{soft Dice, no smoothing} &= \frac{2 \times 1.2}{1.6 + 2} = \frac{2.4}{3.6} = 0.667\\
+  \text{with smoothing} &= \frac{2.4 + 1}{3.6 + 1} = \frac{3.4}{4.6} = 0.739\\
+  \mathcal{L}_{\text{Dice}} &= 1 - 0.739 = 0.261.
+\end{align*}
+Compare the hard Dice at threshold 0.5. The head calls only the top-left pixel cloud: $A = \{\text{TL}\}$, $B = \{\text{TL}, \text{TR}\}$,
+so $\abs{A \cap B} = 1$ and $D = 2 \times 1 / (1 + 2) = 2/3 = 0.667$. Here the soft and hard values agree; in general they do not.
+\end{worked}
+
+\subsection{The gradient of soft Dice is global}
+
+Write $I = \sum p_i t_i$ and $S = \sum p_i + \sum t_i$, so the coefficient is $Q = (2I + 1)/(S + 1)$. Differentiate with respect to one
+pixel's $p_j$ by the quotient rule ($\partial I/\partial p_j = t_j$, $\partial S / \partial p_j = 1$):
+\begin{align*}
+  \frac{\partial Q}{\partial p_j} = \frac{2t_j\,(S + 1) - (2I + 1)\cdot 1}{(S + 1)^2}.
+\end{align*}
+In \cref{we:seghead:dice2x2}, $S + 1 = 4.6$ and $2I + 1 = 3.4$, so $(S+1)^2 = 21.16$:
+\begin{align*}
+  t_j = 1:&\quad \frac{2 \times 4.6 - 3.4}{21.16} = \frac{9.2 - 3.4}{21.16} = \frac{5.8}{21.16} = 0.274\\
+  t_j = 0:&\quad \frac{0 - 3.4}{21.16} = -0.161.
+\end{align*}
+The loss is $1 - Q$, so its gradient has the opposite sign: raise $p$ on labelled pixels, lower it on the others. Unlike BCE's $p_j - t_j$,
+each pixel's Dice gradient depends on $I$ and $S$, sums over the \emph{whole class}. That is what lets Dice see a rare class as a whole.
+
+\section{Why BCE plus Dice: class imbalance with numbers}\label{sec:seghead:imbalance}
+
+\subsection{The cheapest wrong answer for BCE}
+
+Suppose a class covers a fraction $\rho$ of the pixels, and the head ignores the image and predicts one constant probability $p$ everywhere.
+The BCE is then
+\begin{align*}
+  \mathrm{BCE}(p) &= -\bigl[\rho\ln p + (1 - \rho)\ln(1 - p)\bigr],
+\intertext{because a share $\rho$ of the terms have $t = 1$ and the rest $t = 0$. Find the best constant: set the derivative to zero,}
+  \frac{d\,\mathrm{BCE}}{dp} &= -\frac{\rho}{p} + \frac{1 - \rho}{1 - p} = 0.
+\intertext{Multiply both sides by $p(1 - p)$, expand, and cancel $\rho p$:}
+  \rho(1 - p) &= (1 - \rho)p \quad\Longrightarrow\quad \rho - \rho p = p - \rho p
+  \quad\Longrightarrow\quad p = \rho.
+\end{align*}
+The best constant is the class's base rate, and its loss is $-[\rho\ln\rho + (1-\rho)\ln(1-\rho)]$.
+
+\begin{worked}[label={we:seghead:imbalance}]{A rare class and a common one under BCE and Dice}
+Take 1,000 pixels. Shadow covers 10 of them ($\rho = 0.01$), water 300 ($\rho = 0.3$); illustrative shares\tbrk\tagA\ close to the
+training data's 0.09\% shadow and 6.9\% water. Score the constant predictor $p = \rho$.
+
+\textbf{BCE.}
+\begin{align*}
+  \text{shadow:}\quad & -(0.01\ln 0.01 + 0.99\ln 0.99) = 0.01 \times 4.6052 + 0.99 \times 0.01005\\
+                      & = 0.04605 + 0.00995 = 0.0560\\
+  \text{water:}\quad & -(0.3\ln 0.3 + 0.7\ln 0.7) = 0.3 \times 1.2040 + 0.7 \times 0.3567\\
+                      & = 0.3612 + 0.2497 = 0.6109.
+\end{align*}
+A head that never finds a single shadow pixel pays only 0.056 on shadow, eleven times less than the same laziness costs on water
+($0.6109 / 0.0560 = 10.9$). Averaged over classes, ignoring shadow is nearly free.
+
+\textbf{Dice}, same constant predictor:
+\begin{align*}
+  \text{shadow:}\quad & \textstyle\sum p t = 10 \times 0.01 = 0.1, \quad \sum p = 1000 \times 0.01 = 10, \quad \sum t = 10\\
+                      & \mathcal{L}_{\text{Dice}} = 1 - \frac{2 \times 0.1 + 1}{10 + 10 + 1} = 1 - \frac{1.2}{21} = 1 - 0.057 = 0.943\\
+  \text{water:}\quad & \textstyle\sum p t = 300 \times 0.3 = 90, \quad \sum p = 300, \quad \sum t = 300\\
+                      & \mathcal{L}_{\text{Dice}} = 1 - \frac{180 + 1}{600 + 1} = 1 - 0.301 = 0.699.
+\end{align*}
+Dice charges the lazy shadow predictor 0.943 out of a maximum of 1, more than it charges water. A perfect shadow prediction
+($\sum pt = 10$, $\sum p = 10$) scores $1 - 21/21 = 0$. Under Dice, missing a rare class costs the whole term.
+\end{worked}
+
+So the code adds the two, per class:
+\begin{equation}\label{eq:seghead:perclass}
+  \mathcal{L}_k = \mathrm{BCE}_k + \mathcal{L}_{\text{Dice},k},
+\end{equation}
+BCE for well-behaved per-pixel gradients ($p - t$, bounded), Dice so that every class, however rare, carries a full-sized term. The loss
+is the mean of $\mathcal{L}_k$ over the classes (\cref{sec:seghead:known} says which classes count).
+
+\section{Measuring it: intersection over union}\label{sec:seghead:iou}
+
+\begin{definition}[IoU]\index{intersection over union}
+The \emph{intersection over union} (Jaccard index) of a predicted set $A$ and a target set $B$ is $J = \abs{A \cap B}/\abs{A \cup B}$, with
+$\abs{A \cup B} = \abs{A} + \abs{B} - \abs{A \cap B}$. A pixel counts as predicted when $p > 0.5$, which is $z > 0$.
+\end{definition}
+
+\paragraph{IoU and Dice measure the same thing on different scales.} Write $I = \abs{A \cap B}$ and $U = \abs{A \cup B} = \abs{A} + \abs{B} - I$.
+Then $\abs{A} + \abs{B} = U + I$, and
+\begin{align*}
+  D &= \frac{2I}{\abs{A} + \abs{B}} = \frac{2I}{U + I}.
+\intertext{Divide top and bottom by $U$:}
+  D &= \frac{2\,(I/U)}{1 + I/U} = \frac{2J}{1 + J}.
+\end{align*}
+So $D \ge J$ always, with equality only at 0 and 1. In \cref{we:seghead:dice2x2}, $J = 1/2$ and $D = 2 \times 0.5 / 1.5 = 0.667$.
+
+\begin{worked}[label={we:seghead:iou}]{IoU of two pixel sets, and why the tally pools}
+Target water: pixels $\{1, 2, 3, 4\}$; predicted water: $\{2, 3, 4, 5, 6\}$.
+\begin{align*}
+  \text{intersection} &= \{2, 3, 4\}, \text{ size } 3\\
+  \text{union} &= \{1, 2, 3, 4, 5, 6\}, \text{ size } 4 + 5 - 3 = 6\\
+  J &= 3 / 6 = 0.50.
+\end{align*}
+\code{IoUTally} adds intersections and unions over the whole validation set, known pixels only, and divides once at the end. Why not
+average each batch's IoU? Suppose batch 1 holds a sliver of cloud, $I = 1$, $U = 2$, and batch 2 a large cloud, $I = 90$, $U = 100$:
+\begin{align*}
+  \text{mean of ratios} &= (1/2 + 90/100)/2 = (0.5 + 0.9)/2 = 0.70\\
+  \text{pooled} &= (1 + 90)/(2 + 100) = 91/102 = 0.892.
+\end{align*}
+The mean of ratios lets a two-pixel batch count as much as a hundred-pixel one; the pooled ratio weights every pixel equally.
+\end{worked}
+
+\section{Labels you cannot fully trust: the known mask}\label{sec:seghead:known}
+
+\subsection{The problem}
+
+EnMAP's labels are the output of the provider's automatic tests, and they are not always right. A clear desert scene checked on
+2026-09-30 was labelled 57\% cirrus and 14\% cloud.\tbrk\tagM{indradhanu workings/48-checking-labels.md} Train on that and the head learns
+``bare desert equals cloud''. Dropping every doubtful scene would also throw away its water, shadow and snow labels, which may be fine.
+
+So each target carries a second array: a \emph{known mask}\index{known mask}, one per class, saying which pixels' labels count. Unknown
+means \emph{no opinion}, not \emph{no}.
+
+\subsection{The rules, from the source}
+
+\code{enmap_targets} in \file{app/utils/segmentation/targets.py} builds targets and known masks, both \shape{(5, H, W)}:
+\begin{lstlisting}
+# class code 3 = provider no-data: unknown for every class
+known = np.repeat((cls != 3)[None], len(CLASSES), axis=0)
+# code 0 (EnMAP's cloud class): only "cloud" is known
+known[[0, 2, 3, 4]] &= ~cloud_class
+# cirrus level 1: unsure, not clear
+known[2] &= ~((cirrus > 0) & (cirrus < policy.cirrus_min_level) & ~haze)
+# snow wins over cloud
+known[1] &= ~snow
+# no water truth under cloud
+known[0] &= ~(cloud | (cirrus >= policy.cirrus_min_level))
+dry = (... elev >= policy.plateau_elevation_m) or (... wv < policy.low_water_vapour)
+if dry:
+    known[1] = known[2] = False      # cloud, thin_cloud unknown for the whole scene
+\end{lstlisting}
+In words:
+\begin{enumerate}
+  \item \textbf{Provider no-data} (class code 3): unknown for every class.
+  \item \textbf{Under EnMAP's cloud class} (code 0): cloud is known and true; the other four are unknown.
+  \item \textbf{Cirrus level 1} is unknown for thin cloud, neither positive nor negative (unless haze is set).
+  \item \textbf{Overlaps}: where snow is set, cloud is unknown; where cloud or cirrus $\ge 2$ is set, water is unknown.
+  \item \textbf{Dry scenes}: below 0.75\,g/cm$^2$ of water vapour, cloud and thin cloud are unknown for the whole scene; water, shadow and
+    snow still count. An elevation rule (3,500\,m and above) is kept as a guard.
+\end{enumerate}
+The trainer adds two more: a pixel that is nodata in the cube is unknown for every class (\code{seg_known & mask} in
+\code{FinetuneTrainer._seg_batch}), and a tile with less than 40\% valid pixels is left out of the segmentation loss
+(\code{MIN_VALID_PIXEL_FRACTION = 0.4}).
+
+\begin{sourcenote}[: the cirrus rule]
+The course writes the cirrus rule as \code{known[2] &= ~((cirrus == 1) & ~haze)}. The source writes
+\code{(cirrus > 0) & (cirrus < policy.cirrus_min_level) & ~haze} (\file{targets.py}, line 65). With the default
+\code{cirrus_min_level = 2} the two are identical, since the only integer level with $0 < c < 2$ is 1; the source form also follows the policy
+if the threshold is ever changed.
+\end{sourcenote}
+
+\subsection{The masked loss}
+
+Let $k_{ik} \in \{0, 1\}$ say whether pixel $i$'s label for class $k$ is known, and $n_k = \sum_i k_{ik}$. \code{masked_bce_dice} computes, for
+each class with $n_k > 0$,
+\begin{align}
+  \mathrm{BCE}_k &= \frac{1}{n_k}\sum_i k_{ik}\,\ell(p_{ik}, t_{ik}),\label{eq:seghead:mbce}\\
+  \mathcal{L}_{\text{Dice},k} &= 1 - \frac{2\sum_i k_{ik}\,p_{ik}\,t_{ik} + 1}{\sum_i k_{ik}\,p_{ik} + \sum_i k_{ik}\,t_{ik} + 1},\label{eq:seghead:mdice}
+\end{align}
+and returns the mean of $\mathrm{BCE}_k + \mathcal{L}_{\text{Dice},k}$ over the classes that have at least one known pixel in the batch. A class
+with no known pixel is \emph{left out} of the average, not counted as zero.
+
+\begin{worked}[label={we:seghead:knownmask}]{The known-mask loss on a $2 \times 2$ tile}
+A tile from a dry scene, three classes shown (snow and thin cloud have no known pixel here either). Pixel 4 is provider no-data, so it is
+unknown for every class; on a dry scene cloud is unknown everywhere. Allow five minutes.
+\begin{center}
+\begin{tabular}{llcccc}
+\toprule
+& & pixel 1 & pixel 2 & pixel 3 & pixel 4\\
+\midrule
+water & target & 1 & 0 & 0 & --\\
+      & $p$ & 0.9 & 0.1 & 0.5 & (0.9, ignored)\\
+shadow & target & 0 & 0 & 0 & --\\
+      & $p$ & 0.1 & 0.1 & 0.1 & (0.5, ignored)\\
+cloud & & \multicolumn{4}{c}{unknown in all four pixels}\\
+\bottomrule
+\end{tabular}
+\end{center}
+\textbf{Water}, three known pixels:
+\begin{align*}
+  \text{BCE terms:}&\quad -\ln 0.9 = 0.1054,\quad -\ln(1 - 0.1) = 0.1054,\quad -\ln(1 - 0.5) = 0.6931\\
+  \mathrm{BCE} &= (0.1054 + 0.1054 + 0.6931)/3 = 0.9039 / 3 = 0.3013\\
+  \textstyle\sum pt &= 0.9 \times 1 = 0.9, \quad \sum p = 0.9 + 0.1 + 0.5 = 1.5, \quad \sum t = 1\\
+  \mathcal{L}_{\text{Dice}} &= 1 - \frac{2 \times 0.9 + 1}{1.5 + 1 + 1} = 1 - \frac{2.8}{3.5} = 1 - 0.8 = 0.2\\
+  \text{water term} &= 0.3013 + 0.2 = 0.5013.
+\end{align*}
+\textbf{Shadow}, three known pixels:
+\begin{align*}
+  \mathrm{BCE} &= (0.1054 + 0.1054 + 0.1054)/3 = 0.1054\\
+  \textstyle\sum pt &= 0, \quad \sum p = 0.1 + 0.1 + 0.1 = 0.3, \quad \sum t = 0\\
+  \mathcal{L}_{\text{Dice}} &= 1 - \frac{0 + 1}{0.3 + 0 + 1} = 1 - \frac{1}{1.3} = 1 - 0.7692 = 0.2308\\
+  \text{shadow term} &= 0.1054 + 0.2308 = 0.3362.
+\end{align*}
+\textbf{Cloud} has no known pixel and drops out. The loss is the mean over the two classes present:
+\[
+  (0.5013 + 0.3362)/2 = 0.8375 / 2 = 0.419.
+\]
+Calling \code{masked_bce_dice} on these numbers returns 0.4187.\tbrk\tagM{indradhanu workings/47-the-segmentation-head.md} Notice pixel 4: its
+water probability of 0.9 would have cost $-\ln 0.1 = 2.30$ had it been treated as ``not water''.
+\end{worked}
+
+\coursefig[0.9\linewidth]{iw-47-known-mask}{The worked example. Hatched cells are unknown and contribute nothing. Cloud, unknown on a dry
+scene, drops out of the class average; the loss is the mean of water's and shadow's terms.}{fig:seghead:knownmask}
+
+\begin{sourcenote}[: the code's Dice and class weights]
+In \code{masked_bce_dice} (\file{targets.py}, lines 76--95) the probabilities are multiplied by the known mask before the sums
+(\code{p = torch.sigmoid(logits) * k}), and the denominator is \code{(p + targets * k).sum(...)}: exactly \eqref{eq:seghead:mdice}. Since FT04
+an optional \code{class_weights} vector turns the class mean into a weighted mean over the classes present,
+$\sum_{k \in \text{present}} w_k\mathcal{L}_k / \sum_{k \in \text{present}} w_k$ (\cref{ch:ftruns}).
+\end{sourcenote}
+
+\begin{drift}
+A smoke test of the probe stage on one EnMAP shard (dev laptop, 2026-10-16) took water IoU from 0 to 0.16, 0.38 and 0.42 over four small epochs:
+the first evidence that F001's frozen features already separate water.\tbrk\tagM{docs/lld/finetune.md} The full probe (FT01) reached water 0.82 and
+cloud 0.80 (\cref{ch:ftruns}).
+\end{drift}
+
+\section{Checking labels when there is no ground truth}\label{sec:seghead:audit}
+
+\subsection{Why labels need auditing}
+
+The known-mask rules above did not come from a textbook. They come from a label audit run on 2026-10-16 over every EnMAP fine-tuning tile: 104
+shards, 15,492 tiles, 210 scenes.\tbrk\tagM{research/experiments/indradhanu-finetune/README.md} The audit overturned the first draft of
+\file{targets.py} in three places: it treated class code 0 as no-data, switched cloud labels off above 3,500\,m, and treated cirrus level 1 as
+``not thin cloud''. All three were wrong.
+
+EnMAP's labels are \emph{quality layers}: masks the provider's processor computes for every scene with automatic tests (is this pixel bright,
+cold, high?). A head trained on them learns their mistakes along with their truths. Nobody has a second, correct set of labels to compare with.
+So the audit asks a weaker question that can still be answered: \textbf{does what is labelled ``cloud'' look like cloud?}
+
+\begin{analogy}
+You suspect a thermometer is faulty but own no reference thermometer. You can still check it against physics: if it reads 35 degrees while the
+pond outside is frozen, the reading is wrong. You cannot say what the right temperature was, but you can find \emph{when} it goes wrong, and if
+that is always on frosty mornings, you know which readings to distrust. The audit's plausibility tests are the frozen pond; water vapour is the
+frosty morning.
+\end{analogy}
+
+\subsection{Test 1: is this ``cloud'' bright and flat?}
+
+A cloud is white, which gives two measurable properties:
+\begin{itemize}
+  \item \textbf{Bright}: the mean reflectance over 450--650\,nm is above 0.2. Clear land in EnMAP averages 0.07 there.
+  \item \textbf{Flat}: take the mean reflectance in four narrow windows, 460--500, 540--580, 640--680 and 840--880\,nm, and divide the smallest by
+    the largest. White means roughly equal in all four, so the ratio is at least 0.7.
+\end{itemize}
+A labelled cloud pixel that passes both is \emph{plausible}.
+
+\begin{worked}[label={we:seghead:plausible}]{Four spectra through the cloud test}
+Illustrative values\tbrk\tagA; do each ratio by hand.
+\begin{center}\small
+\begin{tabular}{lcccccl}
+\toprule
+& 460--500 & 540--580 & 640--680 & 840--880 & min/max & verdict\\
+\midrule
+cloud & 0.31 & 0.30 & 0.30 & 0.37 & $0.30/0.37 = 0.81$ & bright, flat\\
+vegetation & 0.04 & 0.08 & 0.05 & 0.40 & $0.04/0.40 = 0.10$ & dark\\
+bright dry soil & 0.18 & 0.25 & 0.32 & 0.38 & $0.18/0.38 = 0.47$ & bright, not flat\\
+snow & 0.55 & 0.54 & 0.52 & 0.48 & $0.48/0.55 = 0.87$ & bright, flat\\
+\bottomrule
+\end{tabular}
+\end{center}
+Snow passes, because snow is white too. The audit separates it with the \emph{normalised difference snow index}\index{NDSI}: snow is bright in green
+and dark near 1600\,nm, where cloud stays bright.
+\begin{align*}
+  \text{NDSI} &= \frac{\text{green} - \text{SWIR}_{1550\text{--}1680}}{\text{green} + \text{SWIR}_{1550\text{--}1680}}\\
+  \text{snow (SWIR 0.086):}&\quad \frac{0.54 - 0.086}{0.54 + 0.086} = \frac{0.454}{0.626} = 0.73 \quad (> 0.4\text{: snow-like})\\
+  \text{cloud (SWIR 0.34):}&\quad \frac{0.30 - 0.34}{0.30 + 0.34} = \frac{-0.04}{0.64} = -0.06 \quad (\text{not snow-like}).
+\end{align*}
+The SWIR values are the audit's group means: snow 0.086, EnMAP's cloud class 0.339.
+\end{worked}
+
+These are plausibility tests, not truth. A thin cloud over dark sea can fail ``bright'' and still be real. The audit uses them to find \emph{where}
+failures concentrate, not to relabel pixels.
+
+\subsection{Finding 1: class 0 is the cloud class}
+
+EnMAP's land/water map, \code{label_classes}, has four codes. The shard LLD first described codes 0 and 3 as no-data, and the first
+\file{targets.py} followed it. The audit looked at the pixels:
+\begin{itemize}
+  \item every one of the 1,414,747 class-0 pixels has \code{label_cloud = 1};
+  \item they hold 79\% of all cloud-labelled pixels;
+  \item their mean visible reflectance is 0.30, against 0.07 for clear land: bright, as cloud is.
+\end{itemize}
+Class 0 is EnMAP's cloud class; only class 3 is no-data. Treating class 0 as no-data would have thrown away most of the cloud the head is meant to
+learn:
+\begin{align*}
+  \text{training tiles with at least 1\% cloud:}&\quad 755 \text{ counting class 0}, \quad 269 \text{ without}\\
+  \text{lost:}&\quad 1 - 269/755 = 1 - 0.356 = 0.644 \approx 64\%.
+\end{align*}
+
+\begin{sourcenote}[: the LLDs on class 0 and on cloud\_plausible]
+\file{docs/lld/enmap-shards.md} (lines 43--44) now reads ``classes 0 = cloud, 1 land, 2 water, 3 no-data - class 0 was first read as no-data''; the
+course's remark that the LLD ``calls it no data'' is out of date, and the data, the source and the LLD now agree. Separately,
+\file{docs/lld/finetune.md} lists \code{cloud_plausible(refl, wl)} among the interfaces of \file{app/utils/segmentation/targets.py} (``no caller since
+FT04''), but no function of that name exists anywhere under \file{app/} (grep \code{def cloud_plausible}): the audit's test lives in the dev-laptop
+scripts, not in the repository. The source wins.
+\end{sourcenote}
+
+\subsection{Test 2: is this ``cirrus'' cloud, or the ground?}
+
+\emph{Cirrus} is thin, high ice cloud. A thin cloud adds scattered light to whatever is below it, and that added light shows most where the ground is
+dark. Over land the visible is dark (0.07) and the shortwave infrared at 2100--2250\,nm brighter (about 0.16), so real thin cloud brightens the visible
+\emph{more} than the SWIR. Inside one tile the audit compares pixels labelled cirrus with clear-land pixels (at least 200 of each). If the cirrus pixels
+differ from clear land mainly at 2100--2250\,nm, or hardly at all in the visible (less than 0.005), the label follows the ground (brighter, drier soil),
+not a cloud: it is \emph{surface-driven}\index{surface-driven label}.
+\begin{center}
+\begin{tabular}{llccl}
+\toprule
+tile & band & clear land & ``cirrus'' & change\\
+\midrule
+X & visible & 0.070 & 0.074 & $+0.004$\\
+  & SWIR & 0.160 & 0.210 & $+0.050$: SWIR rose more, surface-driven\\
+Y & visible & 0.070 & 0.110 & $+0.040$\\
+  & SWIR & 0.160 & 0.175 & $+0.015$: visible rose more, cloud-like\\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{Finding 2: dry air, not altitude}
+
+The draft rule switched off cloud labels on scenes above 3,500\,m. No scene in the set reaches it: every scene is in India, and the highest scene-mean
+elevation is 2,776\,m. What does predict surface-driven cirrus is the scene's \emph{water vapour}\index{water vapour}: the amount of water in the air
+column above each square centimetre of ground.
+
+\paragraph{The unit.} If all of it condensed it would form a layer of liquid water. Liquid water has density 1\,g/cm$^3$, so a column of $m$ grams
+over 1\,cm$^2$ is $m$\,cm$^3$ of water, a layer $m$\,cm deep:
+\[
+  0.75 \text{ g/cm}^2 \div 1 \text{ g/cm}^3 = 0.75 \text{ cm} = 7.5 \text{ mm}.
+\]
+\begin{center}
+\begin{tabular}{lccc}
+\toprule
+water vapour (g/cm$^2$) & scenes & cirrus 1 surface-driven & cirrus $\ge 2$ surface-driven\\
+\midrule
+below 0.5 & 3 & 100\% & 100\%\\
+0.5--0.75 & 8 & 90\% & 100\%\\
+0.75--1.0 & 20 & 79\% & 42\%\\
+1.0--1.25 & 33 & 26\% & 10\%\\
+1.5--2.0 & 60 & 14\% & 8\%\\
+2.0--2.5 & 33 & 66\% & 32\%\\
+2.5 and above & 32 & 42\% & 3\%\\
+\bottomrule
+\end{tabular}
+\end{center}
+Source: \tbrk\tagM{research/experiments/indradhanu-finetune/README.md}. Below 0.75\,g/cm$^2$, cirrus labels are almost all the ground. Above 1.0
+most are not, though not all, and the 2.0--2.5 row shows the relationship is not tidy. A likely physical reason, consistent with the table: cirrus
+tests usually rely on a band near 1380\,nm, where water vapour normally absorbs so strongly that the ground is invisible and only high cloud
+shows. In very dry air the ground shows through and looks like cirrus. The high scenes that prompted the draft rule were also dry; altitude was
+standing in for dryness.
+
+\coursefig[0.95\linewidth]{iw-48-label-qa}{(a) Share of cirrus labels that are surface-driven, by the scene's water vapour, for cirrus level 1 and
+level 2 or more; below 0.75\,g/cm$^2$ (dashed) nearly all are. (b) Candidate policies: share of suspect labels each removes against share of
+plausible labels it also removes. The adopted rule removes 62.6\% of suspect labels for 13.6\% of plausible ones.}{fig:seghead:labelqa}
+
+\subsection{Choosing the rule by its trade-off}
+
+Any rule that removes bad labels also removes some good ones. The audit scored each candidate on the training split by the share of
+\emph{suspect} labels it removes (surface-driven cirrus, implausible cloud) and the share of \emph{plausible} labels it removes too:
+\begin{center}\small
+\begin{tabular}{lcccc}
+\toprule
+policy & scenes & tiles hit & suspect removed & plausible removed\\
+\midrule
+water vapour below 0.50 & 3 & 1.5\% & 44.0\% & 0.2\%\\
+\textbf{below 0.75 (adopted)} & \textbf{11} & \textbf{5.6\%} & \textbf{62.6\%} & \textbf{13.6\%}\\
+below 0.93 (lowest tenth) & 21 & 10.6\% & 62.6\% & 13.6\%\\
+water vapour below 1.0 & 30 & 15.2\% & 66.6\% & 15.7\%\\
+elevation above 1,500\,m & 13 & 6.6\% & 43.1\% & 18.8\%\\
+elevation above 3,500\,m (draft) & 0 & 0\% & 0\% & 0\%\\
+\bottomrule
+\end{tabular}
+\end{center}
+Read the adopted row as a ratio, suspect labels removed per plausible label removed:
+\begin{align*}
+  \text{adopted:}&\quad 62.6 / 13.6 = 4.6\\
+  \text{elevation} > 1{,}500\text{ m:}&\quad 43.1 / 18.8 = 2.3 \quad\text{(half as selective).}
+\end{align*}
+The lowest-tenth rule (below 0.93) removes exactly the same labels as the fixed 0.75, because the scenes between 0.75 and 0.93 hold no suspect
+labels to remove, but it switches cloud labels off on 1,545 tiles instead of 808, nearly twice as many. A fixed value wins. The adopted rule touches
+11 training scenes and no test scene (the test split's driest scene has 0.94\,g/cm$^2$).
+
+In the code \code{meta.json} stores \code{scene_wv} in g/cm$^2$ times 1000, so the threshold is 750 (\code{LabelPolicy.low_water_vapour}). A scene with
+\code{scene_wv = 698} has $698/1000 = 0.698$\,g/cm$^2 < 0.75$: dry.
+
+\begin{keypoint}
+The rule was fixed from the audit before any training and is never tuned on results: a rule tuned on IoU would quietly drop whatever labels the head
+found hard, the opposite of an audit.
+\end{keypoint}
+
+\subsection{Findings 3 to 5: a cirrus level nobody can read, duplicates, rarity}
+
+\paragraph{Cirrus level 1 is neither yes nor no.} Over water the audit measured the share of pixels brighter than 0.05 at 1550--1680\,nm, where water
+is black and cloud is not: clear water 3.9\%, cirrus level 1 1.45\%, cirrus level $\ge 2$ 89\%. Level 1 does not look like cloud, so it cannot be a
+positive; it is a label that says ``maybe'', so it cannot be a clean negative. It is unknown for thin cloud.
+
+\paragraph{Snow wins over cloud; no water truth under cloud.} 122,815 pixels are labelled both snow and cloud; snow is white, so the cloud test fires
+on it, and cloud is made unknown there. Pixels labelled water \emph{and} cirrus $\ge 2$ have a mean near-infrared reflectance of 0.179, against 0.024
+for clear water: land-bright, not water. The water label there probably comes from a map of where water usually is, so water is unknown under cloud.
+
+\paragraph{Four scenes counted twice.} Four scenes appear under two processor versions (576 tiles, all in training). A skip list,
+\file{research/experiments/indradhanu-finetune/band_lists/enmap_drop_duplicate_scenes.json}, drops them in the loader workers by scene id.
+
+\paragraph{Some classes are rare.} After the policy, in the training split: water 6.9\% of labelled pixels, thin cloud 1.97\%, cloud 0.66\%, snow
+0.094\%, shadow 0.086\%. Shadow is about one pixel in $100 / 0.086 = 1{,}163$. Snow has one tile in the test split (639 pixels), too few to measure an
+IoU at all. And 53\% of shadow pixels have no cloud within 900\,m in the same tile: an upper bound, since the cloud may sit in the neighbouring tile,
+but a reason to treat shadow labels with care too.
+
+\begin{confusions}
+\confusion{Is there a ``clear'' or ``land'' output?}{No. Five classes, each yes/no. Land is water's ``no'' where the pixel is labelled; clear sky is
+cloud's and thin cloud's ``no''.}
+\confusion{Unknown pixels are counted as negatives, then?}{No; that is the whole point of the known mask. They contribute nothing to BCE, to Dice or to
+IoU, and a class with no known pixel leaves the class average.}
+\confusion{Why not use only Dice, since it handles rare classes?}{Dice's gradient for each pixel depends on whole-class sums and is unstable when
+the sums are small; BCE gives every pixel a bounded, local gradient $p - t$. The two together give stable training and full weight to rare classes.}
+\confusion{Does adding the head change reconstruction?}{Not by itself: an untrained head leaves the reconstruction pass untouched (a test pins this).
+Training the encoder on the segmentation loss can, which is why every stage is gated on the detection bench (\cref{ch:finetune}).}
+\confusion{The audit says these labels are wrong; why not relabel them?}{The tests are plausibility checks, not truth. They find \emph{where} failures
+concentrate; they cannot say what each pixel really is. ``Unknown'' is the honest answer.}
+\confusion{Does the dry-air rule throw away those scenes?}{No. Only cloud and thin cloud become unknown; their water, shadow and snow labels still teach.}
+\confusion{Why a whole-scene rule rather than a per-pixel one?}{Water vapour is a scene property and the failures follow it. Per-pixel tests would bake
+the audit's own heuristics into the training targets.}
+\end{confusions}
+
+\begin{checkyourself}
+\item\label{ex:seghead:1} Use the closed form $P(d, K) = 13d^2 + (518 + 144K)d + 16K$ to compute the head's parameter count for $d = 64$, $K = 5$, and
+  check it layer by layer.
+\item\label{ex:seghead:2} A pixel has logits $+1.0$ for water and thin cloud and $-3.0$ for the other three. What does the sigmoid give for water
+  ($e^{-1} = 0.368$)? What would a softmax over the five logits give for water ($e^{-3} = 0.0498$, $e^{1} = 2.718$)?
+\item\label{ex:seghead:3} Compute the BCE and its gradient $p - t$ for $t = 1$, $p = 0.2$ and for $t = 0$, $p = 0.2$. Then verify the gradient for the
+  first pixel numerically: its logit is $z = \ln(0.2/0.8) = -1.386$; compute $\ell$ at $z = -1.376$ and at $z = -1.396$ and divide the difference by 0.02.
+\item\label{ex:seghead:4} Redo the water term of \cref{we:seghead:knownmask} with pixel 3's probability at 0.2 instead of 0.5. Then compute the soft
+  Dice loss of \cref{we:seghead:dice2x2} if the top-right probability rises from 0.4 to 0.9.
+\item\label{ex:seghead:5} Target cloud covers 8 pixels, the prediction 10 pixels, 6 of them correct. Compute IoU and Dice, and check $D = 2J/(1+J)$.
+\item\label{ex:seghead:6} A labelled cloud pixel has window means 0.22, 0.24, 0.25, 0.36 and visible mean 0.24. Is it plausible? A scene has
+  \code{scene_wv = 812}: are its cloud labels used? Which ratio of suspect to plausible labels does ``water vapour below 1.0'' achieve, and why was it
+  not chosen?
+\end{checkyourself}
+
+\nextchapter{ch:finetune}
+\endgroup

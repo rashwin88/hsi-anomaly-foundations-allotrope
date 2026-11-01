@@ -89,9 +89,9 @@ class BandFilterApplyConfig(BaseModel):
     quality_masks_to_apply: list[str] = Field(
         default_factory=list,
         description=(
-            "Quality mask layers (EnMAP only). Pixels flagged by any of "
-            "these are zeroed out before voxel-fraction masking. "
-            "Available: cloud, cirrus, haze, cloud_shadow, snow."
+            "Quality mask layers. Pixels flagged by any of these are zeroed "
+            "out before voxel-fraction masking. EnMAP: cloud, cirrus, haze, "
+            "cloud_shadow, snow. Tanager: cloud, cirrus (Planet's beta masks)."
         ),
     )
 
@@ -126,7 +126,7 @@ _DEFAULT_PRISMA: dict[str, Any] = {
     "min_valid_pixel_pct": 20.0,
     "max_invalid_voxel_fraction": 0.4,
     "quality_masks_to_apply": [],
-    "use_common_wavelength_grid": True,
+    "use_common_wavelength_grid": False,   # native bands (2026-10-31): V2 reads them; 165-grid models resample at scoring
     "apply_nearest_valid_fill": True,
 }
 
@@ -141,7 +141,37 @@ _DEFAULT_AVIRIS_NG: dict[str, Any] = {
     "min_valid_pixel_pct": 20.0,
     "max_invalid_voxel_fraction": 0.4,
     "quality_masks_to_apply": [],
-    "use_common_wavelength_grid": True,
+    "use_common_wavelength_grid": False,   # native bands (2026-10-31): V2 reads them; 165-grid models resample at scoring
+    "apply_nearest_valid_fill": True,
+}
+
+_DEFAULT_TANAGER: dict[str, Any] = {
+    # AVIRIS-NG's recipe: also ~5 nm native bands. Planet's good_wavelengths
+    # flags (1342-1443 / 1783-1967 nm) drop through band_validity like a bbl;
+    # nodata_pixels is always applied. Cloud is excluded, cirrus with it.
+    "exclusion_ranges": [
+        [0, 450], [912, 978], [1131, 1152], [1350, 1450], [1800, 1950],
+    ],
+    "edge_bands_to_trim": 3,
+    "min_valid_pixel_pct": 20.0,
+    "max_invalid_voxel_fraction": 0.4,
+    "quality_masks_to_apply": ["cloud", "cirrus"],
+    "use_common_wavelength_grid": False,
+    "apply_nearest_valid_fill": True,
+}
+
+_DEFAULT_GENERIC_HSI: dict[str, Any] = {
+    # Any other hyperspectral file (docs/lld/generic-hsi.md): native bands with the usual
+    # exclusion windows. No provider quality masks exist, so none are asked for; an ENVI
+    # `bbl` drops through band_validity like AVIRIS-NG's.
+    "exclusion_ranges": [
+        [0, 450], [912, 978], [1131, 1152], [1350, 1450], [1800, 1950],
+    ],
+    "edge_bands_to_trim": 3,
+    "min_valid_pixel_pct": 20.0,
+    "max_invalid_voxel_fraction": 0.4,
+    "quality_masks_to_apply": [],
+    "use_common_wavelength_grid": False,
     "apply_nearest_valid_fill": True,
 }
 
@@ -154,7 +184,7 @@ _DEFAULT_ENMAP: dict[str, Any] = {
     "min_valid_pixel_pct": 20.0,
     "max_invalid_voxel_fraction": 0.4,
     "quality_masks_to_apply": ["cloud", "cloud_shadow", "haze"],
-    "use_common_wavelength_grid": True,
+    "use_common_wavelength_grid": False,   # native bands (2026-10-31): V2 reads them; 165-grid models resample at scoring
     "apply_nearest_valid_fill": True,
 }
 
@@ -163,11 +193,8 @@ _DEFAULT_ENMAP: dict[str, Any] = {
 
 META = ActionTypeMeta(
     type=KIND,
-    label="Apply spectral band filter",
-    short_description=(
-        "Re-vend the scene with atmospheric-window exclusion, edge trim, "
-        "spectral fill, and 10 nm common-grid resample."
-    ),
+    label="Band filter",
+    short_description="Drop noisy bands and fill gaps so the scene is ready to analyse.",
     description=(
         "Onboarding pickles a *generic* vendable for the scene: "
         "DN→reflectance, sensor-flagged bad bands, validity masks. That's "
@@ -182,8 +209,8 @@ META = ActionTypeMeta(
         "• trim noisy edge bands at each detector boundary;\n"
         "• prune bands with too few valid pixels and pixels with too many "
         "invalid bands;\n"
-        "• apply EnMAP quality masks (cloud / cloud_shadow / haze) when "
-        "available;\n"
+        "• apply quality masks when available (EnMAP cloud / cloud_shadow / "
+        "haze, Tanager cloud / cirrus);\n"
         "• fill partial spectra with shape-preserving PCHIP interpolation;\n"
         "• resample to the 10 nm common wavelength grid for cross-sensor "
         "consistency;\n"
@@ -193,16 +220,12 @@ META = ActionTypeMeta(
         "every downstream HSI Action consumes via `input_action_output_ids` — "
         "scene_segmentation, anomaly_scoring, spectral_detection."
     ),
-    when_to_use=(
-        "First Action on every PRISMA or EnMAP scene. Re-run with adjusted "
-        "exclusion ranges or thresholds when investigating sensor-specific "
-        "artefacts."
-    ),
+    when_to_use="Run first on every hyperspectral scene.",
     inputs=[
         ActionInputSpec(
             key="input_scene_id",
             label="Scene",
-            description="The hyperspectral scene to re-vend.",
+            description="",
             ref_kind="scene",
             required=True,
         ),
@@ -244,11 +267,13 @@ META = ActionTypeMeta(
     # common-grid resample, EnMAP quality masks are all HSI concerns.
     # Single-band thermal scenes (Landsat 9 B10) don't need this step;
     # their onboarding vendable is already inference-ready.
-    accepted_sensor_types=["prisma", "enmap", "aviris_ng"],
+    accepted_sensor_types=["prisma", "enmap", "aviris_ng", "tanager", "generic_hsi"],
     default_config_per_sensor={
         "prisma": _DEFAULT_PRISMA,
         "enmap": _DEFAULT_ENMAP,
         "aviris_ng": _DEFAULT_AVIRIS_NG,
+        "tanager": _DEFAULT_TANAGER,
+        "generic_hsi": _DEFAULT_GENERIC_HSI,
     },
 )
 
@@ -310,6 +335,12 @@ def run(ctx: Any) -> None:
     from app.utils.dataset_builder.prisma_dataset_builder import (
         PrismaDatasetBuilder,
     )
+    from app.utils.dataset_builder.tanager_dataset_builder import (
+        TanagerDatasetBuilder,
+    )
+    from app.utils.dataset_builder.generic_hsi_dataset_builder import (
+        GenericHsiDatasetBuilder,
+    )
     from app.utils.pixel_fill.nearest_valid_fill import nearest_valid_fill
 
     cfg = ctx.configuration
@@ -345,6 +376,10 @@ def run(ctx: Any) -> None:
         builder = EnmapDatasetBuilder(file_source_configuration=file_source)
     elif sensor == "aviris_ng":
         builder = AvirisNGDatasetBuilder(file_source_configuration=file_source)
+    elif sensor == "tanager":
+        builder = TanagerDatasetBuilder(file_source_configuration=file_source)
+    elif sensor == "generic_hsi":
+        builder = GenericHsiDatasetBuilder(file_source_configuration=file_source)
     else:
         raise ValueError(
             f"band_filter_apply: unsupported sensor {sensor!r} "
@@ -434,8 +469,12 @@ def run(ctx: Any) -> None:
         "pickle_filename": _VENDABLE_FILENAME,
         "pickle_size_mb": round(pickle_size_mb, 2),
         "quality_masks_applied": cfg.get("quality_masks_to_apply", []),
+        # Named masks the scene does not carry (a Tanager ENVI upload has none); not an error.
+        "quality_masks_skipped": list(getattr(builder, "quality_masks_skipped", [])),
         "exclusion_ranges_nm": cfg["exclusion_ranges"],
         "edge_bands_to_trim": cfg["edge_bands_to_trim"],
+        # "not_reflectance" for a generic_hsi cube in DN / radiance; None = reflectance.
+        "scene_units": getattr(vendable, "units", None),
     }
 
     # --- Rich diagnostics on disk (heavy arrays go here, NOT into DB) -

@@ -1,0 +1,139 @@
+== 1. HyperSL parameters, by hand and from the checkpoint
+one transformer block: 789760
+encoder 8 blocks 6318080 decoder 3 blocks 2369280 cross-attn 131584 tokenizer convs 204544 BN affine 2048 tokens 512 norms 1024 head 769
+trainable total 9027841
+checkpoint total entries 9158021 buffers (pe, div_term, BN stats) 130180 -> trainable 9027841 epoch 10 sha256 3d5f1914 ... b74a68c
+tokenizer share of trainable 2.29% | conv1x1 768->256 alone 196864
+div_term first, second, last: 1.000000 0.964662 0.010366
+  lambda 450: p=5.0  sin(p*div0)=-0.9589  cos=+0.2837  sin(p*div_last)=+0.0518
+  lambda 1000: p=60.0  sin(p*div0)=-0.3048  cos=-0.9524  sin(p*div_last)=+0.5826
+  lambda 2400: p=200.0  sin(p*div0)=-0.8733  cos=+0.4872  sin(p*div_last)=+0.8764
+wavelength in um instead of nm: p for 1.0 um = -39.9
+mask 0.95 on 149 bands: visible int(149*0.05) = 7 hidden 142
+mask 0.95 on 224-7=217 EnMAP bands: visible 10
+
+== 2. per-scene min-max on a 3-pixel, 2-band toy scene
+S1 min [0.1 0.3] max [0.3 0.5] span [0.2 0.2]
+    [0.1 0.3] -> [0. 0.]
+    [0.2 0.5] -> [0.5 1. ]
+    [0.3 0.4] -> [1.  0.5]
+S2 min [0.05 0.2 ] max [0.4 0.6] span [0.35 0.4 ]
+    [0.05 0.2 ] -> [0. 0.]
+    [0.2 0.5] -> [0.4286 0.75  ]
+    [0.4 0.6] -> [1. 1.]
+(a) the same spectrum (0.20, 0.50) is [0.5 1. ] in S1 and [0.4286 0.75  ] in S2
+(b) S1 + bright anomaly (0.60, 0.90): min [0.1 0.3] max [0.6 0.9]
+    [0.1 0.3] was [0. 0.] now [0. 0.]
+    [0.2 0.5] was [0.5 1. ] now [0.2    0.3333]
+    [0.3 0.4] was [1.  0.5] now [0.4    0.1667]
+    anomaly -> [1. 1.]
+(c) library t=(0.70, 0.20) in S1's frame: [ 3.  -0.5] - outside [0, 1]; clipped: [1. 0.]
+    if t is in the scene, the frame becomes min [0.1 0.2] max [0.7 0.5] and t -> [1. 0.] ; p1 -> [0.     0.3333]
+(d) spectral angle before and after the per-band map, S1
+    p1,p2: reflectance cos 0.9983 angle 3.37 deg | min-max cos nan angle 0.00 deg
+    p2,p3: reflectance cos 0.9656 angle 15.07 deg | min-max cos 0.8000 angle 36.87 deg
+    p1,p3: reflectance cos 0.9487 angle 18.43 deg | min-max cos nan angle 0.00 deg
+    pure scaling by 1/span: (0.9656157585206696, 15.068488159492228) (0.9656157585206697, 15.068488159492201) (0.9870072699305107, 9.246112745563194)
+    fixed z-score (mean 0.25/0.35, std 0.10/0.12): (0.20,0.50) -> [-0.5   1.25] in every scene; t -> [ 4.5  -1.25]
+
+== 3. a kernel over band index: how many nm it spans
+PRISMA 234 (all good bands): 234 bands, 407.0-2497.1 nm, median step 9.06 nm; gaps > 25 nm: 
+   kernel  5: span min 16.6  median 36.4  max 45.0 nm  (centred at 1372.9: 1349.8 .. 1394.8)
+   kernel  9: span min 35.9  median 72.9  max 88.7 nm  (centred at 1394.8: 1349.8 .. 1438.5)
+   kernel 13: span min 74.5  median 108.9  max 132.7 nm  (centred at 1306.2: 1240.2 .. 1372.9)
+PRISMA 149 (HyperSL runs here): 149 bands, 489.8-2349.8 nm, median step 9.78 nm; gaps > 25 nm: 1120.7->1185.6 (64.9); 1317.3->1502.0 (184.8); 1784.7->2036.3 (251.5)
+   kernel  5: span min 28.9  median 39.7  max 280.4 nm  (centred at 1775.1: 1755.8 .. 2036.3)
+   kernel  9: span min 59.0  median 80.5  max 319.4 nm  (centred at 1755.8: 1716.9 .. 2036.3)
+   kernel 13: span min 88.9  median 122.5  max 358.9 nm  (centred at 1736.5: 1677.3 .. 2036.3)
+EnMAP via SpectralEarth 202 (water windows removed): 202 bands, 418.4-2445.3 nm, median step 7.80 nm; gaps > 25 nm: 1282.9->1518.9 (235.9); 1717.5->1977.1 (259.6)
+   kernel  5: span min 16.2  median 31.0  max 291.6 nm  (centred at 1706.9: 1685.5 .. 1977.1)
+   kernel  9: span min 32.5  median 62.0  max 335.0 nm  (centred at 1685.5: 1642.1 .. 1977.1)
+   kernel 13: span min 50.1  median 93.1  max 379.2 nm  (centred at 1663.9: 1597.9 .. 1977.1)
+product 165-band grid: 165 bands, 460.0-2450.0 nm, median step 10.00 nm; gaps > 25 nm: 910.0->980.0 (70.0); 1130.0->1160.0 (30.0); 1340.0->1460.0 (120.0); 1790.0->1960.0 (170.0)
+   kernel  5: span min 40.0  median 40.0  max 200.0 nm  (centred at 1780.0: 1760.0 .. 1960.0)
+   kernel  9: span min 80.0  median 80.0  max 240.0 nm  (centred at 1760.0: 1720.0 .. 1960.0)
+   kernel 13: span min 120.0  median 120.0  max 280.0 nm  (centred at 1740.0: 1680.0 .. 1960.0)
+PRISMA149 bands around the first gap > 100 nm: [1273.5  1284.49 1295.42 1306.22 1317.26 1502.02 1512.63 1523.22 1533.78]
+   window before gap [1250.98 1262.53 1273.5  1284.49 1295.42] span 44.44
+   window across gap [1295.42 1306.22 1317.26 1502.02 1512.63] span 217.21
+   steps inside that window: [ 10.8   11.04 184.77  10.61]
+
+== 4. self-completion vs spatial completion, 3 bands
+background [0.2 0.3 0.4]: self-completion of band 2 = (0.20+0.40)/2 = 0.300, residual -0.000; spatial residual [0. 0. 0.], squared sum 0.0000
+smooth anomaly [0.6 0.5 0.4]: self-completion of band 2 = (0.60+0.40)/2 = 0.500, residual +0.000; spatial residual [0.4 0.2 0. ], squared sum 0.2000
+anomaly with a dip [0.6 0.3 0.6]: self-completion of band 2 = (0.60+0.60)/2 = 0.600, residual -0.300; spatial residual [0.4 0.  0.2], squared sum 0.2000
+least-squares band2 ~ w1*band1 + w3*band3 + c on 2000 noisy linear backgrounds [A]: w1 0.4981 w3 0.5011 c -0.00018
+   learned predictor on smooth anomaly: 0.4991 (true 0.50)
+   learned predictor on dip: 0.5994 (true 0.30)
+
+== 5. 3x3 smoothing and a TV penalty on an abundance map
+single pixel at fill 1.0: 3x3 mean at centre = 1.0/9 = 0.1111; at a neighbour also 0.1111
+single pixel at fill 0.51: 3x3 mean at centre = 0.51/9 = 0.0567; at a neighbour also 0.0567
+single pixel at fill 0.13: 3x3 mean at centre = 0.13/9 = 0.0144; at a neighbour also 0.0144
+lambda 0.005: J(a') = c (a - a')^2 + 4 lambda a'; minimiser a' = max(0, a - 2 lambda / c) = max(0, a - 0.050); a=0.13 -> 0.080; a=0.51 -> 0.460; a=1 -> 0.950
+lambda 0.013: J(a') = c (a - a')^2 + 4 lambda a'; minimiser a' = max(0, a - 2 lambda / c) = max(0, a - 0.130); a=0.13 -> 0.000; a=0.51 -> 0.380; a=1 -> 0.870
+lambda 0.02: J(a') = c (a - a')^2 + 4 lambda a'; minimiser a' = max(0, a - 2 lambda / c) = max(0, a - 0.200); a=0.13 -> 0.000; a=0.51 -> 0.310; a=1 -> 0.800
+square target 1x1: area 1, perimeter edges 4, perimeter/area 4.00
+square target 2x2: area 4, perimeter edges 8, perimeter/area 2.00
+square target 3x3: area 9, perimeter edges 12, perimeter/area 1.33
+square target 5x5: area 25, perimeter edges 20, perimeter/area 0.80
+
+== 6. recorded results turned into figure data
+cloud variant C: total 784,120; row sums [383474, 280448, 70793, 49405]
+   recall [89.  87.1 28.9 86.5] precision [88.1 77.8 55.5 93.5] overall accuracy 82.75%
+   cirrus row: correct 20472 of 70793; called clear 21979, cloud 28341
+cloud variant B: total 784,120; row sums [383474, 280448, 70793, 49405]
+   recall [89.4 80.4 67.9 96.8] precision [90.8 84.2 55.6 91. ] overall accuracy 84.70%
+   cirrus row: correct 48037 of 70793; called clear 6861, cloud 15888
+HySU true areas vs 3x3 smoothing: area/9 = [0.014, 0.057, 0.222, 0.911, 2.044]
+mSAD rad -> deg for DC3 VCA 0.069 and paper 0.199: 3.95 11.4
+fp-filter oracle share of false-positive pixels removed at 90% object recall, baseline: [0.339, 0.128, 0.198, 0.262], mean 0.232
+fp-filter oracle share of false-positive pixels removed at 90% object recall, scores/B: [0.059, 0.219, 0.223, 0.249], mean 0.188
+fp-filter oracle share of false-positive pixels removed at 90% object recall, hypersl/B: [0.615, 0.464, 0.188, 0.318], mean 0.396
+fp-filter oracle share of false-positive pixels removed at 90% object recall, both/B: [0.611, 0.466, 0.159, 0.365], mean 0.400
+splib run, mask 0, per-curve: set1 median recon angle anomalous 3.18 vs background 6.17 deg, AUC 0.094
+splib run, mask 0, per-curve: set2 median recon angle anomalous 4.02 vs background 5.16 deg, AUC 0.220
+splib run, mask 0, per-curve: set3 median recon angle anomalous 3.26 vs background 4.27 deg, AUC 0.242
+splib run, mask 0, per-curve: set4 median recon angle anomalous 2.74 vs background 3.99 deg, AUC 0.104
+mean recon AUC 0.165
+Chikusei K-means OA raw: ours 39.6 paper 42.69 diff -3.09
+Chikusei K-means OA PCA: ours 37.68 paper 41.11 diff -3.43
+Chikusei K-means OA HyperSL band 0-1: ours 59.6 paper 60.23 diff -0.63
+Chikusei K-means OA HyperSL raw: ours 48.19
+HyperSL raw vs 0-1 input OA loss 11.41
+fine-tune BOS: gain ours +1.46 paper +2.61; ratio 0.56
+fine-tune IP: gain ours +2.79 paper +3.44; ratio 0.81
+
+== 7. HyperSL on the labelled PRISMA bench (research/experiments/hypersl-anomaly-bench)
+FTH3_ep5 RM, cloud excl.     pAUC 0.1892  ROC 0.869  TPR@0.001 0.065  caught1 449 (49.4%)  caught0.1 16.0%  tiers [62.2, 43.9, 42.0]  per-scene pAUC [0.2616, 0.1874, 0.0861, 0.2217]
+FTH3_ep5 RM                  pAUC 0.1749  ROC 0.866  TPR@0.001 0.058  caught1 422 (46.4%)  caught0.1 13.9%  tiers [59.2, 41.0, 39.0]  per-scene pAUC [0.2616, 0.1874, 0.0543, 0.1964]
+PCA-RX, cloud excl.          pAUC 0.1390  ROC 0.842  TPR@0.001 0.031  caught1 377 (41.5%)  caught0.1 8.5%  tiers [51.3, 36.7, 36.3]  per-scene pAUC [0.1734, 0.1171, 0.1092, 0.1563]
+PCA-RX                       pAUC 0.1281  ROC 0.839  TPR@0.001 0.029  caught1 361 (39.7%)  caught0.1 8.1%  tiers [48.7, 35.4, 35.0]  per-scene pAUC [0.1734, 0.1171, 0.0822, 0.14]
+MNF-RX, cloud excl.          pAUC 0.0966  ROC 0.753  TPR@0.001 0.024  caught1 280 (30.8%)  caught0.1 5.2%  tiers [38.8, 29.2, 24.3]  per-scene pAUC [0.0871, 0.1267, 0.0754, 0.0971]
+MNF-RX                       pAUC 0.0750  ROC 0.749  TPR@0.001 0.019  caught1 249 (27.4%)  caught0.1 3.4%  tiers [34.9, 25.2, 22.0]  per-scene pAUC [0.0871, 0.1267, 0.0196, 0.0664]
+HyperSL RM, cloud excl.      pAUC 0.0947  ROC 0.761  TPR@0.001 0.024  caught1 369 (40.6%)  caught0.1 6.7%  tiers [52.6, 36.4, 32.7]  per-scene pAUC [0.0875, 0.0966, 0.0599, 0.135]
+HyperSL RM                   pAUC 0.0832  ROC 0.757  TPR@0.001 0.020  caught1 350 (38.5%)  caught0.1 5.4%  tiers [52.0, 33.8, 29.7]  per-scene pAUC [0.0875, 0.0966, 0.0286, 0.1199]
+HyperSL L2, cloud excl.      pAUC 0.0182  ROC 0.628  TPR@0.001 0.007  caught1 137 (15.1%)  caught0.1 4.3%  tiers [22.0, 11.1, 12.0]  per-scene pAUC [0.0415, 0.0225, 0.0069, 0.0021]
+HyperSL L2                   pAUC 0.0175  ROC 0.624  TPR@0.001 0.007  caught1 130 (14.3%)  caught0.1 4.0%  tiers [21.1, 10.8, 11.0]  per-scene pAUC [0.0415, 0.0225, 0.004, 0.0021]
+HyperSL loss, cloud excl.    pAUC 0.0039  ROC 0.503  TPR@0.001 0.000  caught1 63 (6.9%)  caught0.1 0.9%  tiers [7.9, 4.9, 8.0]  per-scene pAUC [0.0021, 0.0117, 0.0019, 0.0]
+HyperSL loss                 pAUC 0.0039  ROC 0.501  TPR@0.001 0.000  caught1 63 (6.9%)  caught0.1 0.9%  tiers [7.9, 4.9, 8.0]  per-scene pAUC [0.0021, 0.0117, 0.0019, 0.0]
+chance caught top 1%: 10.2
+(pixel, band) pairs never hidden in 4 draws: expected 2936 = N x 149 x (7/149)^4 summed; measured 2866; (7/149)^4 = 4.8713e-06
+set1 expected never-hidden: 992708 x 149 x (7/149)^4 = 721; measured 706
+HyperSL L2 - FTH3_ep5 RM: pAUC -0.1574 [-0.1790, -0.1351], caught1 -32.1 [-35.4, -28.9] pts
+HyperSL loss - FTH3_ep5 RM: pAUC -0.1710 [-0.1936, -0.1479], caught1 -39.5 [-42.9, -36.2] pts
+HyperSL RM - FTH3_ep5 RM: pAUC -0.0917 [-0.1060, -0.0776], caught1 -7.9 [-10.8, -5.2] pts
+PCA-RX - FTH3_ep5 RM: pAUC -0.0467 [-0.0604, -0.0327], caught1 -6.7 [-8.8, -4.5] pts
+MNF-RX - FTH3_ep5 RM: pAUC -0.0999 [-0.1170, -0.0826], caught1 -19.0 [-22.0, -16.3] pts
+HyperSL L2, cloud excl. - FTH3_ep5 RM, cloud excl.: pAUC -0.1709 [-0.1945, -0.1476], caught1 -34.3 [-37.6, -31.0] pts
+HyperSL loss, cloud excl. - FTH3_ep5 RM, cloud excl.: pAUC -0.1852 [-0.2092, -0.1606], caught1 -42.5 [-45.8, -39.2] pts
+HyperSL RM, cloud excl. - FTH3_ep5 RM, cloud excl.: pAUC -0.0944 [-0.1094, -0.0800], caught1 -8.8 [-11.7, -6.2] pts
+PCA-RX, cloud excl. - FTH3_ep5 RM, cloud excl.: pAUC -0.0502 [-0.0638, -0.0364], caught1 -7.9 [-10.2, -5.6] pts
+MNF-RX, cloud excl. - FTH3_ep5 RM, cloud excl.: pAUC -0.0926 [-0.1097, -0.0753], caught1 -18.6 [-21.5, -15.8] pts
+HyperSL RM - PCA-RX: pAUC -0.0450 [-0.0589, -0.0318], caught1 -1.2 [-4.0, +1.5] pts
+HyperSL RM, cloud excl. - PCA-RX, cloud excl.: pAUC -0.0443 [-0.0577, -0.0320], caught1 -0.9 [-3.5, +1.9] pts
+step1 set1: {'bands': 149, 'pixels': 992708, 'gpu_s': 428.5, 'total_s': 437.5, 'bands_never_hidden': 706, 'mean_l2': 0.0007401551702059805, 'median_cos': 0.9874452352523804, 'wavelength_min_max': [489.79486083984375, 2349.79150390625]}
+step1 set2: {'bands': 149, 'pixels': 1050895, 'gpu_s': 462.4, 'total_s': 473.6, 'bands_never_hidden': 736, 'mean_l2': 0.001210172544233501, 'median_cos': 0.9976986050605774, 'wavelength_min_max': [489.79486083984375, 2349.79150390625]}
+step1 set3: {'bands': 149, 'pixels': 995483, 'gpu_s': 437.5, 'total_s': 446.2, 'bands_never_hidden': 708, 'mean_l2': 0.0007253445219248533, 'median_cos': 0.9974220395088196, 'wavelength_min_max': [489.79486083984375, 2349.79150390625]}
+step1 set4: {'bands': 149, 'pixels': 1005979, 'gpu_s': 444.3, 'total_s': 452.4, 'bands_never_hidden': 716, 'mean_l2': 0.0014815195463597775, 'median_cos': 0.9957726001739502, 'wavelength_min_max': [489.79486083984375, 2349.79150390625]}
+GPU time total 1773 s for 4,045,065 pixels x 4 draws: 438 us per pixel

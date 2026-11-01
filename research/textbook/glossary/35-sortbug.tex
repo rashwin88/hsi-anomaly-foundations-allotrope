@@ -1,0 +1,21 @@
+\glossentry{Linear interpolation}{An estimate of a value between two samples by the straight line through them: y = (1 - t) y0 + t y1, with t the fraction of the way from x0 to x1.}
+\glossentry{np.interp}{NumPy's one-dimensional linear interpolator, np.interp(x, xp, fp); it requires the sample positions xp to be increasing and does not check.}
+\glossentry{Contract}{What a function promises to return, provided its inputs meet stated conditions.}
+\glossentry{Precondition}{A condition the inputs of a function must satisfy for its contract to hold; when it is violated, the function promises nothing.}
+\glossentry{Undefined behaviour (by contract)}{Output that a function's documentation declares meaningless for some inputs; whatever a given version returns cannot be relied on.}
+\glossentry{Resample matrix}{The (G, C) matrix that maps a spectrum on C scene bands to G grid wavelengths; its b-th column is the interpolation of the b-th unit vector.}
+\glossentry{Unit vector}{A list with 1 in one position and 0 elsewhere; any spectrum is a weighted sum of unit vectors.}
+\glossentry{Linear map}{A map for which the image of a sum is the sum of images and scaling the input scales the output; every linear map between lists of numbers is a matrix.}
+\glossentry{argsort}{The permutation of positions that puts a list in ascending order; np.argsort((700, 600, 500)) is (2, 1, 0).}
+\glossentry{Permutation}{A reordering of a list's positions; sorting the wavelength-value pairs with one permutation leaves the sampled function unchanged.}
+\glossentry{Descending band list}{A band list ordered from long to short wavelength, as PRISMA writes its files within each detector.}
+\glossentry{Fixed-grid model}{A model that reads only the 165-band common grid (the shipped v0.2.0), so every scene must be resampled onto that grid before it reaches the model.}
+\glossentry{Wavelength-reading model}{A model with a spectral stem that reads a scene's own bands at their stated wavelengths (F001 and the FT runs), so it needs no resample.}
+\glossentry{Signature implant}{A synthetic object made by adding a real object's difference spectrum (object mean minus ring mean), carried to the host's bands by interpolation.}
+\glossentry{Reading path}{The chain of code that turns a stored scene into the cube a model reads; two paths for the same scene must give the same cube.}
+\glossentry{Cross-check (of data paths)}{Scoring one model through two different reading paths on data where both exist; any gap is a bug until explained.}
+\glossentry{bench-v2.1}{The implant benchmark rebuilt on 2026-10-18 with sorted interpolation and foreignness tolerance 1.2: 18 hosts, 2,817 objects.}
+\glossentry{Bernoulli variable}{A random variable that is 1 with probability p and 0 otherwise; its mean is p and its variance p(1 - p).}
+\glossentry{Binomial standard error}{The spread of a share caught over n independent objects, the square root of p(1 - p)/n; a rough ruler for whether two shares differ.}
+\glossentry{Selection effect}{A shift in a population caused by which members survive a filter, not by any change to the members themselves.}
+\glossentry{Ordering test}{The check that a benchmark reproduces an ordering the real labels already show, applied to every model, not only the baseline.}

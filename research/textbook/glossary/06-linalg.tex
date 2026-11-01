@@ -1,0 +1,27 @@
+\glossentry{Vector}{An ordered list of numbers, pictured as an arrow from the origin; a pixel's spectrum is a vector with one entry per band.}
+\glossentry{Dot product}{The sum of the products of two vectors' entries, position by position; a single number, large when the vectors are long and point the same way.}
+\glossentry{Norm}{The length of a vector, the square root of the sum of its squared entries (Pythagoras in many dimensions). For a spectrum, roughly its brightness.}
+\glossentry{Angle between vectors}{The angle whose cosine is the dot product divided by both lengths; it measures shape and ignores brightness.}
+\glossentry{Orthogonal}{At right angles; two vectors are orthogonal when their dot product is zero.}
+\glossentry{Unit vector}{A vector of length 1, used to represent a pure direction.}
+\glossentry{Projection}{The multiple of a direction vector closest to a given vector, found by minimising the squared distance; for a unit direction u it is (u.x) u.}
+\glossentry{Matrix}{A rectangular table of numbers; multiplying a vector by it forms one weighted mixture of the inputs per row.}
+\glossentry{Transpose}{A matrix with rows and columns swapped; the transpose of a product reverses the order, (AB)T = BT AT.}
+\glossentry{Symmetric matrix}{A square matrix equal to its own transpose, such as every covariance matrix.}
+\glossentry{Identity matrix}{The square matrix with ones on the diagonal and zeros elsewhere; multiplying by it changes nothing.}
+\glossentry{Inverse}{The matrix that undoes a square matrix, so that their product is the identity; it exists only when the determinant is non-zero.}
+\glossentry{Determinant}{A number computed from a square matrix (ad - bc for 2 x 2) that is zero exactly when the matrix squashes some direction flat.}
+\glossentry{Mean vector}{The band-by-band average of a set of spectra.}
+\glossentry{Centring}{Subtracting the mean from every vector, so that the deviations add up to zero.}
+\glossentry{Outer product}{The matrix d dT whose entry (i, j) is the product of entries i and j; averaging outer products of deviations gives the covariance.}
+\glossentry{Covariance matrix}{The average outer product of centred vectors (divided by N - 1 in the code); variances on the diagonal, pairwise covariances off it.}
+\glossentry{Correlation}{A covariance divided by both standard deviations, between -1 and 1.}
+\glossentry{Eigenvector}{A non-zero vector that a matrix only stretches, not turns; the stretch factor is its eigenvalue.}
+\glossentry{Characteristic polynomial}{det(S - lambda I) as a polynomial in lambda; its roots are the eigenvalues.}
+\glossentry{Spectral theorem}{Every real symmetric matrix can be written U Lambda UT with orthogonal unit eigenvectors in U and real eigenvalues in Lambda.}
+\glossentry{Orthogonal matrix}{A square matrix whose columns are orthogonal unit vectors; it rotates or reflects without stretching, and its inverse is its transpose.}
+\glossentry{Positive semi-definite}{A symmetric matrix with no negative eigenvalues; every covariance matrix is one, because its eigenvalues are variances.}
+\glossentry{Principal component analysis}{Finding the orthogonal directions of greatest variance of a cloud of vectors: the eigenvectors of its covariance, ordered by eigenvalue.}
+\glossentry{Explained variance ratio}{A component's eigenvalue divided by the sum of all eigenvalues: its share of the total variance.}
+\glossentry{Lagrange multiplier}{A number introduced to maximise a function under a constraint; at the optimum the function's gradient is that multiple of the constraint's gradient.}
+\glossentry{Whitening}{Rotating vectors onto the principal directions and dividing each coordinate by its standard deviation, so the cloud has identity covariance.}

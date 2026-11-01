@@ -1,0 +1,35 @@
+TOA 0.19503218970260405
+ring size 1px 20
+ring size domino 24
+z test 2.041199786503148 tier easy
+psf 3x3 window
+ [[0.6004 0.7748 0.6004]
+ [0.7748 1.     0.7748]
+ [0.6004 0.7748 0.6004]]
+ring mean weight 0.324 halo weight 0.7748
+analytic exp(-1/3.92) 0.7748374288832494 exp(-2/3.92) 0.6003730411984044
+shrink 0.676 flat halo ratio 0.6669
+psf domino window
+ [[0.4956 0.7748 0.7748 0.4956]
+ [0.6397 1.     1.     0.6397]
+ [0.4956 0.7748 0.7748 0.4956]]
+abundance s=0.1
+ [[0.06   0.0775 0.06  ]
+ [0.0775 0.1    0.0775]
+ [0.06   0.0775 0.06  ]]
+mix a 0.0 [0.3 0.2]
+mix a 0.25 [0.25 0.3 ]
+mix a 0.5 [0.2 0.4]
+mix a 1.0 [0.1 0.6]
+foreign (3,4,0) 0.64
+match (4,0,2) t=0.2 [4. 0. 2.]
+match (4,0,2) t=0.1 [4.     0.     1.3333]
+solve step -0.1 s 0.7 z 1.0
+solve step 0.1 s 0.3 z 1.0
+already above (None, 0.9999800003999917)
+FT03 v2 940.899
+PCA-RX v2 879.726
+sigma1 ring mean 0.1357 halo 0.6065 flat halo ratio 0.5448
+ex z 0.7499999999999998
+ex solve 0.9 1.5
+ex match [3. 0. 1.]

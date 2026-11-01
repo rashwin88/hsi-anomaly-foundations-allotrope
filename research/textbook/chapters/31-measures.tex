@@ -1,0 +1,657 @@
+\chapter{Detection measures: ROC, pAUC, TPR at a fixed FPR, objects caught and chance}\label{ch:measures}
+
+\begin{onething}
+When anomalies are 0.1--1\% of a scene's pixels, the area under the ROC curve is decided almost entirely by how
+ordinary background pixels are ranked against each other far down the list, where no analyst ever looks; so the
+repository also measures the \emph{top} of the ranking - partial AUC up to 1\% false alarms, the detection rate at
+0.1\% false alarms, and how many objects land in a fixed review budget - and reads every one of them against what
+random scores would get.
+\end{onething}
+
+\section{Why a new set of measures was needed}\label{sec:measures:why}
+
+Every chapter so far has ended with a \emph{score map}: one number per pixel, high where the pixel looks
+anomalous (\cref{ch:residualmaha}). To compare two detectors you need a way to turn a score map and a
+\index{ground truth}\emph{ground-truth mask} - a map marking which pixels a human labelled as anomalous - into a
+number. Until 2026-10-16 the repository used one number for this, the AUC returned by
+\code{compute_roc} in \file{app/utils/anomaly_detection/scoring.py}. On that date a second family of measures
+arrived beside it. Since 2026-10-17 they live in \file{app/evaluation/metrics.py}, keyed \code{pauc_0.01},
+\code{tpr_at_0.001}, \code{hit_1} and \code{hit_0.1}, and are tested by hand-worked numbers in
+\file{tests/test_evaluation/test_metrics.py}.
+
+The problem the new measures solve is easy to state and surprisingly easy to miss. A PRISMA scene has about a
+million valid pixels. Suppose a thousand of them are targets\tagA{} (0.1\%, the order of the labelled bench
+scenes). An analyst can review perhaps the top 1\% of the ranking: ten thousand pixels. Anything the detector does
+to the other 990,000 pixels is invisible to that analyst. A good measure must therefore be sensitive to the top of
+the list and indifferent to the bottom. The AUC is the opposite, as \cref{sec:measures:bulk} proves with numbers.
+
+\begin{analogy}
+A search engine returns a million results for your query. You read the first page. A ranking metric that gives the
+same weight to the order of results 500,000 and 500,001 as to results 1 and 2 will happily prefer an engine whose
+first page is junk, as long as it sorts the junk at the back slightly better. The analyst is the reader of the
+first page; the measures of this chapter are page-one measures.
+\end{analogy}
+
+You need two ideas from earlier: that anomalies are rare (\cref{ch:problem}) and the idea of a threshold on a
+score (\cref{ch:residualmaha}). Nothing else.
+
+\section{Thresholds and the confusion matrix}\label{sec:measures:confusion}
+
+\begin{definition}[Positive, negative, flagged]
+A \index{positive}\emph{positive} (or \emph{target}) is a valid pixel the ground truth marks as anomalous. A
+\index{negative}\emph{negative} (or \emph{background} pixel) is every other valid pixel. Given a
+\index{threshold}\emph{threshold} $\tau$, a pixel is \emph{flagged} when its score $s \ge \tau$.
+\end{definition}
+
+Every pixel then falls into exactly one of four boxes, and the table of their counts is called the
+\index{confusion matrix}\emph{confusion matrix}:
+
+\begin{center}
+\begin{tabular}{lcc}
+\toprule
+ & truth: target & truth: background \\
+\midrule
+flagged ($s \ge \tau$) & true positive (TP) & false positive (FP) \\
+not flagged ($s < \tau$) & false negative (FN) & true negative (TN) \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Write $P$ for the number of targets and $N$ for the number of background pixels. Each column adds up to its total:
+$\mathrm{TP} + \mathrm{FN} = P$ and $\mathrm{FP} + \mathrm{TN} = N$. Two rates summarise the table.
+
+\begin{definition}[TPR and FPR]
+The \index{true-positive rate}\emph{true-positive rate} (TPR, also the detection rate) and the
+\index{false-positive rate}\emph{false-positive rate} (FPR, also the false-alarm rate) at threshold $\tau$ are
+\begin{equation}\label{eq:measures:rates}
+\mathrm{TPR}(\tau) = \frac{\mathrm{TP}(\tau)}{P}, \qquad \mathrm{FPR}(\tau) = \frac{\mathrm{FP}(\tau)}{N}.
+\end{equation}
+\end{definition}
+
+Both rates are divided by their own column total, which is the point: FPR does not care how many targets there
+are, and TPR does not care how much background there is. Both are \emph{non-increasing} functions of $\tau$: raise
+the threshold and you can only flag fewer pixels, never more.
+
+\section{Six pixels by hand: the ROC curve}\label{sec:measures:six}
+
+\begin{definition}[ROC curve]
+The \index{ROC curve}\emph{receiver operating characteristic} (ROC) curve is the set of points
+$(\mathrm{FPR}(\tau), \mathrm{TPR}(\tau))$ as $\tau$ slides from above the highest score (nothing flagged, the
+point $(0,0)$) down to the lowest score (everything flagged, the point $(1,1)$), joined by straight segments.
+\end{definition}
+
+You only need to try thresholds equal to the scores themselves: between two neighbouring scores nothing changes.
+
+\begin{worked}[label={we:measures:six}]{The ROC of six pixels}
+Do this one on paper. Six valid pixels, three targets (T) and three background pixels (B), so $P = 3$, $N = 3$:
+\begin{center}
+\begin{tabular}{lcccccc}
+\toprule
+pixel & 1 & 2 & 3 & 4 & 5 & 6 \\
+score & 0.95 & 0.85 & 0.70 & 0.60 & 0.40 & 0.20 \\
+truth & T & B & T & T & B & B \\
+\bottomrule
+\end{tabular}
+\end{center}
+\textbf{Step 1 - sort by score, highest first.} They are already sorted.
+
+\textbf{Step 2 - sweep the threshold down one pixel at a time}, counting what has been flagged:
+\begin{center}
+\begin{tabular}{lcccc}
+\toprule
+threshold $\tau$ & TP & FP & $\mathrm{TPR} = \mathrm{TP}/3$ & $\mathrm{FPR} = \mathrm{FP}/3$ \\
+\midrule
+above 0.95 & 0 & 0 & 0 & 0 \\
+0.95 (T) & 1 & 0 & 1/3 & 0 \\
+0.85 (B) & 1 & 1 & 1/3 & 1/3 \\
+0.70 (T) & 2 & 1 & 2/3 & 1/3 \\
+0.60 (T) & 3 & 1 & 1 & 1/3 \\
+0.40 (B) & 3 & 2 & 1 & 2/3 \\
+0.20 (B) & 3 & 3 & 1 & 1 \\
+\bottomrule
+\end{tabular}
+\end{center}
+\textbf{Step 3 - list the ROC points} $(\mathrm{FPR}, \mathrm{TPR})$:
+\[
+(0,0),\ (0,\tfrac13),\ (\tfrac13,\tfrac13),\ (\tfrac13,\tfrac23),\ (\tfrac13,1),\ (\tfrac23,1),\ (1,1).
+\]
+A target moves the curve \emph{up} by $1/P = 1/3$; a background pixel moves it \emph{right} by $1/N = 1/3$. The
+curve is a staircase. \Cref{fig:measures:sixroc} draws it.
+\end{worked}
+
+The rule in the last sentence is general and worth stating on its own.
+
+\begin{keypoint}
+Walking down the sorted list, every target is a step up of $1/P$ and every background pixel a step right of $1/N$;
+the ROC curve is the path that walk traces.
+\end{keypoint}
+
+\section{The area under the curve, by the trapezoid rule}\label{sec:measures:auc}
+
+\begin{definition}[AUC]
+The \index{AUC}\emph{area under the ROC curve} (AUC, or ROC-AUC) is the area between the curve and the FPR axis,
+from FPR 0 to FPR 1. A perfect detector, which ranks every target above every background pixel, goes straight up to
+$(0,1)$ and then right: AUC 1. A detector that ranks at random follows the diagonal $\mathrm{TPR} = \mathrm{FPR}$:
+AUC $1/2$.
+\end{definition}
+
+Because the curve is made of straight segments, its area is a sum of trapezoids. A \index{trapezoid rule}\emph{trapezoid}
+between points $(x_0, y_0)$ and $(x_1, y_1)$ has area width times average height:
+\begin{equation}\label{eq:measures:trap}
+\text{area} = (x_1 - x_0)\,\frac{y_0 + y_1}{2}.
+\end{equation}
+This is exactly what \code{auc_exact} in \file{app/evaluation/metrics.py} computes, one line:
+\begin{lstlisting}[basicstyle=\ttfamily\footnotesize]
+def auc_exact(fpr, tpr):     # fpr, tpr: (K,) ROC points from exact_roc, starting at (0, 0)
+    return float(np.sum((fpr[1:] - fpr[:-1]) * (tpr[1:] + tpr[:-1]) / 2))
+\end{lstlisting}
+
+\begin{worked}[label={we:measures:sixauc}]{The AUC of the six pixels, strip by strip}
+Apply \cref{eq:measures:trap} to each consecutive pair of points of \cref{we:measures:six}:
+\begin{center}
+\begin{tabular}{lccc}
+\toprule
+segment & width & heights & area \\
+\midrule
+$(0,0) \to (0,\frac13)$ & $0$ & $0, \frac13$ & $0$ \\
+$(0,\frac13) \to (\frac13,\frac13)$ & $\frac13$ & $\frac13, \frac13$ & $\frac13 \times \frac13 = \frac19$ \\
+$(\frac13,\frac13) \to (\frac13,\frac23)$ & $0$ & & $0$ \\
+$(\frac13,\frac23) \to (\frac13,1)$ & $0$ & & $0$ \\
+$(\frac13,1) \to (\frac23,1)$ & $\frac13$ & $1, 1$ & $\frac13$ \\
+$(\frac23,1) \to (1,1)$ & $\frac13$ & $1, 1$ & $\frac13$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+Add the column:
+\begin{align*}
+\text{AUC} &= \tfrac19 + \tfrac13 + \tfrac13 \\
+&= \tfrac19 + \tfrac39 + \tfrac39 \\
+&= \tfrac79 = 0.7778.
+\end{align*}
+The repository's \code{auc_exact} on these six pixels returns $0.7778$\tagC{} (the book's check script
+\file{research/textbook/tools/compute_measures.py}).
+\end{worked}
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}
+\begin{axis}[width=8.2cm,height=8.2cm,xmin=0,xmax=1,ymin=0,ymax=1.02,
+  xlabel={false-positive rate (FPR)},ylabel={true-positive rate (TPR)},
+  xtick={0,0.3333,0.5,0.6667,1},xticklabels={0,$\frac13$,$\frac12$,$\frac23$,1},
+  ytick={0,0.3333,0.6667,1},yticklabels={0,$\frac13$,$\frac23$,1},grid=major,grid style={gray!20}]
+\addplot[fill=loss!30,draw=none] coordinates {(0,0) (0,0.3333) (0.3333,0.3333) (0.3333,1) (0.5,1) (0.5,0)} \closedcycle;
+\addplot[dashed,maskgrey,thick] coordinates {(0,0) (1,1)};
+\addplot[spat,very thick,mark=*,mark options={fill=white}] coordinates {(0,0) (0,0.3333) (0.3333,0.3333) (0.3333,0.6667) (0.3333,1) (0.6667,1) (1,1)};
+\draw[loss,thick,dashed] (axis cs:0.5,0) -- (axis cs:0.5,1);
+\node[anchor=west,font=\small] at (axis cs:0.52,0.22) {chance (diagonal)};
+\node[anchor=west,font=\small,text=loss!70!black] at (axis cs:0.03,0.12) {pAUC region};
+\node[anchor=west,font=\small,text=loss!70!black] at (axis cs:0.03,0.05) {$\mathrm{FPR}\le 0.5$};
+\node[anchor=south west,font=\small,text=spat] at (axis cs:0.34,0.62) {after 0.70 (T)};
+\node[anchor=north west,font=\small,text=spat] at (axis cs:0.01,0.32) {after 0.95 (T)};
+\end{axis}
+\end{tikzpicture}
+\caption{The ROC of the six pixels of \cref{we:measures:six} (indigo staircase), the chance diagonal (grey,
+dashed), and the region counted by a partial AUC with limit $\mathrm{FPR} \le 0.5$ (amber). Drawn to scale from
+the worked numbers. The full area under the staircase is $7/9$; the amber area is $5/18$, which normalised by the
+limit gives $5/9$ (\cref{we:measures:pauc}).}
+\label{fig:measures:sixroc}
+\end{figure}
+
+\section{AUC is a probability: the Mann--Whitney count}\label{sec:measures:mw}
+
+There is a second way to read the same number, and it explains everything that follows.
+
+\begin{definition}[Pair reading of AUC]
+Pick one target at random and one background pixel at random. The \index{Mann--Whitney statistic}\emph{pair
+reading} of AUC is the probability that the target scores higher, counting a tie as half:
+\begin{equation}\label{eq:measures:mw}
+\mathrm{AUC} = \frac{1}{PN}\sum_{\text{targets } t}\ \sum_{\text{background } b}
+\Big(\mathbf{1}[s_t > s_b] + \tfrac12\,\mathbf{1}[s_t = s_b]\Big).
+\end{equation}
+Here $\mathbf{1}[\cdot]$ is the \emph{indicator}: 1 when the statement in brackets is true, 0 when false. The double
+sum counts winning pairs; it is the \emph{Mann--Whitney U count}, and dividing by the $PN$ pairs turns it into a
+probability \citep{hanley1982meaning}.
+\end{definition}
+
+\begin{worked}[label={we:measures:mw}]{The six pixels, counted as pairs}
+There are $P \times N = 3 \times 3 = 9$ (target, background) pairs. For each target, count the background pixels it
+beats:
+\begin{align*}
+\text{target } 0.95 &\text{ vs } 0.85, 0.40, 0.20: \text{ beats all three} &&\to 3\\
+\text{target } 0.70 &\text{ vs } 0.85, 0.40, 0.20: \text{ loses to } 0.85 &&\to 2\\
+\text{target } 0.60 &\text{ vs } 0.85, 0.40, 0.20: \text{ loses to } 0.85 &&\to 2\\
+\text{wins} &= 3 + 2 + 2 = 7, &&\text{AUC} = 7/9 = 0.7778.
+\end{align*}
+The same $7/9$ as the trapezoids of \cref{we:measures:sixauc}.
+\end{worked}
+
+That the two readings agree is not a coincidence. Here is the proof, in words first and then in symbols.
+
+\paragraph{Proof that the area equals the pair count (no ties).} By the key point of \cref{sec:measures:six}, the
+curve moves right only at background pixels, by $1/N$ each, and moves up only at targets. So the area under the
+staircase is a sum of rectangles, one per background pixel $b$: width $1/N$, and height equal to the TPR at the
+moment $b$ is reached in the walk. That TPR is the share of targets already passed, which is the share of targets
+scoring above $b$:
+\begin{align*}
+\text{area} &= \sum_{b} \frac1N \cdot \mathrm{TPR}\text{ when $b$ is reached}
+  && \text{one rectangle per background pixel}\\
+&= \sum_{b} \frac1N \cdot \frac{\#\{t : s_t > s_b\}}{P}
+  && \text{TPR = share of targets above $b$}\\
+&= \frac{1}{PN} \sum_b \sum_t \mathbf{1}[s_t > s_b]
+  && \text{write the count as a sum of indicators}
+\end{align*}
+which is \cref{eq:measures:mw} with no ties. Check it on the six pixels: the background pixels are reached at
+heights $\frac13$ (pixel 0.85), $1$ (pixel 0.40) and $1$ (pixel 0.20), so the area is
+$\frac13(\frac13 + 1 + 1) = \frac13 \cdot \frac73 = \frac79$.
+
+\paragraph{With ties.} When a target and a background pixel share a score, the threshold flags both at once, and
+the curve moves diagonally: right by $1/N$ and up by $1/P$ in one segment. A trapezoid under that diagonal step
+gets the average of the heights before and after - exactly half the target's contribution, the $\frac12$ in
+\cref{eq:measures:mw}.
+
+\begin{worked}[label={we:measures:tie}]{A tie, both ways}
+Four pixels: $0.9$ (T), $0.5$ (T), $0.5$ (B), $0.1$ (B), so $P = N = 2$. The function \code{exact_roc} puts one ROC
+point at the end of each run of tied scores (\cref{sec:measures:exact}), so the two 0.5s are flagged together.
+\begin{align*}
+&\text{points: } (0,0),\ (0, \tfrac12),\ (\tfrac12, 1),\ (1, 1) \quad \text{(the middle segment is diagonal)}\\
+&\text{trapezoids: } 0 + \tfrac12 \cdot \tfrac{\frac12 + 1}{2} + \tfrac12 \cdot \tfrac{1 + 1}{2}\\
+&\qquad = 0 + \tfrac12 \cdot \tfrac34 + \tfrac12 = \tfrac38 + \tfrac48 = \tfrac78 = 0.875\\
+&\text{pairs: } 0.9 \text{ beats } 0.5, 0.1 \to 2; \quad 0.5 \text{ ties } 0.5 \to \tfrac12\\
+&\qquad \text{and beats } 0.1 \to 1; \quad \text{total } 2 + 1.5 = 3.5\\
+&\text{AUC} = 3.5 / 4 = 0.875.
+\end{align*}
+\end{worked}
+
+\section{Why AUC is decided by the bulk}\label{sec:measures:bulk}
+
+Read \cref{eq:measures:mw} again with the real scene in mind: $P = 1{,}000$ targets, $N = 999{,}000$ background
+pixels\tagA{}. AUC averages over every one of the $999{,}000{,}000$ pairs. A target ranked 500,000th still beats
+the 499,000 or so background pixels below it, and every one of those wins counts. \textbf{Almost all of the AUC is
+earned by putting targets above pixels nobody will ever look at.} The analyst cares about the region
+$\mathrm{FPR} \in [0, 0.01]$, which is 1\% of the curve's width.
+
+Two invented detectors (from the course, part 16) make it concrete. Their ROC curves, as straight segments:
+\begin{align*}
+\text{A}: &\ (0,0) \to (0.01, 0.40) \to (0.30, 0.80) \to (1,1)\\
+\text{B}: &\ (0,0) \to (0.01, 0.02) \to (0.10, 0.80) \to (1,1)
+\end{align*}
+
+\begin{worked}[label={we:measures:ab}]{Two detectors whose AUC and top-of-list disagree}
+Trapezoids for A:
+\begin{align*}
+0.01 \times \tfrac{0 + 0.40}{2} &= 0.01 \times 0.20 = 0.002\\
+0.29 \times \tfrac{0.40 + 0.80}{2} &= 0.29 \times 0.60 = 0.174\\
+0.70 \times \tfrac{0.80 + 1.00}{2} &= 0.70 \times 0.90 = 0.630\\
+\text{AUC}_A &= 0.002 + 0.174 + 0.630 = 0.806.
+\end{align*}
+Trapezoids for B:
+\begin{align*}
+0.01 \times \tfrac{0 + 0.02}{2} &= 0.01 \times 0.01 = 0.0001\\
+0.09 \times \tfrac{0.02 + 0.80}{2} &= 0.09 \times 0.41 = 0.0369\\
+0.90 \times \tfrac{0.80 + 1.00}{2} &= 0.90 \times 0.90 = 0.810\\
+\text{AUC}_B &= 0.0001 + 0.0369 + 0.810 = 0.847.
+\end{align*}
+B has the higher AUC. But at 1\% false alarms A has found 40\% of the targets and B 2\%.
+\end{worked}
+
+\coursefig[0.95\linewidth]{ad-16-roc-top}{The course's figure for this chapter. (a) The five-pixel ROC of the
+course's own example (targets at 0.9 and 0.7 among five pixels), AUC $5/6$. (b) Detectors A and B: B has the larger
+total area; inside the first 1\% of false alarms (the amber strip, stretched, not to scale) A is twenty times
+higher.}{fig:measures:rocTop}
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}
+\begin{groupplot}[group style={group size=2 by 1,horizontal sep=1.6cm},width=6.4cm,height=6cm,
+  ymin=0,ymax=1.02,xlabel={FPR},grid=major,grid style={gray!20}]
+\nextgroupplot[xmin=0,xmax=1,ylabel={TPR},title={\small whole curve}]
+\addplot[dashed,maskgrey] coordinates {(0,0) (1,1)};
+\addplot[spec,very thick,mark=*,mark size=1.5pt] coordinates {(0,0) (0.01,0.40) (0.30,0.80) (1,1)};
+\addplot[spat,very thick,dashed,mark=square*,mark size=1.5pt] coordinates {(0,0) (0.01,0.02) (0.10,0.80) (1,1)};
+\node[font=\small,text=spec,anchor=west] at (axis cs:0.42,0.30) {A: AUC 0.806};
+\node[font=\small,text=spat,anchor=west] at (axis cs:0.42,0.20) {B: AUC 0.847};
+\nextgroupplot[ymax=0.5,xmin=0,xmax=0.012,xtick={0,0.005,0.01},xticklabels={0,0.005,0.01},title={\small first 1\% only, to scale},
+  scaled x ticks=false]
+\addplot[fill=loss!25,draw=none] coordinates {(0,0) (0.01,0.40) (0.01,0)} \closedcycle;
+\addplot[dashed,maskgrey] coordinates {(0,0) (0.012,0.012)};
+\addplot[spec,very thick] coordinates {(0,0) (0.01,0.40) (0.012,0.4276)};
+\addplot[spat,very thick,dashed] coordinates {(0,0) (0.01,0.02) (0.012,0.0373)};
+\node[font=\small,text=spec,anchor=west] at (axis cs:0.0003,0.46) {A: pAUC 0.20};
+\node[font=\small,text=spat,anchor=west] at (axis cs:0.0003,0.41) {B: pAUC 0.01};
+\end{groupplot}
+\end{tikzpicture}
+\caption{Detectors A (teal) and B (indigo, dashed) of \cref{we:measures:ab}, drawn to scale. Left: the whole curve,
+where B's larger area comes from FPR 0.01--0.30. Right: the first 1.2\% of false alarms, where A's area (amber, up to
+FPR 0.01) is twenty times B's. The chance diagonal (grey) is nearly flat on the right-hand scale.}
+\label{fig:measures:ab}
+\end{figure}
+
+\begin{keypoint}
+A ranking measure averaged over the whole list can prefer the detector that is useless where it is used.
+\end{keypoint}
+
+\section{Partial AUC up to a false-alarm limit}\label{sec:measures:pauc}
+
+\begin{definition}[Normalised partial AUC]
+The \index{partial AUC}\emph{partial AUC} up to an FPR limit $m$ is the area under the ROC between FPR 0 and FPR
+$m$. The repository divides it by $m$ so that a perfect detector scores 1:
+\begin{equation}\label{eq:measures:pauc}
+\mathrm{pAUC}_m = \frac{1}{m}\int_0^{m} \mathrm{TPR}(f)\,df.
+\end{equation}
+The repository's headline is $m = 0.01$, key \code{pauc_0.01}, configured in an evaluation config as
+\texttt{\{"kind": "pauc", "max\_fpr": 0.01\}}.
+\end{definition}
+
+\begin{sourcenote}[: what pAUC is normalised by]
+\file{app/evaluation/metrics.py}, module docstring and function \code{pauc} (lines 31--36): ``area under the EXACT
+ROC over FPR 0..max\_fpr, divided by max\_fpr (1 perfect, max\_fpr/2 random)''. The default \code{max_fpr} is
+0.01. The normalisation is a plain division by the width $m$. It is \emph{not} the McClish standardisation used by
+some libraries (scikit-learn's \code{roc_auc_score(max_fpr=...)} applies McClish); derived below so you can tell the
+two apart when you compare with outside numbers.
+\end{sourcenote}
+
+\paragraph{Its chance value, derived.} A random detector's ROC is the diagonal $\mathrm{TPR}(f) = f$. Put that
+into \cref{eq:measures:pauc}:
+\begin{align*}
+\mathrm{pAUC}_m^{\text{chance}} &= \frac1m \int_0^m f\,df && \text{TPR equals FPR on the diagonal}\\
+&= \frac1m \cdot \Big[\tfrac12 f^2\Big]_0^m && \text{the integral of $f$ is $\tfrac12 f^2$}\\
+&= \frac1m \cdot \tfrac12 m^2 && \text{evaluate at $m$, minus at $0$}\\
+&= \frac{m}{2}. && \text{cancel one $m$}
+\end{align*}
+For $m = 0.01$: chance is $0.01/2 = 0.005$. Geometrically it is a triangle of base 0.01 and height 0.01, area
+$0.01 \times 0.01 / 2 = 0.00005$, divided by $0.01$. \textbf{Random pAUC is 0.005, not 0.5.} The test
+\code{test_perfect_random_and_sklearn} checks that random scores stay below 0.05; on two million random pixels the
+book's script measured $0.0052$, $0.0055$ and $0.0057$ in three draws\tagC{}.
+
+\paragraph{The McClish standardisation, for comparison.} \citet{mcclish1989analyzing} rescales the raw partial
+area $A$ (not divided by $m$) so that chance maps to $\frac12$ and perfect to 1, like a full AUC. The smallest
+sensible raw area is the chance triangle $A_{\min} = m^2/2$; the largest is the full rectangle $A_{\max} = m$:
+\begin{equation}\label{eq:measures:mcclish}
+\mathrm{pAUC}^{\text{McClish}} = \frac12\left(1 + \frac{A - A_{\min}}{A_{\max} - A_{\min}}\right).
+\end{equation}
+Check the ends: $A = A_{\min}$ gives $\frac12(1 + 0) = \frac12$, and $A = A_{\max}$ gives $\frac12(1 + 1) = 1$.
+For a repository pAUC of 0.170 at $m = 0.01$ (FT04 with cloud excluded, \cref{ch:bootstrap}):
+\begin{align*}
+A &= 0.170 \times 0.01 = 0.0017 && \text{undo the division by $m$}\\
+A_{\min} &= 0.01^2 / 2 = 0.00005, \quad A_{\max} = 0.01\\
+\frac{A - A_{\min}}{A_{\max} - A_{\min}} &= \frac{0.0017 - 0.00005}{0.01 - 0.00005} = \frac{0.00165}{0.00995} = 0.1658\\
+\mathrm{pAUC}^{\text{McClish}} &= \tfrac12(1 + 0.1658) = 0.5829.
+\end{align*}
+The same detector reads 0.170 on the repository's scale and 0.583 on McClish's\tagC{}. Never compare the two
+without converting.
+
+\begin{worked}[label={we:measures:pauc}]{Partial AUC of the six pixels, with a limit that cuts a segment}
+Take the six pixels and a limit $m = 0.5$ (chosen so the cut falls inside the curve; the product uses 0.01). The
+segments left of FPR 0.5 are:
+\begin{align*}
+(0, \tfrac13) \to (\tfrac13, \tfrac13): &\quad \tfrac13 \times \tfrac13 = \tfrac19\\
+\text{vertical segments at } \tfrac13: &\quad 0\\
+(\tfrac13, 1) \to (\tfrac23, 1), \text{ cut at } 0.5: &\quad (0.5 - \tfrac13) \times 1 = \tfrac16\\
+\text{area} &= \tfrac19 + \tfrac16 = \tfrac{2}{18} + \tfrac{3}{18} = \tfrac{5}{18}\\
+\mathrm{pAUC}_{0.5} &= \tfrac{5}{18} / 0.5 = \tfrac{10}{18} = \tfrac59 = 0.556.
+\end{align*}
+Chance at this limit is $0.5 / 2 = 0.25$. And at the product's limit $m = 0.01$: the curve sits at TPR $\frac13$ from
+FPR 0 all the way to $\frac13$, so the area up to 0.01 is $0.01 \times \frac13$, and dividing by $0.01$ gives
+$\mathrm{pAUC}_{0.01} = \frac13 = 0.333$. The code returns $0.5556$ and $0.3333$\tagC{}.
+\end{worked}
+
+\paragraph{Cutting a sloped segment.} When the segment that crosses $m$ is diagonal (a tie, or the straight lines of
+detectors A and B), \code{pauc} cuts it by linear interpolation. The segment from $(x_0, y_0)$ to $(x_1, y_1)$ with
+$x_0 < m < x_1$ has, at $m$, the height
+\begin{equation}\label{eq:measures:interp}
+y(m) = y_0 + (y_1 - y_0)\,\frac{m - x_0}{x_1 - x_0},
+\end{equation}
+and its piece left of $m$ is the trapezoid of width $m - x_0$ and heights $y_0$, $y(m)$. For the tie of
+\cref{we:measures:tie} with $m = 0.25$: the diagonal runs $(0, \frac12) \to (\frac12, 1)$, so
+$y(0.25) = 0.5 + 0.5 \times \frac{0.25}{0.5} = 0.75$; the area is $0.25 \times \frac{0.5 + 0.75}{2} = 0.15625$; and
+$\mathrm{pAUC}_{0.25} = 0.15625 / 0.25 = 0.625$. For detector A at $m = 0.01$ the cut falls exactly at a point, so
+$\mathrm{pAUC}_A = 0.002 / 0.01 = 0.20$ and $\mathrm{pAUC}_B = 0.0001 / 0.01 = 0.01$: the order flips to the one the
+analyst would choose.
+
+The code, annotated:
+\begin{lstlisting}[basicstyle=\ttfamily\footnotesize]
+def pauc(fpr, tpr, max_fpr=0.01):            # fpr, tpr: (K,) exact ROC points
+    x0, x1, y0, y1 = fpr[:-1], fpr[1:], tpr[:-1], tpr[1:]          # (K-1,) segments
+    y1c = np.where(x1 > max_fpr,                                    # segment crosses the limit:
+                   y0 + (y1 - y0) * (max_fpr - x0) / np.where(x1 > x0, x1 - x0, 1.0),  # eq. interp
+                   y1)
+    return float(np.sum(((np.minimum(x1, max_fpr) - x0) * (y0 + y1c) / 2)[x0 < max_fpr]) / max_fpr)
+\end{lstlisting}
+Segments that start at or beyond the limit (\code{x0 >= max_fpr}) are dropped; vertical runs at one FPR (several
+targets above every background pixel) have zero width but do raise the height that later trapezoids use, so they
+``count fully'', as the docstring says.
+
+\section{Exact ROC versus the product's sampled ROC}\label{sec:measures:exact}
+
+The product's \code{compute_roc} (\file{app/utils/anomaly_detection/scoring.py}, line 184) does not use every score
+as a threshold. It takes evenly spaced percentiles:
+\begin{lstlisting}
+n_pts = min(max_thresholds, max(20, s.size // 10000 + 64))      # max_thresholds = 256
+qs = np.linspace(0.0, 100.0, n_pts)
+\end{lstlisting}
+For a scene of 1,000,000 valid pixels:
+\begin{align*}
+n_{\text{pts}} &= \min(256,\ \max(20,\ 1{,}000{,}000 \,/\!/\, 10{,}000 + 64)) = \min(256, \max(20, 100 + 64)) = 164\\
+\text{spacing} &= 100 / (164 - 1) = 100 / 163 = 0.613 \text{ percentile.}
+\end{align*}
+(Here $/\!/$ is integer division.) So between FPR 0 and 1\% the sampled curve has about one point; its area there is
+a single triangle guessed from it. For the whole AUC the coarseness matters little; for the first 1\% it is most of
+the answer.
+
+\begin{sourcenote}[: the sampled ROC]
+Two descriptions disagree with \code{compute_roc}, and the code wins. ``Samples 256 thresholds'' is a cap: the
+count reaches 256 only from $(256 - 64) \times 10{,}000 = 1{,}920{,}000$ pixels. The function's own docstring says
+the thresholds are ``evenly spaced over the score range plus the unique-value breakpoints sklearn would emit''; the
+code takes percentiles only (\file{app/utils/anomaly_detection/scoring.py}, lines 184--185).
+\end{sourcenote}
+
+\code{exact_roc} avoids sampling. It sorts every score, highest first, and makes one ROC point at the end of each run
+of tied scores:
+\begin{lstlisting}[basicstyle=\ttfamily\footnotesize,literate={~}{{\textasciitilde}}1]
+def exact_roc(s, g):                         # s: (n,) scores, g: (n,) bool truth
+    order = np.argsort(-s, kind="stable")
+    s_sorted, g_sorted = s[order], g[order]
+    last = np.r_[np.flatnonzero(np.diff(s_sorted)), len(s_sorted) - 1]   # end of each tie run
+    fpr = np.r_[0.0, np.cumsum(~g_sorted)[last] / max((~g).sum(), 1)]
+    tpr = np.r_[0.0, np.cumsum(g_sorted)[last] / max(g.sum(), 1)]
+    return fpr, tpr
+\end{lstlisting}
+That is the walk of \cref{we:measures:six}, for a million pixels: the cumulative sums are the TP and FP columns.
+The evaluator reports the product's sampled AUC as \code{roc_auc} (for continuity with every older table) and uses
+the exact curve for everything else; the test checks \code{auc_exact} against scikit-learn's \code{roc_auc_score}
+to $10^{-9}$.
+
+\section{Detection rate at 0.1\% false alarms}\label{sec:measures:tpr}
+
+\begin{definition}[TPR at a fixed FPR]
+The \index{TPR at FPR}\emph{TPR at FPR $f_0$} is the best detection rate reached at any exact ROC point whose FPR
+is at most $f_0$:
+\begin{equation}\label{eq:measures:tprat}
+\mathrm{TPR}@f_0 = \max\{\mathrm{TPR}_k : \mathrm{FPR}_k \le f_0\}.
+\end{equation}
+In code, \code{float(tpr[fpr <= max_fpr].max())}; the repository's key is \code{tpr_at_0.001}, $f_0 = 0.001$.
+\end{definition}
+
+There is no interpolation: only actual ROC points count. On a million-pixel scene 0.1\% of the background is about
+1,000 false alarms, roughly what an analyst can inspect. Its chance level is $f_0$ itself, 0.001, because on the
+diagonal TPR equals FPR. For the six pixels, the ROC points with FPR at most 0.001 are $(0,0)$ and $(0, \frac13)$,
+so $\mathrm{TPR}@0.001 = \frac13$.
+
+\section{Objects caught at a fixed budget}\label{sec:measures:objects}
+
+Pixel rates have a weakness. A 20-pixel roof and a 1-pixel vehicle are two objects, but in TPR the roof counts
+twenty times. An analyst needs \emph{one} flagged pixel per object to go and look.
+
+\begin{definition}[Object]
+An \index{object}\emph{object} is a \index{connected component}\emph{connected component} of the ground-truth mask:
+a maximal set of target pixels in which you can walk from any pixel to any other by steps up, down, left or right
+through target pixels. This is \emph{4-connectivity}: two target pixels that touch only at a corner are two
+objects. \code{PrismaBench} labels objects with \code{ndimage.label(gt)}, whose default structure is the
+4-neighbour cross (\file{app/evaluation/datasets.py}, line 160); implant benches store their object ids directly.
+\end{definition}
+
+\begin{definition}[Objects caught at the top $q$\%]
+Flag the valid pixels scoring at or above the $(100 - q)$th percentile of all valid scores. Grow the flagged set by
+one 4-neighbour step (a \index{binary dilation}\emph{binary dilation}). An object is \emph{caught} when any of its
+pixels lies in the grown set. The measure is the share of objects caught.
+\end{definition}
+
+The code is three lines (\file{app/evaluation/metrics.py}, \code{object_hits}):
+\begin{lstlisting}[basicstyle=\ttfamily\footnotesize]
+k = valid & np.isfinite(score)                                    # (H, W) usable pixels
+# flagged pixels, grown by one 4-neighbour step (the 1-pixel tolerance)
+hits = ndimage.binary_dilation((score >= np.percentile(score[k], 100 - top_pct)) & k)
+return set(np.unique(objects[hits & (objects > 0)]).tolist())    # ids of objects touched
+\end{lstlisting}
+
+\begin{sourcenote}[: the rule is ``within one pixel'', not ``a pixel above the threshold'']
+You will read that an object is caught when ``at least one of its pixels is above the threshold''. The code is
+more generous: a flagged pixel \emph{next to} the object (one 4-neighbour step) also catches it. This is the
+\index{1-pixel tolerance}\emph{1-pixel tolerance}; the module docstring of \file{app/evaluation/metrics.py} says
+``objects with a pixel within 1 px of the top top\_pct\% of scores''. The reason is that the ground-truth masks may
+sit about one pixel off the scene grid. Note also that the percentile is taken over \emph{all} valid pixels, targets
+included, so ``top 1\%'' is not exactly ``FPR 1\%''. Pixel measures (AUC, pAUC, TPR) have no tolerance.
+\end{sourcenote}
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}[x=0.55cm,y=0.55cm]
+\foreach \x in {0,...,6} \foreach \y in {0,...,4} \draw[gray!40] (\x,\y) rectangle ++(1,1);
+% domino object at (2,2),(3,2)
+\fill[spat!25] (2,1) rectangle ++(1,1); \fill[spat!25] (3,1) rectangle ++(1,1);
+\fill[spat!25] (2,3) rectangle ++(1,1); \fill[spat!25] (3,3) rectangle ++(1,1);
+\fill[spat!25] (1,2) rectangle ++(1,1); \fill[spat!25] (4,2) rectangle ++(1,1);
+\fill[loss!70] (2,2) rectangle ++(1,1); \fill[loss!70] (3,2) rectangle ++(1,1);
+\node at (3,-0.7) {\small domino: $m = 2 + 6 = 8$};
+\begin{scope}[xshift=5cm]
+\foreach \x in {0,...,6} \foreach \y in {0,...,4} \draw[gray!40] (\x,\y) rectangle ++(1,1);
+\fill[loss!70] (2,2) rectangle ++(1,1); \fill[loss!70] (3,3) rectangle ++(1,1);
+\node at (2.5,2.5) {\small 1}; \node at (3.5,3.5) {\small 2};
+\node at (3.5,-0.7) {\small corner touch: two objects};
+\end{scope}
+\end{tikzpicture}
+\caption{Left: a two-pixel object (amber) and the six pixels its 1-pixel tolerance adds (indigo); a flagged pixel
+anywhere in these $m = 8$ cells catches it. Right: two target pixels touching only at a corner are two objects under
+4-connectivity (the book's script confirms \texttt{ndimage.label} returns 2).}
+\label{fig:measures:dilate}
+\end{figure}
+
+\section{The chance level of objects caught}\label{sec:measures:chance}
+
+Here is the trap the tolerance creates. Give every pixel an independent random score. At the top-$q$\% budget, each
+pixel is flagged with probability $p = q/100$. Write $m$ for the object's size \emph{after} the 1-pixel dilation:
+its own pixels plus its 4-neighbours. The object is caught if any of those $m$ cells is flagged.
+
+\paragraph{Derivation.} The chance of catching it is one minus the chance of missing all $m$ cells:
+\begin{align*}
+P(\text{one cell not flagged}) &= 1 - p\\
+P(\text{none of $m$ flagged}) &= (1 - p)^m && \text{independent cells: multiply}\\
+P(\text{caught}) &= 1 - (1 - p)^m. && \text{the complement}
+\end{align*}
+This is \code{chance_hit(m, top_pct)} in \file{app/evaluation/metrics.py}, and the evaluator stores it beside every
+object's hit (\code{chance_1}, \code{chance_0.1}). It is a slight approximation: a percentile threshold flags
+exactly $q$\% of pixels, so the cells are not perfectly independent; with a million pixels the difference is
+negligible.
+
+\begin{worked}[label={we:measures:chance}]{Chance for four object shapes at the top 1\%}
+With $p = 0.01$:
+\begin{align*}
+\text{1 pixel: } m &= 1 + 4 = 5, & 0.99^5 &= 0.9510, & 1 - 0.9510 &= 0.0490\\
+\text{domino: } m &= 2 + 6 = 8, & 0.99^8 &= 0.9227, & 1 - 0.9227 &= 0.0773\\
+\text{3 in a row: } m &= 3 + 8 = 11, & 0.99^{11} &= 0.8953, & 1 - 0.8953 &= 0.1047\\
+3 \times 3 \text{ square: } m &= 9 + 12 = 21, & 0.99^{21} &= 0.8097, & 1 - 0.8097 &= 0.1903
+\end{align*}
+For the square, the 12 neighbours are 3 on each of its 4 sides. At the top 0.1\% ($p = 0.001$) the one-pixel object
+has $1 - 0.999^5 = 1 - 0.99501 = 0.0050$. The script's values match: 0.0490, 0.0773, 0.1047, 0.1903 and 0.0050\tagC{}.
+\end{worked}
+
+Bigger objects are caught by chance more often, because they have more cells. So the chance level of a whole bench
+depends on its size mix. The evaluator averages \code{chance_hit} over the objects and prints it as the
+\code{*chance*} row of every table: \textbf{10.2\%} at the top 1\% on the PRISMA bench and \textbf{10.0\%} on
+bench-v1\hfil\penalty50\hfilneg\tagM{docs/training/anomaly-detection/19-running-an-evaluation.md}, about 1\% at the top 0.1\%.
+
+\begin{keypoint}
+Read every ``objects caught'' number next to its chance row: about 10\% at the top 1\% comes free.
+\end{keypoint}
+
+\section{The 3D-ROC terms, and why they are degenerate here}\label{sec:measures:3d}
+
+The hyperspectral literature also reports a ``3D ROC'', which plots TPR and FPR each against the threshold. Scores are
+first \emph{min-max normalised}, $\tilde s = (s - s_{\min})/(s_{\max} - s_{\min})$, so the threshold $\tau$ runs from
+0 to 1. Two areas follow: $\mathrm{AUC}(D, \tau)$ under detection rate against $\tau$, and $\mathrm{AUC}(F, \tau)$
+under false-alarm rate against $\tau$ (lower is better). From them, $\mathrm{AUC}_{\mathrm{BS}} =
+\mathrm{AUC} - \mathrm{AUC}(F,\tau)$ (background suppressibility) and $\mathrm{SNPR} = \mathrm{AUC}(D,\tau) /
+\mathrm{AUC}(F,\tau)$.
+
+\paragraph{The identity the code uses.} For scores in $[0, 1]$, the area under ``share of pixels with $\tilde s \ge
+\tau$'' as $\tau$ runs from 0 to 1 is the \emph{mean} normalised score. Proof: a pixel with normalised score $u$ is at
+or above every threshold from 0 to $u$, so it contributes $\int_0^1 \mathbf{1}[u \ge \tau]\,d\tau = u$ to the area;
+averaging over pixels gives the mean. So \code{three_d_roc} returns the target mean and the background mean of
+$\tilde s$. On the course's five pixels ($0.9$ T, $0.8$ B, $0.7$ T, $0.1$ B, $0.0$ B) the normalised scores are
+$1, 0.889, 0.778, 0.111, 0$; so $\mathrm{AUC}(D,\tau) = (1 + 0.778)/2 = 0.889$ and $\mathrm{AUC}(F,\tau) = (0.889 +
+0.111 + 0)/3 = 0.333$, as the test asserts.
+
+\paragraph{Why it does not help for residual Mahalanobis.} That score is a squared distance with a heavy tail: a few
+pixels sit hundreds of times above the typical background. Min-max normalisation divides by the single highest
+score. With a typical background of 30 and one pixel at 30,000\tagA{}, the normalised background is about
+$30/30{,}000 = 0.001$ for every model, so $\mathrm{AUC}_{\mathrm{BS}}$ is ROC-AUC minus 0.001 and SNPR is set by the
+one brightest pixel. The FT02b README measured exactly that on the PRISMA bench (``AUC\_BS = ROC-AUC - 0.001''). The
+terms are computed for comparison with the literature; do not choose a model with them.
+
+\section{The measures side by side}\label{sec:measures:table}
+
+\begin{center}
+\small
+\begin{tabular}{p{3.0cm}p{2.6cm}ccp{4.1cm}}
+\toprule
+measure & key & perfect & chance & question it answers \\
+\midrule
+ROC-AUC & \texttt{roc\_auc} (sampled), exact per group & 1 & 0.5 & are targets above background on average over everything? \\
+pAUC to 1\% FPR & \texttt{pauc\_0.01} & 1 & 0.005 & how good is the top of the list? \\
+TPR at 0.1\% FPR & \texttt{tpr\_at\_0.001} & 1 & 0.001 & what share of target pixels is in about the top 1,000? \\
+caught, top 1\% & \texttt{hit\_1} & 100\% & about 10\% & how many objects in a 1\% review budget? \\
+caught, top 0.1\% & \texttt{hit\_0.1} & 100\% & about 1\% & the same, in a 0.1\% budget \\
+3D-ROC terms & \texttt{auc\_d\_tau}, \ldots & - & - & literature comparison only \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\Cref{ch:benchmarks} explains why the four labelled PRISMA scenes could not separate models even with these
+measures, and builds a bigger benchmark; \cref{ch:runeval} runs them all from one config; \cref{ch:bootstrap} asks
+how large a difference in them is real.
+
+\begin{confusions}
+\confusion{A pAUC of 0.15 is terrible - it is far below 0.5?}{The chance level of the repository's pAUC is
+$m/2 = 0.005$, not 0.5. A pAUC of 0.15 is thirty times chance. Only McClish's standardisation (not used here) puts
+chance at 0.5.}
+\confusion{\texttt{roc\_auc} and the exact AUC should be the same number?}{\code{roc_auc} is the product's sampled
+\code{compute_roc}, kept so results match what users see; the exact AUC uses every score. They differ slightly;
+quote which one you used.}
+\confusion{Top 1\% means exactly 1\% of pixels are flagged?}{It means ``at or above the 99th percentile of valid
+scores''. With many tied scores more can pass. A score map with a block of zeros (masked pixels left in) can put the
+99th percentile at 0, so every pixel is ``flagged'' and every object ``caught'' whatever the scores.}
+\confusion{Objects caught at 10\% means the model found one object in ten?}{It does, and so would random scores. Report it
+next to chance.}
+\confusion{The 1-pixel tolerance applies to AUC too?}{No. Only objects caught has it. AUC, pAUC and TPR at a fixed
+FPR are pixel measures with no tolerance.}
+\confusion{A diagonal pair of target pixels is one object?}{No. Objects are 4-connected; a corner touch makes two
+objects, each with its own chance level.}
+\end{confusions}
+
+\begin{checkyourself}
+\item\label{ex:measures:1} Four pixels: scores 0.6 (T), 0.5 (B), 0.4 (B), 0.3 (T). List the ROC points, compute the
+AUC by trapezoids and by counting pairs, and compute $\mathrm{pAUC}_{0.01}$ and $\mathrm{TPR}@0.001$. What do the
+measures disagree about?
+\item\label{ex:measures:2} Derive the chance level of the normalised pAUC at a limit $m = 0.05$, and the McClish
+value of a raw partial area $A = 0.02$ at that limit.
+\item\label{ex:measures:3} With random scores at the top-1\% budget, what is the chance of catching an L-shaped
+three-pixel object (cells (0,0), (1,0), (1,1))? Count its 1-pixel tolerance cells by hand.
+\item\label{ex:measures:4} A scene has 600,000 valid pixels. How many thresholds does \code{compute_roc} use, and
+how many percentiles apart are they? Roughly how many sampled points fall between FPR 0 and 1\%?
+\item\label{ex:measures:5} A bench has equal numbers of one-pixel and two-pixel (domino) objects. A model catches
+12\% of them at the top 1\%. How many times chance is that?
+\item\label{ex:measures:6} Using the staircase proof of \cref{sec:measures:mw}, compute the AUC of
+\cref{ex:measures:1} a third way: one rectangle per background pixel.
+\end{checkyourself}
+
+\nextchapter{ch:benchmarks}

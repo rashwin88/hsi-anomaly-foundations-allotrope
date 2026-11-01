@@ -137,6 +137,10 @@ Georeferencing arrives here, from re-reading the raw scene (part 5). If it canno
 resolved, the export returns **422 `crs_missing`** rather than shipping a bundle that would
 be disqualified downstream for having no projection.
 
+(Update 2026-10-31: this materials bundle is the analyst's deliverable, not the AIGC submission. Its
+raster holds family codes, not a 0/1 mask, so the submission uses the `anomaly_detection_prep` bundle
+instead; part 28 explains why, and how PRISMA's grid is now read from the file's UTM attributes.)
+
 ## What the answer is, and is not
 
 The output says: *this pixel, at these coordinates, has a spectrum 8.2 degrees from

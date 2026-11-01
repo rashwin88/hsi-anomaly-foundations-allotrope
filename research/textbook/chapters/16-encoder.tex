@@ -1,0 +1,548 @@
+\chapter{The four-stage encoder}\label{ch:encoder}
+
+\begin{onething}
+The encoder looks at the same 128 $\times$ 128 patch at four zoom levels, from a 32 $\times$ 32 grid of
+narrow tokens down to a 4 $\times$ 4 grid of wide ones, and hands all four to the decoder; it hides
+tokens at the first zoom level only, and the pyramid itself blurs those holes away.
+\end{onething}
+
+You now own every part of one encoder stage: the patch embedding that turns a picture into tokens
+(\cref{ch:patchembed}), efficient self-attention (\cref{ch:esa}), and the transformer block that wraps
+attention and Mix-FFN with LayerNorms and residuals (\cref{ch:block}). This chapter stacks four of those
+stages into a pyramid. The new mathematics is modest: one output-size formula applied four times, a
+receptive-field recurrence, and an expected-value calculation that tells you how many stage-2 tokens
+see no visible data at all. The new \emph{ideas} are bigger, because the pyramid is what makes masked
+training work.
+
+The source is \code{app/foundation_models/components/seg_former_encoder.py}. It is 261 lines\tagC,
+over half of them comments. Read it end to end after this chapter.
+
+\section{Why one resolution is not enough}\label{sec:encoder:why}
+
+\subsection{The plain Vision Transformer}
+
+A plain Vision Transformer (ViT) \citep{dosovitskiy2021image} cuts the image into patches once, turns
+each patch into a token, and then keeps that one grid of tokens, at one width, through every layer. If
+you did that here with 4 $\times$ 4 pixel patches you would have $N = 32 \times 32 = 1024$ tokens in
+every layer. Full attention compares every token with every other token, so every layer would build a
+score table of
+\begin{align*}
+N \times N &= 1024 \times 1024 \\
+           &= 1{,}048{,}576
+\end{align*}
+entries per head. Efficient self-attention (\cref{ch:esa}) cuts that down, but the deeper problem is
+not cost. It is that one grid fixes one scale of question.
+
+\subsection{Anomalies come in every size}
+
+What the model must learn is ``what normally goes here''. The answer depends on the size of the thing
+you are asking about:
+
+\begin{table}[htbp]\centering
+\caption{The scale of an anomaly decides which zoom level sees it best.}\label{tab:encoder:sizes}
+\begin{tabular}{@{}p{0.36\linewidth}lp{0.3\linewidth}@{}}\toprule
+Anomaly & Typical extent & Best seen by \\\midrule
+one odd pixel (a flare, a small vessel) & 1 pixel & F1, the only map with that resolution \\
+a field of unusual material & about 20 pixels & F2 and F3 \\
+a whole region that does not belong & about 200 pixels & F4 \\\bottomrule
+\end{tabular}
+\end{table}
+
+A single-resolution model must pick one of those rows. A hierarchical encoder returns four feature maps
+at four scales and lets the decoder (\cref{ch:decoder}) fuse them, so nothing has to be chosen in
+advance.
+
+\begin{analogy}
+You are surveying unfamiliar terrain with four maps open at once: a street plan, a city map, a regional
+map and a country map. The street plan tells you exactly \emph{where} each building stands but nothing
+about the region; the country map tells you \emph{what kind} of region you are in but cannot locate a
+house. A surveyor who wants to spot a building that does not belong uses all four together. The
+encoder's four stages are those four maps, printed on the same ground: F1 is the street plan, F4 the
+country map. The analogy will keep working in \cref{sec:encoder:holes}: if somebody tears holes in the
+street plan, the city map still covers the ground underneath.
+\end{analogy}
+
+\section{The pyramid, stage by stage}\label{sec:encoder:pyramid}
+
+\subsection{The output-size formula}
+
+Every stage starts with a patch embedding, which is a convolution (\cref{ch:shapes}, \cref{ch:patchembed}).
+A reminder of what you need: a \index{convolution!output size}convolution with kernel size $k$, stride
+$s$ and padding $p$ turns an input grid of side $H_{\text{in}}$ into an output grid of side
+\begin{equation}\label{eq:encoder:convout}
+H_{\text{out}} = \left\lfloor \frac{H_{\text{in}} + 2p - k}{s} \right\rfloor + 1 .
+\end{equation}
+In words: pad both sides by $p$, slide a window of width $k$ in steps of $s$, and count the positions
+at which the window still fits. The floor $\lfloor\cdot\rfloor$ rounds down, because a window that would
+hang over the edge is not computed.
+
+The encoder uses two settings, read from the constructor (\code{seg_former_encoder.py}, lines 108--123):
+\begin{itemize}
+\item stage 1: $k = 4$, $s = 4$, $p = 0$ (non-overlapping 4 $\times$ 4 blocks);
+\item stages 2--4: $k = 3$, $s = 2$, $p = \lfloor 3/2 \rfloor = 1$ (overlapping windows).
+\end{itemize}
+
+\begin{worked}[label={we:encoder:grids}]{The four grid sizes from the formula}
+Do this on paper. The input to stage 1 is the compressor's output, 128 $\times$ 128.
+
+Stage 1, $k=4$, $s=4$, $p=0$:
+\begin{align*}
+H_1 &= \left\lfloor \frac{128 + 2\cdot 0 - 4}{4} \right\rfloor + 1 && \text{substitute}\\
+    &= \left\lfloor \frac{124}{4} \right\rfloor + 1 && \text{$128 + 0 - 4 = 124$}\\
+    &= \lfloor 31 \rfloor + 1 && \text{$124/4 = 31$ exactly}\\
+    &= 32 .
+\end{align*}
+Stage 2, $k=3$, $s=2$, $p=1$, input 32:
+\begin{align*}
+H_2 &= \left\lfloor \frac{32 + 2\cdot 1 - 3}{2} \right\rfloor + 1
+     = \left\lfloor \frac{31}{2} \right\rfloor + 1
+     = \lfloor 15.5 \rfloor + 1
+     = 15 + 1 = 16 .
+\end{align*}
+Stage 3, input 16:
+\begin{align*}
+H_3 &= \left\lfloor \frac{16 + 2 - 3}{2} \right\rfloor + 1
+     = \left\lfloor \frac{15}{2} \right\rfloor + 1
+     = 7 + 1 = 8 .
+\end{align*}
+Stage 4, input 8:
+\begin{align*}
+H_4 &= \left\lfloor \frac{8 + 2 - 3}{2} \right\rfloor + 1
+     = \left\lfloor \frac{7}{2} \right\rfloor + 1
+     = 3 + 1 = 4 .
+\end{align*}
+So the grids are $128 \to 32 \to 16 \to 8 \to 4$. Notice that in stages 2--4 the floor throws away a
+half every time: the padded input has an odd length ($31$, $15$, $7$), and the last half-step does not
+fit a whole window. That is why $p = 1$ with $k = 3$, $s = 2$ halves an even side exactly.
+\end{worked}
+
+Every grid is square, so the token count of stage $i$ is $N_i = H_i \times W_i = H_i^2$:
+\begin{align*}
+N_1 &= 32 \times 32 = 1024, & N_2 &= 16 \times 16 = 256,\\
+N_3 &= 8 \times 8 = 64,     & N_4 &= 4 \times 4 = 16.
+\end{align*}
+Each stage has a quarter as many tokens as the one before: halving each side quarters the area.
+
+\subsection{Widths go up as grids go down}
+
+Each patch embedding also sets the \index{embedding width}\emph{embedding width} $C_i$, the number of
+features every token carries. The configuration is the SegFormer-B0 one \citep{xie2021segformer}:
+$C = (32, 64, 160, 256)$. Two quantities move in opposite directions:
+\begin{itemize}
+\item \textbf{spatial detail falls}, from a 32 $\times$ 32 grid to a 4 $\times$ 4 grid;
+\item \textbf{channel width rises}, from 32 to 256 numbers per token.
+\end{itemize}
+Early stages know \emph{where} things are but little about \emph{what} they are; late stages know a
+great deal about \emph{what} but almost nothing about \emph{where}. A pyramid like this, with grid size
+falling and width rising stage by stage, is called a \index{feature pyramid}\emph{feature pyramid}.
+
+How much information does each stage hold? Count the numbers in one feature map, $N_i \times C_i$:
+\begin{align*}
+\text{F1}: \; 1024 \times 32 &= 32{,}768,\\
+\text{F2}: \; 256 \times 64 &= 16{,}384,\\
+\text{F3}: \; 64 \times 160 &= 10{,}240,\\
+\text{F4}: \; 16 \times 256 &= 4{,}096.
+\end{align*}
+The width grows by $\times 2$, $\times 2.5$, $\times 1.6$ while the token count falls by $\times 4$
+each time, so each map holds fewer numbers than the last. The pyramid \emph{summarises}: it is a
+compression, not a reshuffle. Compare the input to stage 1: $32 \times 128 \times 128 = 524{,}288$
+numbers. F1 already holds sixteen times fewer.
+
+\begin{figure}[htbp]\centering
+\begin{tikzpicture}[x=1cm,y=1cm,font=\small]
+  % one ground square = 2.6 cm for 128 pixels; channel bars at 2.6 cm per 256 channels
+  \def\side{2.6}
+  \foreach \i/\n/\c/\lab/\shp [count=\k from 0] in
+     {1/32/32/F1/{(B, 32, 32, 32)},
+      2/16/64/F2/{(B, 64, 16, 16)},
+      3/8/160/F3/{(B, 160, 8, 8)},
+      4/4/256/F4/{(B, 256, 4, 4)}}{
+    \pgfmathsetmacro{\xo}{\k*3.45}
+    \pgfmathsetmacro{\st}{\side/\n}
+    \begin{scope}[shift={(\xo,0)}]
+      \fill[spat!8] (0,0) rectangle (\side,\side);
+      \ifnum\k=0
+        % hidden tokens at stage 1 only: a fixed pseudo-random 65% pattern
+        \foreach \r in {0,...,31}{\foreach \q in {0,...,31}{
+          \pgfmathtruncatemacro{\h}{mod(7*\r+13*\q+3*\r*\q,20)}
+          \ifnum\h<13 \fill[maskgrey] (\q*\st,\side-\r*\st-\st) rectangle ++(\st,\st);\fi}}
+      \fi
+      \draw[spat!70,line width=0.15pt,step=\st] (0,0) grid (\side,\side);
+      \draw[spat,thick] (0,0) rectangle (\side,\side);
+      \node[above,font=\bfseries\small,text=spat] at (\side/2,\side) {\lab};
+      \node[below] at (\side/2,-0.05) {\n\,$\times$\,\n\ = \pgfmathparse{int(\n*\n)}\pgfmathresult\ tokens};
+      \pgfmathsetmacro{\bw}{\side*\c/256}
+      \fill[spat] (0,-0.95) rectangle (\bw,-0.7);
+      \node[right,font=\footnotesize] at (\bw,-0.825) {};
+      \node[below,font=\footnotesize] at (\side/2,-1.0) {width $C=\c$};
+      \node[below,font=\footnotesize\ttfamily] at (\side/2,-1.45) {\shp};
+    \end{scope}}
+  \foreach \k/\t in {0/{k4 s4 from input},1/{k3 s2},2/{k3 s2}}{
+    \pgfmathsetmacro{\xa}{\k*3.45+\side+0.05}
+    \draw[-{Stealth},thick,spat] (\xa,\side/2) -- ++(0.75,0);}
+\end{tikzpicture}
+\caption{The encoder pyramid drawn to scale. Each square covers the same 128 $\times$ 128 pixels of
+ground; its grid lines are the stage's tokens (stage 1: one token per 4 $\times$ 4 pixels, stage 4: one
+per 32 $\times$ 32). The bar under each square is the token width, drawn at one scale (256 channels =
+the full square width). Grey cells in F1 are hidden tokens at a 65\% hiding rate (an illustrative
+pattern); only F1 has them. Arrows are patch embeddings (stride 2, kernel 3).}
+\label{fig:encoder:pyramid}
+\end{figure}
+
+\coursefig[0.98\linewidth]{iw-16-encoder}{The course's view of the same pyramid: each patch embedding
+(arrow) shrinks the grid, by 4 at stage 1 and by 2 after, and widens the channels, producing F1 to F4 at
+1/4 to 1/32 of the input resolution. Hidden tokens (hatched) exist at stage 1 only. Front-face size and
+depth are compressed for drawing; \cref{fig:encoder:pyramid} is to scale.}{fig:encoder:course}
+
+\subsection{The full configuration}
+
+\begin{table}[htbp]\centering
+\caption{The encoder configuration. The last two columns are derived in
+\cref{sec:encoder:attncost}.}\label{tab:encoder:config}
+\begin{tabular}{@{}crrrrrrrr@{}}\toprule
+Stage & $C_i$ & heads & head dim & $R_i$ & blocks & grid & $N_i$ & keys $N_i/R_i^2$ \\\midrule
+1 & 32  & 2 & 16 & 8 & 2 & 32 $\times$ 32 & 1024 & 16 \\
+2 & 64  & 2 & 32 & 4 & 2 & 16 $\times$ 16 & 256  & 16 \\
+3 & 160 & 5 & 32 & 2 & 2 & 8 $\times$ 8   & 64   & 16 \\
+4 & 256 & 8 & 32 & 1 & 2 & 4 $\times$ 4   & 16   & 16 \\\bottomrule
+\end{tabular}
+\end{table}
+
+The \index{head dimension}head dimension is $C_i$ divided by the number of heads (\cref{ch:attention}):
+$32/2 = 16$, $64/2 = 32$, $160/5 = 32$, $256/8 = 32$.
+
+\begin{sourcenote}[: the number of heads]
+The model class's default is \lstinline|num_heads = [1, 2, 5, 8]|
+(\file{app/foundation_models/components/hyperspectral_seg_former_mae.py}, line 71), and the encoder's
+docstring table shows 1 head at stage 1 (\file{seg_former_encoder.py}, line 80). The configurations
+that trained the shipped models override it to \lstinline|[2, 2, 5, 8]|
+(\file{configs/hyperspectral_segformer_exp_2.json}, line 33, and
+\file{research/experiments/indradhanu-finetune/FT04-final-joint/config.json}). The v0.1.0
+configuration used \lstinline|[1, 2, 5, 8]|. Heads change no parameter count (\cref{ch:params}), so a
+checkpoint from either loads into either shape, but they change what the model computes. Trust the
+config, not the default.
+\end{sourcenote}
+
+\begin{drift}
+Configuration values as of 2026-10-29: \lstinline|num_heads = [2, 2, 5, 8]|\tagM{configs/hyperspectral_segformer_exp_2.json},
+\lstinline|embed_dims = [32, 64, 160, 256]|, \lstinline|reduction_ratios = [8, 4, 2, 1]|,
+\lstinline|num_blocks = [2, 2, 2, 2]|\tagM{research/experiments/indradhanu-finetune/FT04-final-joint/config.json}.
+Indradhanu Heavy (\cref{ch:heavy}) widens the stages; everything in this chapter is for the
+standard widths.
+\end{drift}
+
+\section{The attention budget per stage}\label{sec:encoder:attncost}
+
+Efficient self-attention shrinks the keys and values by a \index{reduction ratio}reduction ratio $R$
+in each direction (\cref{ch:esa}). A grid of $H_i \times W_i$ tokens becomes
+$(H_i/R_i) \times (W_i/R_i)$ keys, so the key count is $N_i / R_i^2$:
+\begin{align*}
+\text{stage 1:}\quad \frac{1024}{8^2} &= \frac{1024}{64} = 16,\\
+\text{stage 2:}\quad \frac{256}{4^2} &= \frac{256}{16} = 16,\\
+\text{stage 3:}\quad \frac{64}{2^2} &= \frac{64}{4} = 16,\\
+\text{stage 4:}\quad \frac{16}{1^2} &= 16.
+\end{align*}
+Every stage attends over exactly 16 keys. That is not a coincidence: the reduction ratios $(8, 4, 2, 1)$
+halve as the grid halves, so each stage's keys form the same 4 $\times$ 4 summary of the patch. The
+score table per head is queries times keys, $N_i \times 16$:
+\[
+1024 \times 16 = 16{,}384, \quad 256 \times 16 = 4{,}096, \quad 64 \times 16 = 1{,}024, \quad 16 \times 16 = 256.
+\]
+Stage 1 has the most queries and therefore the largest table, but the table is $64$ times smaller than
+the $1{,}048{,}576$ entries of full attention from \cref{sec:encoder:why}.
+
+\begin{sourcenote}[: masked stage 1 falls back to full attention]
+When tokens have been removed, stage 1 holds fewer than $H \times W$ tokens, so ESA cannot fold them
+back into a grid for its reduction convolution. It tests \lstinline|can_reduce = (self.reduction_ratio > 1) and (N == H * W)| (\file{app/foundation_models/components/efficient_self_attention.py}, line 144) and,
+when that fails, uses the kept tokens themselves as keys: full attention among the survivors. Mix-FFN
+likewise skips its depthwise convolution when $N \ne H \times W$
+(\file{mix_ffn.py}, lines 118--137). Two comments in \file{seg_former_encoder.py} describe something
+else: lines 203--206 say ``ESA's reshape will produce a grid with gaps, which is fine: the reduction
+conv pools over them'', and lines 219--223 say ``we pass the actual token grid dims instead''. Neither
+happens: the encoder passes the \emph{full} $H, W$, and ESA takes its full-attention fallback. The
+source code wins over its comments.
+
+The consequence for cost: with 359 kept tokens (\cref{sec:encoder:walk}) the masked score table is
+$359 \times 359 = 128{,}881$ entries per head\tagC, about eight times the unmasked reduced table of
+$16{,}384$. Masking makes the linear layers of stage 1 about three times cheaper, but makes its
+attention scores more expensive. The ESA comment (line 142) estimates 262K entries ``very cheap'' for
+50\% masking; at 65\% it is 129K.
+\end{sourcenote}
+
+\section{How far each token sees: the receptive field}\label{sec:encoder:rf}
+
+\begin{definition}[Receptive field]
+The \index{receptive field}\emph{receptive field} of a token is the set of input pixels that can
+change its value through the convolutions that built it. For a square window we quote its side, in
+pixels.
+\end{definition}
+
+Attention lets every token read every other token, so in a transformer the receptive field is in
+principle the whole patch. But the \emph{patch embeddings} alone already fix how many pixels go into a
+token \emph{before} attention runs, and that is what decides how fine a stage's picture is. Two numbers
+track it:
+\begin{itemize}
+\item $r_i$, the receptive field side, in input pixels, of one stage-$i$ token;
+\item $j_i$, the \index{jump}\emph{jump}: how many input pixels apart two neighbouring stage-$i$ tokens are.
+\end{itemize}
+
+A convolution with kernel $k$ and stride $s$ applied to a grid with jump $j$ and receptive field $r$
+gives
+\begin{equation}\label{eq:encoder:rf}
+r_{\text{out}} = r + (k - 1)\, j, \qquad j_{\text{out}} = j \, s .
+\end{equation}
+Derive it in words. The output window covers $k$ neighbouring input tokens. The first of them sees $r$
+pixels. Each further token is $j$ pixels along, so it adds $j$ new pixels at the far edge. There are
+$k - 1$ further tokens, giving $r + (k-1)j$. Neighbouring outputs are $s$ input tokens apart, each $j$
+pixels apart, so the new jump is $s \cdot j$.
+
+\begin{worked}[label={we:encoder:rf}]{Receptive fields of the four stages}
+Start from the input pixels: $r_0 = 1$ (a pixel sees itself), $j_0 = 1$. Do each line on paper.
+
+Stage 1 ($k = 4$, $s = 4$):
+\begin{align*}
+r_1 &= r_0 + (4 - 1)\, j_0 = 1 + 3 \cdot 1 = 4, & j_1 &= j_0 \cdot 4 = 4 .
+\end{align*}
+Stage 2 ($k = 3$, $s = 2$):
+\begin{align*}
+r_2 &= r_1 + (3 - 1)\, j_1 = 4 + 2 \cdot 4 = 12, & j_2 &= 4 \cdot 2 = 8 .
+\end{align*}
+Stage 3:
+\begin{align*}
+r_3 &= 12 + 2 \cdot 8 = 28, & j_3 &= 8 \cdot 2 = 16 .
+\end{align*}
+Stage 4:
+\begin{align*}
+r_4 &= 28 + 2 \cdot 16 = 60, & j_4 &= 16 \cdot 2 = 32 .
+\end{align*}
+A stage-1 token sees exactly its own 4 $\times$ 4 block: no overlap with its neighbours, because $r_1
+= j_1$. A stage-4 token is built from a 60 $\times$ 60 window, and its neighbours are 32 pixels apart:
+neighbouring windows overlap by $60 - 32 = 28$ pixels. The jumps $4, 8, 16, 32$ are the ``1/4 to 1/32
+scale'' of the stage names.
+\end{worked}
+
+That $r_1 = j_1$ at stage 1 is a deliberate design choice, and the masking chapter (\cref{ch:masking})
+depends on it: a stage-1 token is built only from its own 16 pixels, so hiding a token hides exactly
+those pixels and nothing leaks across token borders.
+
+\begin{sourcenote}[: kernel 4, not 7]
+The patch-embedding module's docstring describes stage 1 as ``kernel=7, stride=4 -> overlap = 7 - 4 = 3
+pixels'' (\file{app/foundation_models/components/overlap_patch_embedding.py}, line 10), as in the
+original SegFormer. The encoder builds stage 1 with \lstinline|patch_size = 4 if i == 0 else 3|
+(\file{seg_former_encoder.py}, line 110) and \lstinline|padding = 0| (line 114). The source wins: kernel 4,
+no overlap. With kernel 7 the receptive field would be $1 + 6 = 7$ pixels and a hidden token's pixels
+would leak into its visible neighbours.
+\end{sourcenote}
+
+\section{One stage, in code}\label{sec:encoder:loop}
+
+The encoder's \code{forward} is one loop that runs four times:
+\begin{lstlisting}
+for i in range(self.num_stages):
+    x, H, W = self.patch_embeds[i](x)        # -> (B, N, C_i)
+    B, N, C = x.shape                        # remember the FULL token count
+
+    gather_indices = None
+    if i == 0 and keep_mask is not None:     # hide tokens, stage 1 only
+        x, gather_indices = TokenMasking.remove_tokens(x, keep_mask)
+                                             # (B, N_kept, C_1)
+
+    for block in self.blocks[i]:             # 2 x SegFormerBlock, shape unchanged
+        x = block(x, H, W)
+
+    x = self.norms[i](x)                     # stage-output LayerNorm
+
+    if i == 0 and gather_indices is not None:
+        x = TokenMasking.restore_tokens(x, gather_indices, N, C)  # (B, N, C_1)
+
+    B_cur, N_cur, C_cur = x.shape
+    x = x.transpose(1, 2).reshape(B_cur, C_cur, H, W)  # (B, C_i, H_i, W_i)
+    features.append(x)
+\end{lstlisting}
+Six steps: \textbf{embed, (maybe hide), blocks, normalise, (maybe restore), reshape}. The two
+``maybe'' steps are the subject of \cref{ch:masking}.
+
+The last line does double duty. The reshaped tensor is both this stage's feature map, saved in
+\code{features} for the decoder, and the next stage's input, because the loop variable \code{x} carries
+it into the next iteration. Stages 2--4 therefore never see the compressed picture: stage 2 reads F1,
+stage 3 reads F2, stage 4 reads F3.
+
+The reshape at the end is the sequence-to-spatial conversion of \cref{ch:shapes}: \lstinline|transpose(1, 2)|
+swaps the token and channel axes, then \code{reshape} folds the $N$ tokens back into $H \times W$ rows
+and columns. The transpose is necessary because the memory order differs between the layouts.
+
+\section{Hiding happens at stage 1 only}\label{sec:encoder:holes}
+
+Masked training (\cref{ch:recon}) hides some tokens from the encoder so it must predict them. A natural
+first guess is that every stage should hide tokens. It does not, and the source says why:
+\begin{quote}\small
+``Token removal only happens at Stage 1. After scattering back and reshaping to 2D, Stage 2's OPE
+(Conv2d stride=2) pools over 3x3 regions, so most Stage 2 tokens contain at least some real information
+even with 50\% masking. Stages 2-4 process ALL tokens -- the information loss from masking naturally
+dilutes through the spatial reduction.'' (\file{seg_former_encoder.py}, lines 22--26)
+\end{quote}
+In plainer terms: \textbf{the holes are punched once, at the finest resolution, and then the pyramid
+blurs them out by itself.} Hiding again at stage 2 would starve the coarse stages, which are exactly
+where the model learns its ``what usually goes here'' knowledge.
+
+``Most stage-2 tokens'' is a claim you can check with numbers.
+
+\subsection{Which stage-1 tokens a stage-2 token reads}
+
+A stage-2 token at row $h$ is computed by a 3 $\times$ 3 window, stride 2, padding 1, over the 32
+$\times$ 32 grid of F1. Its window covers F1 rows $2h - 1$, $2h$, $2h + 1$. Row $-1$ is padding (a
+zero that is not a token).
+\begin{itemize}
+\item For $h = 0$: rows $-1, 0, 1$, so only rows 0 and 1 are real: 2 rows.
+\item For $h = 15$: rows $29, 30, 31$, all real: 3 rows. The padding at the bottom is never reached,
+because $2 \cdot 15 + 1 = 31$ is the last row.
+\end{itemize}
+The same holds for columns. So in the 16 $\times$ 16 grid of stage 2:
+\begin{itemize}
+\item 1 token (row 0, column 0) reads $2 \times 2 = 4$ stage-1 tokens;
+\item $15 + 15 = 30$ tokens (row 0 or column 0, not both) read $2 \times 3 = 6$;
+\item $15 \times 15 = 225$ tokens read $3 \times 3 = 9$.
+\end{itemize}
+Check: $1 + 30 + 225 = 256$. Every stage-2 token is accounted for.
+
+\subsection{The expected number of empty stage-2 tokens}
+
+\begin{definition}[Expected value, linearity]
+The \index{expected value}\emph{expected value} $\E[X]$ of a random count $X$ is its long-run average
+over many repetitions. If $X = X_1 + X_2 + \dots + X_n$ is a sum of counts, then
+$\E[X] = \E[X_1] + \dots + \E[X_n]$, whether or not the $X_k$ are independent
+(\index{linearity of expectation}\emph{linearity of expectation}). For an indicator $X_k$ (1 if an event
+happens, 0 if not), $\E[X_k]$ is the probability of the event.
+\end{definition}
+
+Call a stage-2 token \emph{empty} if every stage-1 token in its window was hidden. Treat each stage-1
+token as hidden with probability $\rho = 0.65$, independently (an approximation; the exact draw hides a
+fixed count, see below). A window of $m$ tokens is empty with probability $\rho^m$:
+\begin{align*}
+\rho^4 &= 0.65^4 = 0.65^2 \cdot 0.65^2 = 0.4225 \times 0.4225 \approx 0.1785,\\
+\rho^6 &= 0.65^4 \cdot 0.65^2 \approx 0.1785 \times 0.4225 \approx 0.0754,\\
+\rho^9 &= 0.65^6 \cdot 0.65^3 \approx 0.0754 \times 0.2746 \approx 0.0207 .
+\end{align*}
+By linearity, the expected number of empty stage-2 tokens is the sum of the 256 probabilities:
+\begin{align*}
+\E[\text{empty}] &= 1 \times 0.1785 + 30 \times 0.0754 + 225 \times 0.0207\\
+                 &\approx 0.1785 + 2.262 + 4.66\\
+                 &\approx 7.1 .
+\end{align*}
+About 7 of the 256 stage-2 tokens\tagC, under 3\%, have no visible data in their window. The other 97\%
+see at least one survivor. The exact draw (665 of 1024 hidden, without replacement) gives $6.94$; the
+script \file{research/textbook/tools/compute_masking.py} computes both\tagC. By stage 3, whose tokens
+see 3 $\times$ 3 windows of stage-2 tokens, an empty token would need nine empty stage-2 tokens in a
+row and column block, which essentially never happens.
+
+\begin{keypoint}
+Masking at stage 1 at 65\% leaves only about 7 of 256 stage-2 tokens without any visible input; the
+pyramid fills the holes for free.
+\end{keypoint}
+
+\section{The complete masked walk-through}\label{sec:encoder:walk}
+
+Take two fully valid patches ($B = 2$) of 128 $\times$ 128 and the training ratio $\rho = 0.65$.
+The ratio comes from the training configuration
+\tagM{configs/hyperspectral_segformer_exp_2.json}.
+How many tokens survive? The hiding count is
+$\lfloor 1024 \times 0.65 \rfloor = \lfloor 665.6 \rfloor = 665$ (\cref{ch:masking} explains the
+rounding down), so $1024 - 665 = 359$ tokens are kept.
+
+\begin{table}[htbp]\centering
+\caption{One masked pass through the encoder, $B = 2$, fully valid patches, $\rho = 0.65$. Shapes were
+confirmed by running the real encoder on CPU
+(\texttt{research/textbook/tools/compute\_params.py}).}\label{tab:encoder:walk}
+\begin{tabular}{@{}llll@{}}\toprule
+Stage & Step & Shape after the step & Note \\\midrule
+1 & patch embed $k4\,s4\,p0$ & \shape{(2, 1024, 32)} & all tokens \\
+  & remove tokens & \shape{(2, 359, 32)} & 665 hidden tokens deleted \\
+  & 2 blocks & \shape{(2, 359, 32)} & full-attention fallback \\
+  & LayerNorm & \shape{(2, 359, 32)} & \\
+  & restore tokens & \shape{(2, 1024, 32)} & zeros at hidden slots \\
+  & reshape & \shape{(2, 32, 32, 32)} = F1 & a grid with holes \\\midrule
+2 & patch embed $k3\,s2\,p1$ & \shape{(2, 256, 64)} & pools over the holes \\
+  & 2 blocks, LayerNorm & \shape{(2, 256, 64)} & $R = 4$ \\
+  & reshape & \shape{(2, 64, 16, 16)} = F2 & no holes \\\midrule
+3 & patch embed, blocks, norm & \shape{(2, 64, 160)} & $R = 2$ \\
+  & reshape & \shape{(2, 160, 8, 8)} = F3 & \\\midrule
+4 & patch embed, blocks, norm & \shape{(2, 16, 256)} & $R = 1$, true full attention \\
+  & reshape & \shape{(2, 256, 4, 4)} = F4 & \\\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{sourcenote}[: 359, not 358]
+The course writes ``\textasciitilde 358'' kept tokens at $\rho = 0.65$, which is $35\%$ of $1024$ ($358.4$).
+The code rounds the \emph{hidden} count down, \lstinline|(num_valid * mask_ratio).long()|
+(\file{app/foundation_models/components/token_masking.py}, line 186), so a fully valid patch hides 665
+and keeps 359. Running the encoder confirms 359 per item
+(\file{research/textbook/tools/compute_params_output.txt}).
+\end{sourcenote}
+
+\section{Three things that look like bugs and are not}\label{sec:encoder:notbugs}
+
+\subsection{$H$ and $W$ keep describing the full grid}
+
+After removal there are 359 tokens, but the loop still passes $H = W = 32$ to the blocks. That is
+correct and necessary. The restore step needs the full size to rebuild the grid, and the final reshape
+needs it too. Meanwhile the mismatch $N \ne H \times W$ is \emph{how} ESA and Mix-FFN detect that
+masking is active and take their fallback paths.
+
+\subsection{Hidden positions become exactly zero}
+
+The masked-autoencoder paper \citep{he2022masked} inserts a learned \index{mask token}\emph{mask token}
+at hidden positions: one trained vector that means ``something was here''. This encoder writes zeros
+(\code{restore_tokens} starts from \code{torch.zeros}, \file{token_masking.py}, line 402). It works
+because the decoder's job here is spatial fusion of four maps rather than sequence modelling: it
+fills the gaps from the surviving stage-1 tokens around them and from the fully populated F2--F4.
+
+\subsection{F1 keeps its holes all the way to the decoder}
+
+Nothing fills them at stage 1. F1 arrives at the decoder with zero vectors at every hidden token. That
+is fine: the decoder receives four maps covering the same ground and only one of them has holes.
+
+\section{What the encoder returns}\label{sec:encoder:returns}
+
+\begin{lstlisting}
+return features       # [F1, F2, F3, F4]
+# F1: (B, 32, 32, 32)   F2: (B, 64, 16, 16)   F3: (B, 160, 8, 8)   F4: (B, 256, 4, 4)
+\end{lstlisting}
+A Python list of four tensors at four resolutions and four widths: the complete interface between
+encoder and decoder. Any patch side that divides by 32 works, because the side is divided by 4 once and
+by 2 three times ($4 \times 2 \times 2 \times 2 = 32$); for a 256 $\times$ 256 patch the grids are
+$64, 32, 16, 8$.
+
+\begin{confusions}
+\confusion{Do stages 2--4 see the original image?}{No. Stage 2 reads F1, stage 3 reads F2, stage 4
+reads F3. Only stage 1 touches the compressed picture.}
+\confusion{Is the encoder a bottleneck like an ordinary autoencoder's?}{A hierarchical one. There is no
+single narrow layer; there are four maps, and the coarsest (16 tokens of 256 numbers, 4,096 values) is
+very compressed. All four go to the decoder, so the fine map is not squeezed through the coarse one.}
+\confusion{Why does the width go up as the grid goes down?}{To shift capacity from ``where'' to ``what''
+while each map still shrinks overall (32,768 to 4,096 numbers). It is the standard convolutional
+backbone pattern, inherited by SegFormer.}
+\confusion{Stage 1 has R = 8, so its attention is always reduced?}{Only without masking. In a masked
+pass the token count is not $H \times W$, ESA cannot rebuild the grid, and stage 1 runs full attention
+among the kept tokens (\cref{sec:encoder:attncost}).}
+\confusion{Does every stage-2 token mix hidden and visible tokens?}{Most do. About 7 of 256 are
+expected to see only hidden tokens at $\rho = 0.65$; they carry only bias, LayerNorm and padding
+values, and the decoder must rely on F3 and F4 there.}
+\confusion{Could I use a patch size other than 128?}{Yes, if it divides by 32. The token count, the
+key count and the run time change; the parameter count does not (\cref{ch:params}).}
+\end{confusions}
+
+\begin{checkyourself}
+\item\label{ex:encoder:1} Use \cref{eq:encoder:convout} to find the four grid sizes for a 256
+$\times$ 256 patch, and the token count of each stage.
+\item\label{ex:encoder:2} For a 128 $\times$ 128 patch, how many keys does each stage's attention use
+in an unmasked pass, and how many score entries per head does stage 2 compute?
+\item\label{ex:encoder:3} Using \cref{eq:encoder:rf}, find the receptive field and jump of a stage-2
+token if stage 1 were built with kernel 7, stride 4 (the original SegFormer). Why would that break
+masked training?
+\item\label{ex:encoder:4} A batch is masked at $\rho = 0.5$ instead of 0.65. Using the independence
+approximation, compute the expected number of empty stage-2 tokens for a 128 $\times$ 128 patch.
+\item\label{ex:encoder:5} Name the six steps of one stage, and say which two only happen at stage 1 and
+why the reshape at the end is used twice.
+\end{checkyourself}
+
+\nextchapter{ch:masking}

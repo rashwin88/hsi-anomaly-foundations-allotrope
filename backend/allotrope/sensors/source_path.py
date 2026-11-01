@@ -10,6 +10,12 @@
     (the flight-line scene directory, e.g. ``ang20151219081738/``).
   - HotSat-1: the **folder** containing ``metadata.json`` + the ortho /
     stacked / UDM GeoTIFFs (SatVu L2 Visual scene bundle).
+  - Tanager: the surface-reflectance ``.h5`` (an ``sr``-named one if the
+    upload carries several HDF5 files), else an ENVI ``.hdr`` whose data
+    file is beside it; ``pick_tanager_file``.
+  - generic_hsi: the cube file - a GeoTIFF, an ENVI ``.hdr`` (its data file
+    beside it) or an HDF5 / NetCDF container, the largest if several;
+    ``locate_data`` (raises with the extensions it saw when there is none).
 
 The user-uploaded folder structure is preserved at staging, so the file
 may sit at either ``raw_root/<file>`` or ``raw_root/SOMEFOLDER/<file>``.
@@ -78,5 +84,20 @@ def resolve_source_path(sensor_type: str, raw_root: Path) -> Path:
             if p.name == "metadata.json":
                 return p.parent
         raise ValueError(f"no metadata.json under {raw_root}")
+
+    if sensor_type == "tanager":
+        # Imported here: this module is shared with the api, which must not load h5py at startup.
+        from app.utils.files.tanager_helper import pick_tanager_file
+
+        picked = pick_tanager_file(files)
+        if picked is not None:
+            return picked
+        raise ValueError(f"no .h5 / .he5 / .hdf5 file, and no ENVI .hdr with its data file, under {raw_root}")
+
+    if sensor_type == "generic_hsi":
+        # Imported here for the same reason. The largest GeoTIFF / ENVI cube / HDF file wins.
+        from app.utils.files.generic_hsi_helper import locate_data
+
+        return locate_data(files)[0]
 
     raise ValueError(f"unknown sensor_type {sensor_type!r}")

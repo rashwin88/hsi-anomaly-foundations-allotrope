@@ -1,0 +1,698 @@
+\chapter{Fine-tuning: the curriculum, the BatchNorm see-saw and mixed batches}\label{ch:finetune}
+\begingroup\setlength{\emergencystretch}{5em}% long provenance paths: allow loose lines rather than overfull ones
+\def\tbrk{\hfil\penalty50\hfilneg}% local: a line may break before a provenance tag, leaving the line ragged
+
+\begin{onething}
+Fine-tuning runs as stages (probe the frozen encoder, adapt it to three sensors, then train reconstruction and segmentation
+together), each opened only by a gate written down in advance. On the way, the model's single BatchNorm turned out to keep a
+running mean that is an exponential average dominated by the last couple of dozen batches, so sensor-pure batches made evaluation
+depend on which sensor came last. Mixing every sensor into every batch, one stem pass per band list and one encoder pass for all,
+fixed it.
+\end{onething}
+
+\section{Why a curriculum}\label{sec:finetune:why}
+
+F001 (\cref{ch:pretrain}) has only seen SpectralEarth. The product reads PRISMA, EnMAP and AVIRIS-NG at their own bands, and now has
+a segmentation head (\cref{ch:seghead}) that has never been trained. The obvious plan is to switch everything on at once: load F001,
+add the head, feed all three sensors, train every parameter on reconstruction plus segmentation. It fails in three ways.
+\begin{itemize}
+  \item \textbf{You cannot tell what helped.} If detection moves, was it the new sensors, the new loss, or the new head pulling the encoder?
+  \item \textbf{A fresh head wrecks a trained encoder.} A randomly initialised head produces large, meaningless gradients in its first steps,
+    and they flow back into an encoder that took a hundred epochs to train.
+  \item \textbf{The new skill can cost the old one.} The product's job is detection, which reads the \emph{reconstruction}. Training the shared
+    encoder hard on segmentation can make it a worse reconstructor.
+\end{itemize}
+So the plan (\file{docs/proposals/fine-tuning-and-segmentation.md}, agreed 2026-10-16) is a \emph{curriculum}\index{curriculum}: a sequence of
+stages, each changing one thing, each judged before the next starts. The code is \file{app/foundation_models/trainers/finetune_trainer.py}
+with its configuration \code{SpectralStemFinetuneConfig}; runs live in \file{research/experiments/indradhanu-finetune/}, one folder per run,
+each with its pass criteria written before launch. This chapter is about the machinery and its mathematics; what each run showed is told
+in \cref{ch:ftruns}.
+
+\section{The stages and their gates}\label{sec:finetune:stages}
+
+\begin{table}[htbp]
+\centering\small
+\caption{The fine-tuning curriculum. Stage 4 is optional.}
+\label{tab:finetune:stages}
+\begin{tabular}{p{1.9cm}p{1.1cm}p{2.9cm}p{2.6cm}p{3.9cm}}
+\toprule
+stage & mode & trains & data & gate before the next\\
+\midrule
+0 setup & -- & nothing & -- & everything exists and is tested; label policy fixed\\
+1 probe (FT01) & \texttt{probe} & the segmentation head only & EnMAP & per-class IoU recorded\\
+2 adapt (FT02) & \texttt{adapt} & stem, encoder, reconstruction decoder & all three, by share & bench $\ge 0.861$; test reconstruction falls on every sensor\\
+3 joint (FT03) & \texttt{joint} & everything & all three; segmentation loss on EnMAP & bench not below stage 2; IoU above stage 1\\
+4 pseudo-labels & \texttt{joint} & as stage 3 & plus confident PRISMA and AVIRIS-NG labels & IoU holds; bench holds\\
+5 product & -- & -- & -- & masks replace the threshold rules\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{definition}[Bench and gate]\index{gate (fine-tuning)}
+The \emph{bench} is the mean ROC-AUC (\cref{ch:measures}) on the four labelled PRISMA scenes under the default score, residual Mahalanobis
+(\cref{ch:residualmaha}). A \emph{gate} is a pass criterion written in a run's README before launch and never moved afterwards. 0.861 is F001 at
+epoch 60.
+\end{definition}
+
+\coursefig[0.95\linewidth]{iw-49-curriculum}{(a) The six stages, what each trains, and the gate (amber) it must pass; stage 4 is optional. (b) Batches
+are drawn by fixed shares (top), not in proportion to each sensor's tile count (bottom), which would give AVIRIS-NG 43\% of training.}{fig:finetune:curriculum}
+
+\paragraph{Why the gate is read at \texttt{best.pt}, chosen by another rule.} A gate is read at the checkpoint that validation reconstruction picks
+(\cref{ch:pretrain}), never at whichever epoch scores best on the bench. Suppose a run's true detection ability does not change at all, and four
+checkpoints read 0.855, 0.858, 0.864 and 0.853 on the four bench scenes, the differences being noise\tbrk\tagA. Picking the best of the four reports 0.864,
+which passes a 0.861 gate, although nothing improved: the maximum of several noisy readings is biased upwards. Choosing by the bench turns the bench
+into training data. \Cref{ch:bootstrap} measures how large that noise is.
+
+\section{Starting from F001}\label{sec:finetune:init}
+
+\paragraph{Loading with a check.} \code{build_model} loads the pretrained checkpoint into a model that now has a head:
+\begin{lstlisting}
+missing, unexpected = model.load_state_dict(state, strict=False)
+# new_heads = ("seg_head.", "scale_head."): the only tensors allowed to be missing
+if unexpected or any(not k.startswith(new_heads) for k in missing):
+    raise ValueError(f"init_from does not match the model: ...")
+\end{lstlisting}
+Everything except the new heads must match exactly. A configuration that builds the wrong architecture fails here, loudly, instead of training half
+a model from scratch.
+
+\paragraph{The normalisation curve comes from the checkpoint.} Inside the model each band is normalised as $(v - \mu(\lambda))/\sigma(\lambda)$ with the
+curve computed on SpectralEarth (\cref{ch:pretrain}). The fine-tuning configuration takes that curve from \code{init_from}'s checkpoint and never
+recomputes it.
+
+\begin{worked}[label={we:finetune:curve}]{Why the curve is frozen}
+One band with pretraining mean 0.20 and spread 0.10, and a pixel reading 0.25. Suppose the curve were recomputed on EnMAP and came out at mean 0.22,
+spread 0.12 (illustrative\tbrk\tagA).
+\begin{align*}
+  \text{pretraining curve:}&\quad (0.25 - 0.20)/0.10 = 0.05 / 0.10 = 0.50\\
+  \text{recomputed curve:}&\quad (0.25 - 0.22)/0.12 = 0.03 / 0.12 = 0.25.
+\end{align*}
+The same pixel would reach the weights as 0.25 instead of the 0.50 they learned to read, and every input in every band would shift at once.
+\end{worked}
+
+\section{Parameters, buffers and BatchNorm}\label{sec:finetune:bn}
+
+\subsection{Freezing parameters}
+
+A \emph{probe}\index{probe} trains a small head on top of frozen features, to measure what the features already know. If water and cloud separate well
+with the encoder untouched, F001 learned them in pretraining. In probe mode the trainer marks every parameter outside the head as not trainable and
+gives the optimiser only the head's parameters:
+\begin{lstlisting}
+for name, p in self.model.named_parameters():
+    p.requires_grad = name.startswith("seg_head.")       # only the head learns
+self.optimizer = torch.optim.Adam([p for p in self.model.parameters() if p.requires_grad],
+                                  lr=config.learning_rate)
+\end{lstlisting}
+(Adam is the adaptive optimiser of \cref{ch:trainloop} \citep{kingma2015adam}, here without decoupled weight decay.) That is not quite enough, because
+a model holds two kinds of tensors.\index{parameter (model)}
+\begin{definition}[Parameter and buffer]\index{buffer (PyTorch)}
+A \emph{parameter} is a tensor the optimiser changes through gradients. A \emph{buffer} is a tensor the model keeps and may change itself, without
+gradients; \code{requires_grad} does not touch it.
+\end{definition}
+
+\subsection{BatchNorm: two modes}
+
+The model has one \emph{batch normalisation}\index{batch normalisation} layer \citep{ioffe2015batch}, \code{self.norm = nn.BatchNorm2d(D)} with
+$D = 32$, between the spectral stem and the encoder (\file{app/foundation_models/components/spectral_stem_seg_former_mae.py}, line 75). Every pixel's 32
+stem channels pass through it. The encoder's blocks use LayerNorm (\cref{ch:block}), which normalises each token on its own and keeps no statistics.
+So this is the model's only layer whose output depends on the \emph{other} samples in a batch.
+
+For one channel, with $x$ the values of that channel over every pixel of every sample in the batch:
+\begin{description}[style=nextline,leftmargin=1.2em]
+  \item[Training mode (\texttt{model.train()})] Compute the batch's mean $\mu_B$ and variance $\sigma_B^2$ over all those values, and output
+    \begin{equation}\label{eq:finetune:bntrain}
+      y = \gamma\,\frac{x - \mu_B}{\sqrt{\sigma_B^2 + \epsilon}} + \beta,
+    \end{equation}
+    with learned scale $\gamma$ and shift $\beta$ (parameters) and $\epsilon = 10^{-5}$. Also update two buffers, the running mean $r$ and running
+    variance, towards the batch's values:
+    \begin{equation}\label{eq:finetune:ema}
+      r \leftarrow (1 - m)\,r + m\,\mu_B, \qquad m = 0.1.
+    \end{equation}
+  \item[Evaluation mode (\texttt{model.eval()})] Use the stored running mean and variance in place of $\mu_B$ and $\sigma_B^2$, and update nothing.
+\end{description}
+\code{FoundationTrainer._run_epoch} (\file{app/abstract_classes/foundation_trainer.py}, lines 213 and 228) calls \code{model.train()} before the
+training pass and \code{model.eval()} before validation; inference also runs in evaluation mode. Training and evaluation therefore normalise by
+\emph{different numbers}. That is harmless when every batch looks like the whole data set.
+
+\begin{sourcenote}[: the momentum]
+\code{nn.BatchNorm2d(D)} is built with no \code{momentum} argument (line 75), so PyTorch's default $m = 0.1$ applies, with the convention of
+\eqref{eq:finetune:ema}: the \emph{new} batch gets weight $m$. (Some other libraries call $1 - m = 0.9$ the momentum; read the formula, not the name.)
+\file{docs/lld/finetune.md} records the same: ``PyTorch default momentum 0.1''. One detail the courses leave out: PyTorch updates the running
+\emph{variance} with the batch's unbiased variance (divided by $n - 1$) while normalising the batch itself with the biased one (divided by $n$); with
+$8 \times 128 \times 128 = 131{,}072$ values per channel per micro-batch, the difference is a factor $131{,}072/131{,}071$, negligible.
+\end{sourcenote}
+
+\subsection{The running mean is an exponential moving average}
+
+Unroll \eqref{eq:finetune:ema}. Write $x_k$ for the $k$-th batch's mean and $r_0$ for the starting value; $0.9 = 1 - m$.
+\begin{align*}
+  r_1 &= 0.9\,r_0 + 0.1\,x_1\\
+  r_2 &= 0.9\,r_1 + 0.1\,x_2 = 0.9(0.9\,r_0 + 0.1\,x_1) + 0.1\,x_2 = 0.9^2 r_0 + 0.1(0.9\,x_1 + x_2)\\
+  r_3 &= 0.9\,r_2 + 0.1\,x_3 = 0.9^3 r_0 + 0.1(0.9^2 x_1 + 0.9\,x_2 + x_3).
+\intertext{The pattern: each older batch's weight is multiplied by another 0.9. After $n$ batches}
+  r_n &= 0.9^{n}\,r_0 + 0.1\sum_{k=1}^{n} 0.9^{\,n-k}\,x_k.
+\end{align*}
+This is an \emph{exponential moving average}\index{exponential moving average}: the newest batch has weight 0.1, the one before 0.09, then 0.081, and so on.
+
+\paragraph{How much weight do the last $K$ batches carry?} Add the weights of batches $n, n-1, \dots, n-K+1$:
+\begin{align*}
+  W_K &= 0.1\,(1 + 0.9 + 0.9^2 + \dots + 0.9^{K-1}).
+\intertext{The bracket is a \emph{geometric series}\index{geometric series}. Check the formula $1 + q + \dots + q^{K-1} = (1 - q^K)/(1 - q)$ on a tiny case, $q = 0.9$, $K = 3$:
+$1 + 0.9 + 0.81 = 2.71$ and $(1 - 0.729)/(1 - 0.9) = 0.271/0.1 = 2.71$. So}
+  W_K &= 0.1 \cdot \frac{1 - 0.9^{K}}{1 - 0.9} = 0.1 \cdot \frac{1 - 0.9^K}{0.1} = 1 - 0.9^{K}.
+\end{align*}
+\begin{center}
+\begin{tabular}{rll}
+\toprule
+$K$ & $0.9^K$ & weight of the last $K$ batches, $1 - 0.9^K$\\
+\midrule
+1 & 0.9 & 0.10\\
+5 & 0.590 & 0.41\\
+10 & 0.349 & 0.651\\
+22 & 0.098 & 0.902\\
+\bottomrule
+\end{tabular}
+\end{center}
+How many batches make 90\%? Solve $1 - 0.9^K = 0.9$, that is $0.9^K = 0.1$. Take logarithms: $K\ln 0.9 = \ln 0.1$, so
+$K = \ln 0.1 / \ln 0.9 = -2.3026 / -0.1054 = 21.85$. About 22 batches carry 90\% of the stored mean.
+
+\begin{worked}[label={we:finetune:drift}]{A ``frozen'' encoder that drifts}
+After pretraining a channel's running mean is 0.00, and EnMAP batches have mean 0.50 (illustrative\tbrk\tagA). The probe freezes every parameter but leaves
+the model in training mode. With all $x_k = 0.5$ and $r_0 = 0$, the unrolled formula gives $r_n = 0.5\,(1 - 0.9^n)$:
+\begin{align*}
+  \text{after 1 batch:}&\quad 0.9 \times 0.00 + 0.1 \times 0.50 = 0.050\\
+  \text{after 2 batches:}&\quad 0.9 \times 0.050 + 0.1 \times 0.50 = 0.045 + 0.050 = 0.095\\
+  \text{after 10 batches:}&\quad 0.50 \times (1 - 0.349) = 0.50 \times 0.651 = 0.326.
+\end{align*}
+Ten batches in, the ``frozen'' model normalises its input differently from the one that was pretrained, and the probe measures a drifted encoder.
+\end{worked}
+
+So the probe puts the whole model in evaluation mode for the training pass and switches only the head back:
+\begin{lstlisting}
+def _train_pass_mode(self) -> None:
+    mode = self.config.model_config_.mode
+    # frozen backbone: keep its BatchNorm statistics
+    if mode in ("probe", "scale", "decoder"):
+        self.model.eval()
+        {"probe": self.model.seg_head, ...}[mode].train()
+\end{lstlisting}
+It runs after the parent's \code{model.train()} and before the training pass. Evaluation mode also turns off dropout (\code{drop_rate} 0.4 in F001), so
+the probe sees exactly the features inference sees. In probe mode the validation score that ranks epochs is the segmentation loss, since nothing else
+is trained, and a batch without labels contributes nothing, which is why the probe reads EnMAP alone.
+
+\section{Mixing sensors by share}\label{sec:finetune:shares}
+
+FT01 and FT02 drew every batch from one sensor (the stem took one band list per call, \cref{ch:pretrain}). \code{_MixedLoader} chooses the sensor for
+each batch at random, weighted by its share:
+\begin{lstlisting}
+name = self.rng.choices(self.names, self.weights)[0]     # weights e.g. 0.40, 0.35, 0.25
+\end{lstlisting}
+It keeps one iterator per sensor, restarts a sensor whose shards run out, and seeds its generator with the starting epoch, so a resumed run draws a
+fresh but reproducible sequence.
+
+\paragraph{Why shares, not one shuffled pool.} Count the training tiles:\tbrk\tagM{research/experiments/indradhanu-finetune/README.md}
+\begin{align*}
+  \text{total} &= 14{,}542 + 14{,}802 + 22{,}377 = 51{,}721\\
+  \text{EnMAP} &= 14{,}542 / 51{,}721 = 0.281\\
+  \text{PRISMA} &= 14{,}802 / 51{,}721 = 0.286\\
+  \text{AVIRIS-NG} &= 22{,}377 / 51{,}721 = 0.433.
+\end{align*}
+A pool would give AVIRIS-NG 43\% of training: one airborne campaign, about 200 tiles per flight line, against the product's two satellites. The
+starting shares are EnMAP 0.40, PRISMA 0.35, AVIRIS-NG 0.25.
+
+\paragraph{How exact are random shares?} Each batch is EnMAP with probability 0.40, independently, so over $n$ batches the EnMAP count is a
+\emph{binomial}\index{binomial distribution} variable with mean $np$ and standard deviation $\sqrt{np(1-p)}$. Over 1,000 batches:
+\begin{align*}
+  \text{mean} &= 1{,}000 \times 0.40 = 400\\
+  \text{standard deviation} &= \sqrt{1{,}000 \times 0.40 \times 0.60} = \sqrt{240} = 15.5.
+\end{align*}
+So about 400 $\pm$ 15 EnMAP batches per thousand: shares are honoured to a few percent over an epoch of 3,750 micro-batches.
+
+\paragraph{A validation trap.} Validation runs every test source to the end, in order (\code{_SequentialLoader}), and
+\code{test_samples_per_epoch} caps the total. The test sets hold $950 + 1{,}570 + 2{,}270 = 4{,}790$ tiles. A cap below 4,790 cuts off whichever sensor
+comes last, so its per-sensor score would rest on part of its test set or none of it. FT02 and FT03 set the cap to 5,000.\tbrk\tagM{research/experiments/indradhanu-finetune/FT03-joint/config.json}
+
+\section{The trained-wavelength record}\label{sec:finetune:record}
+
+\Cref{ch:pretrain}'s third band fix drops, at load time, any band more than 15\,nm from every wavelength the model has trained on. For F001 that list is
+SpectralEarth's 202. Fine-tuning trains on PRISMA's own 234 bands, so after it the 20 PRISMA bench bands that F001 dropped are no longer untrained. The
+model keeps a buffer\index{trained-wavelength record}, \code{trained_wl}, that starts as the pretraining wavelengths and grows: each time a batch arrives with a band list the trainer has
+not seen, \code{extend_trained_wavelengths} adds every wavelength not within 0.5\,nm of one already recorded, counting near-duplicates among the new ones
+once.
+
+\begin{worked}[label={we:finetune:record}]{Growing the record}
+Record 500, 510, 520\,nm; a new list 500.3, 515.0, 515.2, 530.0.
+\begin{center}
+\begin{tabular}{llll}
+\toprule
+new & nearest recorded & distance & result\\
+\midrule
+500.3 & 500 & 0.3 $\le 0.5$ & already known, skipped\\
+515.0 & 510 or 520 & 5.0 $> 0.5$ & new\\
+515.2 & 515.0 (new) & 0.2 $\le 0.5$ & counted once with 515.0\\
+530.0 & 520 & 10.0 $> 0.5$ & new\\
+\bottomrule
+\end{tabular}
+\end{center}
+The record becomes 500, 510, 515, 520, 530, and the call returns 2. \code{trained_band_mask} then accepts a band within 15\,nm of anything recorded: 544\,nm
+is $544 - 530 = 14$\,nm away and accepted; 546\,nm is 16\,nm away and dropped.
+\end{worked}
+The two tolerances do different jobs: 0.5\,nm decides ``is this the same wavelength?''; 15\,nm decides ``is this close enough to trained wavelengths for the
+wavelength networks to read it?''. The record grows when a band list is \emph{seen}, not when it is \emph{learned}; ``trained on'' is the most the code can
+know.
+
+\begin{drift}
+During FT02 the record grew from 202 to 733 wavelengths: AVIRIS-NG added 337, PRISMA 177, EnMAP 17 ($202 + 337 + 177 + 17 = 733$).\tbrk\tagM{research/experiments/indradhanu-finetune/FT02-adapt/README.md}
+On the bench's 185 PRISMA bands, 165 were accepted before fine-tuning and all 185 after.
+\end{drift}
+
+\section{The see-saw and the one BatchNorm}\label{sec:finetune:seesaw}
+
+\subsection{The symptom}
+
+FT02 adapted F001 on all three sensors with one sensor per micro-batch (micro-batches of 8, gradients accumulated over 4). Its per-sensor validation did
+not fall smoothly: in epochs 11--12 and 15--17 PRISMA improved while EnMAP and AVIRIS-NG got worse, and then the reverse.
+
+\begin{drift}
+FT02 (2026-10-16), validation SAM: at epoch 8 (\code{best.pt}) PRISMA 5.93$^\circ$, AVIRIS-NG 6.07$^\circ$; at epoch 17 PRISMA 5.04$^\circ$ (its best) and
+AVIRIS-NG 8.24$^\circ$ (worse than at epoch 1).\tbrk\tagM{research/experiments/indradhanu-finetune/FT02-adapt/README.md} The gate was missed: bench 0.855
+against 0.861 (\cref{ch:ftruns}).
+\end{drift}
+
+Validation tiles are fixed and read in the same order every epoch, so the data did not change between epochs: the model did. Two explanations fit a
+see-saw between sensors: \emph{gradient competition} (each optimiser step leans towards whichever sensors were in it) and \emph{normalisation drift}
+(something that is not a weight changes with the most recent sensor). This section is about the second, because it was measured.
+
+\subsection{Training: each sensor normalised to itself}
+
+Give one channel three typical values after the stem (illustrative\tbrk\tagA): EnMAP around 0.2, PRISMA around 0.6, AVIRIS-NG around $-0.4$, each with spread 1.
+In a PRISMA-only batch, $\mu_B \approx 0.6$, so a typical PRISMA pixel becomes $(0.6 - 0.6)/1 = 0.0$. In an AVIRIS-NG-only batch, a typical AVIRIS-NG pixel
+becomes $(-0.4 - (-0.4))/1 = 0.0$. \textbf{In training the encoder never sees the sensors' offsets}: BatchNorm removes them batch by batch.
+
+\subsection{Evaluation: one blended estimate}
+
+At evaluation the same PRISMA pixel is normalised by the running mean. If that is 0.2, it becomes $(0.6 - 0.2)/1 = 0.4$: an offset the encoder never saw in
+training. And the running mean is not a fixed 0.2. From \cref{sec:finetune:bn}, 90\% of it comes from the last 22 micro-batches. An FT02 epoch is 30,000
+samples in micro-batches of 8, so $30{,}000 / 8 = 3{,}750$ micro-batches, and the last 22 are $22 / 3{,}750 = 0.6\%$ of the epoch. Which sensors those were is
+chance.
+
+\begin{worked}[label={we:finetune:lastbatches}]{The end of an epoch moves the stored mean}
+The running mean is 0.20 and the last four micro-batches are PRISMA, PRISMA, PRISMA, AVIRIS-NG. Apply $r \leftarrow 0.9\,r + 0.1\,\mu_B$ four times:
+\begin{align*}
+  \text{PRISMA:}&\quad 0.9 \times 0.20 + 0.1 \times 0.6 = 0.18 + 0.06 = 0.24\\
+  \text{PRISMA:}&\quad 0.9 \times 0.24 + 0.1 \times 0.6 = 0.216 + 0.06 = 0.276\\
+  \text{PRISMA:}&\quad 0.9 \times 0.276 + 0.1 \times 0.6 = 0.2484 + 0.06 = 0.3084\\
+  \text{AVIRIS-NG:}&\quad 0.9 \times 0.3084 + 0.1 \times (-0.4) = 0.27756 - 0.04 = 0.23756.
+\end{align*}
+Four batches moved it from 0.20 to 0.31 and back to 0.24. Validation runs with whatever the last batch left; the next epoch ends on a different sequence.
+\end{worked}
+
+\coursefig[0.95\linewidth]{iw-51-batchnorm}{(a) The last micro-batches of an epoch, one sensor each, and the running mean they drag around; validation uses
+wherever it ends. (b) In training each sensor is normalised by its own batch mean (top); at evaluation every sensor is normalised by the one running mean
+(bottom), so each arrives with an offset the encoder never saw.}{fig:finetune:batchnorm}
+
+\begin{analogy}
+A teacher marks three classes' exams and rescales each to a class average of 60\% before grading, so the marks look comparable. Then the head of school
+rescales everything once more, using the average of whichever class happened to be marked last. Every class's marks shift, by an amount nobody chose,
+and the shift changes each term with the marking order. Marking the three classes' papers shuffled together fixes it: one average, used every time. The
+per-class rescaling is training-mode BatchNorm on sensor-pure batches; the head of school is the running mean; the shuffled pile is a mixed batch.
+\end{analogy}
+
+\paragraph{Gradient accumulation does not help.}\index{gradient accumulation} FT02 accumulated gradients over 4 micro-batches before each optimiser step. That mixes sensors in the
+\emph{gradient}: a step is single-sensor only if all four micro-batches came from the same sensor. The draws are independent, so the probabilities multiply:
+\begin{align*}
+  P(\text{all EnMAP}) &= 0.40^4 = 0.40 \times 0.40 \times 0.40 \times 0.40 = 0.0256\\
+  P(\text{all PRISMA}) &= 0.35^4 = 0.1225 \times 0.1225 = 0.0150\\
+  P(\text{all AVIRIS-NG}) &= 0.25^4 = 0.0625 \times 0.0625 = 0.0039\\
+  P(\text{single-sensor step}) &= 0.0256 + 0.0150 + 0.0039 = 0.0445,
+\end{align*}
+about 4.5\% of steps. But BatchNorm's statistics are computed per micro-batch, in the forward pass, before any accumulation. Accumulation cannot mix what
+BatchNorm sees.
+
+\subsection{The per-scene test}
+
+The FT02 README records a direct test on its epoch-20 checkpoint. The idea, known as \emph{AdaBN}\index{AdaBN} (adaptive batch normalisation)
+\citep{li2016revisiting}, is to replace the stored running statistics by statistics measured on the scene being scored, then score again.
+
+\begin{drift}
+FT02 epoch 20, 2026-10-16:\tbrk\tagM{research/experiments/indradhanu-finetune/FT02-adapt/README.md} re-estimating the statistics on each PRISMA bench scene moved
+them 0.35--0.76 standard deviations. Residual Mahalanobis barely moved (mean 0.853 $\to$ 0.858; objects caught 410 $\to$ 402); \code{combined} swung hard
+(set1 0.943 $\to$ 0.755, set4 0.780 $\to$ 0.642).
+\end{drift}
+
+Two readings. The stored statistics are far from any one PRISMA scene's, by up to three quarters of a standard deviation, the size of the offsets in the
+worked example. And the raw-error score depends on them heavily while residual Mahalanobis barely does: a BatchNorm offset shifts the reconstruction error
+of a whole scene systematically, and residual Mahalanobis subtracts each pixel's local mean residual and whitens by the scene's covariance, which removes most
+of a systematic shift. So BatchNorm is consistent with the see-saw but does not explain the gate miss. Per-scene re-estimation is not a product option:
+\code{combined} fell, and the product scores one scene at a time.
+
+\paragraph{The options.} The FT02 README listed two: keep BatchNorm in evaluation mode during adapt, as the probe does (the statistics stay F001's, from
+SpectralEarth, matching none of the three sensors), or re-estimate them on a balanced mix before each validation (fixing what evaluation sees but not the
+training-time habit of normalising each sensor to itself). The user chose a third: \textbf{mixed-sensor batches}.
+
+\section{Mixed batches: three band lists, one encoder pass}\label{sec:finetune:mixed}
+
+\subsection{The rule that had to bend}\index{mixed batch}
+
+The stem reads a pixel's bands as tokens carrying their wavelengths, and its \code{forward} takes one \shape{(N,)} wavelength list. EnMAP has 224 bands,
+PRISMA 234, AVIRIS-NG 372: a \shape{(3, 224, H, W)} tensor and a \shape{(3, 234, H, W)} tensor cannot be stacked. But the stem's output is
+\shape{(B, 32, H, W)} whatever went in. From there on, nothing knows which sensor a pixel came from. So the rule only ever needed to be
+\begin{keypoint}
+one band list per \emph{stem pass}, not per batch (the invariant of \file{docs/lld/finetune.md}).
+\end{keypoint}
+
+\subsection{\texttt{forward\_mixed}}
+
+In \file{app/foundation_models/components/spectral_stem_seg_former_mae.py}:
+\begin{lstlisting}
+def forward_mixed(self, groups: list, with_scale: bool = False):
+    # groups: [(x, wavelengths_nm, band_valid, keep_mask, out_wavelengths_nm), ...]
+    if self.stem not in WAVELENGTH_STEMS:
+        raise ValueError(f"{self.stem} stem reads one band list only")
+    # one stem pass per sensor, outputs stacked: (8, 32, H, W)
+    z = torch.cat([self._stem(x, wl, bv) for x, wl, bv, _, _ in groups])
+    # the MAE keep masks, stacked in the same order
+    keep = None if groups[0][3] is None else torch.cat([g[3] for g in groups])
+    z = self.norm(z)                              # ONE BatchNorm over all sensors
+    features = self.encoder(z, keep_mask=keep)    # ONE encoder pass
+    z_hat = self._decode(z, features, keep)       # (8, 32, H, W)
+    out, start = [], 0
+    for x, wl, _, _, out_wl in groups:            # split by rows, decode at own bands
+        wl_out = wl if out_wl is None else out_wl
+        part = self.spectral_out(z_hat[start:start + len(x)], wl_out)   # (B_g, M_g, H, W)
+        out.append(self.stats.denormalize(part, wl_out))
+        start += len(x)
+    return out
+\end{lstlisting}
+
+\begin{sourcenote}[: the listing is the current source]
+The course (IW52) shows the first version, \code{z_hat = self.decoder(self.encoder(self.norm(z), keep_mask=keep))}. The source has since gained
+\code{_decode} (for the progressive decoder of FT09, which also reads the normalised stem output) and an optional \code{with_scale} output (the uncertainty head
+of FT06); the listing above follows the source (lines 159--180), with the \code{with_scale} return omitted. For the SegFormer decoder, \code{_decode} is
+exactly \code{self.decoder(features)}, so the two versions compute the same thing.
+\end{sourcenote}
+
+\begin{table}[htbp]
+\centering\small
+\caption{One mixed batch of 8 tiles of 128 $\times$ 128 through \texttt{forward\_mixed}, without band augmentation.}
+\label{tab:finetune:trace}
+\begin{tabular}{llll}
+\toprule
+step & EnMAP & PRISMA & AVIRIS-NG\\
+\midrule
+input & \shape{(3, 224, 128, 128)} & \shape{(3, 234, 128, 128)} & \shape{(2, 372, 128, 128)}\\
+\texttt{\_stem} & \shape{(3, 32, 128, 128)} & \shape{(3, 32, 128, 128)} & \shape{(2, 32, 128, 128)}\\
+\texttt{torch.cat} & \multicolumn{3}{c}{\shape{(8, 32, 128, 128)}}\\
+norm $\to$ encoder $\to$ decoder & \multicolumn{3}{c}{\shape{(8, 32, 128, 128)}}\\
+slice rows & 0--2 & 3--5 & 6--7\\
+\texttt{spectral\_out} & \shape{(3, 224, 128, 128)} & \shape{(3, 234, 128, 128)} & \shape{(2, 372, 128, 128)}\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\coursefig[0.95\linewidth]{iw-52-forward-mixed}{Three sensors, three stem passes (teal), one concatenated batch through the single BatchNorm, encoder and decoder
+(indigo), split by row ranges and decoded at each sensor's own wavelengths.}{fig:finetune:forwardmixed}
+
+The fixed-band stems (\code{linear}, \code{gate}) are built for one band count, so \code{forward_mixed} refuses them. The keep masks are concatenated in the
+same order as the stem outputs, so row $i$ of the batch is masked with sample $i$'s own mask.
+
+\subsection{Where the batch comes from: rounded sub-batch sizes}
+
+With \code{mixed_batches: true}, each sensor gets its own data loader with batch size $\max(1, \operatorname{round}(s \times 8))$ for share $s$, and
+\code{_AllSourcesLoader} yields one sub-batch from every sensor per step:
+\begin{align*}
+  \text{EnMAP:}&\quad \operatorname{round}(0.40 \times 8) = \operatorname{round}(3.2) = 3\\
+  \text{PRISMA:}&\quad \operatorname{round}(0.35 \times 8) = \operatorname{round}(2.8) = 3\\
+  \text{AVIRIS-NG:}&\quad \operatorname{round}(0.25 \times 8) = \operatorname{round}(2.0) = 2\\
+  \text{total:}&\quad 3 + 3 + 2 = 8.
+\end{align*}
+The effective shares are $3/8, 3/8, 2/8 = 0.375, 0.375, 0.25$, not 0.40, 0.35, 0.25: PRISMA gains 2.5 points and EnMAP loses 2.5. Nothing forces the rounded
+sizes to sum to the batch size for other shares; at 8 with these shares they happen to.
+
+\subsection{The loss: every tile counts equally}
+
+\code{_mixed_loss} builds, per sensor, that sensor's MAE mask and its own band-augmentation draw, makes one \code{forward_mixed} call, and combines the
+per-sensor losses weighted by kept samples $n_g$:
+\begin{lstlisting}
+total = total + (l1 + self._get_sam_weight(self._current_epoch) * sam + edge) * n
+kept = kept + n                 # (one line in the source)
+...
+loss = total / kept
+\end{lstlisting}
+Why weight by $n_g$? If $L_g$ is the mean loss over sensor $g$'s $n_g$ tiles, then $n_g L_g$ is the \emph{sum} over those tiles, and
+\[
+  \frac{\sum_g n_g L_g}{\sum_g n_g} = \frac{\text{sum of every tile's loss}}{\text{number of tiles}},
+\]
+the plain mean over all tiles in the batch: every tile counts equally, whichever sensor it is from. With $n = (3, 3, 2)$ and per-sensor losses 0.05, 0.06,
+0.08 (illustrative\tbrk\tagA): $(3 \times 0.05 + 3 \times 0.06 + 2 \times 0.08)/8 = (0.15 + 0.18 + 0.16)/8 = 0.49/8 = 0.0613$, whereas an unweighted mean of
+the three would give $(0.05 + 0.06 + 0.08)/3 = 0.0633$.
+
+\subsection{Why this fixes two things at once}
+
+\textbf{BatchNorm.} Every micro-batch now holds all three sensors. Training normalises by the mix's statistics; the running statistics are averages of mixes;
+evaluation uses those. The offsets of \cref{sec:finetune:seesaw} are no longer removed in training and reintroduced at evaluation: they are present in both.
+
+\textbf{Gradient balance.} Every optimiser step now contains $3 \times 4 = 12$ EnMAP, 12 PRISMA and $2 \times 4 = 8$ AVIRIS-NG tiles.
+
+\begin{worked}[label={we:finetune:toy}]{Alternating sensors never settle; mixed batches do}
+One weight $w$. Sensor A wants $w = 1$ (loss $(w - 1)^2$, gradient $2(w - 1)$); sensor B wants $w = -1$ (loss $(w + 1)^2$, gradient $2(w + 1)$). Learning rate 0.25.
+
+\textbf{Alternating}, one sensor per step, from $w = 0$. Write each step as a map first:
+\begin{align*}
+  \text{A step:}\quad w &\leftarrow w - 0.25 \times 2(w - 1) = w - 0.5w + 0.5 = 0.5w + 0.5\\
+  \text{B step:}\quad w &\leftarrow w - 0.25 \times 2(w + 1) = w - 0.5w - 0.5 = 0.5w - 0.5.
+\end{align*}
+Then run it:
+\begin{align*}
+  \text{A:}&\quad 0.5 \times 0 + 0.5 = 0.5\\
+  \text{B:}&\quad 0.5 \times 0.5 - 0.5 = -0.25\\
+  \text{A:}&\quad 0.5 \times (-0.25) + 0.5 = 0.375\\
+  \text{B:}&\quad 0.5 \times 0.375 - 0.5 = -0.3125.
+\end{align*}
+Where does it end? Compose the two maps: an A step then a B step takes $w$ to $0.5(0.5w + 0.5) - 0.5 = 0.25w + 0.25 - 0.5 = 0.25w - 0.25$. A value that
+this pair leaves unchanged satisfies $w = 0.25w - 0.25$, so $0.75w = -0.25$ and $w = -1/3$ after each B step; after each A step it is
+$0.5 \times (-1/3) + 0.5 = 1/3$. The weight swings for ever between $+1/3$ and $-1/3$, and where you read it depends on which sensor went last.
+
+\textbf{Mixed}, both losses averaged in every step. The gradient of $\tfrac{1}{2}[(w-1)^2 + (w+1)^2]$ is $\tfrac{1}{2}[2(w - 1) + 2(w + 1)] = 2w$, so
+\[
+  w \leftarrow w - 0.25 \times 2w = 0.5w.
+\]
+From $w = 0.5$: $0.25$, $0.125$, $0.0625$, \dots $\to 0$. It settles at the compromise, 0, and stays there.
+\end{worked}
+Real training is not this extreme (FT02's accumulation already mixed most steps), so the BatchNorm effect is expected to be the larger of the two.
+
+\subsection{What else changed when the next run started}
+
+FT02b was ``FT02's config plus \code{mixed_batches: true}'', from FT02's epoch-8 weights. But \code{init_from} loads \emph{weights only}, and the epoch
+counter restarts at 0. So the optimiser state is fresh, the learning rate returns to 0.0001 on a new cosine, and the SAM ramp restarts. At FT02's epoch 8
+(index 7 of a 20-epoch cosine):
+\begin{align*}
+  \eta &= 0.0001 \times \frac{1 + \cos(7\pi/20)}{2} = 0.0001 \times \frac{1 + 0.454}{2} = 0.0001 \times 0.727 = 0.0000727,\\
+  \lambda &= 0.5 \times \min(1, 7/10) = 0.35,
+\end{align*}
+against FT02b's first epoch at $\eta = 0.0001$ and $\lambda = 0.5 \times 0/10 = 0$. If FT02b moves, mixed batches are not the only change.
+
+\begin{sourcenote}[: warm-up is never read]
+FT02's and FT02b's configs set \code{lr_schedule.warmup_epochs: 1} and their READMEs say ``1 warm-up epoch''. \code{FoundationTrainer._build_scheduler}
+(\file{app/abstract_classes/foundation_trainer.py}, line 517) builds a plain \code{CosineAnnealingLR} stepped once per epoch, and no code reads
+\code{warmup_epochs}. There is no warm-up; the first epoch runs at the full rate. \file{docs/lld/finetune.md} now says so.
+\end{sourcenote}
+
+\begin{drift}
+FT02b (2026-10-16, 2.2 hours, \code{best.pt} epoch 9): validation SAM 3.99 / 4.37 / 5.57$^\circ$ (EnMAP / PRISMA / AVIRIS-NG) against FT02's 4.17 / 5.93 /
+6.07; most of PRISMA's drop arrived in the first epoch (4.70). The see-saw was gone by the README's account; the bench gate was missed again, 0.856
+against 0.861.\tbrk\tagM{research/experiments/indradhanu-finetune/FT02b-mixed/README.md} \Cref{ch:ftruns} reads the run.
+\end{drift}
+
+\section{Joint training: reconstruction and segmentation together}\label{sec:finetune:joint}
+
+\subsection{The loss}
+
+Joint mode adds one term to the mixed reconstruction loss (\code{_mixed_loss}):
+\begin{lstlisting}
+loss = total / kept                      # reconstruction: L1 + SAM weight x SAM, per tile
+if cfg.mode == "joint":
+    seg = self._mixed_seg_loss(groups, model)
+    if seg is not None:
+        loss = loss + cfg.seg_weight * seg   # seg_weight x masked BCE + Dice
+\end{lstlisting}
+In symbols, with $w_s$ the segmentation weight:
+\begin{equation}\label{eq:finetune:joint}
+  \mathcal{L} = \underbrace{\frac{\sum_g n_g\bigl(L1_g + \lambda\,\SAM_g\bigr)}{\sum_g n_g}}_{\text{reconstruction, all tiles}}
+              \;+\; w_s\,\underbrace{\frac{1}{\abs{\mathcal{G}_\ell}}\sum_{g \in \mathcal{G}_\ell}\mathcal{L}^{\text{seg}}_g}_{\text{labelled groups only}},
+\end{equation}
+where $\mathcal{G}_\ell$ is the set of sensor groups that carry labels and $\mathcal{L}^{\text{seg}}_g$ is \code{masked_bce_dice} (\cref{ch:seghead}) on group
+$g$. In FT03 only EnMAP carries labels, so the second term is EnMAP's segmentation loss. The code's \code{_mixed_seg_loss} returns
+\code{sum(losses) / len(losses)} over the labelled groups.
+
+\subsection{Choice 1: the segmentation pass sees the whole mixed batch}
+
+Segmentation needs a second forward pass: the reconstruction pass hides 65\% of the tokens, and a mask predictor must see the whole tile. That second pass
+is a danger, because in training mode BatchNorm normalises with \emph{and records} the statistics of every forward call. Suppose the segmentation pass held
+only the 3 EnMAP tiles. Every step would then run one mixed pass and one EnMAP-only pass.
+
+\begin{worked}[label={we:finetune:fixedpoint}]{Where the running mean settles with an EnMAP-only second pass}
+Mixed batches have mean $a = 0.2$, EnMAP-only batches $b = 0.5$ (illustrative\tbrk\tagA); the running mean starts at 0.2.
+\begin{align*}
+  \text{step 1, mixed:}&\quad 0.9 \times 0.200 + 0.1 \times 0.2 = 0.180 + 0.020 = 0.200\\
+  \text{step 1, EnMAP-only:}&\quad 0.9 \times 0.200 + 0.1 \times 0.5 = 0.180 + 0.050 = 0.230\\
+  \text{step 2, mixed:}&\quad 0.9 \times 0.230 + 0.1 \times 0.2 = 0.207 + 0.020 = 0.227\\
+  \text{step 2, EnMAP-only:}&\quad 0.9 \times 0.227 + 0.1 \times 0.5 = 0.2043 + 0.050 = 0.2543.
+\end{align*}
+It keeps climbing. Call the settled value (right after an EnMAP-only pass) $r^\ast$; one full step must leave it unchanged:
+\begin{align*}
+  \text{after the mixed pass:}&\quad 0.9\,r^\ast + 0.1\,a\\
+  \text{after the EnMAP-only pass:}&\quad 0.9\,(0.9\,r^\ast + 0.1\,a) + 0.1\,b = 0.81\,r^\ast + 0.09\,a + 0.1\,b.
+\intertext{Set this equal to $r^\ast$ and solve:}
+  r^\ast &= 0.81\,r^\ast + 0.09\,a + 0.1\,b\\
+  0.19\,r^\ast &= 0.09\,a + 0.1\,b\\
+  r^\ast &= \frac{0.09\,a + 0.1\,b}{0.19} = \frac{0.09 \times 0.2 + 0.1 \times 0.5}{0.19}\\
+         &= \frac{0.018 + 0.05}{0.19} = \frac{0.068}{0.19} = 0.358.
+\end{align*}
+The weights $0.09/0.19 = 0.47$ on the mix and $0.1/0.19 = 0.53$ on EnMAP alone show that the stored mean would settle about halfway between them, matching
+none of the sensors: the fault FT02b had removed one run earlier.
+\end{worked}
+
+So the segmentation pass runs over all eight tiles, through \code{segment_mixed}:
+\begin{lstlisting}
+def segment_mixed(self, groups: list) -> list:
+    # groups: [(x, wavelengths_nm, band_valid), ...] - one per sensor
+    z = torch.cat([self._stem(x, wl, bv) for x, wl, bv in groups])   # (8, 32, H, W)
+    logits = self.seg_head(self.encoder(self.norm(z)))   # (8, 5, H, W), no keep mask
+    # split back by sensor: (3, 5, H, W), (3, 5, H, W), (2, 5, H, W)
+    return list(torch.split(logits, [len(x) for x, _, _ in groups]))
+\end{lstlisting}
+It is \code{forward_mixed} without a keep mask and with the segmentation head in place of the decoder. The PRISMA and AVIRIS-NG rows get logits that no loss
+reads; they are in the pass so that BatchNorm normalises, and records, the same mix as the reconstruction pass. With both passes at mean $a$, the fixed point
+is $r^\ast = (0.09a + 0.1a)/0.19 = a$: the stored mean is the mix's.
+
+\coursefig[0.95\linewidth]{iw-55-joint-passes}{One mixed batch of 8 tiles goes through the shared BatchNorm and encoder twice: masked, to the decoder, for the
+reconstruction loss on all 8; unmasked, to the segmentation head, for the segmentation loss on the 3 EnMAP tiles only (the other 5 rows are normalised but
+not scored). Total loss $=$ reconstruction $+ 0.1 \times$ segmentation.}{fig:finetune:joint}
+
+\paragraph{The argument-order trap.} \code{_seg_inputs} returns \code{(pixels, band_valid, wavelengths, targets, known)}; \code{segment_mixed} wants
+\code{(x, wavelengths, band_valid)}. The call reorders them:
+\begin{lstlisting}
+logits = model.segment_mixed([(p[0], p[2], p[1]) for p in parts])   # (x, wl, band_valid)
+\end{lstlisting}
+Pass \code{p[:3]} instead and the stem receives a \shape{(B, N, H, W)} validity mask where it expects an \shape{(N,)} list of wavelengths. Two neighbouring
+functions that order the same three arguments differently is a trap; a short smoke run on real batches is cheaper than a failed three-hour run.
+
+\begin{sourcenote}[: the validator's stale name]
+\code{SpectralStemFinetuneConfig._mixed_batches_in_adapt_only} (\file{app/models/training/training_config.py}) now rejects only \code{probe}, with the
+message ``mixed\_batches is implemented for modes 'adapt' and 'joint''' (line 231); its name was not changed when joint mode gained \code{segment_mixed}.
+The course (IW55) adds that \file{docs/lld/finetune.md} ``still says mode adapt only in four places''; the LLD has since been updated (``mixed\_batches:
+adapt or joint''). The source wins, and today the LLD agrees with it.
+\end{sourcenote}
+
+\subsection{Choice 2: \texttt{seg\_weight} 0.1, not 1.0}
+
+FT03's README: ``laptop smoke: segmentation loss \textasciitilde 0.4 against reconstruction \textasciitilde 0.05 (L1 $+$ 0.5 SAM)''.\tbrk\tagM{research/experiments/indradhanu-finetune/FT03-joint/README.md}
+Where does 0.05 come from? Per-sensor validation in FT02b had L1 about 0.016 and SAM about 4.2$^\circ$. \code{SAMLoss} returns radians:
+\begin{align*}
+  4.2^\circ &= 4.2 \times 3.1416 / 180 = 0.0733 \text{ rad}\\
+  \text{reconstruction} &= 0.016 + 0.5 \times 0.0733 = 0.016 + 0.0367 = 0.0527.
+\end{align*}
+Now the combined loss \eqref{eq:finetune:joint} at two weights, with segmentation 0.4:
+\begin{align*}
+  w_s = 1.0:&\quad 0.05 + 1.0 \times 0.4 = 0.45; \quad\text{segmentation share } 0.40 / 0.45 = 89\%\\
+  w_s = 0.1:&\quad 0.05 + 0.1 \times 0.4 = 0.09; \quad\text{segmentation share } 0.04 / 0.09 = 44\%.
+\end{align*}
+At 1.0 the shared encoder would be trained mostly to segment EnMAP, and reconstruction, which is what detection reads, would become a side task. At 0.1 the two
+are comparable, as the proposal's ``MAE dominant'' intends. A share of the loss \emph{value} is a rough guide, not the share of the gradient (two terms of
+equal size can have gradients of very different size), but an order-of-magnitude imbalance is what it catches.
+
+\subsection{Choice 3: the probe's head as a warm start}
+
+\index{warm start}\code{seg_head_from} names a checkpoint whose \code{seg_head.*} weights replace the fresh head after \code{init_from} has loaded the backbone. FT03 took FT01's
+probe head. The plan had said ``the probe is a measurement, not a warm start''; it became both. The FT03 README is careful about what that buys: FT01 ``learned
+on F001 features and the encoder has moved since, so it is a warm start, not a fit''.
+
+\begin{drift}
+FT03 (2026-10-16, 3.0 hours on the L40S, 10 epochs, \code{sam_ramp_epochs: 0} so the restarted epoch counter does not train epoch 1 on L1 alone): EnMAP test IoU
+water 0.841 and cloud 0.815 at \code{best.pt} (epoch 10), above FT01's 0.82 / 0.80; per-sensor SAM 3.92 / 4.21 / 5.48$^\circ$, within 0.1$^\circ$ of its
+predecessor; detection unchanged within noise. All three criteria passed.\tbrk\tagM{research/experiments/indradhanu-finetune/FT03-joint/README.md}
+\Cref{ch:ftruns} reads the run in full.
+\end{drift}
+
+\paragraph{Why joint training did not lift detection, and was not expected to.} The detection score is residual Mahalanobis on the \emph{reconstruction}. The
+segmentation head is a separate output; nothing in the score reads it. Joint training could only change detection by changing the encoder, and at
+$w_s = 0.1$ the encoder kept reconstructing as before.
+
+\begin{sourcenote}[: no gradual unfreezing]
+The proposal's first draft said stage 3 trains with the ``encoder unfrozen from the top stage down'' (gradual unfreezing). \file{finetune_trainer.py} has no
+such mechanism: \code{joint} trains every parameter from the first step. The source won, and the proposal was corrected (``gradual top-down unfreezing is not
+implemented'').
+\end{sourcenote}
+
+\section{How segmentation was meant to help detection}\label{sec:finetune:classaware}
+
+Stage 5 is where the head pays back. Its masks can replace \code{scene_segmentation}'s thresholds, removing cloud edges and shadows before scoring. A second
+idea was \emph{class-aware} residual Mahalanobis: give each surface class its own normal. The mathematics behind it is the \emph{law of total variance}\index{law of total variance}.
+
+Let a residual $X$ (one whitened direction) come from land with probability $\pi_1$ and from sea with probability $\pi_2$, with class means $\mu_c$ and
+variances $\sigma_c^2$. The pooled mean is $\mu = \sum_c \pi_c\mu_c$. The pooled variance is the mean squared distance from $\mu$; split each class's
+distances around its own mean:
+\begin{align*}
+  \operatorname{Var}(X) &= \sum_c \pi_c\,\E\bigl[(X - \mu)^2 \mid c\bigr]
+  = \sum_c \pi_c\,\E\bigl[\bigl((X - \mu_c) + (\mu_c - \mu)\bigr)^2 \mid c\bigr].
+\intertext{Expand the square. The cross term $2(\mu_c - \mu)\E[X - \mu_c \mid c]$ is zero, because a class's values average to its own mean:}
+  \operatorname{Var}(X) &= \underbrace{\sum_c \pi_c\,\sigma_c^2}_{\text{within classes}} + \underbrace{\sum_c \pi_c\,(\mu_c - \mu)^2}_{\text{between classes}}.
+\end{align*}
+
+\begin{worked}[label={we:finetune:totalvar}]{Pooled against per-class scoring on a coastal scene}
+A set1-like scene, 75\% sea (illustrative\tbrk\tagA). Land residuals centre on 0 with variance 1; sea residuals centre on 2 with variance 0.25.
+\begin{align*}
+  \mu &= 0.25 \times 0 + 0.75 \times 2 = 1.5\\
+  \text{within} &= 0.25 \times 1 + 0.75 \times 0.25 = 0.25 + 0.1875 = 0.4375\\
+  \text{between} &= 0.25 \times (0 - 1.5)^2 + 0.75 \times (2 - 1.5)^2\\
+                 &= 0.25 \times 2.25 + 0.75 \times 0.25 = 0.5625 + 0.1875 = 0.75\\
+  \text{total} &= 0.4375 + 0.75 = 1.1875.
+\end{align*}
+Two pixels with residual 3.0: a land target, and an ordinary sea pixel two spreads above the sea's mean. Score each by squared distance over variance:
+\begin{align*}
+  \text{pooled, either pixel:}&\quad (3.0 - 1.5)^2 / 1.1875 = 2.25 / 1.1875 = 1.89\\
+  \text{per class, land target:}&\quad (3.0 - 0)^2 / 1 = 9.0\\
+  \text{per class, sea pixel:}&\quad (3.0 - 2)^2 / 0.25 = 1 / 0.25 = 4.0.
+\end{align*}
+Pooled, they are indistinguishable; per class, the target scores more than twice the sea pixel.
+\end{worked}
+
+\begin{drift}
+Class-aware scoring was tested and not shipped: water's tight statistics made water noise dominate (set1 water share of false alarms 14\% $\to$ 92\%). Exclusion of
+cloud by the head's masks was chosen instead (water was kept, since vessels are in scope), lifting FT03's real-bench pAUC from 0.158 to 0.166 (2026-10-17/18,
+\cref{ch:ftruns,ch:shipping}).\tbrk\tagM{docs/proposals/fine-tuning-and-segmentation.md}
+\end{drift}
+
+\begin{confusions}
+\confusion{Does \texttt{requires\_grad = False} freeze a layer?}{It freezes its \emph{parameters}. BatchNorm's running statistics are buffers and keep updating in
+training mode; only \texttt{eval()} stops them.}
+\confusion{Evaluation mode turns BatchNorm off?}{It turns its \emph{updating} off and switches it to the stored statistics. It still normalises.}
+\confusion{BatchNorm is in every SegFormer block?}{Not in this model. The blocks use LayerNorm. The one BatchNorm is \texttt{self.norm}, in front of the encoder.}
+\confusion{Accumulating 4 micro-batches of 8 means BatchNorm sees 32?}{It sees 8. Accumulation adds gradients after four separate forward passes.}
+\confusion{Mixed batches mean the stem reads three band lists at once?}{It is still called once per band list. Mixing starts after the stem.}
+\confusion{Should validation be mixed too?}{It does not need to be. Validation runs in evaluation mode, so BatchNorm uses its stored statistics, not the batch's; a
+sensor-pure validation batch is normalised exactly as a mixed one would be.}
+\confusion{Is the normalisation curve updated for the new sensors?}{No, never. The record of trained wavelengths grows; the curve that normalises inputs does not.}
+\confusion{Joint means PRISMA and AVIRIS-NG are trained to segment too?}{In FT03 they pass through the segmentation pass but no loss reads their logits; they are there
+for BatchNorm. (From FT04 they are taught from confident pseudo-labels, \cref{ch:ftruns}.)}
+\confusion{The see-saw is proven to be BatchNorm?}{It is consistent with it. Gradient competition would also produce a see-saw; mixed batches address both, so one run
+cannot tell them apart.}
+\end{confusions}
+
+\begin{checkyourself}
+\item\label{ex:finetune:1} A BatchNorm channel's running mean is 0.10 and training-mode batches all have mean 0.30. Compute it after each of 3 batches, then check
+  the third value with the closed form $r_n = 0.9^n r_0 + (1 - 0.9^n)\,x$.
+\item\label{ex:finetune:2} What fraction of the stored mean comes from the last 5 micro-batches, and how many micro-batches carry 95\% of it? ($\ln 0.05 = -2.996$,
+  $\ln 0.9 = -0.1054$.)
+\item\label{ex:finetune:3} The record holds 1000 and 1010\,nm. Extend it with 999.8, 1004.6, 1005.0, 1030.0. What is the record, what does the call return, and is a
+  band at 1018\,nm then accepted?
+\item\label{ex:finetune:4} With \texttt{batch\_size} 4 and shares 0.40 / 0.35 / 0.25, what are the sub-batch sizes and the effective shares? In the toy problem of
+  \cref{we:finetune:toy}, start at $w = 1$ and alternate B, A, B.
+\item\label{ex:finetune:5} Redo the running-mean fixed point of \cref{we:finetune:fixedpoint} with mixed mean 0.1 and EnMAP-only mean 0.6. What is it with
+  \texttt{segment\_mixed}?
+\item\label{ex:finetune:6} A sensor's validation L1 is 0.015 and its SAM 4.5$^\circ$. Compute the reconstruction loss at SAM weight 0.5. With segmentation loss 0.3
+  and reconstruction 0.06, what share of the loss is segmentation at $w_s = 1.0$, 0.1 and 0.2?
+\end{checkyourself}
+
+\nextchapter{ch:inference}
+\endgroup

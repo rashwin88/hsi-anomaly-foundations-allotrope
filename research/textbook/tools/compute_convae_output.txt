@@ -1,0 +1,120 @@
+===== Pratibimba (spatial_autoencoder) file spatial_autoencoder_v8.1.0_epoch29.pt
+  manifest params 1380812 | encoder_dims 1→32→64→128→256 | val_loss 13.76964 | inferencer named in manifest: SpatialAutoencoderInferencer
+  checkpoint model_config {'model_type': 'spatial_autoencoder', 'in_channels': 1, 'base_channels': 32, 'num_stages': 4} | epoch 29 | val_losses {128: 15.4376, 256: 21.841, 512: 4.0303} | avg 13.76964
+  train samples/epoch {'128': 30000, '256': 10000, '512': 2000} | epochs 200 | batch 128 | lr 0.001
+  resolver model_config {'model_type': 'spatial_autoencoder', 'in_channels': 1, 'base_channels': 32, 'num_stages': 4} | fm name spatial_autoencoder | default MSE ('L1', 'MSE') | patch 128 stride 64 | stats yes
+  strict load: <All keys matched successfully>
+  trainable 1,379,393  buffers 1,419  state_dict numel 1,380,812  encoder 690,080  decoder 689,313
+  by hand: encoder 690,080 channels [1, 32, 64, 128, 256] | decoder 689,313 channels [256, 128, 64, 32, 1] | total 1,379,393
+    enc stage 0: conv 544 bn 64
+    enc stage 1: conv 32,832 bn 128
+    enc stage 2: conv 131,200 bn 256
+    enc stage 3: conv 524,544 bn 512
+    dec stage 0: convT 524,416 bn 256
+    dec stage 1: convT 131,136 bn 128
+    dec stage 2: convT 32,800 bn 64
+    dec stage 3: convT 513 (final)
+    shape ('enc0', (1, 1, 128, 128), (1, 32, 64, 64))
+    shape ('enc1', (1, 32, 64, 64), (1, 64, 32, 32))
+    shape ('enc2', (1, 64, 32, 32), (1, 128, 16, 16))
+    shape ('enc3', (1, 128, 16, 16), (1, 256, 8, 8))
+    shape ('dec0', (1, 256, 8, 8), (1, 128, 16, 16))
+    shape ('dec1', (1, 128, 16, 16), (1, 64, 32, 32))
+    shape ('dec2', (1, 64, 32, 32), (1, 32, 64, 64))
+    shape ('dec3', (1, 32, 64, 64), (1, 1, 128, 128))
+  inferencer actually used: SpatialAutoencoderInferencer
+    plain: |res| median 10.867 max 26.159 | centre(63,63) 1.346 | (61,61) 1.302
+    hot 3x3: |res| median 11.191 max 40.273 | centre(63,63) 17.600 | (61,61) 0.071
+    hot 1 pixel: |res| median 11.082 max 26.159 | centre(63,63) 1.346 | (61,61) 19.198
+===== Antardhana (spatial_masked_autoencoder) file spatial_masked_autoencoder_v0.1.0_epoch121.pt
+  manifest params 265480 | encoder_dims 1→64→128 | val_loss 17.28919 | inferencer named in manifest: MaskedSpatialAutoencoderInferencer
+  checkpoint model_config {'model_type': 'spatial_autoencoder', 'in_channels': 1, 'base_channels': 64, 'num_stages': 2} | epoch 121 | val_losses {128: 17.0792, 256: 27.8637, 512: 6.9246} | avg 17.28919
+  train samples/epoch {'128': 10000, '256': 5000, '512': 2500} | epochs 300 | batch 64 | lr 0.001
+  resolver model_config {'model_type': 'spatial_autoencoder', 'in_channels': 1, 'base_channels': 64, 'num_stages': 2} | fm name spatial_autoencoder | default MSE ('L1', 'MSE') | patch 128 stride 64 | stats yes
+  strict load: <All keys matched successfully>
+  trainable 264,961  buffers 519  state_dict numel 265,480  encoder 132,672  decoder 132,289
+  by hand: encoder 132,672 channels [1, 64, 128] | decoder 132,289 channels [128, 64, 1] | total 264,961
+    enc stage 0: conv 1,088 bn 128
+    enc stage 1: conv 131,200 bn 256
+    dec stage 0: convT 131,136 bn 128
+    dec stage 1: convT 1,025 (final)
+    shape ('enc0', (1, 1, 128, 128), (1, 64, 64, 64))
+    shape ('enc1', (1, 64, 64, 64), (1, 128, 32, 32))
+    shape ('dec0', (1, 128, 32, 32), (1, 64, 64, 64))
+    shape ('dec1', (1, 64, 64, 64), (1, 1, 128, 128))
+  inferencer actually used: SpatialAutoencoderInferencer
+    plain: |res| median 6.593 max 7.494 | centre(63,63) 6.507 | (61,61) 6.336
+    hot 3x3: |res| median 6.587 max 22.206 | centre(63,63) 22.047 | (61,61) 4.001
+    hot 1 pixel: |res| median 6.585 max 24.231 | centre(63,63) 6.507 | (61,61) 24.231
+===== Tirohita (spatial_masked_autoencoder_l1) file spatial_masked_autoencoder_l1_v0.4.0_epoch77.pt
+  manifest params 330314 | encoder_dims 1→32→64→128 | val_loss 1.79195 | inferencer named in manifest: MaskedSpatialAutoencoderInferencer
+  checkpoint model_config {'model_type': 'spatial_autoencoder', 'in_channels': 1, 'base_channels': 32, 'num_stages': 3, 'kernel_size': 4} | epoch 77 | val_losses {128: 2.028, 256: 1.9496, 512: 1.3982} | avg 1.79195
+  train samples/epoch {'128': 30000, '256': 15000, '512': 2500} | epochs 300 | batch 64 | lr 0.001
+  resolver model_config {'model_type': 'spatial_autoencoder', 'in_channels': 1, 'base_channels': 32, 'num_stages': 3} | fm name spatial_autoencoder | default L1 ('L1', 'MSE') | patch 128 stride 64 | stats yes
+  strict load: <All keys matched successfully>
+  trainable 329,665  buffers 649  state_dict numel 330,314  encoder 165,024  decoder 164,641
+  by hand: encoder 165,024 channels [1, 32, 64, 128] | decoder 164,641 channels [128, 64, 32, 1] | total 329,665
+    enc stage 0: conv 544 bn 64
+    enc stage 1: conv 32,832 bn 128
+    enc stage 2: conv 131,200 bn 256
+    dec stage 0: convT 131,136 bn 128
+    dec stage 1: convT 32,800 bn 64
+    dec stage 2: convT 513 (final)
+    shape ('enc0', (1, 1, 128, 128), (1, 32, 64, 64))
+    shape ('enc1', (1, 32, 64, 64), (1, 64, 32, 32))
+    shape ('enc2', (1, 64, 32, 32), (1, 128, 16, 16))
+    shape ('dec0', (1, 128, 16, 16), (1, 64, 32, 32))
+    shape ('dec1', (1, 64, 32, 32), (1, 32, 64, 64))
+    shape ('dec2', (1, 32, 64, 64), (1, 1, 128, 128))
+  inferencer actually used: SpatialAutoencoderInferencer
+    plain: |res| median 2.321 max 3.465 | centre(63,63) 2.274 | (61,61) 2.316
+    hot 3x3: |res| median 2.319 max 15.348 | centre(63,63) 14.782 | (61,61) 1.766
+    hot 1 pixel: |res| median 2.317 max 20.211 | centre(63,63) 2.274 | (61,61) 20.211
+===== Asanskrita (spatial_masked_autoencoder_l1_unnormalized) file spatial_masked_autoencoder_l1_unnormalized_v0.3.0_epoch82.pt
+  manifest params 267524 | encoder_dims 3→64→128 (input + validity + prediction-mask channels) | val_loss 2.14911 | inferencer named in manifest: MaskedSpatialAutoencoderInferencer
+  checkpoint model_config {'model_type': 'spatial_masked_autoencoder', 'in_channels': 1, 'base_channels': 64, 'num_stages': 2, 'masking_range': [0.35, 0.55]} | epoch 82 | val_losses {128: 2.2128, 256: 2.2169, 512: 2.0176} | avg 2.14911
+  train samples/epoch {'128': 30000, '256': 15000, '512': 2500} | epochs 300 | batch 64 | lr 0.001
+  resolver model_config {'model_type': 'spatial_masked_autoencoder', 'in_channels': 1, 'base_channels': 64, 'num_stages': 2} | fm name spatial_masked_autoencoder_l1_unnormalized | default L1 ('L1', 'MSE') | patch 128 stride 64 | stats none
+  strict load: <All keys matched successfully>
+  trainable 267,009  buffers 515  state_dict numel 267,524  encoder 134,720  decoder 132,289
+  by hand: encoder 134,720 channels [3, 64, 128] | decoder 132,289 channels [128, 64, 1] | total 267,009
+    enc stage 0: conv 3,136 bn 128
+    enc stage 1: conv 131,200 bn 256
+    dec stage 0: convT 131,136 bn 128
+    dec stage 1: convT 1,025 (final)
+    shape ('enc0', (1, 3, 128, 128), (1, 64, 64, 64))
+    shape ('enc1', (1, 64, 64, 64), (1, 128, 32, 32))
+    shape ('dec0', (1, 128, 32, 32), (1, 64, 64, 64))
+    shape ('dec1', (1, 64, 64, 64), (1, 1, 128, 128))
+  inferencer actually used: MaskedSpatialAutoencoderInferencer
+    plain: |res| median 0.747 max 2.089 | centre(63,63) 1.475 | (61,61) 1.478
+    hot 3x3: |res| median 1.140 max 17.338 | centre(63,63) 16.566 | (61,61) 0.015
+    hot 1 pixel: |res| median 0.943 max 19.374 | centre(63,63) 1.475 | (61,61) 19.374
+===== Drashta (normalized_masked_autoencoder) file normalized_masked_autoencoder_v1.2.0_epoch69.pt
+  manifest params 267528 | encoder_dims 3→64→128 (input + validity + prediction-mask channels) | val_loss 5.52873 | inferencer named in manifest: NormalizedMaskedAutoencoderInferencer
+  checkpoint model_config {'model_type': 'normalized_masked_autoencoder', 'in_channels': 1, 'base_channels': 64, 'num_stages': 2, 'kernel_size': 4, 'masking_range': [0.5, 0.75]} | epoch 69 | val_losses {128: 5.6571, 256: 5.6636, 512: 5.2655} | avg 5.52873
+  train samples/epoch {'128': 30000, '256': 15000, '512': 2500} | epochs 300 | batch 64 | lr 0.001
+  resolver model_config {'model_type': 'normalized_masked_autoencoder', 'in_channels': 1, 'base_channels': 64, 'num_stages': 2} | fm name normalized_masked_autoencoder | default L1 ('L1', 'MSE') | patch 128 stride 64 | stats yes
+  strict load: <All keys matched successfully>
+  trainable 267,009  buffers 519  state_dict numel 267,528  encoder 134,720  decoder 132,289
+  by hand: encoder 134,720 channels [3, 64, 128] | decoder 132,289 channels [128, 64, 1] | total 267,009
+    enc stage 0: conv 3,136 bn 128
+    enc stage 1: conv 131,200 bn 256
+    dec stage 0: convT 131,136 bn 128
+    dec stage 1: convT 1,025 (final)
+    shape ('enc0', (1, 3, 128, 128), (1, 64, 64, 64))
+    shape ('enc1', (1, 64, 64, 64), (1, 128, 32, 32))
+    shape ('dec0', (1, 128, 32, 32), (1, 64, 64, 64))
+    shape ('dec1', (1, 64, 64, 64), (1, 1, 128, 128))
+  inferencer actually used: NormalizedMaskedAutoencoderInferencer
+    plain: |res| median 0.576 max 2.184 | centre(63,63) 0.126 | (61,61) 0.240
+    hot 3x3: |res| median 0.582 max 16.796 | centre(63,63) 16.421 | (61,61) 0.593
+    hot 1 pixel: |res| median 0.578 max 18.136 | centre(63,63) 0.126 | (61,61) 18.136
+===== normalised value of a hidden pixel in the masked normalised models
+  (0 - 24.5756) / 13.5744 = -1.810446854477239
+===== exercise checks
+  SpatialAutoencoder(1, base 16, 3 stages): encoder 41552 decoder 41361 total 82913
+  transposed conv (1,2) * (1,1,1,1): [1.0, 3.0, 3.0, 2.0]
+  transposed conv (3,-1) * (1,2,2,1): [6.0, 5.0, 1.0, -2.0]
+  ConvTranspose2d k=4 s=2 p=1 on 16: (1, 1, 32, 32)
+  ConvTranspose2d k=3 s=2 p=1 on 16: (1, 1, 31, 31)

@@ -1,0 +1,736 @@
+\chapter{Tensors, shapes, layers and the arithmetic of convolutions}\label{ch:shapes}
+
+\begin{onething}
+A shape such as \shape{(B, N, C)} is a precise statement about how numbers are arranged, and the
+three layer types this model is built from (the linear layer, the convolution and the $1\times1$
+convolution) each change shapes and own parameters by formulas you can work out by hand before the
+computer tells you.
+\end{onething}
+
+You are about to read a model whose every line changes the shape of a tensor. Most bugs in tensor code
+are shape bugs, and the worst of them do not crash: a wrong reshape produces a tensor of the right size
+with its numbers in the wrong places, and training carries on with scrambled data. The defence is to
+know, for every operation, what shape goes in, what shape comes out, and in what order the numbers sit.
+
+This chapter gives you that knowledge in four pieces. First the vocabulary: tensors, axes, the batch,
+and the two layouts the model keeps switching between. Second the linear layer. Third the
+convolution, worked by hand, with the formula for its output size derived by counting and then checked
+on every stage of Indradhanu's encoder. Fourth the $1\times1$ convolution, which ties the other two
+together and is the subject of \cref{ch:compressor}. Throughout, you will predict parameter counts by
+hand and check them against the real model.
+
+\begin{analogy}
+Think of a tensor as a warehouse. The numbers are boxes laid out along one very long aisle (computer
+memory is one-dimensional). The \emph{shape} is the warehouse's filing system: ``aisle positions
+0--15 are channel~0, 16--31 are channel~1'', and within a channel ``four rows of four''. Two
+warehouses can hold exactly the same boxes in exactly the same aisle order and still mean different
+things if their filing systems differ. A \emph{reshape} changes the filing system without moving a box.
+A \emph{transpose} changes which boxes the filing system points at. If you relabel the aisle when you
+needed to move the boxes, every box is filed under the wrong name, and nothing tells you.
+\end{analogy}
+
+%======================================================================
+\section{Tensors and how to read a shape}\label{sec:shapes:tensors}
+
+\begin{definition}[Tensor, axis, shape]
+A \emph{tensor}\index{tensor} is a rectangular block of numbers. Each direction along which you can
+index it is an \emph{axis}\index{axis} (also called a dimension), and the list of the lengths of its
+axes is its \emph{shape}\index{shape}. The number of axes is the tensor's \emph{rank}\index{rank (of a
+tensor)}.
+\end{definition}
+
+\begin{center}
+\begin{tabular}{lll}
+\toprule
+rank & example shape & what it is\\
+\midrule
+0 & \shape{()} & a single number\\
+1 & \shape{(5,)} & a list of five numbers\\
+2 & \shape{(3, 4)} & a grid, three rows by four columns\\
+3 & \shape{(165, 128, 128)} & a stack of 165 grids: one hyperspectral patch\\
+4 & \shape{(8, 165, 128, 128)} & eight such patches\\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Read a shape left to right as nested containers. \shape{(8, 165, 128, 128)} is ``eight items, each
+containing 165 layers, each of which is 128 rows by 128 columns''. The number of values in a tensor is
+the product of its shape: $8\times165\times128\times128 = 21{,}626{,}880$.
+
+\subsection{The batch}
+
+Neural networks process several examples at once, because a graphics processor is far more efficient
+on 128 patches together than on one patch 128 times. That group is a \emph{batch}\index{batch}, and its
+size is written $B$. Almost every tensor in the model has $B$ as its first axis, and almost every
+operation treats the $B$ items independently. When you read the code you can usually ignore $B$ and
+think about one patch.
+
+\subsection{The symbols used in this book}
+
+\begin{center}
+\begin{tabular}{lll}
+\toprule
+symbol & meaning & typical value\\
+\midrule
+$B$ & batch size & 128 in training$^{\ast}$\\
+$C$ & input spectral bands & 165\\
+$D$ & channels after the spectral compressor & 32 (24 in v0.1.0)\\
+$H$, $W$ & height and width in pixels & 128, 128\\
+$N$ & number of tokens at a stage & 1024 at stage 1\\
+$C_i$ & token width at encoder stage $i$ & 32, 64, 160, 256\\
+$k$, $s$, $p$ & kernel, stride, padding of a convolution & \cref{sec:shapes:conv}\\
+\bottomrule
+\end{tabular}
+\end{center}
+{\small $^{\ast}$Batch size 128 is the v0.2.0 training
+configuration\tagM{configs/hyperspectral_segformer_exp_2.json}; the code default is 32.}
+
+Watch the two meanings of ``channels''. $C=165$ is the number of input bands. $C_i$ is the width of
+the vectors inside encoder stage $i$. They are unrelated numbers that both get called channels.
+
+\subsection{Where the numbers live: row-major order}\label{sec:shapes:memory}
+
+Computer memory is a single line of numbers. A tensor of shape \shape{(B, C, H, W)} is stored in
+\emph{row-major order}\index{row-major order}: the last axis changes fastest. Walking along memory, you
+pass $W$ values of row~0 of channel~0, then row~1 of channel~0, and so on through all $H$ rows; then
+the same for channel~1; and after all $C$ channels, the next batch item.
+
+You can derive the memory position (the \emph{offset}) of element $(b,c,h,w)$, counting everything
+from $0$, by counting how many values come before it:
+\begin{align*}
+\text{offset}(b,c,h,w)
+&= b\cdot(CHW) + c\cdot(HW) + h\cdot W + w
+  && \text{items, channels, rows, columns before it}\\
+&= \bigl((b\,C + c)\,H + h\bigr)\,W + w.
+  && \text{factor out $W$, then $H$}
+\end{align*}
+The numbers $CHW$, $HW$, $W$ and $1$ multiplying the indices are called the tensor's
+\emph{strides}\index{stride!of a tensor} (not to be confused with a convolution's stride in
+\cref{sec:shapes:conv}). They say how far apart in memory two neighbours along each axis are.
+
+\begin{worked}[label={we:shapes:offset}]{Finding a value in memory}
+Take a tensor of shape \shape{(1, 2, 2, 2)}: one item, two channels, each a $2\times2$ grid. Where is
+element $(b,c,h,w) = (0,1,0,1)$, that is channel~1, row~0, column~1? The strides are
+$CHW = 2\cdot2\cdot2 = 8$, $HW = 2\cdot2 = 4$, $W = 2$ and $1$. So
+\begin{align*}
+\text{offset} &= 0\cdot8 + 1\cdot4 + 0\cdot2 + 1\cdot1\\
+&= 0 + 4 + 0 + 1\\
+&= 5.
+\end{align*}
+It is the sixth value in memory (offset $5$, counting from $0$): four values of channel~0 come first,
+then channel~1's row~0, column~0 at offset~4, then our element.
+\end{worked}
+
+%======================================================================
+\section{Two layouts of the same numbers}\label{sec:shapes:layouts}
+
+The model keeps its data in one of two arrangements.
+
+\begin{center}
+\begin{tabular}{lll}
+\toprule
+layout & shape & used by\\
+\midrule
+spatial\index{layout!spatial} & \shape{(B, C, H, W)} & convolutions, pixel shuffle, the loss\\
+sequence\index{layout!sequence} & \shape{(B, N, C)} & attention, LayerNorm, linear layers\\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Spatial says ``a picture with $C$ layers''. Sequence says ``a list of $N$ \emph{tokens}\index{token},
+each described by $C$ numbers''. A token here is one spatial position's vector of channel values; when
+you convert spatial to sequence, $N = H\times W$. The conversion is written in the code as
+\begin{lstlisting}
+x = x.flatten(2)        # (B, C, H, W) -> (B, C, H*W) = (B, C, N)
+x = x.transpose(1, 2)   # (B, C, N)    -> (B, N, C)
+\end{lstlisting}
+\code{flatten(2)} merges every axis from axis~2 onwards into one: the two spatial axes become a single
+list of $N$ positions. \code{transpose(1, 2)} swaps axes~1 and~2. The way back is
+\begin{lstlisting}
+x = x.transpose(1, 2).reshape(B, C, H, W)   # (B, N, C) -> (B, C, N) -> (B, C, H, W)
+\end{lstlisting}
+
+\coursefig[\linewidth]{iw-07-layouts}{The two layouts of the same numbers. (a) Spatial
+\texttt{(B, C, H, W)}: a grid of positions per channel, as convolutions need. (b) \texttt{flatten(2)}
+joins the two spatial axes into $N = H\times W$ positions. (c) \texttt{transpose(1, 2)} makes each
+position a row of $C$ numbers, a token, as attention and LayerNorm need. A reshape alone would scramble
+the order. (Course figure IW~7.1.)}{fig:shapes:layouts}
+
+\subsection{Why a reshape alone scrambles the data}
+
+A \code{reshape} changes the shape but keeps the numbers in the same memory order. The two layouts need
+\emph{different} memory orders: spatial wants all of channel~0's pixels, then all of channel~1's;
+sequence wants token~0's channel values, then token~1's. So an axis swap is unavoidable. The smallest
+example that shows this has two channels and four pixels.
+
+\begin{worked}[label={we:shapes:layout}]{A $2\times2\times2$ cube through flatten, transpose and a wrong reshape}
+Take $B=1$, $C=2$, $H=W=2$, holding the numbers $1$ to $8$ in memory order:
+\[
+\text{channel 0} = \begin{pmatrix}1&2\\3&4\end{pmatrix},\qquad
+\text{channel 1} = \begin{pmatrix}5&6\\7&8\end{pmatrix},\qquad
+\text{memory: } 1\ 2\ 3\ 4\ 5\ 6\ 7\ 8 .
+\]
+The four pixels are: top-left (channel values $1$ and $5$), top-right ($2$, $6$), bottom-left ($3$,
+$7$) and bottom-right ($4$, $8$). The correct tokens are therefore $[1,5]$, $[2,6]$, $[3,7]$, $[4,8]$.
+
+\emph{Step 1, flatten(2).} Shape \shape{(1, 2, 2, 2)} becomes \shape{(1, 2, 4)}. Each channel's
+$2\times2$ grid is read row by row into a list of four:
+\[
+\begin{pmatrix}1&2&3&4\\5&6&7&8\end{pmatrix}.
+\]
+Memory has not moved: still $1\,2\,3\,4\,5\,6\,7\,8$.
+
+\emph{Step 2, transpose(1, 2).} Shape \shape{(1, 2, 4)} becomes \shape{(1, 4, 2)}: rows and columns
+swap.
+\[
+\begin{pmatrix}1&5\\2&6\\3&7\\4&8\end{pmatrix}.
+\]
+Row~$n$ is token~$n$, and each token holds its pixel's two channel values. Correct. Laid out
+contiguously, memory now reads $1\,5\,2\,6\,3\,7\,4\,8$: the boxes have moved.
+
+\emph{The wrong way, reshape(1, 4, 2) straight from the cube.} A reshape reads memory in order,
+$1\,2\,3\,4\,5\,6\,7\,8$, and cuts it into four rows of two:
+\[
+\begin{pmatrix}1&2\\3&4\\5&6\\7&8\end{pmatrix}.
+\]
+The ``token'' $[1,2]$ is two different pixels' channel-0 values. Every token is wrong, the shape is
+right, and no error is raised.
+\end{worked}
+
+The source carries the same warning, in \file{app/foundation_models/components/overlap_patch_embedding.py}:
+``Cannot use view/reshape directly because the axes need to swap''.
+
+\subsection{Broadcasting}
+
+When two tensors of different shapes are multiplied, numpy and torch stretch any axis of length~1 to
+match the other tensor. This is \emph{broadcasting}\index{broadcasting}:
+\[
+\underbrace{\shape{(B, 165, H, W)}}_{\text{the cube}} \times
+\underbrace{\shape{(B, 1, H, W)}}_{\text{a pixel mask}} \to \shape{(B, 165, H, W)}.
+\]
+The mask's single channel is reused for all 165 bands. That is why pixel masks in this code have shape
+\shape{(B, 1, H, W)} and not \shape{(B, H, W)}: the $1$ is a placeholder in the channel slot, so the
+axes line up. In the same way the per-band normalisation statistics are stored with shape
+\shape{(1, 165, 1, 1)} (\file{app/foundation_models/components/pixel_normalization.py}) so that one
+mean per band is reused at every pixel of every patch.
+
+%======================================================================
+\section{The linear layer}\label{sec:shapes:linear}
+
+\subsection{One neuron}
+
+A \emph{neuron}\index{neuron} takes a vector $\vect{x}\in\R^{n}$, multiplies each entry by its own
+\emph{weight}\index{weight}, adds the products, and adds a \emph{bias}\index{bias}:
+\begin{equation}\label{eq:shapes:neuron}
+y = w_1x_1 + w_2x_2 + \dots + w_nx_n + b = \vect{w}\T\vect{x} + b .
+\end{equation}
+The sum of products $\vect{w}\T\vect{x}$ is the dot product (\cref{ch:linalg}). A neuron has $n$
+weights and one bias: $n+1$ parameters. In most networks a nonlinear function (an
+\emph{activation}\index{activation function}, such as GELU in \cref{ch:block}) is applied to $y$
+afterwards; here we count only the linear part, because that is where the parameters are.
+
+\subsection{A layer of neurons is a matrix}
+
+Put $m$ neurons side by side, all reading the same $\vect{x}$. Stack their weight vectors as the rows
+of a matrix $\mat{W}\in\R^{m\times n}$ and their biases into $\vect{b}\in\R^{m}$:
+\begin{equation}\label{eq:shapes:linear}
+\vect{y} = \mat{W}\vect{x} + \vect{b},\qquad
+y_i = \sum_{j=1}^{n} W_{ij}\,x_j + b_i \quad (i = 1,\dots,m).
+\end{equation}
+This is a \emph{linear layer}\index{linear layer} (PyTorch \code{nn.Linear(n, m)}). Output $i$ is a
+weighted mixture of all the inputs, with its own recipe of weights, row $i$ of $\mat{W}$. Counting:
+\begin{equation}\label{eq:shapes:linearcount}
+\text{parameters} = \underbrace{m\cdot n}_{\text{entries of } \mat{W}} + \underbrace{m}_{\text{entries of } \vect{b}}
+= \text{in}\times\text{out} + \text{out}.
+\end{equation}
+
+\begin{worked}[label={we:shapes:linear}]{A linear layer from three inputs to two outputs}
+Let $n=3$, $m=2$,
+\[
+\mat{W} = \begin{pmatrix}1.0 & 0.0 & 0.0\\ 0.0 & 0.5 & 0.5\end{pmatrix},\quad
+\vect{b} = \begin{pmatrix}0.0\\0.1\end{pmatrix},\quad
+\vect{x} = \begin{pmatrix}0.10\\0.20\\0.30\end{pmatrix}.
+\]
+Row~1 of $\mat{W}$ is $(1.0, 0.0, 0.0)$:
+\begin{align*}
+y_1 &= 1.0\times0.10 + 0.0\times0.20 + 0.0\times0.30 + 0.0\\
+&= 0.10 + 0 + 0 + 0 = 0.10.
+\end{align*}
+Row~2 is $(0.0, 0.5, 0.5)$:
+\begin{align*}
+y_2 &= 0.0\times0.10 + 0.5\times0.20 + 0.5\times0.30 + 0.1\\
+&= 0 + 0.10 + 0.15 + 0.1 = 0.35.
+\end{align*}
+So $\vect{y} = (0.10,\ 0.35)\T$. Output~1 copied input~1; output~2 averaged inputs~2 and~3 and added
+an offset. Parameter count: $3\times2 + 2 = 8$, which is what PyTorch reports for
+\code{nn.Linear(3, 2)}\tagC.
+\end{worked}
+
+\subsection{Applied to a sequence}
+
+\code{nn.Linear} acts on the \emph{last} axis of its input and treats all other axes as a batch. Given
+tokens of shape \shape{(B, N, C\_in)} it applies the same $\mat{W}$ and $\vect{b}$ to every one of the
+$B\cdot N$ tokens and returns \shape{(B, N, C\_out)}. That is why linear layers live in the sequence
+layout: the last axis must be the feature axis.
+
+\subsection{Why not one linear layer for the whole image?}
+
+You could flatten an entire patch into one vector and apply one linear layer to it. Count the cost of
+mapping a patch to a patch of the same size: the input has $165\times128\times128 = 2{,}703{,}360$
+values, so
+\[
+\text{weights} = 2{,}703{,}360 \times 2{,}703{,}360 \approx 7.3\times10^{12}\tagC .
+\]
+Seven trillion parameters, for one layer. Worse, such a layer treats a field in the top-left corner and
+the same field in the bottom-right as unrelated problems. The convolution fixes both faults.
+
+%======================================================================
+\section{The convolution}\label{sec:shapes:conv}
+
+\subsection{Two ideas: locality and sharing}
+
+A convolution builds each output value from a small neighbourhood of the input
+(\emph{locality}\index{locality}), and it uses the same weights at every position
+(\emph{weight sharing}\index{weight sharing}). The small block of weights is the \emph{kernel}%
+\index{kernel}; its side length is the \emph{kernel size} $k$. The kernel slides over the input; at
+each position it multiplies the values under it by its weights and adds them up.
+
+\subsection{Single channel, written as a sum}
+
+\begin{definition}[2-D cross-correlation]
+For a single-channel input $x$ (an $H\times W$ grid) and a $k\times k$ kernel $K$ with bias $b$, the
+output at row $i$, column $j$ (counting from $0$) is
+\begin{equation}\label{eq:shapes:xcorr}
+y_{i,j} = b + \sum_{u=0}^{k-1}\sum_{v=0}^{k-1} K_{u,v}\; x_{i+u,\ j+v}.
+\end{equation}
+\end{definition}
+Deep-learning libraries call this a \emph{convolution}\index{convolution}. Strictly it is a
+\emph{cross-correlation}\index{cross-correlation}: the mathematical convolution flips the kernel first
+($K_{k-1-u,\,k-1-v}$). Because the kernel is learned, the flip makes no difference to what a network can
+represent, and this book follows the library usage.
+
+Read \cref{eq:shapes:xcorr} as ``place the kernel's top-left corner on input position $(i,j)$,
+multiply the overlapping pairs, add''. With an $H\times W$ input and no padding the corner can go at
+rows $0$ to $H-k$ and columns $0$ to $W-k$, so the output is $(H-k+1)\times(W-k+1)$.
+
+\begin{worked}[label={we:shapes:conv}]{A $3\times3$ input and a $2\times2$ kernel, by hand}
+Do this on paper. Input and kernel, bias $b=0$:
+\[
+x = \begin{pmatrix}1&2&0\\0&1&3\\2&1&1\end{pmatrix},\qquad
+K = \begin{pmatrix}1&0\\-1&2\end{pmatrix}.
+\]
+The output is $(3-2+1)\times(3-2+1) = 2\times2$. Each entry pairs $K$ with the $2\times2$ block of $x$
+whose top-left corner is at $(i,j)$.
+
+$(i,j)=(0,0)$, block $\begin{pmatrix}1&2\\0&1\end{pmatrix}$:
+\begin{align*}
+y_{0,0} &= 1\times1 + 0\times2 + (-1)\times0 + 2\times1\\
+&= 1 + 0 + 0 + 2 = 3.
+\end{align*}
+$(0,1)$, block $\begin{pmatrix}2&0\\1&3\end{pmatrix}$:
+\begin{align*}
+y_{0,1} &= 1\times2 + 0\times0 + (-1)\times1 + 2\times3\\
+&= 2 + 0 - 1 + 6 = 7.
+\end{align*}
+$(1,0)$, block $\begin{pmatrix}0&1\\2&1\end{pmatrix}$:
+\begin{align*}
+y_{1,0} &= 1\times0 + 0\times1 + (-1)\times2 + 2\times1\\
+&= 0 + 0 - 2 + 2 = 0.
+\end{align*}
+$(1,1)$, block $\begin{pmatrix}1&3\\1&1\end{pmatrix}$:
+\begin{align*}
+y_{1,1} &= 1\times1 + 0\times3 + (-1)\times1 + 2\times1\\
+&= 1 + 0 - 1 + 2 = 2.
+\end{align*}
+So
+\[
+y = \begin{pmatrix}3&7\\0&2\end{pmatrix}.
+\]
+PyTorch's \code{F.conv2d} gives the same four numbers\tagC. This kernel responds most to ``top-left and
+bottom-right bright, bottom-left dark'', and its four weights are used at every position.
+\end{worked}
+
+\subsection{Stride and padding}
+
+Two more settings control where the kernel goes.
+
+\begin{definition}[Stride and padding]
+The \emph{stride}\index{stride!of a convolution} $s$ is how far the kernel jumps between positions:
+with $s=2$ it is placed at every second row and every second column. The \emph{padding}\index{padding}
+$p$ is a border of $p$ zeros added on every side of the input before the kernel slides.
+\end{definition}
+
+With stride and padding, \cref{eq:shapes:xcorr} becomes
+\begin{equation}\label{eq:shapes:xcorrsp}
+y_{i,j} = b + \sum_{u=0}^{k-1}\sum_{v=0}^{k-1} K_{u,v}\; \tilde{x}_{s i+u,\ s j+v},
+\end{equation}
+where $\tilde{x}$ is the zero-padded input (so $\tilde{x}_{a,b'} = x_{a-p,\,b'-p}$ inside the original
+picture and $0$ in the border). The kernel's top-left corner sits at padded position $(si, sj)$.
+
+\begin{figure}[htbp]\centering
+\begin{tikzpicture}[scale=0.62]
+% padded 6x6 grid: border cells are padding
+\foreach \r in {0,...,5}{\foreach \c in {0,...,5}{
+  \pgfmathsetmacro{\pad}{(\r==0 || \r==5 || \c==0 || \c==5) ? 1 : 0}
+  \ifdim\pad pt=1pt
+    \draw[maskgrey,dashed,fill=maskgrey!12] (\c,-\r) rectangle ++(1,-1);
+    \node[font=\scriptsize,maskgrey] at (\c+0.5,-\r-0.5) {0};
+  \else
+    \draw[spat] (\c,-\r) rectangle ++(1,-1);
+  \fi}}
+\foreach \r in {1,...,4}{\foreach \c in {1,...,4}{
+  \pgfmathtruncatemacro{\idx}{(\r-1)*4+\c-1}
+  \node[font=\scriptsize] at (\c+0.5,-\r-0.5) {$x_{\idx}$};}}
+% window at output (0,0): padded rows 0-2, cols 0-2
+\draw[loss,very thick] (0,0) rectangle (3,-3);
+% window at output (0,1): padded cols 2-4
+\draw[attn,very thick,dashed] (2,0.08) rectangle (5,-3.08);
+\node[font=\small,anchor=west] at (6.4,-0.6) {\textcolor{loss}{solid}: window for $y_{0,0}$, corner at padded $(0,0)$};
+\node[font=\small,anchor=west] at (6.4,-1.5) {\textcolor{attn}{dashed}: window for $y_{0,1}$, corner at padded $(0,2)$};
+\node[font=\small,anchor=west] at (6.4,-2.4) {grey border: padding $p=1$ of zeros};
+\node[font=\small,anchor=west] at (6.4,-3.3) {kernel $k=3$, stride $s=2$};
+\node[font=\small,anchor=west] at (6.4,-4.4) {output $2\times2$; real pixels seen:};
+\node[font=\small,anchor=west] at (6.4,-5.2) {$y_{0,0}$: 4, $y_{0,1}$: 6, $y_{1,0}$: 6, $y_{1,1}$: 9};
+\end{tikzpicture}
+\caption{A $3\times3$ kernel sliding with stride~2 over a $4\times4$ input padded by one ring of zeros,
+the setting of encoder stages~2 to~4. Consecutive windows share a column (the overlap is $k-s=1$). The
+corner windows see only 4 real pixels; the bottom-right one sees 9.}
+\label{fig:shapes:slide}
+\end{figure}
+
+\subsection{Many channels in, many channels out}
+
+Real inputs have $C_{\text{in}}$ channels, and a layer produces $C_{\text{out}}$ output channels. Each
+output channel $o$ has its own kernel for every input channel, so the weights form a four-axis tensor
+$K\in\R^{C_{\text{out}}\times C_{\text{in}}\times k\times k}$, and each output channel has one bias:
+\begin{equation}\label{eq:shapes:multiconv}
+y_{o,i,j} = b_o + \sum_{c=0}^{C_{\text{in}}-1}\ \sum_{u=0}^{k-1}\sum_{v=0}^{k-1}
+K_{o,c,u,v}\; \tilde{x}_{c,\ s i+u,\ s j+v}.
+\end{equation}
+In words: output channel $o$ at position $(i,j)$ looks at a $k\times k$ window in \emph{every} input
+channel, and mixes all $C_{\text{in}}\cdot k\cdot k$ values with its own weights. The parameter count is
+\begin{equation}\label{eq:shapes:convcount}
+\text{parameters} = C_{\text{in}}\cdot C_{\text{out}}\cdot k\cdot k + C_{\text{out}}.
+\end{equation}
+For example \code{nn.Conv2d(3, 2, kernel_size=2)} has $3\cdot2\cdot2\cdot2 + 2 = 24 + 2 = 26$
+parameters\tagC. Notice what is \emph{absent} from \cref{eq:shapes:convcount}: $H$ and $W$. Weight
+sharing makes the cost independent of the picture size.
+
+%======================================================================
+\section{The output-size formula, derived by counting}\label{sec:shapes:outsize}
+
+You will use this formula more than any other in Part~III, so derive it rather than memorise it.
+
+Work along one axis; the other is the same. After padding, the axis has length
+\[
+L = H + 2p .
+\]
+The kernel's first cell sits at positions $0, s, 2s, 3s, \dots$, that is at $ns$ for $n = 0, 1, 2,
+\dots$. Placed at $ns$, the kernel covers positions $ns$ to $ns + k - 1$. It must fit inside the padded
+axis, so its last cell must be at most $L-1$:
+\begin{align*}
+ns + k - 1 &\le L - 1
+  && \text{the last covered cell is inside}\\
+ns &\le L - k
+  && \text{add $1-k$ to both sides}\\
+n &\le \frac{L-k}{s}.
+  && \text{divide by $s>0$}
+\end{align*}
+Since $n$ is a whole number, the largest allowed $n$ is $\left\lfloor (L-k)/s \right\rfloor$, where
+$\lfloor\cdot\rfloor$ (the \emph{floor}\index{floor}) means ``round down to a whole number''. The
+allowed values are $n = 0, 1, \dots, \lfloor (L-k)/s\rfloor$; counting the $0$ as well, there are
+\begin{equation}\label{eq:shapes:outsize}
+H_{\text{out}} = \left\lfloor \frac{H + 2p - k}{s} \right\rfloor + 1
+\end{equation}
+of them. Each kernel position gives one output value, so this is the output size.
+
+\begin{worked}[label={we:shapes:stages}]{Every stage of Indradhanu's encoder}
+The encoder builds its four patch embeddings in
+\file{app/foundation_models/components/seg_former_encoder.py} (lines~110--114):
+stage~1 has $k=4$, $s=4$, $p=0$; stages~2 to~4 have $k=3$, $s=2$, $p=1$. Input $H=128$.
+
+Stage 1:
+\begin{align*}
+H + 2p - k &= 128 + 0 - 4 = 124,\\
+124 / 4 &= 31, \quad \lfloor 31 \rfloor = 31,\\
+H_{\text{out}} &= 31 + 1 = 32.
+\end{align*}
+Stage 2 ($H=32$):
+\begin{align*}
+32 + 2 - 3 &= 31,\\
+31 / 2 &= 15.5, \quad \lfloor 15.5\rfloor = 15,\\
+H_{\text{out}} &= 15 + 1 = 16.
+\end{align*}
+Stage 3 ($H=16$):
+\begin{align*}
+16 + 2 - 3 &= 15,\\
+15/2 &= 7.5, \quad \lfloor 7.5 \rfloor = 7,\\
+H_{\text{out}} &= 7 + 1 = 8.
+\end{align*}
+Stage 4 ($H=8$):
+\begin{align*}
+8 + 2 - 3 &= 7,\\
+7/2 &= 3.5,\quad \lfloor 3.5\rfloor = 3,\\
+H_{\text{out}} &= 3 + 1 = 4.
+\end{align*}
+The grids are $32, 16, 8, 4$ on a side, so the token counts are $32^2 = 1024$, $16^2 = 256$,
+$8^2 = 64$ and $4^2 = 16$. Running the real encoder on a \shape{(1, 32, 128, 128)} input returns
+feature maps \shape{(1, 32, 32, 32)}, \shape{(1, 64, 16, 16)}, \shape{(1, 160, 8, 8)} and
+\shape{(1, 256, 4, 4)}\tagC.
+\end{worked}
+
+Two small facts drop out of \cref{eq:shapes:outsize}. When $k = s$ and $p = 0$, it gives
+$\lfloor (H-k)/k\rfloor + 1 = \lfloor H/k \rfloor$: the windows tile the axis. When $k=3$, $s=2$,
+$p=1$, it gives $\lfloor (H-1)/2 \rfloor + 1$, which equals $H/2$ when $H$ is even.
+
+\begin{worked}[label={we:shapes:pad}]{Why stage 1 must set its padding explicitly}
+\code{OverlapPatchEmbedding} defaults to padding $p = \lfloor k/2 \rfloor$ when none is given. Had stage~1
+used that default with $k=4$, the padding would be $2$:
+\begin{align*}
+128 + 2\times2 - 4 &= 128 + 4 - 4 = 128,\\
+128 / 4 &= 32,\\
+H_{\text{out}} &= 32 + 1 = 33.
+\end{align*}
+A $33\times33$ grid of $1089$ tokens, windows hanging two pixels over the edge, and token boundaries
+no longer aligned with the $4\times4$ blocks that the masking code assumes. The encoder therefore
+passes \lstinline!padding = 0 if i == 0 else None!.
+\end{worked}
+
+\begin{sourcenote}[: ``H\_out = H\_in // stride'' holds only for even sizes]
+The docstring of \code{OverlapPatchEmbedding}
+(\file{app/foundation_models/components/overlap_patch_embedding.py}, lines~87--105) states
+``\code{H' = H // desired_compression}'' and ``with padding = patch\_size // 2:
+\code{H_out = H_in // stride}''. \Cref{eq:shapes:outsize} says otherwise for odd inputs. With $k=3$,
+$s=2$, $p=1$ and $H=33$: $\lfloor(33+2-3)/2\rfloor+1 = \lfloor 16\rfloor + 1 = 17$, while
+$33 /\!/ 2 = 16$. PyTorch returns 17\tagC. The docstring line~87 also says the convolution uses
+\code{padding=patch_size//2}, which is false for stage~1 ($p=0$). Neither matters for the $128\times128$
+patches the model is trained on, because every stage then receives an even size; the formula is the
+authority.
+\end{sourcenote}
+
+\begin{worked}[label={we:shapes:spatialenc}]{The convolutional autoencoder and a $100\times100$ patch}
+The old \code{SpatialEncoder} (\cref{ch:recon}) uses $k=4$, $s=2$, $p=1$ at each of three stages. On
+$H=128$:
+\[
+\lfloor(128 + 2 - 4)/2\rfloor + 1 = \lfloor 126/2 \rfloor + 1 = 63 + 1 = 64,
+\]
+an exact halving; then $32$, then $16$. On $H = 100$:
+\begin{align*}
+\text{stage 1: } & \lfloor (100 + 2 - 4)/2 \rfloor + 1 = \lfloor 98/2 \rfloor + 1 = 49 + 1 = 50,\\
+\text{stage 2: } & \lfloor (50 + 2 - 4)/2 \rfloor + 1 = \lfloor 48/2 \rfloor + 1 = 24 + 1 = 25,\\
+\text{stage 3: } & \lfloor (25 + 2 - 4)/2 \rfloor + 1 = \lfloor 23/2\rfloor + 1 = 11 + 1 = 12.
+\end{align*}
+The decoder doubles three times, $12\to24\to48\to96$, and $96\ne100$: the output cannot be subtracted
+from the input. Height and width must be divisible by $2^3 = 8$.
+\end{worked}
+
+%======================================================================
+\section{Receptive field}\label{sec:shapes:rf}
+
+\begin{definition}[Receptive field]
+The \emph{receptive field}\index{receptive field} of an output value is the set of input pixels that can
+affect it. For a stack of convolutions it is a square; its side is what this book calls the receptive
+field size.
+\end{definition}
+
+One convolution with kernel $k$ has a receptive field of $k$ pixels. Stack layers and it grows. Keep
+two numbers per layer $\ell$: the receptive field $r_\ell$ and the \emph{jump}\index{jump} $J_\ell$, the
+distance in input pixels between two neighbouring outputs of layer $\ell$. Start from the input itself:
+$r_0 = 1$, $J_0 = 1$.
+
+Layer $\ell$ has kernel $k_\ell$ and stride $s_\ell$. Its window spans $k_\ell$ neighbouring outputs of
+layer $\ell-1$. Those are $J_{\ell-1}$ input pixels apart, so the window's first and last positions are
+$(k_\ell-1)J_{\ell-1}$ input pixels apart, and each of them brings its own receptive field of
+$r_{\ell-1}$:
+\begin{align}
+r_\ell &= r_{\ell-1} + (k_\ell - 1)\,J_{\ell-1}, \label{eq:shapes:rf}\\
+J_\ell &= J_{\ell-1}\, s_\ell. \label{eq:shapes:jump}
+\end{align}
+The jump multiplies because moving one output of layer $\ell$ moves $s_\ell$ outputs of layer
+$\ell-1$, each $J_{\ell-1}$ pixels.
+
+\begin{worked}[label={we:shapes:rf}]{Receptive field of the four patch embeddings}
+Stage~1, $k=4$, $s=4$:
+\begin{align*}
+r_1 &= 1 + (4-1)\times1 = 1 + 3 = 4, & J_1 &= 1\times4 = 4.
+\end{align*}
+Stage~2, $k=3$, $s=2$:
+\begin{align*}
+r_2 &= 4 + (3-1)\times4 = 4 + 8 = 12, & J_2 &= 4\times2 = 8.
+\end{align*}
+Stage~3:
+\begin{align*}
+r_3 &= 12 + 2\times8 = 12 + 16 = 28, & J_3 &= 8\times2 = 16.
+\end{align*}
+Stage~4:
+\begin{align*}
+r_4 &= 28 + 2\times16 = 28 + 32 = 60, & J_4 &= 16\times2 = 32.
+\end{align*}
+A stage-4 token sits on a $32$-pixel grid ($J_4$) but its patch-embedding path sees a $60\times60$
+window of the input ($r_4$). Back-propagating from one centre output through four such convolutions
+with all-one weights touches exactly 4, 12, 28 and 60 input rows\tagC.
+\end{worked}
+
+Two cautions. First, these numbers count only the patch-embedding convolutions. The transformer blocks
+in between contain a $3\times3$ depthwise convolution (\cref{ch:block}) that widens the field further,
+and attention (\cref{ch:attention}) lets a token read every other token at its stage, which makes the
+effective receptive field the whole patch. Second, ``a stage-4 token covers a $32\times32$ region'' (as
+the Indradhanu course puts it) describes the jump: the grid cell each token stands for. Its receptive
+field is wider, because the stride-2 windows of stages~2 to~4 overlap.
+
+%======================================================================
+\section{The $1\times1$ convolution is a linear layer at every pixel}\label{sec:shapes:onebyone}
+
+Set $k=1$, $s=1$, $p=0$ in \cref{eq:shapes:multiconv}. The sums over $u$ and $v$ have a single term
+($u=v=0$), the padded input is the input, and the kernel tensor $K_{o,c,0,0}$ is a matrix $W_{o,c}$:
+\begin{align}
+y_{o,i,j} &= b_o + \sum_{c} K_{o,c,0,0}\; x_{c,\,i,\,j}
+  && \text{only $u=v=0$ survives}\notag\\
+&= b_o + \sum_{c} W_{o,c}\; x_{c,i,j}.
+  && \text{rename $K_{o,c,0,0}$ as $W_{o,c}$}\label{eq:shapes:onebyone}
+\end{align}
+Compare with \cref{eq:shapes:linear}. At each pixel $(i,j)$, the vector of channel values
+$\vect{x}_{:,i,j}$ is multiplied by the same matrix $\mat{W}$ and shifted by the same $\vect{b}$:
+\begin{equation}
+\vect{y}_{:,i,j} = \mat{W}\,\vect{x}_{:,i,j} + \vect{b}\qquad\text{for every pixel } (i,j).
+\end{equation}
+A \emph{$1\times1$ convolution}\index{convolution!$1\times1$} is a linear layer applied independently at
+every pixel. It mixes channels and does no spatial mixing at all: pixel $(3,7)$ never looks at
+pixel $(3,8)$. Its parameter count, from \cref{eq:shapes:convcount} with $k=1$, is
+$C_{\text{in}}\cdot C_{\text{out}} + C_{\text{out}}$, the same as \cref{eq:shapes:linearcount}.
+
+The equivalence is exact in code too: a \code{nn.Conv2d(3, 2, 1)} and a \code{nn.Linear(3, 2)} with
+the same weights give identical results, one in the spatial layout and one on the flattened tokens
+(checked numerically\tagC).
+
+\coursefig[0.92\linewidth]{iw-08-conv1x1}{A $1\times1$ convolution is a matrix-vector product per pixel.
+At every pixel the 4-band vector $\vect{x}$ is multiplied by the same $2\times4$ matrix $\mat{W}$,
+giving two output channels, $y_0 = 1.1$ and $y_1 = -0.5$ (the numbers of \cref{we:compressor:mix}).
+The spatial grid is untouched; only the channel axis changes. (Course figure IW~8.1.)}{fig:shapes:conv1x1}
+
+\Cref{ch:compressor} uses exactly this: Indradhanu's spectral compressor is a $1\times1$ convolution
+from 165 channels to 32.
+
+%======================================================================
+\section{Counting parameters: a convolutional encoder by hand}\label{sec:shapes:count}
+
+The best test of understanding is to predict a real model's parameter count before asking the
+computer. Take the convolutional autoencoder's encoder of \cref{ch:recon},
+\code{SpatialEncoder(in_channels=1, base_channels=32, num_stages=3)}. Each stage is a
+\code{Conv2d} with $k=4$, $s=2$, $p=1$, followed by a \code{BatchNorm2d}, which has $2$ parameters per
+channel (\cref{ch:compressor} explains why). Channels go $1\to32\to64\to128$.
+
+\begin{worked}[label={we:shapes:spatialcount}]{The SpatialEncoder's 165,024 parameters}
+Stage~0, $1\to32$:
+\begin{align*}
+\text{conv weights} &= 1\times32\times4\times4 = 32\times16 = 512,\\
+\text{conv biases} &= 32,\\
+\text{BatchNorm} &= 2\times32 = 64,\\
+\text{stage total} &= 512 + 32 + 64 = 608.
+\end{align*}
+Stage~1, $32\to64$:
+\begin{align*}
+\text{conv weights} &= 32\times64\times16 = 2048\times16 = 32{,}768,\\
+\text{conv biases} &= 64,\\
+\text{BatchNorm} &= 2\times64 = 128,\\
+\text{stage total} &= 32{,}768 + 64 + 128 = 32{,}960.
+\end{align*}
+Stage~2, $64\to128$:
+\begin{align*}
+\text{conv weights} &= 64\times128\times16 = 8192\times16 = 131{,}072,\\
+\text{conv biases} &= 128,\\
+\text{BatchNorm} &= 2\times128 = 256,\\
+\text{stage total} &= 131{,}072 + 128 + 256 = 131{,}456.
+\end{align*}
+Total:
+\begin{align*}
+608 + 32{,}960 &= 33{,}568,\\
+33{,}568 + 131{,}456 &= 165{,}024.
+\end{align*}
+\lstinline!sum(p.numel() for p in SpatialEncoder(1, 32, 3).parameters())! returns
+165{,}024\tagC. The whole autoencoder with its mirrored decoder has
+329{,}665\tagM{docs/training/anomaly-detection/10-reconstruction-models.md}.
+\end{worked}
+
+%======================================================================
+\section{The whole forward pass as a table of shapes}\label{sec:shapes:table}
+
+\Cref{tab:shapes:forward} lists every shape a training patch passes through in Indradhanu, with
+$C=165$, $D=32$ and $H=W=128$. You are not expected to understand every row yet. You are expected to
+know the table exists, to see that the model starts and ends at \shape{(B, 165, 128, 128)}, and to
+check each patch-embedding row against \cref{we:shapes:stages}.
+
+\begin{table}[htbp]\centering\small
+\caption{Shapes through one Indradhanu forward pass (course part IW07, with stage rows checked
+against the real encoder by \texttt{tools/compute\_shapes.py}). ``$\sim$358'' is the number of
+visible stage-1 tokens at mask ratio 0.65 ($1024\times0.35 \approx 358$).}
+\label{tab:shapes:forward}
+\begin{tabular}{llll}
+\toprule
+step & module & output shape & chapter\\
+\midrule
+input & & \shape{(B, 165, 128, 128)} & \\
+normalise & \texttt{PixelNormalize} & \shape{(B, 165, 128, 128)} & \ref{ch:bandpipeline}\\
+compress & \texttt{SpectralCompressor} & \shape{(B, 32, 128, 128)} & \ref{ch:compressor}\\
+S1 patch embed & $k4,s4,p0$ & \shape{(B, 1024, 32)} & \ref{ch:patchembed}\\
+S1 delete hidden & \texttt{remove\_tokens} & \shape{(B, $\sim$358, 32)} & \ref{ch:masking}\\
+S1 blocks $\times2$ & \texttt{SegFormerBlock} & \shape{(B, $\sim$358, 32)} & \ref{ch:block}\\
+S1 restore, to 2-D & & \shape{(B, 32, 32, 32)} = F1 & \ref{ch:encoder}\\
+S2 embed + blocks & $k3,s2,p1$ & \shape{(B, 256, 64)} $\to$ F2 \shape{(B, 64, 16, 16)} & \ref{ch:encoder}\\
+S3 embed + blocks & $k3,s2,p1$ & \shape{(B, 64, 160)} $\to$ F3 \shape{(B, 160, 8, 8)} & \ref{ch:encoder}\\
+S4 embed + blocks & $k3,s2,p1$ & \shape{(B, 16, 256)} $\to$ F4 \shape{(B, 256, 4, 4)} & \ref{ch:encoder}\\
+decoder fuse & $1\times1$ convs, upsample & \shape{(B, 256, 32, 32)} & \ref{ch:decoder}\\
+sub-pixel conv & $3\times3$ conv & \shape{(B, 512, 32, 32)} & \ref{ch:decoder}\\
+pixel shuffle & factor 4 & \shape{(B, 32, 128, 128)} & \ref{ch:decoder}\\
+decompress & \texttt{SpectralDecompressor} & \shape{(B, 165, 128, 128)} & \ref{ch:compressor}\\
+denormalise & \texttt{PixelDenormalize} & \shape{(B, 165, 128, 128)} & \ref{ch:bandpipeline}\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+A habit worth adopting: annotate every line of tensor code with its shape, as the repository does
+(\file{docs/10-code-style.md}):
+\begin{lstlisting}
+x = x.flatten(2)          # x: (B, c_out, N)
+x = x.transpose(1, 2)     # x: (B, N, c_out)
+\end{lstlisting}
+
+%======================================================================
+\begin{confusions}
+\confusion{Is $N$ the number of pixels?}{Only when you flatten a full-resolution map. After a patch
+embedding $N$ counts tokens: at stage~1 each token covers a $4\times4$ block, so $N = (H/4)(W/4)$, one
+sixteenth of the pixel count.}
+\confusion{Is a reshape the same as a transpose?}{No. A reshape keeps memory order and changes only
+the filing system; a transpose changes which number sits where. Converting \shape{(B, C, H, W)} to
+\shape{(B, N, C)} needs the transpose (\cref{we:shapes:layout}).}
+\confusion{Is a deep-learning convolution the mathematician's convolution?}{It is a cross-correlation:
+the kernel is not flipped. Since the kernel is learned, nothing is lost.}
+\confusion{Does the stride of a tensor have anything to do with the stride of a convolution?}{No. A
+tensor's strides are memory distances between neighbours along each axis; a convolution's stride is
+how far the kernel jumps. Same word, two meanings.}
+\confusion{Does a bigger image need more convolution parameters?}{No. \Cref{eq:shapes:convcount} has
+no $H$ or $W$ in it: the same kernel is reused at every position.}
+\confusion{Is a $1\times1$ convolution really a convolution?}{Formally yes, with a window of one pixel.
+In practice it is a per-pixel matrix multiply that mixes channels and never looks at neighbours.}
+\end{confusions}
+
+\begin{checkyourself}
+\item\label{ex:shapes:1} Read \shape{(8, 165, 128, 128)} aloud in plain words. Then convert
+\shape{(4, 64, 16, 16)} to the sequence layout: what are $N$ and the feature width?
+\item\label{ex:shapes:2} Compute by hand the convolution of
+$x = \begin{pmatrix}2&0&1\\1&3&0\\0&1&2\end{pmatrix}$ with
+$K = \begin{pmatrix}0&1\\1&-1\end{pmatrix}$, bias $0$, stride~1, no padding.
+\item\label{ex:shapes:3} Use \cref{eq:shapes:outsize} to find the output size of a convolution with
+$k=7$, $s=4$, $p=3$ on $H=128$ (the stale ``kernel 7'' of \cref{ch:patchembed}), and of $k=3$, $s=2$,
+$p=1$ on $H=31$. Is the second equal to $31 /\!/ 2$?
+\item\label{ex:shapes:4} How many parameters does \code{nn.Conv2d(64, 160, kernel_size=3)} have? And
+\code{nn.Conv2d(32, 165, kernel_size=1)}?
+\item\label{ex:shapes:5} A stack of three convolutions has $(k,s) = (3,1)$, $(3,2)$, $(3,1)$. Compute
+the receptive field and jump after each layer.
+\item\label{ex:shapes:6} Starting from the tensor of \cref{we:shapes:layout} in sequence layout
+$\begin{pmatrix}1&5\\2&6\\3&7\\4&8\end{pmatrix}$, apply \code{transpose(1, 2)} then
+\code{reshape(1, 2, 2, 2)} and confirm you recover the two channels. What would
+\code{reshape(1, 2, 2, 2)} without the transpose give?
+\end{checkyourself}
+
+\nextchapter{ch:convae}

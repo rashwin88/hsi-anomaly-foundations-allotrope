@@ -1,0 +1,81 @@
+\answersfor{ch:attention}
+
+\begin{solution}{ex:attention:1}
+\emph{Directly.} Exponentiate each score:
+\begin{align*}
+  e^{3} &= 20.0855, & e^{1} &= 2.7183, & e^{0} &= 1.0000.
+\end{align*}
+Add: $20.0855 + 2.7183 + 1.0000 = 23.8038$. Divide:
+\begin{align*}
+  20.0855/23.8038 &= 0.8438, & 2.7183/23.8038 &= 0.1142, & 1.0000/23.8038 &= 0.0420.
+\end{align*}
+\emph{Stably.} The maximum is 3. Subtract it: $(3-3, 1-3, 0-3) = (0, -2, -3)$. Exponentiate:
+$e^{0} = 1.0000$, $e^{-2} = 0.1353$, $e^{-3} = 0.0498$. Add: $1.0000 + 0.1353 + 0.0498 = 1.1851$.
+Divide: $1.0000/1.1851 = 0.8438$, $0.1353/1.1851 = 0.1142$, $0.0498/1.1851 = 0.0420$.
+
+The weights agree, as \cref{sec:attention:shift} proves they must. Check the sum:
+$0.8438 + 0.1142 + 0.0420 = 1.0000$.
+\end{solution}
+
+\begin{solution}{ex:attention:2}
+Scores of $\vect{q} = (0,1)$ against $(1,0), (0,1), (1,1)$:
+\begin{align*}
+  0\cdot1 + 1\cdot0 &= 0, & 0\cdot0 + 1\cdot1 &= 1, & 0\cdot1 + 1\cdot1 &= 1.
+\end{align*}
+Scaled by $1/\sqrt2 = 0.7071$: $(0, 0.7071, 0.7071)$. Exponentials: $(1.0000, 2.0281, 2.0281)$.
+Sum: $1.0000 + 2.0281 + 2.0281 = 5.0562$. Weights: $1.0000/5.0562 = 0.1978$,
+$2.0281/5.0562 = 0.4011$, $2.0281/5.0562 = 0.4011$.
+
+Output, first feature: $0.1978\cdot1 + 0.4011\cdot0 + 0.4011\cdot1 = 0.1978 + 0 + 0.4011 = 0.5989$.
+Second feature: $0.1978\cdot0 + 0.4011\cdot1 + 0.4011\cdot1 = 0 + 0.4011 + 0.4011 = 0.8022$.
+So $\vect{o}_2 = (0.5989, 0.8022)$: the mirror image of token 1's output, as the symmetry of the
+input (swap the two features and tokens 1 and 2 swap) demands.
+\end{solution}
+
+\begin{solution}{ex:attention:3}
+With two scores,
+\begin{align*}
+  \softmax(s_1, s_2)_1 &= \frac{e^{s_1}}{e^{s_1} + e^{s_2}} && \text{definition}\\
+  &= \frac{e^{s_1}/e^{s_1}}{e^{s_1}/e^{s_1} + e^{s_2}/e^{s_1}} && \text{divide top and bottom by } e^{s_1}\\
+  &= \frac{1}{1 + e^{s_2 - s_1}} = \frac{1}{1 + e^{-(s_1 - s_2)}} && e^{x}/e^{y} = e^{x-y}.
+\end{align*}
+This is the logistic sigmoid of the difference $s_1 - s_2$. For a lead of 2: $e^{-2} = 0.1353$,
+$1 + 0.1353 = 1.1353$, $1/1.1353 = 0.8808$. The leader takes 88\% of the attention.
+\end{solution}
+
+\begin{solution}{ex:attention:4}
+\emph{One term, mean.} $\E[q_ik_i] = \E[q_i]\E[k_i] = 0\cdot0 = 0$ (independence).
+
+\emph{One term, variance.} $\E[q_i^2] = \operatorname{Var}(q_i) + (\E[q_i])^2 = 4 + 0 = 4$, and
+likewise $\E[k_i^2] = 4$. So
+\[
+  \operatorname{Var}(q_ik_i) = \E[q_i^2k_i^2] - 0^2 = \E[q_i^2]\E[k_i^2] = 4\cdot4 = 16 .
+\]
+\emph{Sum of 16 independent terms.} $\operatorname{Var}(\vect{q}\cdot\vect{k}) = 16 + 16 + \dots
++ 16$ (16 terms) $= 16\times16 = 256$, a standard deviation of $\sqrt{256} = 16$.
+
+\emph{Divisor.} Dividing by $a$ divides the variance by $a^2$; we need $256/a^2 = 1$, so
+$a^2 = 256$ and $a = 16$. In general the divisor is $\sigma^2\sqrt d = 4\times4 = 16$; the usual
+$\sqrt d = 4$ would leave a variance of $256/16 = 16$. This is one reason the inputs to attention
+are normalised first (\cref{ch:block}): the $\sqrt d$ rule assumes unit-variance components.
+\end{solution}
+
+\begin{solution}{ex:attention:5}
+(a) $d = 160/5 = 32$; scale $= 1/\sqrt{32} = 1/5.6569 = 0.1768$.
+
+(b) One projection: $160\times160 + 160 = 25{,}600 + 160 = 25{,}760$. Four:
+$4\times25{,}760 = 103{,}040$. (Equivalently $4\cdot160^2 + 4\cdot160 = 102{,}400 + 640 = 103{,}040$.)
+
+(c) $205{,}920 - 103{,}040 = 102{,}880$. These belong to the spatial-reduction convolution and its
+LayerNorm of \cref{ch:esa}: $160\times160\times2\times2 + 160 = 102{,}400 + 160 = 102{,}560$ and
+$2\times160 = 320$; $102{,}560 + 320 = 102{,}880$.
+\end{solution}
+
+\begin{solution}{ex:attention:6}
+$d = 256/8 = 32$. After the split and transpose, $\mat{Q}$ is \shape{(B, 8, 16, 32)}. The scores
+are \shape{(B, 8, 16, 32) @ (B, 8, 32, 16)} $=$ \shape{(B, 8, 16, 16)}. After
+\code{weights @ V} the output is \shape{(B, 8, 16, 32)}; transposing gives \shape{(B, 16, 8, 32)}
+and concatenating the heads gives \shape{(B, 16, 256)}, which the output projection keeps at
+\shape{(B, 16, 256)}. Per patch there are $16\times16 = 256$ scores per head and
+$8\times256 = 2{,}048$ over all heads.
+\end{solution}

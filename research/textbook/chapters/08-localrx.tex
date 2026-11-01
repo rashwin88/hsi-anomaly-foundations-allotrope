@@ -1,0 +1,773 @@
+\chapter{Local RX, regularisation and MNF-RX}\label{ch:localrx}
+
+\begin{onething}
+Global RX fails in two ways: one Gaussian cannot describe a scene of many surfaces, and a 165-band
+covariance cannot be inverted safely. Local RX fixes the first by comparing each pixel with a ring of
+its own neighbours; MNF-RX fixes the second by keeping only the few directions in which signal beats
+noise, so the covariance it inverts has no small eigenvalues to explode. Both are the Mahalanobis
+distance of \cref{ch:rx}, applied to a better-chosen background or a better-chosen space.
+\end{onething}
+
+\section{Two failures, two repairs}\label{sec:localrx:motivation}
+
+\Cref{ch:rx} ended with global RX failing for two separate reasons.
+
+\emph{The background is not one cloud.} In \cref{we:rx:mixture} a hot patch of machinery on warm bare
+ground scored $z = 1.57$ against a scene that was half forest, and $z = 3.0$ against the bare ground
+around it. Global RX asks ``is this pixel unusual for the scene?''; the question you often mean is
+``is this pixel unusual for its surroundings?''. Both are real questions with different answers, and
+\emph{local RX}\index{local RX} answers the second by estimating a separate mean and covariance for
+every pixel from the pixels around it.
+
+\emph{The covariance is nearly singular.} On 165 correlated bands the smallest eigenvalues are
+estimation noise, and inverting turns them into the largest weights (\cref{sec:rx:singular}). Diagonal
+loading keeps the arithmetic from failing but cannot tell real low-variance directions from noise
+(\cref{sec:rx:regularisation}). The repair the product ships is to reduce the dimension first, keeping
+only directions that are well estimated and carry signal, and to run RX there. The obvious way to
+reduce dimension is PCA; the right way, for a sensor whose noisiest bands are also its most variable,
+is the \emph{maximum noise fraction} transform, MNF.
+
+\begin{analogy}
+A security guard deciding whether a car is out of place could compare it with every car in the city
+(global) or with the cars parked on the same street (local). A sports car is unremarkable in the
+city-wide statistics and alarming on a street of delivery vans. But the guard must not include the
+suspicious car's own parking space, or the spaces right next to it where its passengers' other cars
+may be, in ``the street'': those would make the street look like the suspect. That margin left out of
+the comparison is the guard window of this chapter.
+\end{analogy}
+
+\section{The dual window}\label{sec:localrx:window}
+
+For each pixel under test, local RX takes its background from a square ring: a square \emph{outer
+window} centred on the pixel, with a smaller square \emph{inner window} (the \emph{guard
+window}\index{guard window}) removed from its middle. This shape is called a \emph{dual
+window}\index{dual window} or \emph{annulus}\index{annulus}.
+
+\begin{definition}[Ring of half-sizes $o$ and $i$]
+With outer half-size $o$ and inner half-size $i < o$, the outer window is the
+$(2o + 1)\times(2o + 1)$ square of pixels within $o$ rows and $o$ columns of the test pixel, the guard
+is the $(2i + 1)\times(2i + 1)$ square within $i$, and the background ring is the outer window minus
+the guard.
+\end{definition}
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}[scale=0.42]
+  \foreach \x in {-4,...,4} \foreach \y in {-4,...,4} {
+    \fill[spat!25] (\x-0.5,\y-0.5) rectangle (\x+0.5,\y+0.5);
+  }
+  \foreach \x in {-1,...,1} \foreach \y in {-1,...,1} {
+    \fill[maskgrey!45] (\x-0.5,\y-0.5) rectangle (\x+0.5,\y+0.5);
+  }
+  \fill[loss] (-0.5,-0.5) rectangle (0.5,0.5);
+  \draw[step=1,gray!60,shift={(0.5,0.5)}] (-5,-5) grid (4,4);
+  \draw[very thick,spat] (-4.5,-4.5) rectangle (4.5,4.5);
+  \draw[very thick,maskgrey!90!black] (-1.5,-1.5) rectangle (1.5,1.5);
+  \draw[decorate,decoration={brace,amplitude=4pt}] (0.5,4.8) -- (4.5,4.8)
+    node[midway,above=3pt,font=\scriptsize] {$o = 4$};
+  \draw[decorate,decoration={brace,amplitude=3pt,mirror}] (0.5,-1.8) -- (1.5,-1.8)
+    node[midway,below=3pt,font=\scriptsize] {$i = 1$};
+  \node[right,font=\small,align=left] at (5.5,2) {\textcolor{loss}{\rule{6pt}{6pt}} pixel under test};
+  \node[right,font=\small,align=left] at (5.5,0) {\textcolor{maskgrey}{\rule{6pt}{6pt}} guard, excluded: $3\times3 = 9$};
+  \node[right,font=\small,align=left] at (5.5,-2) {\textcolor{spat!40}{\rule{6pt}{6pt}} background ring: $81 - 9 = 72$};
+\end{tikzpicture}
+\caption{A dual window with outer half-size $o = 4$ and inner half-size $i = 1$. The background is the
+$9\times9$ outer square minus the $3\times3$ guard: $81 - 9 = 72$ pixels. The product's defaults,
+$o = 25$ and $i = 5$, give a $51\times51$ square and an $11\times11$ guard.}
+\label{fig:localrx:window}
+\end{figure}
+
+\subsection{Counting the ring}
+
+The number of background pixels is the outer area minus the guard area. Factor it with the
+difference of two squares, $a^2 - b^2 = (a - b)(a + b)$:
+\begin{align}
+n_{\text{ring}} &= (2o + 1)^2 - (2i + 1)^2 \notag\\
+&= \big((2o + 1) - (2i + 1)\big)\big((2o + 1) + (2i + 1)\big) \notag\\
+&= (2o - 2i)(2o + 2i + 2) \notag\\
+&= 4\,(o - i)(o + i + 1). \label{eq:localrx:ring}
+\end{align}
+
+\begin{worked}[label={we:localrx:count}]{The default ring, and the ring at an edge}
+\code{LocalRXDetector} defaults to \code{outer_window = 25} and \code{inner_window = 5}, which its
+docstring defines as half-sizes (\code{app/detectors/local_rx_detector.py}, lines 53--54 and 155--156).
+Directly:
+\begin{align*}
+\text{outer square} &= (2\times25 + 1)^2 = 51^2 = 2601\\
+\text{guard} &= (2\times5 + 1)^2 = 11^2 = 121\\
+n_{\text{ring}} &= 2601 - 121 = 2480 .
+\end{align*}
+By \cref{eq:localrx:ring}: $4\times(25 - 5)\times(25 + 5 + 1) = 4\times20\times31 = 2480$. The code
+computes the same number as \code{max_bg = (2 * outer + 1) ** 2 - (2 * inner + 1) ** 2} (line 240).
+
+Near the edge of the image the windows are cut off. At a corner pixel the outer window keeps only the
+rows and columns inside the image, $0$ to $25$, so it is $26\times26$, and the guard is $6\times6$:
+\[
+n_{\text{corner}} = 26\times26 - 6\times6 = 676 - 36 = 640 .
+\]
+On the middle of the top edge the outer window is $26\times51$ and the guard $6\times11$:
+$1326 - 66 = 1260$. A corner pixel has about a quarter of the full background, and pixels beside
+cloud or nodata lose more.
+\end{worked}
+
+\section{Why the guard window exists}\label{sec:localrx:guard}
+
+The guard is the subtle part, and leaving it out quietly ruins the detector. A real target is usually
+larger than one pixel, and the sensor blurs it further into its neighbours. Without a guard, those
+neighbours are \emph{also} target, and they go into the background statistics. The background mean
+shifts towards the target, the background covariance inflates along exactly the direction that makes
+the target unusual, and the Mahalanobis distance shrinks. The target partly whitens itself out of
+detection.
+
+\begin{worked}[label={we:localrx:guard}]{A $3\times3$ target with and without a guard}
+One band, a $5\times5$ patch, outer half-size $o = 2$. The target is the $3\times3$ block of 25s in the
+middle; the 16 pixels around it are background, eight at 20 and eight at 22:
+\[
+\begin{matrix}
+20 & 22 & 20 & 22 & 20\\
+22 & 25 & 25 & 25 & 22\\
+20 & 25 & \mathbf{25} & 25 & 20\\
+22 & 25 & 25 & 25 & 22\\
+20 & 22 & 20 & 22 & 20
+\end{matrix}
+\]
+We score the centre pixel (bold). Do both cases on paper.
+
+\textbf{With a guard of half-size $i = 1$.} The guard is the whole $3\times3$ target, and the ring is
+the 16 border pixels: $4\times(2 - 1)\times(2 + 1 + 1) = 16$. Their mean and variance:
+\begin{align*}
+\mu &= \frac{8\times20 + 8\times22}{16} = \frac{160 + 176}{16} = \frac{336}{16} = 21\\
+\textstyle\sum(x - \mu)^2 &= 8\times(20 - 21)^2 + 8\times(22 - 21)^2 = 8 + 8 = 16\\
+\sigma^2 &= \frac{16}{16 - 1} = \frac{16}{15} = 1.0667 .
+\end{align*}
+With one band RX is the squared z-score:
+\[
+\text{RX} = \frac{(25 - 21)^2}{16/15} = \frac{16\times15}{16} = 15 .
+\]
+That is far beyond the $\chi^2_1$ threshold for 0.1\% (10.83).
+
+\textbf{Without a guard ($i = 0$, only the centre pixel excluded).} The ring is now 24 pixels: the 16
+border pixels and the 8 other target pixels at 25.
+\begin{align*}
+\mu &= \frac{336 + 8\times25}{24} = \frac{336 + 200}{24} = \frac{536}{24} = 22.333\\
+\textstyle\sum(x - \mu)^2 &= 8\times(20 - 22.333)^2 + 8\times(22 - 22.333)^2 + 8\times(25 - 22.333)^2\\
+&= 8\times5.444 + 8\times0.111 + 8\times7.111 = 43.56 + 0.89 + 56.89 = 101.33\\
+\sigma^2 &= \frac{101.33}{23} = 4.406\\
+\text{RX} &= \frac{(25 - 22.333)^2}{4.406} = \frac{7.111}{4.406} = 1.61 .
+\end{align*}
+The same pixel drops from 15 to 1.61, an ordinary value. The target's own neighbours raised the
+background mean from 21 to 22.3 and quadrupled its variance. The repository's
+\code{batch_mahalanobis} returns 15.0000 and 1.6140 on this patch\tagC{} (with the default ridge of
+$10^{-4}$, 14.9986 and 1.6140).
+\end{worked}
+
+\begin{keypoint}
+Whatever the background window contains is, by definition, normal; the guard keeps the target out of
+its own definition of normal.
+\end{keypoint}
+
+The guard is a compromise, not a guarantee. A target larger than the guard contaminates its ring
+anyway; a guard so large that it holds every possible target leaves a ring far from the pixel, which
+is a worse description of its surroundings. A target that fills the whole outer window becomes its own
+background and vanishes. That is one reason to run global and local detectors side by side: they fail
+on different targets.
+
+\section{The local RX algorithm}\label{sec:localrx:algorithm}
+
+For every valid pixel $\vect{x}$ at position $(r, c)$, \code{LocalRXDetector.detect} does the following.
+\begin{enumerate}
+  \item Collect the valid pixels of the ring around $(r, c)$: $\vect{b}_1, \dots, \vect{b}_n$.
+  \item If $n$ is below \code{min_bg_pixels}, leave the pixel unscored (NaN).
+  \item Compute the ring mean $\hat\muv = \frac1n\sum_j\vect{b}_j$ and covariance
+    $\hat\Cov = \frac{1}{n - 1}\sum_j(\vect{b}_j - \hat\muv)(\vect{b}_j - \hat\muv)\T$.
+  \item Score
+  \begin{equation}\label{eq:localrx:lrx}
+  \text{LRX}(\vect{x}) = (\vect{x} - \hat\muv)\T\,(\hat\Cov + \epsilon\mat{I})\inv\,(\vect{x} - \hat\muv),
+  \qquad \epsilon = 10^{-4}.
+  \end{equation}
+\end{enumerate}
+The source docstring states the same formula, ``Score = (x - $\mu$)$^\top$ ($\Sigma$ + $\lambda$I)$^{-1}$ (x -
+$\mu$)'' (\code{local_rx_detector.py}, line 10), with the ridge called $\lambda$ there; this book calls it
+$\epsilon$ to keep $\lambda$ for eigenvalues.
+
+\subsection{Why at least $B + 1$ background pixels}
+
+The default \code{min_bg_pixels} is the number of bands plus one, $B + 1$ (\code{local_rx_detector.py},
+line 187; $10 + 1 = 11$ for the 10-component MNF version). The reason is a fact about sample
+covariances.
+
+\paragraph{Claim.} A covariance estimated from $n$ points has rank at most $n - 1$: at most $n - 1$ of
+\index{rank}\index{covariance matrix!rank of a sample}
+its eigenvalues are non-zero.
+
+\noindent\textit{Proof.} By \cref{eq:linalg:covmat}, $\hat\Cov$ is a sum of $n$ outer products
+$\vect{d}_j\vect{d}_j\T$. For any vector $\vect{v}$, $\hat\Cov\vect{v} = \frac{1}{n-1}\sum_j
+\vect{d}_j(\vect{d}_j\T\vect{v})$ is a combination of the deviations $\vect{d}_j$, so every output of
+$\hat\Cov$ lies in the space the deviations span. The deviations add to zero
+(\cref{sec:linalg:covariance}), so the last one is minus the sum of the others, and they span at most
+$n - 1$ dimensions. A matrix whose outputs fill at most $n - 1$ dimensions has at least $B - (n - 1)$
+zero eigenvalues. \hfill$\square$
+
+So with $n \le B$ background pixels the covariance is exactly singular and has no inverse; $n = B + 1$
+is the least that can give a full-rank matrix. The script confirms it on random 10-dimensional points:
+2 points give rank 1, 5 give rank 4, 10 give rank 9, 11 give rank 10\tagC. Full rank is necessary, not
+sufficient: a covariance from 11 points in 10 dimensions is invertible but its small eigenvalues are
+very poorly estimated, which is where the ridge earns its place. On 177 raw PRISMA bands the corner
+pixel's 640 background pixels are enough for full rank but not for a trustworthy inverse.
+
+\subsection{Batching, padding and the masked mean}
+\index{masked mean}\index{local RX!batching}
+
+Local RX needs one covariance, one solve and one quadratic form \emph{per pixel}. Doing this one pixel
+at a time in Python is hopeless (\cref{sec:localrx:cost}), so the detector stacks a batch of pixels'
+rings into one array of shape \shape{(N, max\_bg, B)} and computes all their statistics in a few tensor
+operations (\code{app/detectors/_local_background.py}, \code{batch_mahalanobis}). Arrays must be
+rectangular, but rings are not all the same size, so each row is padded to the full ring size
+\code{max_bg} and a count array \code{n} says how many entries are real. A boolean mask
+\code{arange(max_bg) < n[:, None]} marks the real entries.
+
+\begin{worked}[label={we:localrx:padding}]{The masked mean must divide by the real count}
+Two pixels, one band, \code{max_bg = 4}. Pixel 0 has four real background values; pixel 1 has two,
+0.30 and 0.34, padded with two zeros.
+\begin{align*}
+\text{mask, pixel 0:}&\quad [0,1,2,3] < 4 \;\to\; [\text{T},\text{T},\text{T},\text{T}]\\
+\text{mask, pixel 1:}&\quad [0,1,2,3] < 2 \;\to\; [\text{T},\text{T},\text{F},\text{F}]
+\end{align*}
+The correct mean of pixel 1 divides the masked sum by its real count, 2:
+\[
+\frac{0.30 + 0.34 + 0 + 0}{2} = \frac{0.64}{2} = 0.32 .
+\]
+Dividing by \code{max_bg} instead would give $0.64/4 = 0.16$, half the true value, because two of the
+four slots are padding. The code divides by \code{mask.sum(dim=1)} (line 60--61), and it multiplies the
+centred values by the mask again (line 64) so that padding contributes nothing to the covariance
+either. With the correct statistics, a test value of 0.40 at pixel 1 scores
+\[
+\frac{(0.40 - 0.32)^2}{\sigma^2 + \epsilon},\quad
+\sigma^2 = \frac{(0.30 - 0.32)^2 + (0.34 - 0.32)^2}{2 - 1} = \frac{0.0004 + 0.0004}{1} = 0.0008,
+\]
+so $0.0064/(0.0008 + 0.0001) = 0.0064/0.0009 = 7.11$, which is what \code{batch_mahalanobis}
+returns\tagC. Edge pixels are exactly the ones with padding, and exactly where you least want
+spurious detections.
+\end{worked}
+
+\subsection{Three practical details}
+
+\paragraph{Precision depends on the device.} \code{batch_mahalanobis} computes in \code{float32} on a
+GPU and \code{float64} on the CPU (line 47). The same scene can therefore give scores differing in the
+last digits on different hardware, far below any threshold anyone sets, but enough to break a test
+that demands exact equality. Test with a tolerance, or test the ranking.
+
+\paragraph{Two masks.} The result object carries a \code{spatial_mask} (pixels \emph{eligible} for
+\index{computed mask}
+scoring: valid and kept) and a \code{computed_mask} (pixels that actually \emph{got} a score,
+\code{local_rx_detector.py} line 368). They differ wherever a ring held fewer than \code{min_bg_pixels}
+valid neighbours. Always reduce statistics over \code{computed_mask}. Treating an unscored pixel as
+score zero biases every statistic, and since unscored pixels cluster at edges and beside cloud, the
+bias is systematic rather than random.
+
+\paragraph{Stride.} A \code{stride} greater than 1 scores only every \code{stride}-th row and column and
+fills the rest by bilinear interpolation (\code{_interpolate_strided}). A stride of 2 scores a quarter
+of the pixels, about four times faster, at the price of smoothing small targets.
+
+\section{The cost of local RX}\label{sec:localrx:cost}
+\index{local RX!cost}
+
+\begin{worked}[label={we:localrx:cost}]{How much arithmetic one PRISMA scene costs}
+A PRISMA scene is about $1210\times1219$ pixels\tagM{docs/lld/local-background.md}:
+\[
+1210\times1219 = 1{,}474{,}990 \text{ pixels}.
+\]
+For each, building a $B\times B$ covariance from 2480 ring pixels takes about $2480\times B^2$
+multiply-adds (each ring pixel adds its $B^2$-entry outer product), and solving one $B\times B$ system
+about $B^3/3$. Two cases:
+\begin{center}
+\begin{tabular}{rrrr}
+\toprule
+$B$ & covariance per pixel & solve per pixel & whole scene\\
+\midrule
+10  & $2480\times100 = 248{,}000$          & $\approx 333$       & $\approx 3.7\times10^{11}$\\
+177 & $2480\times31{,}329 = 77{,}695{,}920$ & $\approx 1.85\times10^{6}$ & $\approx 1.2\times10^{14}$\\
+\bottomrule
+\end{tabular}
+\end{center}
+For comparison, global RX at $B = 10$ builds one covariance from all the pixels:
+$1{,}474{,}990\times100 \approx 1.5\times10^{8}$ multiply-adds, more than two thousand times less than
+local RX at the same $B$. Running local RX on 177 raw bands is about 300 times more expensive again than
+running it in 10 MNF components\tagC.
+
+Memory matters as much as arithmetic. The detector sizes its GPU batch from
+\code{bytes_per_elem = (2 * max_bg * B + B * B) * 4} (\code{local_rx_detector.py}, lines 198--199): for
+$B = 10$ that is $(2\times2480\times10 + 100)\times4 = 198{,}800$ bytes per pixel in the batch, and for
+$B = 177$ it is $3{,}636{,}996$ bytes, so a batch that fits a GPU at $B = 10$ must be about 18 times
+smaller at $B = 177$.
+\end{worked}
+
+The two repairs of this chapter therefore support each other. Reducing the dimension first (MNF) makes
+local RX affordable, and makes each local covariance well estimated from 2480 pixels.
+
+\section{Choosing a better space: why not PCA}\label{sec:localrx:whynotpca}
+
+The resolver's comment says the fix for the near-singular covariance is to run RX ``in a 10-dim
+noise-whitened subspace''. Why noise-whitened, and not the obvious choice, the top 10 principal
+components of \cref{sec:linalg:pca}?
+
+PCA keeps the directions of greatest variance. Variance is signal plus noise, and on an imaging
+spectrometer the noise is not the same in every band: bands at the ends of the spectrum and in
+absorption regions have little light and a lot of noise. If a noisy band's noise variance is large,
+PCA ranks it high and keeps it, while a clean band with real but modest variation is ranked low and
+thrown away. What you want to rank by is not variance but \emph{signal-to-noise ratio}.
+
+\subsection{Signal plus noise}
+
+Model every pixel as $\vect{x} = \vect{s} + \vect{n}$: a signal $\vect{s}$ (what the ground looks like)
+plus sensor noise $\vect{n}$, with the noise independent of the signal and of mean zero. The covariance
+of a sum of independent parts is the sum of their covariances. (Expand
+$(\vect{d}_s + \vect{d}_n)(\vect{d}_s + \vect{d}_n)\T = \vect{d}_s\vect{d}_s\T + \vect{d}_s\vect{d}_n\T +
+\vect{d}_n\vect{d}_s\T + \vect{d}_n\vect{d}_n\T$ and average: the cross terms average to zero for
+independent parts.) So
+\begin{equation}\label{eq:localrx:sigsum}
+\Cov = \Cov_s + \Cov_n .
+\end{equation}
+Along a unit direction $\vect{a}$, by \cref{eq:linalg:dirvar}, the signal variance is
+$\vect{a}\T\Cov_s\vect{a}$ and the noise variance $\vect{a}\T\Cov_n\vect{a}$.
+
+\begin{definition}[Noise fraction and signal-to-noise ratio]\index{noise fraction}\index{signal-to-noise ratio}
+The \emph{noise fraction} of a direction $\vect{a}$ is the share of its variance that is noise,
+$\vect{a}\T\Cov_n\vect{a} / \vect{a}\T\Cov\vect{a}$. Its \emph{signal-to-noise ratio} (SNR) is
+$\vect{a}\T\Cov_s\vect{a} / \vect{a}\T\Cov_n\vect{a}$.
+\end{definition}
+
+The \emph{maximum noise fraction}\index{maximum noise fraction} transform of \citet{green1988transformation}
+finds the directions in order of noise fraction; ordered from least noisy to most, they are the
+directions of highest SNR first. The same transform is often called the \emph{minimum noise fraction}
+transform, which is the name in the course and in the repository's docstrings; both names refer to the
+same directions, listed from opposite ends.
+
+\section{Deriving MNF}\label{sec:localrx:mnf}
+
+\subsection{The generalised eigenproblem}
+
+Maximise the ratio of total variance to noise variance along $\vect{a}$:
+\begin{equation}\label{eq:localrx:rayleigh}
+\max_{\vect{a}}\ R(\vect{a}) = \frac{\vect{a}\T\Cov\vect{a}}{\vect{a}\T\Cov_n\vect{a}} .
+\end{equation}
+Because $\Cov = \Cov_s + \Cov_n$, $R(\vect{a}) = 1 + \text{SNR}(\vect{a})$, so maximising $R$ maximises SNR
+and minimises the noise fraction $1/R$. Scaling $\vect{a}$ does not change $R$ (numerator and
+denominator both scale by the square), so fix the scale by requiring $\vect{a}\T\Cov_n\vect{a} = 1$ and
+maximise the numerator, exactly as PCA fixed $\vect{u}\T\vect{u} = 1$ in \cref{sec:linalg:pca}. The
+Lagrangian is
+\[
+L(\vect{a}, \lambda) = \vect{a}\T\Cov\vect{a} - \lambda(\vect{a}\T\Cov_n\vect{a} - 1).
+\]
+The gradient of a quadratic form $\vect{a}\T\mat{S}\vect{a}$ with symmetric $\mat{S}$ is $2\mat{S}\vect{a}$
+(\cref{sec:linalg:pca}), so setting the gradient of $L$ to zero gives
+\begin{align}
+2\Cov\vect{a} - 2\lambda\Cov_n\vect{a} &= \vect{0} \notag\\
+\Cov\vect{a} &= \lambda\,\Cov_n\vect{a} . \label{eq:localrx:geneig}
+\end{align}
+This is a \emph{generalised eigenproblem}\index{generalised eigenproblem}: $\lambda$ and $\vect{a}$ are
+a generalised eigenvalue and eigenvector of the pair $(\Cov, \Cov_n)$. If $\Cov_n$ is invertible,
+multiplying both sides on the left by $\Cov_n\inv$ gives the ordinary eigenproblem
+$\Cov_n\inv\Cov\,\vect{a} = \lambda\vect{a}$. Multiplying \cref{eq:localrx:geneig} on the left by
+$\vect{a}\T$ shows what $\lambda$ means:
+$\vect{a}\T\Cov\vect{a} = \lambda\,\vect{a}\T\Cov_n\vect{a}$, so $\lambda = R(\vect{a}) = 1 +
+\text{SNR}(\vect{a})$. The best direction is the generalised eigenvector with the largest $\lambda$.
+
+\subsection{Solving it: noise-whiten, then PCA}
+
+$\Cov_n\inv\Cov$ is not symmetric, so the spectral theorem does not apply to it directly. The trick is
+to change variables so that it does. Let $\mat{W}_n = \Cov_n^{-1/2}$ be a whitening matrix for the
+\emph{noise} (\cref{sec:linalg:whitening}, symmetric form), so that $\mat{W}_n\Cov_n\mat{W}_n = \mat{I}$.
+Write $\vect{a} = \mat{W}_n\vect{v}$ and substitute into \cref{eq:localrx:geneig}:
+\begin{align*}
+\Cov\mat{W}_n\vect{v} &= \lambda\,\Cov_n\mat{W}_n\vect{v}\\
+\mat{W}_n\Cov\mat{W}_n\vect{v} &= \lambda\,\mat{W}_n\Cov_n\mat{W}_n\vect{v}
+  && \text{multiply on the left by } \mat{W}_n\\
+\left(\mat{W}_n\Cov\mat{W}_n\right)\vect{v} &= \lambda\,\vect{v}
+  && \mat{W}_n\Cov_n\mat{W}_n = \mat{I}.
+\end{align*}
+The matrix $\mat{W}_n\Cov\mat{W}_n$ is symmetric: it is the covariance of the noise-whitened data
+$\mat{W}_n\vect{x}$ (\cref{eq:linalg:covtransform}). So MNF is two steps you already know:
+\begin{enumerate}
+  \item \textbf{Noise-whiten}: transform the data so that the noise has identity covariance, equal in
+    every direction.
+  \item \textbf{PCA} in the whitened space. Now that every direction has noise variance 1, the
+    direction of greatest variance is the direction of greatest $1 + \text{SNR}$.
+\end{enumerate}
+The MNF directions in the original band space are $\vect{a}_k = \mat{W}_n\vect{v}_k$, and the $k$-th
+\emph{MNF component} of a pixel is $y_k = \vect{a}_k\T(\vect{x} - \muv) = \vect{v}_k\T\mat{W}_n(\vect{x} -
+\muv)$. This is exactly the code:
+
+\begin{lstlisting}
+# app/detectors/mnf_compression_detector.py, _compute_mnf_transform (lines 315-344)
+centered = pixels - self._mnf_mean                     # (N, B)
+noise_eigvals, noise_eigvecs = np.linalg.eigh(noise_cov)
+noise_eigvals = np.maximum(noise_eigvals, 1e-10)       # floor the noise eigenvalues
+# W_n, (B, B):
+whiten = noise_eigvecs @ np.diag(1.0 / np.sqrt(noise_eigvals)) @ noise_eigvecs.T
+whitened = centered @ whiten.T                         # step 1, (N, B)
+# step 2, PCA of the noise-whitened data:
+eigvals, eigvecs = np.linalg.eigh(np.cov(whitened, rowvar=False))
+order = np.argsort(eigvals)[::-1]                      # largest 1 + SNR first
+combined = (eigvecs[:, :n_components].T) @ whiten      # rows a_k^T, (k, B)
+\end{lstlisting}
+
+The symmetric form $\mat{V}\mat{\Lambda}^{-1/2}\mat{V}\T$ used here is one of many noise-whitening
+matrices; any other is a rotation of it, $\mat{R}\mat{W}_n$ with $\mat{R}$ orthogonal. A rotation
+before PCA rotates the eigenvectors $\vect{v}_k$ by the same $\mat{R}$ and leaves the eigenvalues
+unchanged, so the final directions $\vect{a}_k$ and components $y_k$ are the same whichever whitening you
+pick.
+
+\begin{worked}[label={we:localrx:mnf2}]{MNF against PCA on two bands}
+Band 1 is variable but noisy; band 2 is quiet but clean. Suppose the total and noise covariances are
+\[
+\Cov = \begin{pmatrix} 8 & 2\\ 2 & 1.25\end{pmatrix},\qquad
+\Cov_n = \begin{pmatrix} 4 & 0\\ 0 & 0.25\end{pmatrix},
+\qquad\text{so}\qquad
+\Cov_s = \Cov - \Cov_n = \begin{pmatrix} 4 & 2\\ 2 & 1\end{pmatrix}.
+\]
+Half of band 1's variance is noise (4 of 8); a fifth of band 2's is (0.25 of 1.25). The signal
+covariance has determinant $4\times1 - 2\times2 = 0$: all the signal lies along one direction,
+$(2, 1)$, as if one material's abundance varied across the scene. Do this on paper.
+
+\textbf{Step 1, noise-whiten.} $\Cov_n$ is diagonal, so
+$\mat{W}_n = \Cov_n^{-1/2} = \diag(1/\sqrt4, 1/\sqrt{0.25}) = \diag(0.5, 2)$. The whitened covariance is
+$\mat{W}_n\Cov\mat{W}_n$; entry $(i,j)$ is $\Sigma_{ij}$ times the $i$-th and $j$-th diagonal entries of
+$\mat{W}_n$:
+\begin{align*}
+(1,1):&\quad 8\times0.5\times0.5 = 2\\
+(1,2):&\quad 2\times0.5\times2 = 2\\
+(2,2):&\quad 1.25\times2\times2 = 5
+\end{align*}
+so $\mat{W}_n\Cov\mat{W}_n = \begin{psmallmatrix} 2 & 2\\ 2 & 5\end{psmallmatrix}$.
+
+\textbf{Step 2, PCA.} Trace $2 + 5 = 7$, determinant $2\times5 - 2\times2 = 6$, characteristic
+polynomial $\lambda^2 - 7\lambda + 6 = (\lambda - 6)(\lambda - 1)$: $\lambda_1 = 6$, $\lambda_2 = 1$. For
+$\lambda_1 = 6$: $(2 - 6)v_1 + 2v_2 = 0$, so $v_2 = 2v_1$ and $\vect{v}_1 = (1, 2)/\sqrt5$. For
+$\lambda_2 = 1$: $(2 - 1)v_1 + 2v_2 = 0$, so $\vect{v}_2 = (2, -1)/\sqrt5$.
+
+\textbf{Step 3, back to bands.} $\vect{a}_1 = \mat{W}_n\vect{v}_1 = (0.5\times1, 2\times2)/\sqrt5 = (0.5,
+4)/\sqrt5 = (0.224, 1.789)$. The first MNF direction weights the clean band 8 times as heavily as the
+noisy one.
+
+\textbf{Step 4, read the eigenvalues.} $\lambda_1 = 6 = 1 + \text{SNR}$, so the first component has
+SNR 5. Check directly: $\Cov_s\vect{a}_1 = (4\times0.5 + 2\times4,\ 2\times0.5 + 1\times4)/\sqrt5 =
+(10, 5)/\sqrt5$, so the signal variance is $\vect{a}_1\T\Cov_s\vect{a}_1 = (0.5\times10 + 4\times5)/5 =
+25/5 = 5$; the noise variance is $(4\times0.25 + 0.25\times16)/5 = (1 + 4)/5 = 1$; SNR $= 5/1 = 5$.
+The second component has $\lambda_2 = 1$: SNR 0, pure noise, as it must be when all the signal lies
+along one direction.
+
+\textbf{Compare PCA on the raw bands.} $\Cov$ has trace $9.25$ and determinant
+$8\times1.25 - 4 = 6$, so its eigenvalues are $(9.25 \pm \sqrt{9.25^2 - 24})/2 = (9.25 \pm 7.846)/2$:
+8.548 and 0.702. The first principal direction is $(0.964, 0.264)$, mostly the noisy band 1. Its signal
+variance is 4.81 and its noise variance 3.74\tagC: SNR 1.29. PCA's best direction is a quarter as clean
+as MNF's.
+\end{worked}
+
+\subsection{Estimating the noise from neighbouring pixels}
+\index{noise covariance}\index{maximum noise fraction!noise estimate}
+
+MNF needs $\Cov_n$, and nobody hands you the sensor noise. The \emph{shift-difference}
+method\index{shift difference} of \citet{green1988transformation} estimates it from the image itself.
+Adjacent pixels usually show nearly the same ground, so their \emph{difference} is mostly noise. Write
+two horizontal neighbours as $\vect{x}(p) = \vect{s}(p) + \vect{n}(p)$ and $\vect{x}(p') = \vect{s}(p') +
+\vect{n}(p')$. If $\vect{s}(p') \approx \vect{s}(p)$,
+\[
+\vect{x}(p') - \vect{x}(p) \approx \vect{n}(p') - \vect{n}(p).
+\]
+If the noise at the two pixels is independent with the same covariance $\Cov_n$, the covariance of
+the difference is
+\begin{align*}
+\Cov\big(\vect{n}(p') - \vect{n}(p)\big)
+&= \Cov(\vect{n}(p')) + \Cov(\vect{n}(p)) - (\text{cross terms, zero for independent noise})\\
+&= \Cov_n + \Cov_n = 2\,\Cov_n ,
+\end{align*}
+using \cref{eq:linalg:covtransform} with $\mat{A} = (\mat{I}\ \ {-\mat{I}})$ applied to the stacked pair.
+So $\Cov_n \approx \frac12\Cov(\text{differences})$: the line
+\code{noise_cov = np.cov(diff_pixels, rowvar=False) / 2.0}
+(\code{mnf_compression_detector.py}, line 291), with differences taken between each valid pixel and its
+right-hand neighbour (lines 283--285).
+
+\begin{worked}[label={we:localrx:noise}]{A noise covariance from a strip of five pixels}
+Two bands, one row of five pixels:
+\begin{center}
+\begin{tabular}{cccccc}
+\toprule
+& $p_1$ & $p_2$ & $p_3$ & $p_4$ & $p_5$\\
+\midrule
+band 1 & 10.0 & 10.2 & 9.9  & 10.1 & 10.0\\
+band 2 & 20.0 & 20.1 & 20.1 & 20.0 & 20.0\\
+\bottomrule
+\end{tabular}
+\end{center}
+Horizontal differences, right minus left:
+\begin{align*}
+\text{band 1:}&\quad 0.2,\ -0.3,\ 0.2,\ -0.1 \qquad(\text{sum } 0)\\
+\text{band 2:}&\quad 0.1,\ 0.0,\ -0.1,\ 0.0 \qquad(\text{sum } 0).
+\end{align*}
+Their means are 0, so the covariance of the four difference vectors (divisor $4 - 1 = 3$) is
+\begin{align*}
+\text{var}_1 &= \tfrac13(0.04 + 0.09 + 0.04 + 0.01) = \tfrac13\times0.18 = 0.06\\
+\text{var}_2 &= \tfrac13(0.01 + 0 + 0.01 + 0) = \tfrac13\times0.02 = 0.00667\\
+\text{cov}_{12} &= \tfrac13\big(0.2\times0.1 + (-0.3)\times0 + 0.2\times(-0.1) + (-0.1)\times0\big)
+  = \tfrac13(0.02 - 0.02) = 0 .
+\end{align*}
+Halving: $\hat\Cov_n = \diag(0.03, 0.00333)$, noise standard deviations $\sqrt{0.03} = 0.173$ and
+$\sqrt{0.00333} = 0.058$. Band 1 is three times as noisy. The repository's
+\code{_estimate_noise_covariance}, called on this strip, returns the same matrix\tagC.
+\end{worked}
+
+The assumption behind the estimate fails wherever neighbours really differ: along a coastline, a road
+edge, a field boundary. Those differences are counted as noise, inflating $\hat\Cov_n$ in the directions
+of the edges' contrast. Over a whole scene, edges are a small fraction of neighbour pairs and the
+estimate is useful; and it needs no calibration data. One consequence is worth noticing: an
+imaging spectrometer such as PRISMA records each image column with its own detector element, so a
+column-to-column calibration offset (a stripe) appears in exactly these horizontal differences. The
+estimate counts striping as noise, which is why the MNF local detector's docstring credits it with
+``suppressing sensor noise and striping artefacts'' (\code{mnf_compression_lrx_detector.py}, lines
+6--8).
+
+\subsection{The eigenvalue diagnostic}
+\index{maximum noise fraction!eigenvalues}
+
+Because each MNF eigenvalue is $1 + \text{SNR}$ of its component, the list of eigenvalues says how much
+signal the scene has and in how many directions. Signal components have eigenvalues well above 1; pure
+noise components sit near 1. The anomaly course states the practical rule: the eigenvalues should
+\emph{fall away sharply}, a few components carrying the structure; nearly flat eigenvalues mean the
+compression found no dominant signal and the scores deserve suspicion. That is why
+\code{MNFCompressionRXResult} carries \code{mnf_eigenvalues} and why the detector logs the ratio of
+the first to the last retained one (\code{mnf_compression_detector.py}, lines 346--349).
+
+\begin{worked}[label={we:localrx:spectrum}]{Eigenvalues of PCA and MNF on a synthetic cube}
+The script builds a $12$-band, $50\times50$ synthetic cube from three smooth spatial patterns mixed by
+three random spectra, plus independent noise whose standard deviation rises from 0.05 in band 1 to 0.6
+in band 12, and runs the repository's own MNF code on it\tagC. The noise estimate is close: for band 12
+the true noise variance is $0.6^2 = 0.36$ and the estimate is 0.350; for band 4, 0.040 against
+0.042. The two eigenvalue lists:
+\begin{center}
+\begin{tabular}{lp{0.72\linewidth}}
+\toprule
+PCA of the cube & 1.26, 0.53, 0.31, 0.26, 0.20, 0.17, 0.14, 0.085, 0.059, 0.035, 0.024, 0.010\\
+MNF & 65.4, 4.02, 2.18, \quad 1.07, 1.06, 1.02, 1.00, 0.99, 0.98, 0.97, 0.95, 0.93\\
+\bottomrule
+\end{tabular}
+\end{center}
+PCA's list falls smoothly: you cannot see that the cube has exactly three signals, because the noisy
+bands supply variance in every direction. MNF's list has three eigenvalues well above 1 and nine
+within 7\% of 1: three signal components and nine noise components, read straight off the table.
+\end{worked}
+
+\section{MNF-RX}\label{sec:localrx:mnfrx}
+
+\emph{MNF-RX}\index{MNF-RX} projects every valid pixel onto the first $k$ MNF directions and runs global
+RX on the $k$ components. The product's default is $k = 10$
+(\code{DEFAULT_N_COMPONENTS = 10}, \code{mnf_compression_detector.py} line 33; the worker calls
+\code{fit()} with no arguments). To see what this buys, you need one more fact about the Mahalanobis
+distance.
+
+\subsection{Mahalanobis distance ignores invertible changes of coordinates}
+\index{Mahalanobis distance!invariance}
+
+\paragraph{Claim.} Let $\vect{y} = \mat{A}\vect{x}$ with $\mat{A}$ square and invertible. Then the
+Mahalanobis distance of $\vect{y}$ in its own statistics equals that of $\vect{x}$ in its own.
+
+\noindent\textit{Proof.} The mean of $\vect{y}$ is $\mat{A}\muv$ and its covariance
+$\mat{A}\Cov\mat{A}\T$ (\cref{eq:linalg:covtransform}). The inverse of a product of invertible matrices
+is the product of inverses in reverse order, $(\mat{A}\Cov\mat{A}\T)\inv = (\mat{A}\T)\inv\Cov\inv\mat{A}\inv$
+(check: multiplying by $\mat{A}\Cov\mat{A}\T$ cancels the factors pair by pair from the middle). With
+$\vect{d} = \vect{x} - \muv$, use the transpose of a product and then the inverse of a product:
+\begin{align*}
+(\mat{A}\vect{d})\T(\mat{A}\Cov\mat{A}\T)\inv(\mat{A}\vect{d})
+&= \vect{d}\T\mat{A}\T(\mat{A}\T)\inv\,\Cov\inv\,\mat{A}\inv\mat{A}\vect{d}\\
+&= \vect{d}\T\,\mat{I}\,\Cov\inv\,\mat{I}\,\vect{d} = \vect{d}\T\Cov\inv\vect{d}.
+\end{align*}
+\hfill$\square$
+
+The MNF transform with all $B$ components kept is an invertible matrix, so \textbf{MNF-RX with every
+component kept is exactly plain RX}. The script confirms it on the synthetic cube: the two score maps
+differ by at most $7\times10^{-14}$\tagC, rounding error. Every benefit of MNF-RX therefore comes from
+\emph{discarding} components, not from the transform itself. MNF's job is to sort the directions so
+that the ones you discard are the noise.
+
+\subsection{What MNF-RX computes}
+
+The MNF components are uncorrelated over the pixels used to fit them, with variances equal to the MNF
+eigenvalues: their covariance is $\mat{V}_k\T\mat{W}_n\Cov\mat{W}_n\mat{V}_k = \diag(\lambda_1, \dots,
+\lambda_k)$, by the same argument as \cref{we:linalg:pcacoords}. When \code{spectral.rx} re-estimates the
+covariance of the $k$ components on those same pixels, it finds this diagonal matrix, so
+\begin{equation}\label{eq:localrx:mnfrx}
+\text{MNF-RX}(\vect{x}) = \sum_{j=1}^{k}\frac{y_j^2}{\lambda_j},
+\qquad y_j = \vect{a}_j\T(\vect{x} - \muv).
+\end{equation}
+The script checks this on the synthetic cube with $k = 3$: the library's scores and the sum agree to
+$5\times10^{-14}$, and the mean in-sample score is $2.9988 = 3\times(N-1)/N$\tagC, as
+\cref{sec:rx:chi2} predicts.
+
+Now the numerical point. The denominators in \cref{eq:localrx:mnfrx} are the $k$ largest MNF
+eigenvalues, each $1 + \text{SNR} \ge$ roughly 1. No denominator can be tiny, so nothing explodes; the
+condition number of the $10\times10$ covariance is $\lambda_1/\lambda_{10}$, the ratio the detector
+logs, and with $\lambda_{10}$ near or above 1 it is bounded by the strongest component's SNR. Compare
+plain RX, whose denominators include the smallest of 165 eigenvalues of the raw covariance. Under a
+Gaussian background the scores follow $\chi^2_{10}$, mean 10 (\cref{sec:rx:chi2}).
+
+There is a statistical point as well, and it explains why discarding helps even when nothing
+explodes. A discarded MNF component with eigenvalue near 1 is almost pure noise; kept, it adds a
+squared standard normal to every pixel's score and nothing to a target's. Under a Gaussian background a
+score in $C$ dimensions has standard deviation $\sqrt{2C}$ (\cref{sec:rx:chi2}), and a target must stand
+out against that spread. Suppose a target adds 30 to the score along one signal component. In $C = 10$
+dimensions the background spread is $\sqrt{20} = 4.5$, and 30 is $30/4.5 = 6.7$ spreads; in $C = 165$
+dimensions the spread is $\sqrt{330} = 18.2$, and the same 30 is $30/18.2 = 1.6$ spreads. Every noise
+component kept dilutes the signal components.
+
+\begin{sourcenote}[: MNF-RX in the product]
+The worker builds the classical detector, calls \code{detector.fit()}, which estimates the MNF
+transform from all spatially valid pixels, and only then narrows \code{detector._spatial_mask} to the
+upstream keep mask (segmentation or cloud mask) before \code{detect()}
+(\code{backend/allotrope/action_types/_anomaly_scoring_run.py}, lines 361--392). So the MNF directions
+and the noise estimate come from all valid pixels, cloud included, while the RX mean and covariance in
+MNF space come from the kept pixels only. In that case the components are no longer exactly
+uncorrelated over the pixels RX sees, and \code{spectral.rx}'s full $10\times10$ inverse, not the
+diagonal sum of \cref{eq:localrx:mnfrx}, is what is computed; the two agree only when no pixels are
+masked. The course describes MNF-RX without this detail.
+\end{sourcenote}
+
+\subsection{MNF local RX}
+\index{MNF local RX}
+
+\code{MNFCompressionLRXDetector} combines both repairs: project onto the top $k = 10$ MNF components,
+then run the local RX of \cref{sec:localrx:algorithm} on the $k$-band cube, with the same defaults
+(outer half-size 25, guard half-size 5, ridge $10^{-4}$, \code{min_bg_pixels} $= k + 1 = 11$;
+\code{mnf_compression_lrx_detector.py}, lines 36--39 and 215--219). Two consequences of the earlier
+sections:
+\begin{itemize}
+  \item Each ring has 2480 pixels to estimate a $10\times10$ covariance with
+    $10\times11/2 = 55$ distinct entries: about 45 pixels per number, well determined.
+  \item The ridge $\epsilon = 10^{-4}$ is negligible here. The MNF components have variances of order
+    1 or more, so adding $10^{-4}$ changes each eigenvalue by a fraction of $10^{-4}$ or less. In this
+    space the ridge does what it should: it only matters when a ring is so small that its covariance
+    is singular.
+\end{itemize}
+It is registered (\code{ADModel.MNF_LRX}) but, like plain local RX, it is not one of the product's
+resolved classical models (\code{mnf_rx} and \code{thermal_grx}).
+
+\section{PCA-RX, the evaluation baseline}\label{sec:localrx:pcarx}
+
+One more Mahalanobis detector appears throughout Part VII as the classical yardstick. In the
+evaluation framework (\code{app/evaluation/scorers.py}, lines 39--40) the scorer \code{pca_rx} is the
+residual score of \cref{ch:residualmaha} applied to the cube with a reconstruction of zeros: the
+``residual'' is then the cube itself.
+
+\begin{definition}[PCA-RX]\index{PCA-RX}
+Fit PCA to the valid pixels of the cube, keep the top $d = 30$ principal directions, and whiten them
+(\cref{sec:linalg:whitening}): $\vect{z}(p) = \mat{\Lambda}_d^{-1/2}\mat{U}_d\T(\vect{x}(p) - \muv)$. The
+score is the squared distance of a pixel's whitened components from the mean of the whitened
+components over a ring around it:
+\begin{equation}\label{eq:localrx:pcarx}
+\text{PCA-RX}(p) = \norm{\vect{z}(p) - \bar{\vect{z}}_{\text{ring}}(p)}^2 .
+\end{equation}
+\end{definition}
+
+It differs from \code{LocalRXDetector} in four ways, each worth knowing:
+\begin{enumerate}
+  \item \textbf{PCA, not MNF.} The 30 kept directions are those of greatest variance. Truncating at
+    30 rather than 10 keeps more structure; the price is that noise-dominated high-variance
+    directions, if any, are kept too.
+  \item \textbf{Local mean, global covariance.} Only the mean comes from the ring; the whitening uses one
+    covariance for the scene, fitted on at most 200,000 valid pixels drawn with seed 0
+    (\code{residual_mahalanobis.py}, lines 35 and 38--46). A local mean costs a few sums per pixel
+    instead of a covariance and a solve, and \cref{ch:residualmaha} computes it for every pixel at
+    once with integral images.
+  \item \textbf{Full window widths.} \code{LOCAL_WINDOW = (21, 61)} gives the guard and outer
+    \emph{full} widths (line 33: ``inner (guard) and outer full widths''), not half-sizes. The ring has
+    $61^2 - 21^2 = 3721 - 441 = 3280$ pixels. In \code{LocalRXDetector}'s half-size convention this would
+    be $o = 30$, $i = 10$: $4\times20\times41 = 3280$.
+  \item \textbf{A fallback instead of NaN.} A pixel whose ring holds fewer than $2d = 60$ valid pixels
+    (\code{MIN_RING_FACTOR = 2}) is scored against the global mean, $\norm{\vect{z}(p)}^2$, and pixels
+    outside the valid mask score 0, not NaN.
+\end{enumerate}
+
+\begin{worked}[label={we:localrx:pcarx}]{PCA-RX on a tiny whitened patch}
+Take $d = 1$ and suppose the whitened component $z$ is 1 everywhere on a $7\times7$ patch except 4 at
+the centre, with windows $(1, 5)$: a guard of full width 1 (the pixel itself) and an outer square of full
+width 5. The ring around the centre has $5^2 - 1^2 = 24$ pixels, all with $z = 1$, so its mean is 1 and
+\[
+\text{PCA-RX}(\text{centre}) = (4 - 1)^2 = 9 .
+\]
+\code{local_mean_score} returns 9.0 on this patch\tagC. Note what is \emph{not} divided: there is no
+ring variance in the denominator, because $z$ is already in units of the scene's global spread.
+\end{worked}
+
+\begin{drift}
+PRISMA labelled bench, mean pixel ROC-AUC over four scenes, report generated 2026-10-15, production Indradhanu
+v0.2.0 (\file{research/experiments/dual-window-mahalanobis/README.md}): MNF-RX with 10 components 0.752,
+local RX with a dual window on the cube 0.743, PCA-RX with 30 components on the cube 0.831, residual
+Mahalanobis on Indradhanu's residual 0.839 (global mean) and 0.854 (local mean, 21/61)\tagM{research/experiments/dual-window-mahalanobis/README.md}. On implant
+bench-v1 (evaluation stage 3, 2026-10-17) the model-free PCA-RX caught 30.2\% of objects in the top 1\% against 26.9\% for FT03 with
+residual Mahalanobis, while on the real objects its pAUC was 0.128 against FT03's
+0.158\tagM{docs/training/anomaly-detection/19-running-an-evaluation.md}. \Cref{ch:benchmarks,ch:runeval}
+explain what that reversal says about the bench.
+\end{drift}
+
+The README draws the lesson that matters for this chapter: PCA30-RX on the cube beats MNF-RX on both
+datasets it was tried on, ``which suggests MNF-RX's 10 components are too few. That is a separate,
+untested hypothesis.'' Read it as a caution, not a verdict: MNF-RX is the product's classical
+hyperspectral detector because it is numerically safe, not because it was shown to be the best
+classical detector.
+
+\section{Global and local together}\label{sec:localrx:together}
+\index{statistical ensembler}
+
+Global and local detectors fail differently. Global RX misses a target that is ordinary for the scene
+but strange for its street; local RX misses a target larger than its guard, and a target that sits in a
+region it shares with nothing else. The repository has a detector that fuses the two,
+\code{StatisticalEnsembler} (\code{app/detectors/statistical_ensembler.py}): it runs global and local RX,
+turns each score map into ranks between 0 and 1 (its empirical cumulative distribution), and combines
+them by product (the default: a pixel must look anomalous to both), maximum or mean. It is not
+registered in the detector factory and is used only from notebooks. The same rank-fusion idea returns in
+the scoring experiments of \cref{ch:scoringgains}.
+
+\begin{confusions}
+\confusion{Why not always use local RX, if it is more sensitive?}{It is far more expensive (one
+covariance and solve per pixel), it misses targets larger than its guard, and it is blind to a target
+that fills its ring. Global and local answer different questions.}
+\confusion{Is the ring square or circular?}{Square: two nested squares, the inner one excluded. A
+circle would be marginally more principled and slower to index.}
+\confusion{Are outer\_window = 25 and LOCAL\_WINDOW = (21, 61) the same kind of number?}{No.
+\texttt{LocalRXDetector}'s windows are half-sizes, so 25 means a $51\times51$ square; the residual score's
+and PCA-RX's are full widths, so 61 means a $61\times61$ square. The \texttt{spectral} library's own
+\texttt{rx(window=(inner, outer))} also takes full widths.}
+\confusion{MNF is PCA, isn't it?}{PCA after noise-whitening. On the raw bands PCA maximises variance;
+MNF maximises signal-to-noise. Where the noisiest bands are also the most variable, PCA keeps exactly the
+wrong directions (\cref{we:localrx:mnf2}).}
+\confusion{Does MNF-RX change the RX score of a pixel?}{Only by discarding components. With all
+components kept it equals plain RX exactly; the Mahalanobis distance does not care about invertible
+changes of coordinates.}
+\confusion{Estimating noise from neighbour differences seems crude.}{It assumes adjacent pixels show the
+same ground, which fails at edges, and counts column stripes as noise. It needs no calibration data and
+is good enough over a whole scene, which is why it has been standard since 1988.}
+\confusion{What is min\_bg\_pixels for?}{A covariance from $n$ points has rank at most $n - 1$, so with
+$B$ bands you need at least $B + 1$ background pixels for an invertible covariance. Pixels with fewer
+are left unscored (NaN), and that is why \texttt{computed\_mask} exists.}
+\end{confusions}
+
+\begin{checkyourself}
+\item\label{ex:localrx:1} Compute the number of background pixels for half-sizes $o = 15$, $i = 3$, both
+  directly and with \cref{eq:localrx:ring}. How many does a corner pixel have?
+\item\label{ex:localrx:2} In the $5\times5$ patch of \cref{we:localrx:guard}, replace the eight target
+  neighbours by background values (four 20s and four 22s) so that only the centre is 25. Score the
+  centre with $i = 0$. What does this tell you about when a guard is needed?
+\item\label{ex:localrx:3} A pixel has 3 real background values padded to 6: 0.20, 0.22, 0.24. Compute the
+  correct mean and the mean you would get by dividing by 6, and the correct (unregularised) one-band
+  score of a test value 0.30.
+\item\label{ex:localrx:4} For $\Cov = \begin{psmallmatrix} 3 & 1\\ 1 & 1.5\end{psmallmatrix}$ and
+  $\Cov_n = \begin{psmallmatrix} 2 & 0\\ 0 & 0.5\end{psmallmatrix}$, compute the noise-whitened covariance,
+  its eigenvalues, and the SNR of the first MNF component. Which band does the first MNF direction weight
+  more heavily?
+\item\label{ex:localrx:5} Prove that MNF-RX with all components kept equals plain RX, starting from
+  $\vect{y} = \mat{A}(\vect{x} - \muv)$ with $\mat{A}$ invertible. Why, then, does MNF-RX help?
+\item\label{ex:localrx:6} How many distinct numbers does a $30\times30$ covariance hold? How many valid
+  pixels per number does PCA-RX's 200,000-pixel sample give, and how many per number would a local
+  $30$-dimensional covariance from a 3280-pixel ring give?
+\end{checkyourself}
+
+\nextchapter{ch:recon}

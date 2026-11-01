@@ -34,6 +34,7 @@ import {
   getSpectrum,
   listVisualizations,
 } from "../api/scenes";
+import { readInk, tufteAxis } from "./DiagnosticCharts";
 import type {
   Annotation,
   HistogramJson,
@@ -683,15 +684,16 @@ function HistogramChart({ hist }: { hist: HistogramJson }) {
           {},
           {
             label: "count",
-            stroke: "#1f5f3d",
-            fill: "rgba(31, 95, 61, 0.25)",
+            stroke: "rgba(46, 125, 107, 0.6)",
+            width: 0,
+            fill: "rgba(46, 125, 107, 0.6)",
             paths: (uPlot as unknown as { paths: { bars: (cfg: object) => unknown } }).paths.bars({
               size: [0.95, 100],
               align: 0,
             }),
           },
         ],
-        axes: [{ stroke: "#888" }, { stroke: "#888" }],
+        axes: [tufteAxis(readInk()), tufteAxis(readInk(), undefined, { size: 60, space: 30 })],
       };
       const inst = new (uPlot as unknown as { new (o: object, d: unknown[], el: HTMLElement): { destroy(): void } })(opts, data, container);
       dispose = () => inst.destroy();
@@ -791,16 +793,13 @@ function SpectrumChart({ spectrum }: { spectrum: SpectrumResponse }) {
           { label: "λ (nm)" },
           {
             label: "reflectance",
-            stroke: "#1f5f3d",
-            width: 1.5,
+            stroke: "#2e7d6b",
+            width: 1.25,
             points: { show: false },
             spanGaps: false,
           },
         ],
-        axes: [
-          { stroke: "#888", label: "λ (nm)" },
-          { stroke: "#888", label: "ρ" },
-        ],
+        axes: [tufteAxis(readInk(), "λ (nm)"), tufteAxis(readInk(), "ρ")],
       };
       const inst = new (uPlot as unknown as { new (o: object, d: unknown[], el: HTMLElement): { destroy(): void } })(opts, data, container);
       dispose = () => inst.destroy();

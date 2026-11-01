@@ -57,3 +57,11 @@ reads it unchanged. Each entry's `chapter` is `<group>.<family>`.
   - each family is capped at 40.
 - **`asd_subtype`** is `ASDFR` for every entry. The cache builder needs an ASD FWHM to exist,
   but resamples with the sensor's FWHM.
+
+## Tried, not added: in-scene solar-panel spectra (2026-11-01)
+
+82 photovoltaic-array spectra (PRISMA L2D over a Rajasthan park, Tanager surface reflectance over Groningen and
+Caborca, each with scene, row / col and lat / lon) were tried as `manmade.glass` entries for a namer class
+`glass_solar`. They did not change the namer's output at all, so they were **not added** and this library is
+unchanged. `research/experiments/spectral-namer/pv-library/README.md` has the data, the before / after numbers and
+why; `add_pv_spectra.py` there rebuilds the addition (version `family_v1+pv1`) if pure module spectra are found.

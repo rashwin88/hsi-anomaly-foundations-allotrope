@@ -7,6 +7,12 @@ pull in numpy / rasterio / scipy / pyarrow.
 See the spec doc ``spectal_match_sample/WALKTHROUGH.md`` for the
 algorithmic design (Days 1-4 explain the curation, missing-bands
 strategy, cache build, and pattern-bucketed SAM core).
+
+Order of a run: the spectral namer (``_spectral_namer_run``) on every anomaly pixel, then SAM
+and family matching on the pixels of man-made objects only. Natural objects' pixels keep their
+spectra in the snapshot (the viewer still inspects them) and are painted
+``_SENTINEL_NAMER_NATURAL`` / ``_FAMILY_NAMER_NATURAL`` in the two match rasters. Without a
+namer result (disabled, all_kept, or failed) every anomaly pixel is matched, as before.
 """
 
 from __future__ import annotations
@@ -54,6 +60,8 @@ _FAMILY_LIBRARY_NPZ = "family_library_refl.npz"
 _FAMILY_NOT_IN_MASK = -2
 _FAMILY_NOT_SCORED = -1
 _FAMILY_UNCONFIRMED = 0
+# The namer called the pixel's object natural, so it was not matched.
+_FAMILY_NAMER_NATURAL = -3
 
 # Man-made families get saturated colours, natural ones muted earth tones, so a glance at
 # the map separates "something built" from "unusual ground". Assigned in sorted-name order.
@@ -64,12 +72,14 @@ _MANMADE_COLOURS = [
 _NATURAL_COLOURS = ["#a3a380", "#8d7b68", "#7c9070", "#b5a48b", "#6b7b8c", "#9c8f7a", "#7f8f6f"]
 _UNCONFIRMED_COLOUR = "#e2e8f0"
 _NOT_SCORED_COLOUR = "#475569"
+_NAMER_NATURAL_COLOUR = "#2A9D8F"      # the namer's teal (_spectral_namer_run.NATURAL_COLOUR)
 
 _PNG_MAX_EDGE = 4096
 
 # Sentinel values painted into match_map.tif.
 _SENTINEL_NOT_IN_MASK = -2
 _SENTINEL_NO_MATCH = -1
+_SENTINEL_NAMER_NATURAL = -3
 
 
 def _resolve_cache_path(ctx: Any, cfg: dict, vendable: Any) -> Path:
@@ -125,6 +135,18 @@ def _resolve_cache_path(ctx: Any, cfg: dict, vendable: Any) -> Path:
     return npz_path
 
 
+def _open_memmap_form(arr: Any) -> Any:
+    """Older AVIRIS-NG vendables (docs/09-known-issues.md, issue 12) store each cube as a
+    {"__memmap__": True, filename, dtype, shape, offset} dict pointing at a raw file beside
+    the pickle. Open that read-only; pass any real array through."""
+    if isinstance(arr, dict) and arr.get("__memmap__"):
+        import numpy as np
+
+        return np.memmap(arr["filename"], dtype=arr["dtype"], mode="r",
+                         shape=tuple(arr["shape"]), offset=int(arr.get("offset", 0)))
+    return arr
+
+
 def run(ctx: Any) -> None:
     import numpy as np
     import rasterio
@@ -165,8 +187,8 @@ def run(ctx: Any) -> None:
     with vendable_path.open("rb") as f:
         vendable = pickle.load(f)
 
-    cube = vendable.normalized_hyperspectral_cube                 # (B, H, W)
-    validity = vendable.validity_cube                             # (B, H, W) int8 1/0
+    cube = _open_memmap_form(vendable.normalized_hyperspectral_cube)   # (B, H, W)
+    validity = _open_memmap_form(vendable.validity_cube)               # (B, H, W) int8 1/0
     B, H, W = cube.shape
 
     if anomaly_mask.shape != (H, W):
@@ -200,8 +222,8 @@ def run(ctx: Any) -> None:
     else:
         pixel_mask = (anomaly_mask.astype(bool) & spatial_valid.astype(bool))
 
-    rows, cols = np.where(pixel_mask)
-    n_pixels = int(rows.size)
+    rows_all, cols_all = np.where(pixel_mask)
+    n_pixels = int(rows_all.size)
     if n_pixels == 0:
         # Nothing to match — write empty outputs but still succeed so
         # the action lands in `complete` instead of `failed`.
@@ -209,10 +231,22 @@ def run(ctx: Any) -> None:
         return _write_empty_outputs(ctx, anomaly_mask, library_entries, cfg, upstream_id,
                                     cache_path, match_map_profile, n_pixels, t0)
 
-    # Build the (P, B) spectra + (P, B) validity arrays.
-    # Cube is (B, H, W); transpose for fancy indexing.
-    pixel_spectra = cube[:, rows, cols].T.astype(np.float32)        # (P, B)
-    pixel_valid = validity[:, rows, cols].T.astype(np.uint8)        # (P, B) 1/0
+    output_dir: Path = ctx.output_dir
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    # ---- 4b. Spectral namer: natural objects are not matched ---------
+    namer_block, match_mask = _namer_stage(
+        ctx, cfg, cube=cube, validity=validity, wavelengths=vendable.band_cw_order,
+        pixel_mask=pixel_mask, profile=match_map_profile, output_dir=output_dir,
+    )
+    natural_mask = pixel_mask & ~match_mask
+    to_match = match_mask[rows_all, cols_all]                       # (P_all,) bool
+    rows, cols = rows_all[to_match], cols_all[to_match]
+
+    # Build the (P, B) spectra + (P, B) validity arrays, for every anomaly pixel (the viewer's
+    # snapshot); SAM takes the to_match rows. Cube is (B, H, W); transpose for fancy indexing.
+    pixel_spectra = cube[:, rows_all, cols_all].T.astype(np.float32)        # (P_all, B)
+    pixel_valid = validity[:, rows_all, cols_all].T.astype(np.uint8)        # (P_all, B) 1/0
 
     # ---- 5. Savitzky-Golay smooth ----------------------------------
     ctx.on_step("smooth_spectra")
@@ -225,25 +259,26 @@ def run(ctx: Any) -> None:
     # ---- 6. Run the pattern-bucketed SAM matcher -------------------
     ctx.on_step("match_pixels")
     t_match = time.monotonic()
-    result = match_pixels(
-        pixels=pixel_spectra_smooth,
-        pixel_valid=pixel_valid,
-        library_refl=library_refl,
-        library_valid=library_valid,
-        top_k=cfg["top_k"],
-        min_coverage=cfg["min_coverage"],
-        min_band_count=cfg["min_band_count"],
-    )
+    if rows.size:
+        result = match_pixels(
+            pixels=pixel_spectra_smooth[to_match],
+            pixel_valid=pixel_valid[to_match],
+            library_refl=library_refl,
+            library_valid=library_valid,
+            top_k=cfg["top_k"],
+            min_coverage=cfg["min_coverage"],
+            min_band_count=cfg["min_band_count"],
+        )
+    else:                                   # the namer called every object natural
+        result = _empty_match_result(cfg["top_k"])
     match_seconds = time.monotonic() - t_match
     logger.info(
-        "matched %d pixels in %.2fs (no_match=%d)",
-        n_pixels, match_seconds, int(result.no_match.sum()),
+        "matched %d pixels in %.2fs (no_match=%d, natural skipped=%d)",
+        int(rows.size), match_seconds, int(result.no_match.sum()), int(natural_mask.sum()),
     )
 
     # ---- 7. Write outputs ------------------------------------------
     ctx.on_step("write_outputs")
-    output_dir: Path = ctx.output_dir
-    output_dir.mkdir(parents=True, exist_ok=True)
 
     _write_matches_parquet(
         output_dir / _MATCHES_PARQUET,
@@ -252,17 +287,18 @@ def run(ctx: Any) -> None:
     _write_match_map(
         output_dir / _MATCH_MAP_TIF,
         profile=match_map_profile,
-        pixel_mask=pixel_mask,
+        pixel_mask=match_mask,
         rows=rows, cols=cols, result=result,
+        natural_mask=natural_mask,
     )
     _render_match_map_png(
         output_dir / _MATCH_MAP_PNG,
-        pixel_mask=pixel_mask,
+        pixel_mask=match_mask,
         rows=rows, cols=cols, result=result,
     )
     _render_match_map_png(
         output_dir / _MATCH_MAP_OVERLAY_PNG,
-        pixel_mask=pixel_mask,
+        pixel_mask=match_mask,
         rows=rows, cols=cols, result=result,
         transparent_unmatched=True,
     )
@@ -298,8 +334,8 @@ def run(ctx: Any) -> None:
     # synchronously client-side. Parallel arrays keyed by parquet row order.
     np.savez(
         output_dir / _PIXEL_SPECTRA_NPZ,
-        rows=rows.astype(np.int32),
-        cols=cols.astype(np.int32),
+        rows=rows_all.astype(np.int32),
+        cols=cols_all.astype(np.int32),
         spectra=pixel_spectra_smooth.astype(np.float32),
         valid=pixel_valid.astype(np.uint8),
         wavelengths=np.asarray(vendable.band_cw_order, dtype=np.float64),
@@ -313,11 +349,15 @@ def run(ctx: Any) -> None:
         ctx, cfg, vendable=vendable, cube=cube, validity=validity,
         anomaly_mask=anomaly_mask, pixel_mask=pixel_mask, rows=rows, cols=cols,
         profile=match_map_profile, output_dir=output_dir,
+        natural_mask=natural_mask if namer_block.get("status") == "ok" else None,
     )
 
     summary = {
         "upstream_anomaly_detection_output_id": upstream_id,
         "sensor_type": ctx.sensor_type,
+        # A generic_hsi scene in DN / radiance: library spectra and the namer expect reflectance.
+        **({"warning": "scene is not reflectance; matches and namer classes are unreliable"}
+           if getattr(vendable, "units", None) == "not_reflectance" else {}),
         "splib_cache_path": str(cache_path),
         "n_library_entries": len(library_entries),
         "mode": cfg["mode"],
@@ -328,12 +368,18 @@ def run(ctx: Any) -> None:
         "sg_polyorder": cfg["sg_polyorder"],
         "chapters": cfg["chapters"],
         "n_pixels": n_pixels,
-        "n_pixels_matched": int(n_pixels - int(result.no_match.sum())),
+        # pixels_matched went to SAM and family matching; the namer's natural objects did not.
+        "pixels_matched": int(rows.size),
+        "pixels_natural_skipped": int(natural_mask.sum()),
+        "n_pixels_matched": int(rows.size - int(result.no_match.sum())),
         "n_pixels_no_match": int(result.no_match.sum()),
         "timing_seconds": {
+            "namer": (namer_block.get("timing_seconds") or {}).get("total"),
             "match": round(match_seconds, 3),
+            "family": family_block.get("timing_seconds"),
             "total": round(time.monotonic() - t0, 3),
         },
+        "namer": namer_block,
         "family": family_block,
     }
     (output_dir / _SUMMARY_JSON).write_text(json.dumps(summary, indent=2))
@@ -355,15 +401,52 @@ def preview(ctx: Any, output_dir: Any) -> Any:
 
 
 # ---------------------------------------------------------------------------
+# Spectral namer
+# ---------------------------------------------------------------------------
+
+
+def _namer_stage(ctx: Any, cfg: dict, *, cube, validity, wavelengths, pixel_mask, profile,
+                 output_dir: Path) -> tuple[dict[str, Any], Any]:
+    """(summary["namer"], (H, W) bool pixels to match). Every anomaly pixel is matched unless
+    the namer ran and called objects natural."""
+    if not cfg.get("namer", False):                      # absent on pre-namer configs
+        return {"status": "disabled"}, pixel_mask
+    if cfg["mode"] != "anomaly_pixels":
+        return {"status": "skipped",
+                "reason": f"mode={cfg['mode']}: the namer runs on anomaly pixels only"}, pixel_mask
+    ctx.on_step("namer")
+    from ._spectral_namer_run import run_namer
+
+    block, manmade = run_namer(ctx, cfg, cube=cube, validity=validity, wavelengths=wavelengths,
+                               pixel_mask=pixel_mask, profile=profile, output_dir=output_dir)
+    return block, (pixel_mask if manmade is None else manmade)
+
+
+def _empty_match_result(top_k: int):
+    import numpy as np
+
+    from app.spectral_match import MatchResult
+
+    return MatchResult(angles_deg=np.zeros((0, top_k), np.float32),
+                       library_ix=np.zeros((0, top_k), np.int32),
+                       n_bands_used=np.zeros((0, top_k), np.int32),
+                       no_match=np.zeros(0, bool))
+
+
+# ---------------------------------------------------------------------------
 # Family matching
 # ---------------------------------------------------------------------------
 
 
 def _family_match(
     ctx: Any, cfg: dict, *, vendable, cube, validity, anomaly_mask, pixel_mask,
-    rows, cols, profile, output_dir: Path,
+    rows, cols, profile, output_dir: Path, natural_mask=None,
 ) -> dict[str, Any]:
     """Run calibrated Simplex ACE and write the family_* outputs; return summary["family"].
+
+    (rows, cols) are the pixels to match; ``natural_mask`` (H, W), when the namer ran, its
+    natural pixels, painted ``_FAMILY_NAMER_NATURAL``. The whole anomaly_mask stays out of
+    ring backgrounds and the calibration sample either way.
 
     Never raises: a failure is returned as {"status": "failed", "error": ...} so the SAM
     outputs already written still make a complete action.
@@ -378,6 +461,8 @@ def _family_match(
     if cfg["mode"] != "anomaly_pixels":
         return {"status": "skipped",
                 "reason": f"mode={cfg['mode']}: family matching runs on anomaly pixels only"}
+    if not len(rows):
+        return {"status": "skipped", "reason": "the namer called every anomaly object natural"}
     alpha = float(cfg.get("family_alpha", DEFAULT_ALPHA))      # absent on pre-family configs
     t = time.monotonic()
     try:
@@ -398,8 +483,10 @@ def _family_match(
         named = fam.answered[i] or fam.group[i] == "natural"
         codes[i] = code_of[fam.family[i]] if named else _FAMILY_UNCONFIRMED
 
-    legend = _family_legend(names, fam.family_groups)
+    legend = _family_legend(names, fam.family_groups, namer=natural_mask is not None)
     code_map = np.full(pixel_mask.shape, _FAMILY_NOT_IN_MASK, dtype=np.int16)
+    if natural_mask is not None:
+        code_map[natural_mask] = _FAMILY_NAMER_NATURAL
     code_map[rows, cols] = codes
 
     _write_family_parquet(output_dir / _FAMILY_MATCHES_PARQUET, rows=rows, cols=cols,
@@ -408,11 +495,15 @@ def _family_match(
     for path, transparent in ((_FAMILY_MAP_PNG, False), (_FAMILY_MAP_OVERLAY_PNG, True)):
         _render_family_png(output_dir / path, code_map=code_map, legend=legend,
                            transparent=transparent)
-    # "library" lists the npz rows' ids and names: the browser's npz reader is numeric-only.
+    # "library" lists the npz rows' ids, names and namer classes: the browser's npz reader is
+    # numeric-only, and the object card plots the nearest entry within the object's class.
+    from app.spectral_match.namer.classes import class_of
+
     (output_dir / _FAMILY_LEGEND_JSON).write_text(json.dumps({
         "alpha": alpha, "p_star": fam.p_star, "n_manmade_families": fam.n_manmade_families,
         "codes": legend,
-        "library": [{"id": e.material_id, "label": e.name} for e in entries],
+        "library": [{"id": e.material_id, "label": e.name, "cls": class_of(e.chapter, e.name)}
+                    for e in entries],
     }, indent=2))
     np.savez(
         output_dir / _FAMILY_LIBRARY_NPZ,
@@ -438,13 +529,16 @@ def _family_match(
         "n_named_manmade": int((manmade & fam.answered).sum()),
         "n_unconfirmed_manmade": int((manmade & ~fam.answered).sum()),
         "n_natural": int((scored & (fam.group == "natural")).sum()),
+        "n_namer_natural_skipped": int(natural_mask.sum()) if natural_mask is not None else 0,
         "counts": counts,
         "timing_seconds": round(seconds, 3),
     }
 
 
-def _family_legend(names: list[str], groups: tuple[str, ...]) -> dict[str, dict]:
-    """family_map code (as str) → {family, group, label, colour}."""
+def _family_legend(names: list[str], groups: tuple[str, ...],
+                   namer: bool = False) -> dict[str, dict]:
+    """family_map code (as str) → {family, group, label, colour}; ``namer`` adds the code for
+    pixels the namer called natural, which matching skipped."""
     legend = {
         str(_FAMILY_NOT_SCORED): {"family": "not_scored", "group": "none",
                                   "label": "Not scored (nodata on a used band)",
@@ -453,6 +547,10 @@ def _family_legend(names: list[str], groups: tuple[str, ...]) -> dict[str, dict]
                                    "label": "Man-made, type unconfirmed",
                                    "colour": _UNCONFIRMED_COLOUR},
     }
+    if namer:
+        legend[str(_FAMILY_NAMER_NATURAL)] = {
+            "family": "namer_natural", "group": "natural",
+            "label": "Natural (spectral namer), not matched", "colour": _NAMER_NATURAL_COLOUR}
     n_mm = n_nat = 0
     for i, (f, g) in enumerate(zip(names, groups)):
         if g == "manmade":
@@ -594,15 +692,17 @@ def _write_matches_parquet(
 
 
 def _write_match_map(
-    out_path: Path, *, profile, pixel_mask, rows, cols, result
+    out_path: Path, *, profile, pixel_mask, rows, cols, result, natural_mask=None,
 ) -> None:
-    """Paint the top-1 library index per matched pixel."""
+    """Paint the top-1 library index per matched pixel; the namer's natural pixels -3."""
     import numpy as np
     import rasterio
 
     H, W = pixel_mask.shape
     out = np.full((H, W), _SENTINEL_NOT_IN_MASK, dtype=np.int32)
     out[pixel_mask] = _SENTINEL_NO_MATCH
+    if natural_mask is not None:
+        out[natural_mask] = _SENTINEL_NAMER_NATURAL
 
     if rows.size:
         top1 = result.library_ix[:, 0].astype(np.int32)
@@ -799,5 +899,6 @@ def _write_empty_outputs(
         "n_pixels_no_match": 0,
         "timing_seconds": {"total": round(time.monotonic() - t0, 3)},
         "note": "no pixels in the input mask — empty outputs written.",
+        "namer": {"status": "skipped", "reason": "no pixels in the input mask"},
         "family": {"status": "skipped", "reason": "no pixels in the input mask"},
     }, indent=2))

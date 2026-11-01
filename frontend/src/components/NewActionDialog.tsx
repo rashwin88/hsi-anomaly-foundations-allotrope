@@ -9,12 +9,15 @@
 // description on the type card AND the input pickers in step 2 come
 // from META verbatim. No type-specific UI logic lives here.
 //
+// Simple by default (user request, 2026-11-01): a card shows the label and one sentence; the
+// form shows the inputs and the few switches a normal user touches (BASIC_FIELDS). Every
+// other configuration field sits behind a collapsed "Advanced" disclosure, pre-filled with the
+// sensor default, and is sent only if changed. Names, defaults and validation are the backend's.
+//
 // Deferred to a later step:
 //   - Template picker (we always submit with action_template_id=null
 //     for now — the api accepts this; default configuration body comes
 //     from META.default_config_per_sensor)
-//   - Custom configuration editor (parameter form fields)
-//   - Annotation-ref inputs (not used by the v1 action types)
 //
 // Sequence diagrams: action-submit · action-types-catalog · action-list
 
@@ -85,6 +88,16 @@ export function NewActionDialog({
   const [adpWeights, setAdpWeights] = useState<Record<string, number>>({});
   const [adpUpstreamError, setAdpUpstreamError] = useState<string | null>(null);
   const [adpLoadingUpstream, setAdpLoadingUpstream] = useState(false);
+
+  // Generic config fields the user changed (basic or Advanced), by config key. JSON-typed
+  // fields hold their raw text until submit.
+  const [cfgEdits, setCfgEdits] = useState<Record<string, unknown>>({});
+
+  // anomaly_scoring with a V2 segmentation input: the classes left out at scoring. null = not
+  // changed from the segmentation's own choice, so nothing is sent (its keep_mask, as before).
+  const [scoreExclude, setScoreExclude] = useState<string[] | null>(null);
+  // Codenames of native-band models (Indradhanu V2): they cannot read a 165-grid band filter.
+  const [nativeModels, setNativeModels] = useState<Set<string>>(new Set());
 
   // Catalog fetch.
   useEffect(() => {
@@ -168,6 +181,37 @@ export function NewActionDialog({
     };
   }, [selectedType?.type, inputRefs]);
 
+  useEffect(() => {
+    if (selectedType?.type !== "anomaly_scoring") return;
+    let cancelled = false;
+    listModels()
+      .then((items) => {
+        if (!cancelled)
+          setNativeModels(new Set(items.filter((m) => m.band_grid === "native").map((m) => m.codename.name)));
+      })
+      .catch(() => {
+        /* the run-time check still refuses a 165-grid band filter */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedType?.type]);
+
+  // Addition C (docs/proposals/class-driven-flow.md): V2 reads native bands, so a band filter
+  // resampled to the old 165-band grid is greyed out in the picker when V2 will run.
+  const segMethod =
+    (cfgEdits.method as string | undefined) ??
+    ((selectedType?.default_config_per_sensor[sceneSensorType] as Record<string, unknown> | undefined)
+      ?.method as string | undefined);
+  const needsNativeBands =
+    (selectedType?.type === "scene_segmentation" && segMethod === "indradhanu_v2") ||
+    (selectedType?.type === "anomaly_scoring" && adModelCodenames.some((c) => nativeModels.has(c)));
+
+  const typeLabels = useMemo(
+    () => new Map((catalog ?? []).map((t) => [t.type, t.label])),
+    [catalog],
+  );
+
   // Available types = those accepting this scene's sensor.
   const availableTypes = useMemo<ActionTypeMeta[]>(() => {
     return (catalog ?? []).filter((t) =>
@@ -187,6 +231,27 @@ export function NewActionDialog({
         | Record<string, unknown>
         | undefined) ?? {};
     const cfg: Record<string, unknown> = { ...baseCfg };
+    for (const [k, v] of Object.entries(cfgEdits)) {
+      if (typeof v === "string" && typeof baseCfg[k] === "number") {
+        const n = Number(v);
+        if (v.trim() === "" || !Number.isFinite(n)) {
+          setSubmitError(`"${k}" must be a number.`);
+          setSubmitting(false);
+          return;
+        }
+        cfg[k] = n;
+      } else if (typeof v === "string" && isJsonField(baseCfg[k])) {
+        try {
+          cfg[k] = JSON.parse(v);
+        } catch {
+          setSubmitError(`"${k}" is not valid JSON.`);
+          setSubmitting(false);
+          return;
+        }
+      } else {
+        cfg[k] = v;
+      }
+    }
 
     for (const input of selectedType.inputs) {
       if (input.ref_kind === "scene") {
@@ -240,6 +305,7 @@ export function NewActionDialog({
         if (Object.keys(out).length > 0) cleanedOverrides[cname] = out;
       }
       cfg.model_overrides = cleanedOverrides;
+      if (scoreExclude !== null) cfg.exclude_classes = scoreExclude;
     }
 
     // scene_segmentation-specific fields: user can override the four
@@ -377,6 +443,8 @@ export function NewActionDialog({
               onBack={() => {
                 setSelectedType(null);
                 setInputRefs({});
+                setCfgEdits({});
+                setScoreExclude(null);
                 setSubmitError(null);
               }}
             />
@@ -388,9 +456,32 @@ export function NewActionDialog({
               sceneName={sceneName}
               sceneSensorType={sceneSensorType}
               inputRefs={inputRefs}
-              onChangeRef={(key, value) =>
-                setInputRefs((prev) => ({ ...prev, [key]: value }))
+              typeLabels={typeLabels}
+              needsNativeBands={needsNativeBands}
+              onChangeRef={(key, value) => {
+                if (key === "input_scene_segmentation_output_id") setScoreExclude(null);
+                setInputRefs((prev) => ({ ...prev, [key]: value }));
+              }}
+            />
+
+            {selectedType.type === "anomaly_scoring" &&
+              inputRefs["input_scene_segmentation_output_id"] && (
+              <ScoringClassPicker
+                segmentationOutputId={inputRefs["input_scene_segmentation_output_id"]}
+                value={scoreExclude}
+                onChange={setScoreExclude}
+              />
+            )}
+
+            <ConfigFields
+              meta={selectedType}
+              defaults={
+                (selectedType.default_config_per_sensor[sceneSensorType] as
+                  | Record<string, unknown>
+                  | undefined) ?? {}
               }
+              edits={cfgEdits}
+              onChange={(k, v) => setCfgEdits((prev) => ({ ...prev, [k]: v }))}
             />
 
             {selectedType.type === "anomaly_scoring" && (
@@ -403,7 +494,11 @@ export function NewActionDialog({
               />
             )}
 
-            {selectedType.type === "scene_segmentation" && (
+            {/* The index-threshold block only applies to the "indices" method; V2 ignores it. */}
+            {selectedType.type === "scene_segmentation" &&
+              ((cfgEdits.method as string | undefined) ??
+                (selectedType.default_config_per_sensor[sceneSensorType] as
+                  Record<string, unknown> | undefined)?.method) !== "indradhanu_v2" && (
               <SceneSegmentationExtras
                 overrides={segOverrides}
                 onChange={setSegOverrides}
@@ -502,17 +597,8 @@ function ActionTypePicker({
           >
             <div className="action-type-card__head">
               <span className="action-type-card__label">{t.label}</span>
-              <span className="action-type-card__slug">{t.type}</span>
             </div>
             <p className="action-type-card__short">{t.short_description}</p>
-            <div className="action-type-card__pills">
-              {t.accepted_sensor_types.map((s) => (
-                <span key={s} className="sensor-pill">{s}</span>
-              ))}
-              <span className="action-type-card__io">
-                {t.inputs.length} in · {t.outputs.length} out
-              </span>
-            </div>
           </button>
         ))}
       </div>
@@ -534,40 +620,10 @@ function ActionTypeSummary({
       <button type="button" className="action-summary__back" onClick={onBack}>
         ← Pick a different type
       </button>
-      <p className="action-summary__description">{meta.description}</p>
+      <p className="action-summary__description">{meta.short_description}</p>
       {meta.when_to_use && (
-        <p className="action-summary__when">
-          <strong>When to use.</strong> {meta.when_to_use}
-        </p>
+        <p className="action-summary__when">{meta.when_to_use}</p>
       )}
-      <div className="action-summary__io">
-        <div>
-          <span className="action-summary__io-title">Inputs</span>
-          <ul>
-            {meta.inputs.map((i) => (
-              <li key={i.key}>
-                <strong>{i.label}</strong>{" "}
-                <span className="form__optional">({i.ref_kind})</span>
-                {i.description && <> — {i.description}</>}
-              </li>
-            ))}
-          </ul>
-        </div>
-        <div>
-          <span className="action-summary__io-title">
-            Outputs ({meta.outputs.length})
-          </span>
-          <ul>
-            {meta.outputs.map((o) => (
-              <li key={o.key}>
-                <strong>{o.label}</strong>{" "}
-                <span className="form__optional">({o.artifact_type})</span>
-                {o.description && <> — {o.description}</>}
-              </li>
-            ))}
-          </ul>
-        </div>
-      </div>
     </section>
   );
 }
@@ -581,6 +637,8 @@ interface InputsFormProps {
   sceneName: string;
   sceneSensorType: string;
   inputRefs: Record<string, string>;
+  typeLabels: Map<string, string>;
+  needsNativeBands: boolean;
   onChangeRef: (key: string, value: string) => void;
 }
 
@@ -624,12 +682,11 @@ function ActionInputsForm({
   sceneName,
   sceneSensorType,
   inputRefs,
+  typeLabels,
+  needsNativeBands,
   onChangeRef,
 }: InputsFormProps) {
   const visible = meta.inputs.filter((i) => inputApplicable(i, sceneSensorType));
-  const hidden = meta.inputs.filter(
-    (i) => !inputApplicable(i, sceneSensorType),
-  );
   return (
     <div className="action-inputs">
       {visible.map((input) => (
@@ -639,22 +696,16 @@ function ActionInputsForm({
           projectId={projectId}
           sceneId={sceneId}
           sceneName={sceneName}
+          typeLabels={typeLabels}
+          incompatible={
+            needsNativeBands && input.producing_action_types.includes("band_filter_apply")
+              ? oldGridReason
+              : undefined
+          }
           value={inputRefs[input.key] ?? ""}
           onChange={(v) => onChangeRef(input.key, v)}
         />
       ))}
-      {hidden.length > 0 && (
-        <p className="form__optional small">
-          {hidden.map((i) => i.label).join(" · ")} not used on{" "}
-          <strong>{sceneSensorType}</strong> scenes (those upstream actions
-          are hyperspectral-only).
-        </p>
-      )}
-      <p className="action-inputs__note">
-        Configuration uses the system defaults for{" "}
-        <strong>{meta.label}</strong>. A custom-parameter editor lands in a
-        later step.
-      </p>
     </div>
   );
 }
@@ -664,6 +715,8 @@ interface InputFieldProps {
   projectId: string;
   sceneId: string;
   sceneName: string;
+  typeLabels: Map<string, string>;
+  incompatible?: (summary: Record<string, unknown>) => string | null;
   value: string;
   onChange: (v: string) => void;
 }
@@ -673,6 +726,8 @@ function ActionInputField({
   projectId,
   sceneId,
   sceneName,
+  typeLabels,
+  incompatible,
   value,
   onChange,
 }: InputFieldProps) {
@@ -681,8 +736,7 @@ function ActionInputField({
       <div className="form__field">
         <span className="form__label">{input.label}</span>
         <p className="form__readonly">
-          <strong>{sceneName}</strong>{" "}
-          <span className="form__optional mono">{sceneId}</span>
+          <strong>{sceneName}</strong>
         </p>
         {input.description && (
           <p className="form__optional">{input.description}</p>
@@ -695,6 +749,8 @@ function ActionInputField({
       <ActionOutputPickerField
         input={input}
         projectId={projectId}
+        typeLabels={typeLabels}
+        incompatible={incompatible}
         value={value}
         onChange={onChange}
       />
@@ -785,11 +841,15 @@ function AnnotationPickerField({
 function ActionOutputPickerField({
   input,
   projectId,
+  typeLabels,
+  incompatible,
   value,
   onChange,
 }: {
   input: ActionInputSpec;
   projectId: string;
+  typeLabels: Map<string, string>;
+  incompatible?: (summary: Record<string, unknown>) => string | null;
   value: string;
   onChange: (v: string) => void;
 }) {
@@ -858,6 +918,8 @@ function ActionOutputPickerField({
   return (
     <ActionOutputDropdown
       input={input}
+      typeLabels={typeLabels}
+      incompatible={incompatible}
       options={options}
       error={error}
       value={value}
@@ -868,12 +930,16 @@ function ActionOutputPickerField({
 
 function ActionOutputDropdown({
   input,
+  typeLabels,
+  incompatible,
   options,
   error,
   value,
   onChange,
 }: {
   input: ActionInputSpec;
+  typeLabels: Map<string, string>;
+  incompatible?: (summary: Record<string, unknown>) => string | null;
   options: Action[] | null;
   error: string | null;
   value: string;
@@ -881,15 +947,22 @@ function ActionOutputDropdown({
 }) {
   // Fetch each candidate Action's detail to resolve its output_<uuid>.
   const [outputIds, setOutputIds] = useState<Record<string, string>>({});
+  const [summaries, setSummaries] = useState<Record<string, Record<string, unknown>>>({});
+  const reasonOf = (actionId: string): string | null =>
+    incompatible && summaries[actionId] ? incompatible(summaries[actionId]) : null;
   useEffect(() => {
     if (!options || options.length === 0) return;
     let cancelled = false;
     import("../api/actions").then(async ({ getAction }) => {
       const result: Record<string, string> = {};
+      const sums: Record<string, Record<string, unknown>> = {};
       for (const a of options) {
         try {
           const detail = await getAction(a.id);
-          if (detail.output) result[a.id] = detail.output.id;
+          if (detail.output) {
+            result[a.id] = detail.output.id;
+            sums[a.id] = detail.output.summary ?? {};
+          }
         } catch {
           /* skip — surfaces as "missing output" in dropdown */
         }
@@ -897,9 +970,7 @@ function ActionOutputDropdown({
       }
       if (!cancelled) {
         setOutputIds(result);
-        if (!value && options.length > 0 && result[options[0].id]) {
-          onChange(result[options[0].id]);
-        }
+        setSummaries(sums);
       }
     });
     return () => {
@@ -908,6 +979,18 @@ function ActionOutputDropdown({
     // Only refresh when the option set changes (action_id list).
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [JSON.stringify(options?.map((o) => o.id) ?? [])]);
+
+  // Default to the newest usable output, and drop a pick that has become unusable (V2 chosen
+  // after a 165-grid band filter was auto-picked).
+  useEffect(() => {
+    if (!options) return;
+    const usable = options.filter((a) => outputIds[a.id] && !reasonOf(a.id));
+    const picked = options.find((a) => outputIds[a.id] === value);
+    if (value && picked && reasonOf(picked.id)) onChange(usable[0] ? outputIds[usable[0].id] : "");
+    else if (!value && usable[0]) onChange(outputIds[usable[0].id]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [outputIds, summaries, incompatible, value]);
+  const anyIncompatible = (options ?? []).some((a) => reasonOf(a.id));
 
   return (
     <div className="form__field">
@@ -918,8 +1001,10 @@ function ActionOutputDropdown({
       )}
       {options && options.length === 0 && (
         <p className="form__error">
-          No completed{" "}
-          <strong>{input.producing_action_types.join(", ") || "actions"}</strong>{" "}
+          No finished{" "}
+          <strong>
+            {input.producing_action_types.map((t) => typeLabels.get(t) ?? t).join(", ") || "actions"}
+          </strong>{" "}
           in this project yet. Run one first.
         </p>
       )}
@@ -929,22 +1014,262 @@ function ActionOutputDropdown({
           onChange={(e) => onChange(e.target.value)}
           required={input.required}
         >
+          {!value && (
+            <option value="">
+              {anyIncompatible ? "— none usable: add a Band filter (native bands) —" : "— choose —"}
+            </option>
+          )}
           {options.map((a) => {
             const oid = outputIds[a.id];
             return (
-              <option key={a.id} value={oid ?? ""} disabled={!oid}>
+              <option key={a.id} value={oid ?? ""} disabled={!oid || Boolean(reasonOf(a.id))}>
                 {oid ? "" : "(no output yet) "}
-                {a.type} · {new Date(a.created_at).toLocaleString()} ·{" "}
-                {a.id}
+                {typeLabels.get(a.type) ?? a.type} · {new Date(a.created_at).toLocaleString()} ·{" "}
+                {a.id.replace(/^action_/, "").slice(0, 8)}
+                {reasonOf(a.id) ? ` · ${reasonOf(a.id)}` : ""}
               </option>
             );
           })}
         </select>
       )}
+      {anyIncompatible && (
+        <p className="form__optional small" role="note">
+          Greyed out: band filters on the old 165-band grid. Indradhanu V2 needs native bands, so add
+          a new Band filter (it keeps native bands by default) and use that.
+        </p>
+      )}
       {input.description && (
         <p className="form__optional">{input.description}</p>
       )}
     </div>
+  );
+}
+
+// A band_filter_apply output resampled to the 165-band grid, which a native-band model cannot read.
+function oldGridReason(summary: Record<string, unknown>): string | null {
+  return summary.common_wavelength_grid_applied === true ? "old 165-band grid, not for V2" : null;
+}
+
+// --- ScoringClassPicker -------------------------------------------------
+//
+// anomaly_scoring with a V2 scene_segmentation input: its classes as "Leave out" checkboxes,
+// labelled with that action's coverage (summary legend, % of valid pixels) and pre-ticked with
+// its own exclude_classes. Untouched sends nothing (the segmentation's keep_mask, as before).
+// Gap 1 of docs/proposals/class-driven-flow.md.
+
+interface LegendItem {
+  key: string;
+  label: string;
+  pct_of_valid: number;
+  excluded: boolean;
+}
+
+function ScoringClassPicker({
+  segmentationOutputId,
+  value,
+  onChange,
+}: {
+  segmentationOutputId: string;
+  value: string[] | null;
+  onChange: (next: string[] | null) => void;
+}) {
+  const [legend, setLegend] = useState<LegendItem[] | null>(null);
+  const [isV2, setIsV2] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLegend(null);
+    setIsV2(null);
+    getActionOutput(segmentationOutputId)
+      .then((out) => {
+        if (cancelled) return;
+        const s = out.summary ?? {};
+        setIsV2(s.method === "indradhanu_v2");
+        const items = Array.isArray(s.legend) ? (s.legend as LegendItem[]) : [];
+        setLegend(items.filter((it) => it.key !== "land"));
+      })
+      .catch(() => {
+        if (!cancelled) setIsV2(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [segmentationOutputId]);
+
+  if (isV2 === null) return null;
+  if (!isV2 || !legend) {
+    return (
+      <p className="form__optional small">
+        This segmentation uses index thresholds; its own settings decide what is left out.
+      </p>
+    );
+  }
+  const own = legend.filter((it) => it.excluded).map((it) => it.key);
+  const ticked = value ?? own;
+  const toggle = (key: string) => {
+    const next = ticked.includes(key) ? ticked.filter((k) => k !== key) : [...ticked, key];
+    const order = legend.map((it) => it.key);
+    next.sort((a, b) => order.indexOf(a) - order.indexOf(b));
+    onChange(next.length === own.length && next.every((k) => own.includes(k)) ? null : next);
+  };
+  return (
+    <div className="form__field">
+      <span className="form__label">Leave out</span>
+      <div className="action-config">
+        {legend.map((it) => (
+          <label key={it.key} className="action-config__check">
+            <input type="checkbox" checked={ticked.includes(it.key)} onChange={() => toggle(it.key)} />
+            <span>
+              {it.label} {Number(it.pct_of_valid ?? 0).toFixed(1)}%
+            </span>
+          </label>
+        ))}
+      </div>
+      <p className="form__optional small">
+        Ticked classes score zero with Indradhanu V2 and stay out of MNF-RX's background.
+        Pre-ticked: what the segmentation left out.
+      </p>
+    </div>
+  );
+}
+
+// --- Generic configuration fields ------------------------------------
+//
+// Every default_config key that is not an input and not owned by a type-specific block below
+// is rendered from its default's JS type: checkbox, number, text, comma list, or JSON text.
+// BASIC_FIELDS stay visible; the rest go behind "Advanced", collapsed.
+
+// The switches a normal user touches, with a plain label.
+const BASIC_FIELDS: Record<string, Record<string, string>> = {
+  spectral_library_match: { namer: "Call each anomaly man-made or natural" },
+  scene_segmentation: { method: "Method", exclude_classes: "Leave out (classes)" },
+};
+
+// Keys the type-specific blocks (AnomalyScoringExtras, SceneSegmentationExtras,
+// AnomalyDetectionPrepExtras) already edit, or deliberately leave at the default.
+const OWNED_FIELDS: Record<string, string[]> = {
+  anomaly_scoring: ["model_codenames", "model_overrides"],
+  scene_segmentation: ["thresholds", "classes_to_mask", "bands"],
+  anomaly_detection_prep: ["algorithm_weights"],
+};
+
+// Fixed choices for string fields, mirrored from the backend validators.
+const FIELD_CHOICES: Record<string, Record<string, string[]>> = {
+  spectral_library_match: { mode: ["anomaly_pixels", "all_kept"] },
+  scene_segmentation: { method: ["indradhanu_v2", "indices"] },
+};
+
+const isStringList = (v: unknown): v is string[] =>
+  Array.isArray(v) && v.every((x) => typeof x === "string");
+
+// Defaults that are not a scalar or a list of strings are edited as JSON text.
+function isJsonField(v: unknown): boolean {
+  return v !== null && typeof v === "object" && !isStringList(v);
+}
+
+function ConfigFields({
+  meta,
+  defaults,
+  edits,
+  onChange,
+}: {
+  meta: ActionTypeMeta;
+  defaults: Record<string, unknown>;
+  edits: Record<string, unknown>;
+  onChange: (key: string, value: unknown) => void;
+}) {
+  const inputKeys = new Set(meta.inputs.map((i) => i.key));
+  const owned = new Set(OWNED_FIELDS[meta.type] ?? []);
+  const basic = BASIC_FIELDS[meta.type] ?? {};
+  const keys = Object.keys(defaults).filter((k) => !inputKeys.has(k) && !owned.has(k));
+  const basicKeys = keys.filter((k) => k in basic);
+  const advancedKeys = keys.filter((k) => !(k in basic));
+  const field = (k: string) => (
+    <ConfigField
+      key={k}
+      name={k}
+      label={basic[k]}
+      def={defaults[k]}
+      choices={FIELD_CHOICES[meta.type]?.[k]}
+      value={k in edits ? edits[k] : undefined}
+      onChange={(v) => onChange(k, v)}
+    />
+  );
+  if (keys.length === 0) return null;
+  return (
+    <div className="action-config">
+      {basicKeys.map(field)}
+      {advancedKeys.length > 0 && (
+        <details className="action-config__advanced">
+          <summary>Advanced</summary>
+          <p className="form__optional small">Defaults are fine for most scenes.</p>
+          <div className="action-config__grid">{advancedKeys.map(field)}</div>
+        </details>
+      )}
+    </div>
+  );
+}
+
+function ConfigField({
+  name,
+  label,
+  def,
+  choices,
+  value,
+  onChange,
+}: {
+  name: string;
+  label?: string;
+  def: unknown;
+  choices?: string[];
+  value: unknown;               // undefined = untouched, shows the default
+  onChange: (v: unknown) => void;
+}) {
+  const title = label ?? name;
+  if (typeof def === "boolean") {
+    const checked = typeof value === "boolean" ? value : def;
+    return (
+      <label className="action-config__check">
+        <input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} />
+        <span className={label ? "" : "mono"}>{title}</span>
+      </label>
+    );
+  }
+  let control;
+  if (typeof def === "number") {
+    control = (
+      <input type="number" step="any" value={String(value ?? def)}
+             onChange={(e) => onChange(e.target.value)} />
+    );
+  } else if (typeof def === "string" && choices) {
+    control = (
+      <select value={String(value ?? def)} onChange={(e) => onChange(e.target.value)}>
+        {choices.map((c) => <option key={c} value={c}>{c}</option>)}
+      </select>
+    );
+  } else if (typeof def === "string" || def === null) {
+    control = (
+      <input type="text" value={String(value ?? def ?? "")}
+             onChange={(e) => onChange(e.target.value)} />
+    );
+  } else if (isStringList(def)) {
+    const list = isStringList(value) ? value : def;
+    control = (
+      <input type="text" value={list.join(", ")}
+             onChange={(e) => onChange(e.target.value.split(",").map((x) => x.trim()).filter(Boolean))} />
+    );
+  } else {
+    control = (
+      <textarea rows={2} className="mono small"
+                value={typeof value === "string" ? value : JSON.stringify(def)}
+                onChange={(e) => onChange(e.target.value)} />
+    );
+  }
+  return (
+    <label className="action-config__field">
+      <span className={label ? "" : "mono small"}>{title}</span>
+      {control}
+    </label>
   );
 }
 
@@ -1016,8 +1341,8 @@ function AnomalyScoringExtras({
   const compatible = useMemo<ModelSummary[]>(() => {
     if (!models) return [];
     const sensorMatch = (m: ModelSummary): boolean => {
-      // Scene sensors: "prisma" / "enmap" / "aviris_ng" → hyperspectral
-      // models (all produce a 165-band common-grid cube post-filter).
+      // Scene sensors: "prisma" / "enmap" / "aviris_ng" / "tanager" →
+      // hyperspectral models.
       // Scene sensors: "landsat9" / "hotsat1" → thermal models. (HotSAT
       // currently has no anomaly-scoring-compatible model wired in the
       // backend; the picker will correctly show an empty list with the
@@ -1025,7 +1350,9 @@ function AnomalyScoringExtras({
       const sceneFamily =
         sceneSensorType === "prisma" ||
         sceneSensorType === "enmap" ||
-        sceneSensorType === "aviris_ng"
+        sceneSensorType === "aviris_ng" ||
+        sceneSensorType === "tanager" ||
+        sceneSensorType === "generic_hsi"
           ? "hyperspectral"
           : sceneSensorType === "landsat9" || sceneSensorType === "hotsat1"
             ? "thermal"
@@ -1106,11 +1433,7 @@ function AnomalyScoringExtras({
           })}
         </ul>
       )}
-      <p className="form__optional">
-        Pick one to scout, more to compare side by side. Each model has its
-        own scoring + patch / stride / batch knobs — leave them on default
-        unless you have a reason to deviate.
-      </p>
+      <p className="form__optional">Pick one or more.</p>
     </div>
   );
 }
@@ -1220,20 +1543,6 @@ function ModelKnobs({
 
   return (
     <div className="anomaly-extras__knobs">
-      <label className="anomaly-extras__scoring">
-        <span>scoring</span>
-        <select
-          value={currentScoring ?? ""}
-          onChange={(e) => set({ scoring_method: e.target.value })}
-        >
-          {model.scoring_methods.map((sm) => (
-            <option key={sm} value={sm}>
-              {sm}
-              {sm === model.default_scoring_method ? " (default)" : ""}
-            </option>
-          ))}
-        </select>
-      </label>
       <button
         type="button"
         className="anomaly-extras__advanced-toggle"
@@ -1245,6 +1554,20 @@ function ModelKnobs({
       </button>
       {advancedOpen && (
         <div className="anomaly-extras__advanced">
+          <label className="anomaly-extras__scoring">
+            <span>scoring</span>
+            <select
+              value={currentScoring ?? ""}
+              onChange={(e) => set({ scoring_method: e.target.value })}
+            >
+              {model.scoring_methods.map((sm) => (
+                <option key={sm} value={sm}>
+                  {sm}
+                  {sm === model.default_scoring_method ? " (default)" : ""}
+                </option>
+              ))}
+            </select>
+          </label>
           {/* Foundation-only knobs. Classical detectors (MNF-RX,
               Thermal-GRX) are whole-cube ops with no patch / stride /
               batch / sam_l1_alpha / inferencer-side erosion. The
@@ -1443,22 +1766,20 @@ function SceneSegmentationExtras({
   return (
     <div className="form__field anomaly-extras">
       <div className="anomaly-extras__header">
-        <span className="form__label">Segmentation thresholds</span>
+        <span className="form__label">Masks</span>
         <button
           type="button"
           className="anomaly-extras__advanced-toggle"
           onClick={() => setOpen((o) => !o)}
           aria-expanded={open}
         >
-          {open ? "Hide" : "Customize"}{" "}
+          {open ? "Hide" : "Advanced"}{" "}
           <span aria-hidden="true">{open ? "▾" : "▸"}</span>
         </button>
       </div>
       {!open && (
         <p className="anomaly-extras__knob-help small">
-          Using defaults: NDWI&gt;0.3 = water · brightness&gt;0.4 = cloud ·
-          brightness&lt;0.02 = shadow · NDVI&gt;0.4 = vegetation. All four
-          classes go into the keep-mask exclusion.
+          Masks water, cloud, shadow and vegetation with the default thresholds.
         </p>
       )}
       {open && (
@@ -1550,13 +1871,10 @@ function AnomalyDetectionPrepExtras({
   onChangeWeight: (algo: string, value: number) => void;
 }) {
   return (
-    <div className="form__field anomaly-extras">
-      <span className="form__label">Algorithm weights</span>
+    <details className="form__field anomaly-extras action-config__advanced">
+      <summary>Advanced: model weights</summary>
       {!upstreamSelected && (
-        <p className="scene-detail__hint">
-          Pick an upstream <code>anomaly_scoring</code> output above —
-          this form will reveal one weight input per algorithm that ran.
-        </p>
+        <p className="scene-detail__hint">Pick an anomaly scoring result first.</p>
       )}
       {upstreamSelected && loading && (
         <p className="scene-detail__hint">Loading upstream algorithms…</p>
@@ -1566,11 +1884,7 @@ function AnomalyDetectionPrepExtras({
       )}
       {upstreamSelected && !loading && algorithms && algorithms.length > 0 && (
         <>
-          <p className="form__hint small">
-            Each algorithm's score map is rescaled to [0, 1] and then
-            weight-averaged into a single composite. Weight 0 drops that
-            algorithm from the composite. Defaults to equal weights.
-          </p>
+          <p className="form__hint small">Equal by default; 0 leaves a model out.</p>
           <ul className="anomaly-extras__model-list">
             {algorithms.map((algo) => {
               const value = weights[algo] ?? 1.0;
@@ -1598,6 +1912,6 @@ function AnomalyDetectionPrepExtras({
           </ul>
         </>
       )}
-    </div>
+    </details>
   );
 }

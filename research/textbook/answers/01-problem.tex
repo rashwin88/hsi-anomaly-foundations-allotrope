@@ -1,0 +1,70 @@
+\answersfor{ch:problem}
+
+\begin{solution}{ex:problem:1}
+(1) No labelled anomalies exist, because labelling a satellite pixel needs someone to have
+confirmed what is on the ground; this closes the route ``collect training data''. (2) The target
+class is open-ended: a classifier can only return labels it was given, so it is blind to the
+unanticipated anomaly that matters most; this closes the route ``label a few known kinds and
+hope''. (3) Anomalies are so rare that a rule answering ``normal'' every time scores near-perfect
+accuracy; this closes the route ``train anyway and check the accuracy'', because the check itself
+is meaningless.
+\end{solution}
+
+\begin{solution}{ex:problem:2}
+The rule is right on every normal pixel and wrong on every anomalous one.
+\begin{align*}
+\text{normal pixels} &= 1{,}000{,}000 - 10 = 999{,}990,\\
+\text{accuracy} &= \frac{999{,}990}{1{,}000{,}000} = 0.99999 = 99.999\%,\\
+\text{base rate} &= \frac{10}{1{,}000{,}000} = 0.00001 = 10^{-5}.
+\end{align*}
+The rule finds none of the ten anomalies and still scores $99.999\%$.
+\end{solution}
+
+\begin{solution}{ex:problem:3}
+Mean:
+\begin{align*}
+10 + 12 + 14 + 20 &= 56,\\
+\mu &= 56/4 = 14.
+\end{align*}
+Differences from the mean and their squares:
+\begin{align*}
+10 - 14 &= -4, & 16,\\
+12 - 14 &= -2, & 4,\\
+14 - 14 &= 0, & 0,\\
+20 - 14 &= 6, & 36.
+\end{align*}
+Average of the squares and its root:
+\begin{align*}
+16 + 4 + 0 + 36 &= 56,\\
+\sigma^2 &= 56/4 = 14,\\
+\sigma &= \sqrt{14} \approx 3.742.
+\end{align*}
+Score of the pixel reading $20$:
+\[ s = \frac{\abs{20 - 14}}{3.742} = \frac{6}{3.742} \approx 1.60. \]
+\end{solution}
+
+\begin{solution}{ex:problem:4}
+\begin{align*}
+k &= 0.0005 \times 2{,}000{,}000 = 1{,}000 \text{ pixels.}
+\end{align*}
+Doubling every score does not change the kept set. Multiplying all scores by the same positive
+number preserves their order: if $s_a > s_b$ then $2s_a > 2s_b$. The top $1{,}000$ by rank are the
+same pixels; only the cut-off value (the $99.95$ percentile) doubles with them.
+\end{solution}
+
+\begin{solution}{ex:problem:5}
+Differences band by band:
+\begin{align*}
+0.05 - 0.07 &= -0.02,\\
+0.25 - 0.22 &= 0.03,\\
+0.40 - 0.40 &= 0.00.
+\end{align*}
+Absolute values $0.02$, $0.03$, $0.00$; their sum is $0.05$; divided by $3$ the score is
+$0.05/3 \approx 0.0167$.
+
+A pixel stored as $0$ is not a measurement, but its values are far from every real pixel, so any
+score that measures distance from normal ranks it near the top. It also distorts the scene
+statistics (mean and spread) that the genuine pixels are scored against, as
+\cref{we:problem:unmasked} showed, so it must be excluded both from the statistics and from the
+ranking.
+\end{solution}

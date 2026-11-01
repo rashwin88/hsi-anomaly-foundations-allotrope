@@ -1,0 +1,33 @@
+== percentile threshold as the api computes it: thr = np.percentile(finite, p); mask = composite >= thr ==
+N=956,679 p=99.5: (1-p/100)*N = 4,783.395; position p/100*(N-1) = 951,894.610; flagged = N - ceil(pos) = 4,784; numpy flagged = 4,784
+N=1,474,990 p=99.5: (1-p/100)*N = 7,374.950; position p/100*(N-1) = 1,467,614.055; flagged = N - ceil(pos) = 7,375; numpy flagged = 7,375
+N=1,000,000 p=99.0: (1-p/100)*N = 10,000.000; position p/100*(N-1) = 989,999.010; flagged = N - ceil(pos) = 10,000; numpy flagged = 10,000
+N=2,400,000 p=99.75: (1-p/100)*N = 6,000.000; position p/100*(N-1) = 2,393,999.002; flagged = N - ceil(pos) = 6,000; numpy flagged = 6,000
+N=10 p=70.0: (1-p/100)*N = 3.000; position p/100*(N-1) = 6.300; flagged = N - ceil(pos) = 3; numpy flagged = 3
+
+== Indradhanu-only composite: zeros outside the kept area are finite and join the population ==
+total 1474990 kept 956679 zeros 518311
+top 0.5% of all finite pixels: 7375 = 0.771 % of kept
+percentile that flags ~4,784 pixels when all 1,474,990 are in the population: 99.6757
+
+== min-max rescale and weighted composite ==
+Indradhanu score 7.2 in [0, 36]: 0.2 ; MNF-RX 30 in [2, 82]: 0.35
+weights 2 and 1 -> normalised 0.6666666666666666 0.3333333333333333 ; composite 0.25
+
+== excluded_percent (AD23) ==
+1000x1200: valid 1,128,000; excluded_percent = 8.0
+800x900: valid 700,000; excluded_percent = 5.114
+
+== PRISMA georeferencing: rasterio from_bounds on an assumed bounding box ==
+| 0.00, 0.00, 77.00|
+| 0.00,-0.00, 13.13|
+| 0.00, 0.00, 1.00|
+a = (east-west)/W = 0.0002953240360951595 ; e = -(north-south)/H = -0.0002727272727272728
+pixel row 0 col 0: centre lon 77.000148 lat 13.129864
+pixel row 605 col 610: centre lon 77.180295 lat 12.964864
+pixel row 1209 col 1218: centre lon 77.359852 lat 12.800136
+degree of longitude at 13 deg N ~ 111.32 km * cos(13 deg) = 108.46687561189238 km
+pixel width in m ~ 32.03287548833568 ; height 30.156545454545462
+
+== the funnel (AD13) ==
+1474990 1386491 956679 4783.395 308.4

@@ -21,3 +21,4 @@ numbered doc explains the design that won.
 | `inference-harness-adoption.md` | adopting or deleting `InferenceHarness`, which is fully built, tested, and unused |
 | `fine-tuning-and-segmentation.md` | **agreed, stages 1-4 run** - Indradhanu fine-tuning on EnMAP / PRISMA / AVIRIS-NG with a segmentation head; stage table, cloud-only exclusion, FT04 passed (release candidate), product wiring next |
 | `detection-supervised-finetuning.md` | **agreed, run, did not pass** (2026-10-18) - FT05 implant-denoising (implanted input, clean target); the detection-head alternative is untried |
+| `aigc-evaluation-submission.md` | **proposed 2026-10-31** - closing the gaps for the AIGC Stage-III evaluation submission (boolean GeoTIFF + SHP, PRISMA UTM georef, Indradhanu V2 from the UI, SAM vs namer per-object table, reflectance writer) |

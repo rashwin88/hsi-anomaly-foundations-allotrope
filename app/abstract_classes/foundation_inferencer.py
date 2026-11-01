@@ -96,7 +96,22 @@ class FoundationInferencer(ABC):
         """Load model weights from a checkpoint."""
         logger.info(f"Loading weights from: {path}")
         ckpt = torch.load(path, map_location=self.device, weights_only=False)
-        self.model.load_state_dict(ckpt["model_state_dict"])
+        state = ckpt["model_state_dict"]
+        if getattr(self.config, "pixel_stats_override", None) is not None:
+            # The override (e.g. HotSat-1's per-scene DN z-score) lives in the PixelNormalize / PixelDenormalize
+            # buffers build_model set; the checkpoint's own stats would overwrite it on load (found 2026-10-31:
+            # runs with and without the override were identical). Keep the override's buffers.
+            from app.foundation_models.components.pixel_normalization import PixelDenormalize, PixelNormalize
+            keep = {f"{name}.{b}" for name, mod in self.model.named_modules()
+                    if isinstance(mod, (PixelNormalize, PixelDenormalize)) for b in ("mean", "std")}
+            state = {k: v for k, v in state.items() if k not in keep}
+            missing, unexpected = self.model.load_state_dict(state, strict=False)
+            if unexpected or set(missing) - keep:
+                raise RuntimeError(f"checkpoint mismatch: missing {sorted(set(missing) - keep)}, "
+                                   f"unexpected {unexpected}")
+            logger.info(f"  pixel_stats_override kept: {sorted(keep)}")
+        else:
+            self.model.load_state_dict(state)
         logger.info(
             f"  Loaded weights from epoch {ckpt.get('epoch', '?')}, "
             f"avg_val_loss: {ckpt.get('avg_val_loss', 'N/A')}"

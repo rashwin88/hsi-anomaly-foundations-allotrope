@@ -1,0 +1,122 @@
+
+=== library ===
+entries 411 on 165 grid fully finite 352 grid bands 165
+165-grid std: min 0.0352 median 0.0770 max 0.1004
+
+=== SAM on mixed pixels ===
+target usgs_s07_ASD_GalvanizedSheetMetal_GDS334_ASDFRa_AREF.txt | grass usgs_s07_ASD_Cheatgrass_ANP92-11A_BECKa_AREF.txt | soil ecostress_soil.alfisol.haploxeralf.none.all.87p313.jhu.becknic.spectrum.txt
+angle(t, bg) = 23.44 deg
+first fill where SAM's nearest entry is in the target's family: 0.8500000000000001
+a=0.1: nearest family natural.npv (2.87 deg); angle to t 22.56
+a=0.2: nearest family natural.npv (2.62 deg); angle to t 21.53
+a=0.3: nearest family natural.npv (2.79 deg); angle to t 20.34
+a=0.5: nearest family natural.npv (2.50 deg); angle to t 17.25
+|t - b| mean abs reflectance 0.1699; normalised mean abs 2.180
+
+=== family subspaces ===
+manmade.building       n= 11  rank for 99% energy  2  top-1 share 0.940
+manmade.glass          n=  1  rank for 99% energy  1  top-1 share 1.000
+manmade.metal          n= 13  rank for 99% energy  2  top-1 share 0.949
+manmade.oil            n= 30  rank for 99% energy  3  top-1 share 0.947
+manmade.paint          n=  8  rank for 99% energy  2  top-1 share 0.965
+manmade.pavement       n= 15  rank for 99% energy  2  top-1 share 0.977
+manmade.plastic        n= 38  rank for 99% energy  4  top-1 share 0.930
+manmade.roofing        n= 27  rank for 99% energy  4  top-1 share 0.917
+manmade.textile        n= 14  rank for 99% energy  4  top-1 share 0.893
+manmade.wood_paper     n=  7  rank for 99% energy  2  top-1 share 0.987
+smallest principal angle manmade.metal vs manmade.roofing (rank 3): 3.70 deg; after projecting out bg-10: 49.80 deg
+smallest principal angle manmade.plastic vs manmade.textile (rank 3): 4.53 deg; after projecting out bg-10: 32.71 deg
+smallest principal angle manmade.metal vs manmade.plastic (rank 3): 2.04 deg; after projecting out bg-10: 43.20 deg
+smallest principal angle manmade.pavement vs manmade.building (rank 3): 0.51 deg; after projecting out bg-10: 9.97 deg
+smallest principal angle manmade.paint vs manmade.plastic (rank 3): 5.92 deg; after projecting out bg-10: 19.40 deg
+foreign fraction of (manmade.building - natural mean) vs natural top-10: median 0.004
+foreign fraction of (manmade.glass - natural mean) vs natural top-10: median 0.000
+foreign fraction of (manmade.metal - natural mean) vs natural top-10: median 0.002
+foreign fraction of (manmade.oil - natural mean) vs natural top-10: median 0.006
+foreign fraction of (manmade.paint - natural mean) vs natural top-10: median 0.007
+foreign fraction of (manmade.pavement - natural mean) vs natural top-10: median 0.000
+foreign fraction of (manmade.plastic - natural mean) vs natural top-10: median 0.024
+foreign fraction of (manmade.roofing - natural mean) vs natural top-10: median 0.002
+foreign fraction of (manmade.textile - natural mean) vs natural top-10: median 0.024
+foreign fraction of (manmade.wood_paper - natural mean) vs natural top-10: median 0.006
+
+=== detection SNR ===
+known-direction MF: Pfa 0.001, Pd 0.5: required SNR = 9.55
+||d||^2 (normalised, galvanised metal vs grass/soil) = 904.1
+mean|e|=0.05 sigma=0.063 eps=0.1 phi=0.006: d'Sd=  28388.3  a_min=0.0183
+mean|e|=0.05 sigma=0.063 eps=0.1 phi=0.05 : d'Sd= 122871.4  a_min=0.0088
+mean|e|=0.05 sigma=0.063 eps=0.1 phi=0.2  : d'Sd= 444972.8  a_min=0.0046
+mean|e|=0.05 sigma=0.063 eps=0.1 phi=1.0  : d'Sd=2162847.0  a_min=0.0021
+mean|e|=0.10 sigma=0.125 eps=0.1 phi=0.006: d'Sd=   7097.1  a_min=0.0367
+mean|e|=0.10 sigma=0.125 eps=0.1 phi=0.05 : d'Sd=  30717.9  a_min=0.0176
+mean|e|=0.10 sigma=0.125 eps=0.1 phi=0.2  : d'Sd= 111243.2  a_min=0.0093
+mean|e|=0.10 sigma=0.125 eps=0.1 phi=1.0  : d'Sd= 540711.7  a_min=0.0042
+mean|e|=0.14 sigma=0.175 eps=0.1 phi=0.006: d'Sd=   3621.0  a_min=0.0514
+mean|e|=0.14 sigma=0.175 eps=0.1 phi=0.05 : d'Sd=  15672.4  a_min=0.0247
+mean|e|=0.14 sigma=0.175 eps=0.1 phi=0.2  : d'Sd=  56756.7  a_min=0.0130
+mean|e|=0.14 sigma=0.175 eps=0.1 phi=1.0  : d'Sd= 275873.3  a_min=0.0059
+Pfa 0.001 threshold, unit-variance t_3: 5.90 (Gaussian 3.09); SNR need x3.64
+Pfa 0.001 threshold, unit-variance t_5: 4.57 (Gaussian 3.09); SNR need x2.18
+
+=== PSF halo ===
+cell 4 px: centre-pixel energy 0.075; own cell 0.520; 4 edge-neighbour cells (visible in a checkerboard) 0.401 (min 0.304, max 0.465)
+cell 8 px: centre-pixel energy 0.075; own cell 0.740; 4 edge-neighbour cells (visible in a checkerboard) 0.240 (min 0.016, max 0.463)
+3x3 object, psf_weights: mean weight on 1-px halo 0.544 (object 1.0)
+1x1 object: halo weight 0.775; ring (2-3 px) weight 0.324
+2x2 object: halo weight 0.640; ring (2-3 px) weight 0.199
+4x4 object: halo weight 0.487; ring (2-3 px) weight 0.123
+
+=== leakage ===
+l=0.1: SNR x0.81; a_min x1.11
+l=0.3: SNR x0.49; a_min x1.43
+l=0.5: SNR x0.25; a_min x2.00
+
+=== gain and SRF ===
+kappa=1.02: cos >= 0.999951, angle <= 0.57 deg
+kappa=1.05: cos >= 0.999703, angle <= 1.40 deg
+kappa=1.1: cos >= 0.998866, angle <= 2.73 deg
+kappa=1.2: cos >= 0.995859, angle <= 5.22 deg
+smooth +/-5% gain on (t - b): angle median 0.61 deg, 95th pct 1.29
+SRF centre shift 1.0 nm: SAM(shifted, nominal) median 0.106 deg, max 0.524; median per-entry max rel change 0.012
+SRF centre shift 2.0 nm: SAM(shifted, nominal) median 0.208 deg, max 1.040; median per-entry max rel change 0.025
+SRF centre shift 5.0 nm: SAM(shifted, nominal) median 0.519 deg, max 2.552; median per-entry max rel change 0.061
+FWHM 8.0 nm instead of 10: SAM median 0.028 deg, max 0.200
+FWHM 12.0 nm instead of 10: SAM median 0.028 deg, max 0.204
+FWHM 15.0 nm instead of 10: SAM median 0.056 deg, max 0.497
+
+=== sample size ===
+discordance 0.1, delta 0.05: n objects = 314
+discordance 0.1, delta 0.1: n objects = 78
+discordance 0.1, delta 0.15: n objects = 35
+discordance 0.2, delta 0.05: n objects = 628
+discordance 0.2, delta 0.1: n objects = 157
+discordance 0.2, delta 0.15: n objects = 70
+discordance 0.3, delta 0.05: n objects = 942
+discordance 0.3, delta 0.1: n objects = 235
+discordance 0.3, delta 0.15: n objects = 105
+n=30, discordance 0.2: MDE 0.229
+n=30: 95% CI half-width on one accuracy p=0.5: 0.179
+n=100, discordance 0.2: MDE 0.125
+n=100: 95% CI half-width on one accuracy p=0.5: 0.098
+n=300, discordance 0.2: MDE 0.072
+n=300: 95% CI half-width on one accuracy p=0.5: 0.057
+
+=== chi-square: any direction vs known subspace ===
+q= 1: chi2 threshold at Pfa 0.001 =  10.83; noncentrality for Pd 0.5:  10.83
+q= 3: chi2 threshold at Pfa 0.001 =  16.27; noncentrality for Pd 0.5:  14.24
+q=10: chi2 threshold at Pfa 0.001 =  29.59; noncentrality for Pd 0.5:  20.53
+q=30: chi2 threshold at Pfa 0.001 =  59.70; noncentrality for Pd 0.5:  30.59
+Gaussian null of cos^2 to a fixed 1-dim subspace in 165 whitened dims: mean 0.0061, 99.5th pct 0.0470
+Gaussian null of cos^2 to a fixed 3-dim subspace in 165 whitened dims: mean 0.0182, 99.5th pct 0.0760
+Gaussian null of cos^2 to a fixed 3-dim subspace in 234 whitened dims: mean 0.0128, 99.5th pct 0.0539
+
+=== empirical null threshold ===
+N_null=10000, tail level 0.005: exceedances 50, sd of realised FPR 0.00071 (14% relative)
+N_null=10000, tail level 0.001: exceedances 10, sd of realised FPR 0.00032 (32% relative)
+N_null=100000, tail level 0.005: exceedances 500, sd of realised FPR 0.00022 (4% relative)
+N_null=100000, tail level 0.001: exceedances 100, sd of realised FPR 0.00010 (10% relative)
+
+=== leakage of a linear predictor ===
+linear predictor = mean of 16 border pixels: leakage l = mean 0.218 (range 0.190-0.234)
+linear predictor = mean of all 64 px of the 4 edge-neighbour tokens: leakage l = mean 0.084 (range 0.063-0.097)
+implied discordance from a +-1.9 pt half-width on 909 objects: 0.085

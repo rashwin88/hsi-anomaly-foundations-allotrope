@@ -1,0 +1,214 @@
+
+== 1. parameter count of the namer as the code builds it today (D = 64, d = 32, 4 heads, hidden 256, embed 128) ==
+  stats             0
+  stem         17,825
+  norm            128
+  pixel       180,992
+  to_embed     32,896
+  to_manmade      257
+  to_fill         257
+  library     115,328
+  log_tau           1
+  l1_bias           1
+  total       347,685   (347,684 before l1_bias was added for level 1 by matching)
+  stem by tensor:
+    queries                  (64, 32)    2,048
+    band_weight.0.weight     (64, 32)    2,048
+    band_weight.0.bias       (64,)          64
+    band_weight.2.weight     (32, 64)    2,048
+    band_weight.2.bias       (32,)          32
+    skip_weight.0.weight     (64, 32)    2,048
+    skip_weight.0.bias       (64,)          64
+    skip_weight.2.weight     (64, 64)    4,096
+    skip_weight.2.bias       (64,)          64
+    bin_bias.weight          (32, 32)    1,024
+    bin_bias.bias            (32,)          32
+    q.weight                 (32, 32)    1,024
+    q.bias                   (32,)          32
+    k.weight                 (32, 32)    1,024
+    k.bias                   (32,)          32
+    v.weight                 (32, 32)    1,024
+    v.bias                   (32,)          32
+    o.weight                 (32, 32)    1,024
+    o.bias                   (32,)          32
+    to_channel.weight        (1, 32)        32
+    to_channel.bias          (1,)            1
+  stem by hand: band_weight (32*64+64)+(64*32+32) = 4192 ; skip_weight (32*64+64)+(64*64+64) = 6272 ; bin_bias 32*32+32 = 1056 ; queries 64*32 = 2048 ; q,k,v,o 4*(32*32+32) = 4224 ; to_channel 32+1 = 33
+  sum = 17825
+  share of stem: 0.0513 ; pixel tower (pixel MLP + 3 heads): 214402 ; library tower: 115328
+  dead under level1 = matching: to_manmade 257 parameters receive no gradient
+
+== 2. wavelength encoding: 16 periods from 10 to 10,000 nm, geometric ==
+  ratio between periods 1000^(1/15) = 1.5849
+  periods (nm): [10.0, 15.8, 25.1, 39.8, 63.1, 100.0, 158.5, 251.2, 398.1, 631.0, 1000.0, 1584.9, 2511.9, 3981.1, 6309.6, 10000.0]
+  enc(1000 nm) first 4 sines: [0.0, 0.5659, -0.9281, 0.6793] ; slowest pair (sin, cos): 0.5878 0.809
+  by hand: sin(2 pi 1000/10) = sin(200 pi) = 0; sin(2 pi 1000/15.85) = 0.5659 ; sin(2 pi 1000/10000) = 0.5878 cos = 0.809
+  cosine of enc(1000) and enc(1010): 0.6709
+
+== 3. bins: 40 nm from 400 nm ==
+  G = ceil((2500-400)/40) = ceil( 52.5 ) = 53 ; last bin 2480 - 2520 nm
+  lambda 405.0: floor((405.0-400)/40) = 0 -> bin 0
+  lambda 439.9: floor((439.9-400)/40) = 0 -> bin 0
+  lambda 440.0: floor((440.0-400)/40) = 1 -> bin 1
+  lambda 1000.0: floor((1000.0-400)/40) = 15 -> bin 15
+  lambda 2450.0: floor((2450.0-400)/40) = 51 -> bin 51
+  lambda 2510.0: floor((2510.0-400)/40) = 52 -> bin 52
+  lambda 380.0: floor((380.0-400)/40) = -1 -> bin 0
+  bin centres: 420, 460, ...,  2500.0
+
+== 4. band widths (half the gaps, gaps capped at 20 nm) ==
+  bands [410.0, 430.0, 445.0, 470.0] -> widths [20.0, 17.5, 17.5, 20.0]
+  across a water gap [1320.0, 1330.0, 1340.0, 1460.0, 1470.0] -> widths [10.0, 10.0, 15.0, 15.0, 10.0] (cap 20.0 )
+
+== 5. token averaging as one matmul, by hand (4 bands, 2 bins, d = 2 for paper) [k vectors assumed] ==
+  w*v = [10.0, -3.5, 17.5, 8.0] ; cnt per bin = [37.5, 37.5]
+  kmat (N, G*d) =
+ [[ 1.   0.   0.   0. ]
+ [ 0.5  0.5  0.   0. ]
+ [ 0.   0.   0.   1. ]
+ [ 0.  -0.   1.  -1. ]]
+  vals @ kmat = [8.25, -1.75, 8.0, 9.5] -> tokens [[0.22, -0.0467], [0.2133, 0.2533]]
+  direct loop over bands: [[0.22, -0.0467], [0.2133, 0.2533]]
+
+== 6. attention over bins, by hand: 1 query, 3 bins, head dim 2, bin 3 empty ==
+  q.k / sqrt(2): [0.7071, 0.3536, 2.1213]
+  softmax with bin 3 masked: [0.5875, 0.4125, 0.0] ; output [0.365, 0.1525]
+  torch SDPA with bool mask: [0.365, 0.1525]
+
+== 7. frozen BatchNorm, one channel ==
+  y = 1.5 (0.9 - 0.4)/sqrt(0.25 + 1e-5) - 0.1 = 1.39997 ; by hand 1.39997
+
+== 8. EnMAP's 224-band list in the stem's bins ==
+  bands 224 range 418.416 - 2445.3
+  bands per bin: [5, 8, 8, 8, 8, 6, 7, 5, 6, 5, 6, 5, 6, 9, 9, 4, 3, 4, 3, 4, 3, 3, 4, 3, 3, 0, 3, 4, 3, 4, 3, 4, 4, 4, 2, 0, 0, 0, 0, 4, 4, 5, 4, 5, 5, 4, 5, 5, 5, 5, 6, 1, 0]
+  occupied bins: 47 of 53 ; most bands in one bin: 9
+  bands left if 1340-1460 and 1790-1960 nm are dead [A: windows]: 218
+  occupied bins then: 46
+
+== 9. one training step for one sensor at illustrative EnMAP sizes: B=16, 128x128, N=200, L=378 (real code, random data) ==
+  pixels (16, 200, 128, 128) = 52,428,800 numbers = 200 MiB fp32
+  ring (16, 200, 128, 128) count (16, 1, 128, 128) sigma (16, 200)
+  interior pixels allowed per tile: (128 - 2*7)^2 = 12996
+  plant: {'x': (8192, 200), 'r': (8192, 200), 'manmade': (8192,), 'cls': (8192,), 'entry': (8192,), 'fill': (8192,)} 1.5s
+  kinds drawn (man-made, natural mix, plain): [4110, 1984, 2098] of 8192
+  forward on CPU: 0.3s
+  stem.band_weight [(200, 32), (200, 32), (200, 32)]
+  stem.bin_bias  [(53, 32), (53, 32), (53, 32)]
+  stem.k         [(8192, 53, 32), (8192, 53, 32), (378, 53, 32)]
+  stem.v         [(8192, 53, 32), (8192, 53, 32), (378, 53, 32)]
+  stem.q         [(64, 32), (64, 32), (64, 32)]
+  stem.o         [(8192, 64, 32), (8192, 64, 32), (378, 64, 32)]
+  stem.to_channel [(8192, 64, 1), (8192, 64, 1), (378, 64, 1)]
+  stem.skip_weight [(200, 64), (200, 64), (200, 64)]
+  stem(out)      [(8192, 64, 1, 1), (8192, 64, 1, 1), (378, 64, 1, 1)]
+  norm           [(8192, 64), (8192, 64), (378, 64)]
+  pixel MLP      [(8192, 256)]
+  to_embed       [(8192, 128)]
+  to_fill        [(8192, 1)]
+  library MLP    [(378, 128)]
+  z (8192, 128) e (378, 128) S (P, L) = (8192, 378) -> class scores (8192, 8) level-1 logit (8192,) fill (8192,)
+  kmat elements N*G*d = 339200 ; tok elements P*G*d = 13893632 ; (P,N,d) avoided = 52428800
+  attention weights per stem call P*heads*D*G = 111,149,056 = 424 MiB fp32
+  SDPA chunks of 32,768 rows: P=8192 -> 1 chunk; library L=378 -> 1
+  score matrix elements P*L = 3,096,576
+  own-entry exclusions: 6094 (every planted sample, man-made and natural mix)
+  untrained losses: BCE 0.7339, CE 1.9941 (ln 7 = 1.9459), fill L1 0.3287
+  classes with -inf (no train entry): 0
+
+== 10. level 1 by matching, 3 library entries: plastic s=6.0, metal s=5.0, soil (natural) s=5.5; bias 0; truth man-made ==
+  logit = LSE(6, 5) - 5.5 + 0 = 0.8133 ; LSE(6,5) = 6 + ln(1 + e^-1) = 6.3133
+  P(man-made) = sigmoid = 0.6928 ; BCE = 0.367
+  dL/dlogit = p - y = -0.3072
+  autograd dL/ds: [-0.2246, -0.0826, 0.3072] ; dL/dbias = -0.3072
+  softmax weights within man-made: e^6/(e^6+e^5) = 0.7311
+  sum of grads: -0.0
+  same scores, truth natural: BCE 1.1803 grads [0.5065, 0.1863, -0.6928]
+  the test's pair: logits [5.5461, -5.0541]
+
+== 11. why one hyperplane fails: XOR on the unit circle; natural at 0 and 180 deg, man-made at 90 and 270 deg ==
+  pixel at 80 deg, cosines: {'n1': 0.1736, 'n2': -0.1736, 'm1': 0.9848, 'm2': -0.9848}
+  tau 0.1: S_mm = LSE(9.8481, -9.8481) = 9.8481; S_nat = LSE(1.7365, -1.7365) = 1.7670; logit = 8.0810
+  pixel at 190 deg: logit = 1.7670 - 9.8481 = -8.0810
+
+== 12. the entry-count offset: LSE of m equal scores = s + ln m ==
+  EnMAP natural entries 378 - 159 = 219 ; man-made train 159 - 34 = 125
+  ln 219 = 5.3891 ; ln 125 = 4.8283 ; offset ln(219/125) = 0.5608
+
+== 13. evidence: what the losses mean (BCE -> geometric-mean probability of the truth) ==
+  chance: BCE 0.6931 -> exp(-BCE) = 0.5000
+  linear head, 150 steps: BCE 0.6400 -> exp(-BCE) = 0.5273
+  matching, 150 steps: BCE 0.4300 -> exp(-BCE) = 0.6505
+
+== 14. the fill law and the sample law ==
+  E[a] man-made/natural mix = (1 - 0.05)/ln 20 = 0.95 / 2.9957 = 0.3171
+  E[fill target] over all samples = 0.75 * 0.3171 = 0.2378
+  median = 0.05^0.5 = 0.2236
+  E[a^2] = (1 - 0.05^2)/(2 ln 20) = 0.1665
+  per step per sensor 16*512 = 8192 ; expected man-made 4096, natural mix 2048, plain 2048
+  eval: 40 batches x 8192 = 327680 samples per sensor per fill (kinds 0.5/0.5/0)
+  P(a <= 0.1, 0.25, 0.5): [0.2314, 0.5372, 0.7686]
+
+== 15. learning-rate schedule (LambdaLR, total 20,000 steps, warmup 500, base 3e-4, stem 0.3x) ==
+  step     0: factor 0.00200  lr 6.000e-07  stem 1.800e-07
+  step     1: factor 0.00400  lr 1.200e-06  stem 3.600e-07
+  step   249: factor 0.49981  lr 1.499e-04  stem 4.498e-05
+  step   499: factor 0.99846  lr 2.995e-04  stem 8.986e-05
+  step   500: factor 0.99846  lr 2.995e-04  stem 8.986e-05
+  step  5000: factor 0.85355  lr 2.561e-04  stem 7.682e-05
+  step 10000: factor 0.50000  lr 1.500e-04  stem 4.500e-05
+  step 15000: factor 0.14645  lr 4.393e-05  stem 1.318e-05
+  step 19999: factor 0.00000  lr 1.851e-12  stem 5.552e-13
+
+== 16. the bank, N001b and N002, on EnMAP and AVIRIS-NG band lists ==
+  enmap_224: 378 entries, natural 219, man-made 159, test 34, train man-made 125
+    oil_fuel            40  8  20%
+    plastic             46  8  17%
+    textile_fabric      14  3  21%
+    wood_paper          11  2  18%
+    paint_coatings       4  1  25%
+    metal               10  3  30%
+    concrete_asphalt    34  9  26%
+    N002 (textile held out): train man-made pool 114, test pool 45 (textile 14)
+    level-1 matching classes in training: natural entries 219 as class 7
+  aviris_ng_372: 380 entries, natural 220, man-made 160, test 34, train man-made 126
+    oil_fuel            40  8  20%
+    plastic             46  8  17%
+    textile_fabric      14  3  21%
+    wood_paper          12  2  17%
+    paint_coatings       4  1  25%
+    metal               10  3  30%
+    concrete_asphalt    34  9  26%
+    N002 (textile held out): train man-made pool 115, test pool 45 (textile 14)
+    level-1 matching classes in training: natural entries 220 as class 7
+
+== 17. hash split examples ==
+  'Copper Metal': 1600007b = 369,098,875 / 4,294,967,295 = 0.0859
+  'Aluminum Metal': d13908a4 = 3,510,175,908 / 4,294,967,295 = 0.8173
+
+== 18. pass bars at fill 0.25 (separability JSONs) ==
+  prisma: f = 0.1658, ACE recall 0.7724, bar 0.8724
+  enmap: f = 0.2149, ACE recall 0.6635, bar 0.7635
+  aviris_ng: f = 0.1866, ACE recall 0.7603, bar 0.8603
+
+== 19. inference: ring_means on a 9x9 single-band toy is the generator's ring ==
+  infer ring [0.4712199866771698, 0.513670027256012] generator ring [0.47122, 0.51367]
+  bands dropped at inference when valid at <= 50% of requested pixels: 3 of 5 valid = 0.6 keep; 2 of 4 = 0.5 drop
+
+== 20. ACE at fill 1.0 (the laptop test's fill) and the LSE-of-LSE identity ==
+  prisma: fill 1.0 f = 0.1404, ACE man-made recall 0.8703
+  enmap: fill 1.0 f = 0.1336, ACE man-made recall 0.8711
+  aviris_ng: fill 1.0 f = 0.1459, ACE man-made recall 0.8696
+  e^6 = 403.4288, e^5 = 148.4132, e^5.5 = 244.6919; man-made mass share (e^6+e^5)/(e^6+e^5+e^5.5) = 0.6928
+  LSE over class LSEs 3.4723 = LSE over all entries 3.4723
+  with bias b = 0.5: P(M) = e^b A / (e^b A + N) = 0.7881 ; sigmoid(0.8133 + 0.5) = 0.7881
+
+== 21. answers: hidden 128 / embed 64 count; level 1 with a second natural entry; widths at 1790-1970; equal scores ==
+  hidden 128, embed 64: total 117,285
+  S_nat = LSE(5.5, 5.5) = 6.1931 ; logit 0.1201 ; P 0.53 ; BCE 0.6349 ; grads [-0.3436, -0.1264, 0.235, 0.235]
+  widths 1790,1800,1960,1970: [10.0, 15.0, 15.0, 10.0] bins [34, 35, 39, 39]
+  equal scores: P(M) = 125/(125+219) = 0.3634 ; b = ln(219/125) = 0.5608
+  a_min 0.02: P(a<=0.25) = 0.6456 ; mean = 0.2505
+  pool example: S_nat = ln(e^2.5 + 1) = 2.5789 ; LSE(3,2) = 3.3133 ; logit 0.7344 ; P(M) 0.6758 ; P(plastic|M) 0.7311
+  attention by hand: e^0.7071 = 2.0281 e^0.3536 = 1.4242
+  lerp example: v = (0.35-0.308)/0.108 = 0.3889
+  new library 500 spectra MLP mult-adds: 57344000

@@ -539,7 +539,7 @@ def render_all(
     Sensor dispatch:
       - landsat9 | hotsat1 → color.png + histogram.json. NIR/SWIR/NDVI/
         band-mosaic skipped (single-band thermal scenes).
-      - prisma | enmap | aviris_ng → color.png + nir.png + swir.png +
+      - prisma | enmap | aviris_ng | tanager | generic_hsi → color.png + nir.png + swir.png +
         ndvi.png + band_mosaic.png + histogram.json.
 
     Each step is wrapped in its own try/except so a failure in one
@@ -559,7 +559,7 @@ def render_all(
 
     _try("color", lambda: render_color_thumbnail(vendable, sensor_type, out_dir / "color.png"))
 
-    if sensor_type in ("prisma", "enmap", "aviris_ng"):
+    if sensor_type in ("prisma", "enmap", "aviris_ng", "tanager", "generic_hsi"):
         _try("nir", lambda: render_nir_composite(vendable, out_dir / "nir.png"))
         _try("swir", lambda: render_swir_composite(vendable, out_dir / "swir.png"))
         _try("ndvi", lambda: render_ndvi(vendable, out_dir / "ndvi.png"))

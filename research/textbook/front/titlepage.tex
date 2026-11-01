@@ -1,0 +1,26 @@
+\begin{titlepage}
+\centering
+\vspace*{30mm}
+{\Huge\bfseries Finding What Does Not Belong\par}
+\vspace{6mm}
+{\LARGE The Mathematics of Hyperspectral Anomaly Detection\\[2mm] and the Indradhanu Foundation Model\par}
+\vspace{14mm}
+{\large A step-by-step textbook built from the Allotrope training courses\par}
+\vspace{10mm}
+\begin{tikzpicture}[x=1cm,y=1cm]
+  % a small cube of bands, the book's emblem
+  \foreach \i in {0,...,7} {
+    \pgfmathsetmacro{\c}{100-10*\i}
+    \fill[spec!\c!spat, opacity=0.85] (0.18*\i,0.18*\i) rectangle ++(3,3);
+    \draw[white, line width=0.4pt] (0.18*\i,0.18*\i) rectangle ++(3,3);
+  }
+  \fill[loss] (1.26+1.9,1.26+1.2) circle (0.12);
+  \draw[loss, line width=1pt] (1.26+1.9,1.26+1.2) circle (0.3);
+\end{tikzpicture}
+\vfill
+{\large Study material, subordinate to the source code and to
+\texttt{docs/01-orientation.md} through \texttt{docs/10-code-style.md}.\par}
+\vspace{4mm}
+{\large Compiled from the courses as of 2026-10-29\par}
+\vspace{10mm}
+\end{titlepage}

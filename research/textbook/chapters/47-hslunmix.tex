@@ -1,0 +1,379 @@
+\chapter{Unmixing and sub-pixel targets}\label{ch:hslunmix}
+\def\tbrk{\hfil\penalty50\hfilneg}% local: a line may break before a provenance tag
+
+\begin{onething}
+A published ``endmember-free'' unmixing method built on HyperSL lost to the classical VCA + FCLS on every data set with
+exact truth, needed VCA to start in the authors' own code, gained nothing from pretraining, took 5--13 minutes per scene
+on a 96\,GB GPU, and, because its abundances pass through a $3\times3$ head and a total-variation penalty, smoothed a
+target a seventh of a pixel wide down to an object AUC of 0.68, where per-pixel ACE scored 0.97.
+\end{onething}
+
+\Cref{ch:hslnorm} asked whether HyperSL's \emph{embedding} can name a material. A second route exists: use HyperSL as the
+backbone of an \emph{unmixing} network, which splits each pixel into a few pure materials and their shares. Liu et al.\
+\citep{liu2025endmemberfree} proposed exactly this, ``endmember-free'' unmixing on a pretrained HyperSL. If it worked it
+would answer two of the product's questions at once: which material is in the pixel, and how much of the pixel it
+fills. The experiment \file{research/experiments/hypersl-unmixing/} tested it on 2026-10-13/14 on a Colab RTX PRO 6000
+(96\,GB). Its README is in commit \code{4d292ac}; every number in this chapter is from it unless marked otherwise.
+
+\begin{analogy}
+A newspaper photograph printed through a coarse halftone screen. A crowd shot reproduces well: faces are many dots wide.
+A person standing far off, smaller than one dot, is averaged into the grey of the dot and vanishes. Nothing is wrong
+with the press; it is built for pictures whose detail is larger than its dot. A sub-pixel target is the far-off
+person, and HyperSL's unmixing head is the screen.
+\end{analogy}
+
+%======================================================================
+\section{The words}\label{sec:hslunmix:words}
+
+\begin{definition}[Linear mixing, endmember, abundance]
+The \emph{linear mixing model}\index{linear mixing model} writes a pixel as a weighted sum of $K$ pure spectra, its
+\emph{endmembers}\index{endmember} $\vect{e}_1,\dots,\vect{e}_K$, plus noise:
+\begin{equation}
+\vect{x}=\sum_{k=1}^{K}a_k\vect{e}_k+\vect{n}=\mat{E}\vect{a}+\vect{n},\qquad a_k\ge0,\quad \sum_k a_k=1 .
+\label{eq:hslunmix:lmm}
+\end{equation}
+The weights $a_k$ are the \emph{abundances}\index{abundance}: the share of the pixel each material covers. With $K=2$,
+background $\vect{b}$ and target $\vect{t}$, it is the fill model of \cref{ch:namer}: $\vect{x}=(1-a)\vect{b}+a\vect{t}$.
+\end{definition}
+
+\begin{definition}[Blind unmixing, VCA, FCLS]
+\emph{Blind unmixing}\index{blind unmixing} finds both $\mat{E}$ and the abundances from the image alone.
+\emph{VCA}\index{VCA} (vertex component analysis, \citep{nascimento2005vca}) finds endmembers as the most extreme
+pixels of the data cloud; \emph{FCLS}\index{FCLS} (fully constrained least squares, \citep{heinz2001fcls}) then finds,
+for each pixel, the abundances that best fit \cref{eq:hslunmix:lmm} under both constraints. VCA + FCLS takes seconds
+per scene.
+\end{definition}
+
+\begin{definition}[mSAD, mRMSE]
+After matching each found endmember to a true one (the Hungarian method pairs them so the total error is least),
+\emph{mSAD}\index{mSAD} is the mean spectral angle between pairs, in radians, and \emph{mRMSE}\index{mRMSE} the mean
+root-mean-square error of the abundance maps. Lower is better for both. 0.1\,rad is $5.7^\circ$.
+\end{definition}
+
+\begin{definition}[Object AUC]
+For one labelled object, take its highest score and rank it against every background pixel's score: the
+\emph{object AUC}\index{object AUC} is the share of background pixels it beats. 1.00 means the object's best pixel
+outranks the whole background.
+\end{definition}
+
+%======================================================================
+\section{What was compared}\label{sec:hslunmix:setup}
+
+\paragraph{Data.} Two kinds, graded by how exact their truth is.
+\begin{itemize}
+\item \textbf{Blind unmixing}: DC1, DC2, DC3 and EGU-Net, synthetic scenes with exact truth (grade B; DC3 has no pure
+pixels, EGU has spectral variability, the two cases built to favour a learned method); and Samson, Jasper and Urban4,
+real scenes whose ``truth'' is FCLS from hand-picked endmembers (grade D, a reproduction check only).
+\item \textbf{Sub-pixel targets}: DLR HySU \citep{cerra2021hysu}, five materials in squares of side 0.25, 0.5, 1, 2 and
+3\,m on grass, imaged at 0.7\,m (VNIR only); and Gudalur AVIRIS-NG aggregated to 32\,m, 16\,m sheets, true fill at most
+0.25.
+\end{itemize}
+
+\paragraph{HyperSL presets.} The paper and the released code disagree, so both were run. ``Start'' is how the
+endmembers are initialised; $R_\theta$ is explained in \cref{sec:hslunmix:blind}.
+
+\begin{center}\small
+\begin{tabular}{@{}lllp{30mm}p{34mm}@{}}
+\toprule
+preset & start & $R_\theta$ & loss & source \\
+\midrule
+\code{paper} & random & yes & paper eq.~17 & the paper \\
+\code{paper_noR} & random & no & paper eq.~17 & the paper without $R_\theta$ \\
+\code{upstream} & \textbf{VCA} & no & SAD $+0.35\sqrt{A}$ $+0.1\sum\abs{\Delta E}$ & \file{downstream_unmixing.py} \\
+\code{scratch} & random & yes & paper eq.~17 & \code{paper} with a \emph{random} backbone \\
+\bottomrule
+\end{tabular}
+\end{center}
+All use the \code{10_base_mask95} checkpoint, AdamW, 200 epochs and 400 patches; 2 seeds for \code{paper_noR} and
+\code{upstream}, 1 for \code{paper} and \code{scratch}, 10 for VCA + FCLS. 112 runs in all.
+
+\begin{sourcenote}[: the released code is not endmember-free]
+\file{downstream_unmixing.py} overwrites the decoder with VCA endmembers and prints ``Endmember initialized by VCA''. It also
+uses a different loss, patch size and weights from the paper and has no $R_\theta$. Only this VCA-initialised version came
+close to a published number: Urban mSAD $0.262\pm0.050$ against the paper's 0.213. The paper's endmember-free version
+reached 0.323 on Jasper against a reported 0.045. An independent benchmark also failed to reproduce the method
+\tagMr{\texttt{2d893e6}: summary.md, step 3}.
+\end{sourcenote}
+
+%======================================================================
+\section{Blind unmixing: the classical method wins where truth is exact}\label{sec:hslunmix:blind}
+
+\begin{table}[htbp]
+\centering\small
+\begin{tabular}{@{}lllllll@{}}
+\toprule
+set (grade) & VCA+FCLS (10) & upstream (2) & paper\_noR (2) & paper (1) & scratch (1) \\
+\midrule
+DC1 (B) & \textbf{0.000 $\pm$ 0.000} & 0.092 $\pm$ 0.000 & 0.084 $\pm$ 0.003 & 0.173 & 0.173 \\
+DC2 (B) & \textbf{0.000 $\pm$ 0.000} & 0.085 $\pm$ 0.001 & 0.082 $\pm$ 0.029 & 0.182 & 0.175 \\
+DC3 (B) & \textbf{0.069 $\pm$ 0.008} & 0.124 $\pm$ 0.000 & 0.164 $\pm$ 0.043 & 0.199 & 0.153 \\
+EGU (B) & \textbf{0.004 $\pm$ 0.001} & 0.106 $\pm$ 0.001 & 0.083 $\pm$ 0.005 & 0.264 & 0.249 \\
+Samson (D) & 0.085 $\pm$ 0.062 & 0.278 $\pm$ 0.108 & \textbf{0.074 $\pm$ 0.025} & 0.531 & 0.493 \\
+Jasper (D) & 0.397 $\pm$ 0.038 & 0.405 $\pm$ 0.011 & \textbf{0.323 $\pm$ 0.039} & 0.472 & 0.472 \\
+Urban4 (D) & 0.418 $\pm$ 0.015 & \textbf{0.262 $\pm$ 0.050} & 0.322 $\pm$ 0.084 & 0.419 & 0.413 \\
+\bottomrule
+\end{tabular}
+\caption{mSAD in radians, mean $\pm$ standard deviation over seeds (seed count in brackets), lower is better, best per
+row in bold\tagMr{\texttt{4d292ac}: hypersl-unmixing/README.md}.}
+\label{tab:hslunmix:msad}
+\end{table}
+
+\begin{table}[htbp]
+\centering\small
+\begin{tabular}{@{}lllllll@{}}
+\toprule
+set (grade) & VCA+FCLS & upstream & paper\_noR & paper & scratch \\
+\midrule
+DC1 (B) & \textbf{0.000 $\pm$ 0.000} & 0.332 $\pm$ 0.025 & 0.333 $\pm$ 0.001 & 0.380 & 0.388 \\
+DC2 (B) & \textbf{0.000 $\pm$ 0.000} & 0.220 $\pm$ 0.010 & 0.209 $\pm$ 0.005 & 0.387 & 0.296 \\
+DC3 (B) & \textbf{0.103 $\pm$ 0.026} & 0.324 $\pm$ 0.033 & 0.300 $\pm$ 0.009 & 0.357 & 0.347 \\
+EGU (B) & \textbf{0.081 $\pm$ 0.005} & 0.229 $\pm$ 0.001 & 0.242 $\pm$ 0.004 & 0.453 & 0.438 \\
+Samson (D) & 0.282 $\pm$ 0.021 & 0.301 $\pm$ 0.040 & 0.236 $\pm$ 0.000 & 0.308 & \textbf{0.225} \\
+Jasper (D) & 0.317 $\pm$ 0.044 & 0.298 $\pm$ 0.026 & \textbf{0.242 $\pm$ 0.113} & 0.472 & 0.461 \\
+Urban4 (D) & 0.380 $\pm$ 0.033 & 0.282 $\pm$ 0.119 & \textbf{0.281 $\pm$ 0.021} & 0.517 & 0.569 \\
+\bottomrule
+\end{tabular}
+\caption{mRMSE of the abundances, same layout\tagMr{\texttt{4d292ac}: hypersl-unmixing/README.md}.}
+\label{tab:hslunmix:mrmse}
+\end{table}
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}
+\begin{axis}[ybar, bar width=5pt, width=0.92\linewidth, height=55mm, ymin=0, ymax=0.3,
+  xtick={0,1,2,3}, xticklabels={DC1,DC2,DC3,EGU}, ylabel={mSAD (rad)},
+  legend style={at={(0.5,-0.16)},anchor=north,font=\scriptsize,legend columns=3}, enlarge x limits=0.15]
+\addplot[fill=spec!70] table[x=i, y=vca] {figdata/hsl_msad.dat};
+\addplot[fill=spat!50] table[x=i, y=upstream] {figdata/hsl_msad.dat};
+\addplot[fill=spat!80] table[x=i, y=noR] {figdata/hsl_msad.dat};
+\addplot[fill=loss!60] table[x=i, y=paper] {figdata/hsl_msad.dat};
+\addplot[fill=maskgrey] table[x=i, y=scratch] {figdata/hsl_msad.dat};
+\legend{VCA+FCLS, upstream (VCA start), paper\_noR, paper, scratch (random backbone)}
+\end{axis}
+\end{tikzpicture}
+\caption{mSAD on the four exact-truth sets. The classical method is near zero on DC1, DC2 and EGU; every HyperSL preset is
+0.08--0.26\,rad. The last two bars, pretrained and random backbone, are nearly the same height.}
+\label{fig:hslunmix:msad}
+\end{figure}
+
+Read the tables in three steps.
+
+\paragraph{1. On exact truth, VCA + FCLS wins every set on both measures}, including DC3 and EGU, the cases built to
+favour a learned method. HyperSL's abundance error there is 0.21--0.33 against the classical $\le0.10$.
+
+\begin{worked}[label={we:hslunmix:deg}]{What 0.069 against 0.199 radians means}
+Convert with $1\text{ rad}=180/\pi=57.296^\circ$:
+\begin{align*}
+0.069\times57.296 &= 3.95^\circ \quad\text{(VCA+FCLS on DC3)},\\
+0.199\times57.296 &= 11.40^\circ \quad\text{(the \texttt{paper} preset on DC3)}\tagC .
+\end{align*}
+On the hardest exact-truth set, HyperSL's endmembers sit almost three times as far from the truth.
+\end{worked}
+
+\paragraph{2. HyperSL wins only where the ``truth'' is itself an unmixing.} On Samson, Jasper and Urban the reference
+is FCLS from hand-picked endmembers, so a win measures agreement with that reference, not accuracy. The chain is
+calibrated: our VCA + FCLS matches the paper's own VCA rows on Jasper (0.397 against 0.406) and Urban (0.418 against
+0.473).
+
+\paragraph{3. Pretraining adds nothing in the paper's configuration.} \code{scratch} is \code{paper} with a randomly
+initialised backbone. DC1: 0.173 against 0.173; EGU: 0.249 against 0.264. The paper's ablation claims a 3--10 times gain in
+mSAD from pretraining; it does not reproduce.
+
+\begin{sourcenote}[: what was not run]
+The combination \code{paper_noR} with a random backbone was not run, so pretraining's value \emph{without} $R_\theta$ is
+untested. The comparison in point 3 is for the paper's full configuration. Seeds were trimmed to 1--2 for the HyperSL
+presets; on the grade-B sets the spread is small next to the gaps, on grade D it is not (Samson \code{upstream}
+$\pm0.108$).
+\end{sourcenote}
+
+\subsection{The $R_\theta$ branch explains what the mixing should}
+
+The paper's model reconstructs a pixel as $\hat{\vect{x}}=\mat{E}\vect{a}+R_\theta(\cdot)$: the mixing term plus an
+unconstrained convolutional branch from HyperSL's features to the spectrum. Measured: \textbf{$R_\theta$ carries 29--56\%
+of the reconstruction energy on every set}. Whatever $R_\theta$ explains, $\mat{E}\vect{a}$ does not have to, and the
+abundances stop being forced to account for the pixel. On the target scenes it drove the target abundance to about 1
+even on empty background (floor 0.995), which breaks every area estimate. \code{paper} is the worst preset everywhere.
+
+%======================================================================
+\section{Sub-pixel targets: smoothed away}\label{sec:hslunmix:targets}
+
+\begin{table}[htbp]
+\centering\small
+\begin{tabular}{@{}lccccc@{}}
+\toprule
+target side (true area in pixels) & 0.25\,m (0.13) & 0.5\,m (0.51) & 1\,m (2.0) & 2\,m (8.2) & 3\,m (18.4) \\
+\midrule
+ACE, our library + field spectra & \textbf{0.97} & \textbf{1.00} & 1.00 & 1.00 & 1.00 \\
+step 5 gain, our library + field & \textbf{0.97} & \textbf{1.00} & 1.00 & 1.00 & 1.00 \\
+ACE, our library only & 0.88 & 0.99 & 1.00 & 1.00 & 1.00 \\
+HyperSL anchored (\code{paper_noR}) & 0.68 & 0.77 & 1.00 & 1.00 & 1.00 \\
+HyperSL blind (\code{paper_noR}) & 0.72 & 0.62 & 0.80 & 0.88 & 0.92 \\
+\bottomrule
+\end{tabular}
+\caption{HySU object AUC: does the object's best pixel outrank the background?\tagMr{\texttt{4d292ac}:
+hypersl-unmixing/README.md} ``Anchored'' gives HyperSL the field spectra as fixed endmembers; ``blind'' lets it learn
+its own. ACE is the adaptive cosine estimator of the family matcher (\cref{ch:material}); step 5 is the ring-background
+subspace plus a library fill of \texttt{manmade-library-unmixing}.}
+\label{tab:hslunmix:hysu}
+\end{table}
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}
+\begin{axis}[width=0.85\linewidth, height=55mm, xlabel={target side (m); true area in pixels in brackets},
+  ylabel={object AUC}, ymin=0.55, ymax=1.03, xtick={0,1,2,3,4},
+  xticklabels={0.25 (0.13),0.5 (0.51),1 (2.0),2 (8.2),3 (18.4)}, legend style={at={(0.98,0.03)},anchor=south east,font=\small}]
+\addplot[spec, thick, mark=*] table[x=i, y=ace] {figdata/hsl_hysu_auc.dat};
+\addplot[spec!50, thick, mark=square*] table[x=i, y=acelib] {figdata/hsl_hysu_auc.dat};
+\addplot[loss, thick, mark=triangle*] table[x=i, y=hslanch] {figdata/hsl_hysu_auc.dat};
+\addplot[attn, thick, dashed, mark=diamond*] table[x=i, y=hslblind] {figdata/hsl_hysu_auc.dat};
+\legend{ACE + field spectra, ACE library only, HyperSL anchored, HyperSL blind}
+\end{axis}
+\end{tikzpicture}
+\caption{HySU object AUC against target size. Every method finds targets of 1\,m and more when told the material; below
+one pixel, HyperSL anchored falls to 0.68 and 0.77 while per-pixel ACE stays at 0.97--1.00.}
+\label{fig:hslunmix:hysu}
+\end{figure}
+
+At Gudalur (32\,m pixels, fill at most 0.25), ACE (0.99), the step-5 gain (0.98) and anchored HyperSL (1.00) all find the
+sheets; blind HyperSL reaches 0.59. And blind HyperSL never learned a target as an endmember: on HySU the nearest learned
+endmember is a median $18^\circ$ from each target spectrum and 3 of 5 materials share one; at Gudalur $10^\circ$, with 4 of 5
+sharing one. A target covering a few pixels carries too little of the scene's variance to win an endmember of its own.
+
+\subsection{Why: a $3\times3$ head, worked by hand}
+
+The README gives the cause: HyperSL's abundances ``pass through a $3\times3$ conv head and a TV penalty. A target smaller
+than a pixel is smoothed into its surroundings, so its fill drops to about 0.'' Both halves can be worked on paper.
+
+\begin{definition}[$3\times3$ averaging]
+A $3\times3$ convolution replaces each pixel's value by a weighted sum of itself and its 8 neighbours. Its simplest form
+is the plain average, all nine weights $\tfrac19$. A learned head is not exactly this, but any head whose weights are
+positive and sum to 1 is a smoothing of the same kind\tagA.
+\end{definition}
+
+\begin{worked}[label={we:hslunmix:avg}]{One target pixel at fill $a$, averaged over $3\times3$}
+The abundance map is 0 everywhere except one pixel, which holds $a$. At that pixel, the average of its nine values is
+\begin{align*}
+\frac{a+0+0+0+0+0+0+0+0}{9} &= \frac{a}{9}.
+\end{align*}
+At each of its 8 neighbours, the window again holds exactly one non-zero value, the target's, so each neighbour also
+becomes $a/9$. For HySU's two smallest targets\tagC:
+\begin{align*}
+a=0.13:&\quad 0.13/9 = 0.0144,\\
+a=0.51:&\quad 0.51/9 = 0.0567 .
+\end{align*}
+The peak falls ninefold and spreads over nine pixels. A detector reading the smoothed map is looking for an abundance of
+0.0144 against the background's own noise in abundance, which the smoothing does not shrink by the same factor.
+\end{worked}
+
+\begin{definition}[Total variation]
+The (anisotropic) \emph{total variation}\index{total variation} of a map is the sum, over all pairs of side-by-side pixels,
+of the absolute difference of their values: $\mathrm{TV}(\vect{a})=\sum_{i\sim j}\abs{a_i-a_j}$. A TV penalty adds
+$\lambda\,\mathrm{TV}$ to the loss, rewarding maps made of flat patches \citep{rudin1992tv}.
+\end{definition}
+
+\begin{worked}[label={we:hslunmix:tv}]{Why a TV penalty sets small targets to zero}
+Take the $K=2$ mixture: a pixel holds $\vect{x}=\vect{b}+a(\vect{t}-\vect{b})$. If the model reports fill $a'$
+instead, its reconstruction misses by $(a-a')(\vect{t}-\vect{b})$, whose squared length is $(a-a')^2c$ with
+$c=\norm{\vect{t}-\vect{b}}^2$. A single target pixel among zeros has 4 side neighbours, so its TV is $4a'$. The cost
+for that pixel is
+\begin{align*}
+J(a') &= c\,(a-a')^2 + 4\lambda a' .
+\end{align*}
+Differentiate with respect to $a'$ and set to zero:
+\begin{align*}
+\frac{dJ}{da'} &= -2c\,(a-a') + 4\lambda = 0 && \text{derivative of a square, and of a line}\\
+2c\,(a-a') &= 4\lambda && \text{move }4\lambda\text{ across}\\
+a-a' &= \frac{2\lambda}{c} && \text{divide by }2c\\
+a' &= a-\frac{2\lambda}{c}, && \text{and since a fill cannot be negative,}\\
+a' &= \max\!\left(0,\ a-\frac{2\lambda}{c}\right).
+\end{align*}
+With $c=0.20$ (the smooth anomaly of \cref{ch:hsldetect}'s toy, $\norm{(0.4,0.2,0)}^2=0.16+0.04+0=0.20$) and $\lambda=0.013$
+\tagA, the shrinkage is $2\times0.013/0.20=0.026/0.20=0.13$. Then\tagC
+\begin{align*}
+a=0.13:&\quad a'=\max(0,\ 0.13-0.13)=0,\\
+a=0.51:&\quad a'=0.51-0.13=0.38,\\
+a=1:&\quad a'=1-0.13=0.87 .
+\end{align*}
+The penalty subtracts the same amount from every target pixel. A target whose fill is below that amount vanishes.
+\end{worked}
+
+The amount depends on the target's shape. For a $k\times k$ block of fill $a'$ among zeros, the data term is $k^2c\,(a-a')^2$
+(one per pixel) and the TV is $4k\,a'$ (only the $4k$ edges on its border differ). The same steps give
+\begin{align*}
+-2k^2c\,(a-a')+4k\lambda &= 0 \quad\Longrightarrow\quad a' = a-\frac{2\lambda}{k\,c}.
+\end{align*}
+The shrinkage falls as $1/k$: with the numbers above it is 0.13 for a single pixel, 0.065 for $2\times2$, 0.043 for $3\times3$
+and 0.026 for $5\times5$\tagC. \textbf{TV charges by perimeter and the data pay by area, so the smallest targets lose the
+most.} That is the exact opposite of what a sub-pixel detector needs; ACE and the step-5 gain score each pixel on its own and
+keep them.
+
+\begin{keypoint}
+A penalty that makes abundance maps tidy is a prior that objects are large. Our targets are small. Any model that smooths
+across pixels, whether by a $3\times3$ head, TV, or a spatial decoder, has to be judged at fills of 0.1 to 0.25, where the
+product works.
+\end{keypoint}
+
+\subsection{Fill: accurate only when the material is known}
+
+Median relative area error on HySU (0 is perfect):
+
+\begin{center}\small
+\begin{tabular}{@{}lccccc@{}}
+\toprule
+method & 0.25\,m & 0.5\,m & 1\,m & 2\,m & 3\,m \\
+\midrule
+step 5 oracle, in-image spectrum & 0.35 & 0.68 & 0.05 & 0.08 & \textbf{0.04} \\
+step 5 oracle, field spectrum & \textbf{0.30} & \textbf{0.51} & 0.37 & 0.14 & 0.07 \\
+HyperSL anchored (\code{paper_noR}) & 0.97 & 0.99 & 0.33 & 0.33 & 0.29 \\
+step 5 blind (best man-made entry) & 19.2--19.6 & 0.65--0.77 & 0.03--0.37 & 0.07--0.46 & 0.06--0.68 \\
+\bottomrule
+\end{tabular}
+\end{center}
+HyperSL's 0.97 and 0.99 on the two smallest sizes are \cref{we:hslunmix:tv} measured: the reported area is about 0. At
+Gudalur no method estimates fill well (per-pixel RMSE 0.14--0.16 for the step-5 oracle and for HyperSL, against true fills
+$\le0.25$). The product's rule followed from this: report fill only when a spectrum of the actual material is available
+(\file{docs/lld/spectral-family-match.md}).
+
+%======================================================================
+\section{Cost, and the decision}\label{sec:hslunmix:cost}
+
+VCA + FCLS takes seconds per scene. HyperSL took 5 minutes (\code{upstream}) to 13 minutes (\code{paper_noR}) per scene on
+a 96\,GB GPU. The family-match design records the outcome in one row of its rejected-techniques table: ``HyperSL deep
+`endmember-free' unmixing \dots{} worse than classical unmixing on exact-truth sets; smooths away sub-pixel targets; 5--13
+min per scene on a 96\,GB GPU \dots{} rejected''\tbrk\tagM{docs/lld/spectral-family-match.md}.
+
+\begin{drift}
+Every number here is from the 2026-10-13/14 Colab run (README in commit \code{4d292ac}); its data and raw outputs are on the
+team Drive (\file{MyDrive/PS_11/claude_experiments/}), not in the repository. HySU truth is the nominal target side, not
+the measured areas.
+\end{drift}
+
+%======================================================================
+\begin{confusions}
+\confusion{HyperSL won on Jasper and Urban, so it unmixes real scenes better.}{Those references are FCLS from hand-picked
+endmembers; a win is agreement with that reference. On exact truth it lost every set.}
+\confusion{``Endmember-free'' means no classical step.}{The authors' released script starts from VCA. The endmember-free
+version, as the paper describes it, missed its own published Jasper number by a factor of seven.}
+\confusion{Pretraining is what makes it work.}{With $R_\theta$, a random backbone matched the pretrained one.}
+\confusion{A $3\times3$ head only blurs edges.}{For a one-pixel target the whole object is an edge: the peak falls to
+$a/9$.}
+\confusion{TV removes noise, not targets.}{TV cannot tell the two apart when the target is one pixel: it subtracts
+$2\lambda/c$ from both.}
+\end{confusions}
+
+\begin{checkyourself}
+\item\label{ex:hslunmix:1} A target pixel at fill 0.25 sits among zeros. After a $3\times3$ average, what is the value at the
+  target and at a diagonal neighbour? At a pixel two steps away?
+\item\label{ex:hslunmix:2} Convert the mSAD of \code{upstream} and VCA + FCLS on EGU to degrees.
+\item\label{ex:hslunmix:3} In \cref{we:hslunmix:tv}, find the largest $\lambda$ for which a single target at fill 0.13 survives
+  with $a'>0$, when $c=0.20$.
+\item\label{ex:hslunmix:4} Repeat the TV shrinkage for a $2\times2$ target at fill 0.13 with $c=0.20$ and $\lambda=0.013$. Does
+  it survive?
+\item\label{ex:hslunmix:5} $R_\theta$ carries 40\% of the reconstruction energy. If a pixel's spectrum has squared length 1.0
+  and the reconstruction is perfect, what squared length is left for $\mat{E}\vect{a}$ to explain? Why does this make
+  abundances unreliable?
+\item\label{ex:hslunmix:6} HyperSL takes 13 minutes per scene. How long for the 4 PRISMA bench scenes, and for 18 implant hosts?
+\end{checkyourself}
+
+\nextchapter{ch:hslcloud}

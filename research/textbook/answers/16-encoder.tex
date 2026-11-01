@@ -1,0 +1,58 @@
+\answersfor{ch:encoder}
+
+\begin{solution}{ex:encoder:1}
+Use $H_{\text{out}} = \lfloor (H_{\text{in}} + 2p - k)/s \rfloor + 1$.
+\begin{align*}
+\text{stage 1 } (k=4,\ s=4,\ p=0):\quad H_1 &= \lfloor (256 + 0 - 4)/4 \rfloor + 1 = \lfloor 252/4 \rfloor + 1 = 63 + 1 = 64,\\
+\text{stage 2 } (k=3,\ s=2,\ p=1):\quad H_2 &= \lfloor (64 + 2 - 3)/2 \rfloor + 1 = \lfloor 63/2 \rfloor + 1 = 31 + 1 = 32,\\
+\text{stage 3:}\quad H_3 &= \lfloor (32 + 2 - 3)/2 \rfloor + 1 = \lfloor 31/2 \rfloor + 1 = 15 + 1 = 16,\\
+\text{stage 4:}\quad H_4 &= \lfloor (16 + 2 - 3)/2 \rfloor + 1 = \lfloor 15/2 \rfloor + 1 = 7 + 1 = 8.
+\end{align*}
+Token counts: $64 \times 64 = 4096$, $32 \times 32 = 1024$, $16 \times 16 = 256$, $8 \times 8 = 64$.
+Each is four times the 128-pixel figure, because the patch has four times the area.
+\end{solution}
+
+\begin{solution}{ex:encoder:2}
+Keys are $N_i / R_i^2$: stage 1 $1024/64 = 16$, stage 2 $256/16 = 16$, stage 3 $64/4 = 16$, stage 4
+$16/1 = 16$. Stage 2 has 256 queries and 16 keys, so its score table per head has
+$256 \times 16 = 4{,}096$ entries. Stage 2 has 2 heads, so $2 \times 4{,}096 = 8{,}192$ entries per
+block and per patch.
+\end{solution}
+
+\begin{solution}{ex:encoder:3}
+Start with $r_0 = 1$, $j_0 = 1$. Stage 1 with $k = 7$, $s = 4$:
+\begin{align*}
+r_1 &= 1 + (7-1)\cdot 1 = 7, & j_1 &= 1 \cdot 4 = 4.
+\end{align*}
+Stage 2 with $k = 3$, $s = 2$:
+\begin{align*}
+r_2 &= 7 + (3-1)\cdot 4 = 7 + 8 = 15, & j_2 &= 4 \cdot 2 = 8.
+\end{align*}
+The problem is at stage 1: $r_1 = 7 > j_1 = 4$, so neighbouring stage-1 tokens share $7 - 4 = 3$ pixels
+(in each direction). A hidden token's pixels would then also feed its visible neighbours, and the
+encoder would see part of what it must predict: the leakage that \cref{ch:recon} forbids.
+\end{solution}
+
+\begin{solution}{ex:encoder:4}
+With $\rho = 0.5$:
+\begin{align*}
+\rho^4 &= 0.5^4 = 0.0625,\\
+\rho^6 &= 0.5^6 = 0.015625,\\
+\rho^9 &= 0.5^9 = 0.001953125.
+\end{align*}
+The window counts are unchanged (1 window of 4 tokens, 30 of 6, 225 of 9). By linearity of expectation:
+\begin{align*}
+\E[\text{empty}] &= 1 \times 0.0625 + 30 \times 0.015625 + 225 \times 0.001953125\\
+&= 0.0625 + 0.46875 + 0.439453\\
+&\approx 0.97 .
+\end{align*}
+About one empty stage-2 token per patch, compared with about seven at $\rho = 0.65$.
+\end{solution}
+
+\begin{solution}{ex:encoder:5}
+Patch embed; remove tokens (stage 1 only, when a keep mask is given); the blocks; the stage LayerNorm;
+restore tokens (stage 1 only, same condition); reshape to $(B, C_i, H_i, W_i)$. Removal and
+restore happen only at stage 1 because hiding is done once at the finest scale and the stride-2 patch
+embeddings dilute the holes. The reshaped tensor is appended to the feature list for the decoder and
+also stays in the loop variable \code{x}, so it is the next stage's input.
+\end{solution}

@@ -1,0 +1,17 @@
+\glossentry{Decoder}{The part of the model that turns the encoder's four feature maps into one full-resolution reconstruction in the compressed channel space.}
+\glossentry{Decoder width}{The common channel count, 256, to which all four encoder maps are projected before they are combined.}
+\glossentry{1 by 1 convolution}{A convolution that looks at one position at a time and mixes only channels: a linear layer applied at every pixel with shared weights.}
+\glossentry{All-MLP decoder}{SegFormer's decoder design: per-scale 1 by 1 projections, upsampling to one size, concatenation and a 1 by 1 fuse; 1 by 1 convolutions are per-pixel MLP layers.}
+\glossentry{Linear interpolation}{The value between two samples on the straight line through them: (1 - u) f0 + u f1 for a position u between 0 and 1.}
+\glossentry{Bilinear interpolation}{Linear interpolation along the rows and then between the rows; each output is a weighted average of four neighbouring samples with weights that sum to 1.}
+\glossentry{align\_corners=False}{PyTorch's resizing convention in which pixel centres sit at half-integer positions and the outer edges of input and output grids line up.}
+\glossentry{Concatenation}{Joining tensors along an axis; here four 256-channel maps along the channel axis into one 1024-channel map.}
+\glossentry{Fuse convolution}{The 1 by 1 convolution from 1024 to 256 channels that learns how much of each scale to use at each position.}
+\glossentry{Refine convolutions}{The decoder's two 3 by 3 convolutions at quarter resolution, its only spatial layers; the second outputs 512 channels and has no activation.}
+\glossentry{Sub-pixel convolution}{A convolution that outputs r squared channels per output channel so that a pixel shuffle can turn them into an r by r block of pixels.}
+\glossentry{Pixel shuffle}{A parameter-free rearrangement from (B, C r squared, H, W) to (B, C, rH, rW): out[c, rh + i, rw + j] = in[c r squared + r i + j, h, w].}
+\glossentry{Upscale factor}{The factor r of a pixel shuffle; 4 here, taking 32 by 32 to 128 by 128.}
+\glossentry{Decompressor}{The bare 1 by 1 convolution from 32 compressed channels back to the band count, with no normalisation and no activation.}
+\glossentry{Denormalisation}{Undoing the per-band z-score: multiply by the band's standard deviation and add its mean, giving reflectance.}
+\glossentry{Shape-preserving model}{A model whose output has exactly the input's shape, so that the two can be subtracted to give a residual.}
+\glossentry{Multiply-add}{One multiplication followed by one addition; the unit in which convolution work is counted.}

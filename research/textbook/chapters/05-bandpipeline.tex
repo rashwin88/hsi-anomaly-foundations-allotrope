@@ -1,0 +1,820 @@
+\chapter{Making sensors comparable: band filtering, interpolation and normalisation}\label{ch:bandpipeline}
+
+\begin{onething}
+Eight stages turn a sensor's own bands into $165$ bands that mean the same thing on every
+hyperspectral sensor, using nothing more advanced than the equation of a straight line (and one
+shape-preserving curve). Inside the model, a second and different ``normalisation'' rescales each
+band to a z-score, and its exact inverse turns the model's output back into reflectance.
+\end{onething}
+
+\section{The problem}\label{sec:bandpipeline:problem}
+
+\Cref{ch:sensors} fixed the destination: $165$ wavelengths from $460$ to $2{,}450$ nm. This chapter
+is the journey. A PRISMA cube arrives with $239$ bands at PRISMA's wavelengths, some flagged bad by
+the sensor, some inside atmospheric windows, some noisy at detector edges, and pixels that are
+valid in some bands and not others. To reach the grid you must decide which bands to trust, decide
+which pixels to keep, fill the holes in the kept pixels' spectra, and then estimate each spectrum's
+value at the grid wavelengths.
+
+The obvious shortcut is to skip the first three decisions and interpolate the raw spectrum straight
+onto the grid. It fails, because an interpolator trusts every number it is given: a bad band
+becomes a spike in the resampled spectrum, an invalid zero drags its neighbours down, and a
+detector-edge artefact is spread across two grid bands. Interpolation is only as good as its
+inputs, so the pipeline cleans first and interpolates last.
+
+The pipeline is driven entirely by one configuration object, \code{BandFilterConfig}
+(\file{app/models/dataset/vendables.py}, lines 71--138), and run by each sensor's dataset builder;
+the shared composition is visible in one function, \code{to_common_grid}
+(\file{app/utils/data_transformations/common_grid_pipeline.py}).
+
+\begin{table}[htbp]\centering
+\caption{The eight stages and their defaults. Stages 1--4 are \texttt{SpectralBandFilter}
+(\texttt{spectral\_band\_filter.py}); stage 7 is \texttt{interpolate\_spectral\_gaps}
+(\texttt{spectral\_interpolator.py}); stage 8 is \texttt{resample\_to\_common\_grid}
+(\texttt{spectral\_resampler.py}).}\label{tab:bandpipeline:stages}
+\small
+\begin{tabular}{@{}clp{0.33\linewidth}l@{}}\toprule
+Stage & Acts on & What it does & Setting (default)\\\midrule
+1 & bands & drop bands the sensor flagged bad & always\\
+2 & bands & drop bands inside atmospheric windows & \texttt{exclusion\_ranges} (5 windows)\\
+3 & bands & drop the first and last bands of each detector & \texttt{edge\_bands\_to\_trim} ($3$)\\
+4 & bands & drop bands with too few valid pixels & \texttt{min\_valid\_pixel\_pct} ($20.0$)\\
+5 & pixels & invalidate pixels flagged by quality masks (EnMAP only) & \texttt{quality\_masks\_to\_apply}\\
+6 & pixels & invalidate pixels with too many invalid bands & \texttt{max\_invalid\_voxel\_fraction} ($0.4$)\\
+7 & values & fill the remaining holes along wavelength (PCHIP) & --\\
+8 & values & resample onto the common grid (linear) & \texttt{common\_wavelength\_grid}\\\bottomrule
+\end{tabular}
+\end{table}
+
+After the eight stages, the \code{band_filter_apply} Action applies one more step, the nearest-valid
+pixel fill (\cref{sec:bandpipeline:fill}), and pickles the result.
+
+\begin{sourcenote}[: ``four stages'' or ``eight'']
+The docstring of \code{BandFilterConfig} says it ``controls four filtering stages''; the courses and
+\file{docs/03-data-pipeline.md} speak of eight. Both are right about different things: the four are
+the band-dropping stages inside \code{SpectralBandFilter}, and the eight count the pixel and value
+stages the builders run afterwards with the same configuration. This book uses the eight.
+\end{sourcenote}
+
+\section{Stages 1--4: deciding which bands to trust}\label{sec:bandpipeline:bands}
+
+\code{SpectralBandFilter.get_good_band_indices} walks the sensor's bands once and keeps band $k$
+only if it passes all four tests, in order:
+\begin{lstlisting}
+for i in range(len(self._wavelengths)):
+    if self._flags[i] != 1: continue                                   # 1: sensor flag
+    wl = self._wavelengths[i]
+    if any(lo <= wl <= hi for lo, hi in self._exclusion_ranges): continue  # 2: window
+    if i in edge_set: continue                                         # 3: detector edge
+    if self._validity_scores[i] < self._min_valid_pixel_pct: continue  # 4: coverage
+    good.append(i)
+\end{lstlisting}
+
+\textbf{Stage 1, the sensor already knows.} Detectors fail, and the sensor ships a flag per band.
+A flagged PRISMA band still occupies a slice of the cube, with $\mathrm{FWHM} = 0.0$
+(\cref{ch:sensors}); it is present but meaningless.
+
+\textbf{Stage 2, the atmosphere is opaque in places.} The five windows of \cref{ch:sensors} remove
+every native band whose centre wavelength lies inside one of them, ends included.
+
+\textbf{Stage 3, detector edges are unreliable.} A detector's response falls off at the ends of its
+array, so the first and last \code{edge_bands_to_trim} bands of each detector (VNIR and SWIR) are
+dropped. In the source the edge set is computed once, from the \emph{full} list of each detector's
+band indices, before any other stage: a band that stage 1 or 2 already dropped can still count as
+one of the three edge bands.
+
+\textbf{Stage 4, a mostly invalid band is not worth keeping.} The per-band score $s_c$ of
+\cref{eq:product:bandscore} must be at least $20\%$: a band valid in fewer than a fifth of the
+scene's pixels is dropped.
+
+\begin{worked}[label={we:bandpipeline:filter}]{Filtering a ten-band toy sensor}
+A toy sensor has ten bands (all values illustrative\tagA). Bands $0$--$4$ are on detector VNIR,
+$5$--$9$ on SWIR. Use \code{edge_bands_to_trim} $= 1$ to keep it small, and the real windows and
+$20\%$ threshold.
+\begin{center}\small
+\begin{tabular}{@{}lcccccccccc@{}}\toprule
+band $k$ & 0 & 1 & 2 & 3 & 4 & 5 & 6 & 7 & 8 & 9\\\midrule
+wavelength (nm) & 440 & 600 & 800 & 940 & 990 & 1000 & 1400 & 1600 & 2200 & 2480\\
+flag & 1 & 1 & 0 & 1 & 1 & 1 & 1 & 1 & 1 & 1\\
+detector & V & V & V & V & V & S & S & S & S & S\\
+$s_k$ (\%) & 99 & 99 & 99 & 99 & 99 & 99 & 99 & 12 & 99 & 99\\\bottomrule
+\end{tabular}
+\end{center}
+First the edge set (stage 3), from the full per-detector index lists: VNIR is $\{0,\dots,4\}$, so
+its edges are $0$ and $4$; SWIR is $\{5,\dots,9\}$, edges $5$ and $9$. Edge set $= \{0, 4, 5, 9\}$.
+Now walk the bands.
+\begin{itemize}
+\item Band 0: flag 1; $440$ lies in $(0, 450)$, dropped at stage 2.
+\item Band 1: passes stages 1 and 2; not an edge; $99 \ge 20$. \textbf{Kept.}
+\item Band 2: flag 0, dropped at stage 1.
+\item Band 3: $940$ lies in $(912, 978)$, dropped at stage 2.
+\item Band 4: $990$ is in no window; but $4$ is an edge, dropped at stage 3.
+\item Band 5: edge, dropped at stage 3.
+\item Band 6: $1{,}400$ lies in $(1350, 1450)$, dropped at stage 2.
+\item Band 7: passes 1--3; $12 < 20$, dropped at stage 4.
+\item Band 8: $2{,}200$ is in no window, not an edge, $99 \ge 20$. \textbf{Kept.}
+\item Band 9: edge, dropped at stage 3.
+\end{itemize}
+Two bands survive, $1$ and $8$. Note band $0$: it was both a window band and an edge band; it
+is counted as dropped at stage 2 because the tests run in order, but because the edge set came from
+the full list, trimming ``one band at the VNIR edge'' removed nothing beyond what stage 2 had already
+removed. The edges are positions in the file, not ``the first surviving bands''.
+\end{worked}
+
+For a real PRISMA cube about $188$ of the $239$ bands survive stages 1--4
+(\file{docs/03-data-pipeline.md}).
+
+\section{Stages 5 and 6: deciding which pixels to keep}\label{sec:bandpipeline:pixels}
+
+\textbf{Stage 5} applies only to EnMAP, the one sensor that ships quality masks. Any pixel flagged
+($>0$) by one of the masks named in \code{quality_masks_to_apply} (default cloud, cloud shadow,
+haze) has its whole validity column set to $0$: \code{validity[:, flagged] = 0}.
+
+\textbf{Stage 6} makes validity binary. Let $C'$ be the number of bands that survived stages 1--4
+and $n(i,j)$ the number of those bands in which pixel $(i,j)$ is valid. The pixel's invalid
+fraction is
+\begin{equation}\label{eq:bandpipeline:frac}
+f(i,j) = 1 - \frac{n(i,j)}{C'},
+\end{equation}
+and the pixel is invalidated in every band if $f(i,j) > 0.4$
+(\code{max_invalid_voxel_fraction}); note the strict ``greater than''. Pixels that pass keep their
+partial validity, and stage 7 fills their holes. After stage 7, every pixel is valid in all bands or
+in none: \textbf{validity is binary}. That single fact removes a whole category of special cases from
+every detector downstream: none of them ever has to handle ``valid in these $140$ bands but not
+those $25$''.
+
+\begin{worked}[label={we:bandpipeline:frac}]{Kept or wiped?}
+Take $C' = 188$ surviving bands. How many invalid bands may a pixel have and still be kept? It is
+kept when $f \le 0.4$, that is when the number of invalid bands $u = C' - n$ satisfies
+\begin{align*}
+\frac{u}{188} &\le 0.4\\
+u &\le 0.4 \times 188 = 75.2.
+\end{align*}
+$u$ is a whole number, so $u \le 75$. Check both sides of the line:
+\begin{align*}
+u = 75:&\quad 75/188 \approx 0.3989 \le 0.4 \;\Rightarrow\; \text{kept, its 75 holes filled at stage 7},\\
+u = 76:&\quad 76/188 \approx 0.4043 > 0.4 \;\Rightarrow\; \text{invalid in every band}.
+\end{align*}
+\end{worked}
+
+\begin{sourcenote}[: the denominator is the surviving bands, not 165]
+The anomaly-detection course (parts 5 and 7) works this rule as ``$55/165$'' and ``$61/165$''. In the
+source the fraction is taken over the bands that survived stages 1--4 (\code{num_bands =
+bsq_validity.shape[0]} after band filtering, \file{prisma_dataset_builder.py}, lines 358--362;
+\code{validity.mean(axis=0)} on the filtered cube in \file{common_grid_pipeline.py}). Stage 6 runs
+\emph{before} resampling, when the cube has $C'$ native bands (about $188$ for PRISMA), not $165$.
+The arithmetic of the course examples is right; the denominator is not.
+\end{sourcenote}
+
+\section{Linear interpolation, from the equation of a line}\label{sec:bandpipeline:linear}
+
+Stages 7 and 8 both estimate a spectrum's value at a wavelength where it was not measured. The
+simplest estimator, and the one stage 8 uses, is linear interpolation. You can derive it from the
+equation of a straight line.
+
+\subsection{Two-point form}
+
+You know the spectrum at two wavelengths: value $y_0$ at $\lambda_0$ and $y_1$ at $\lambda_1$, with
+$\lambda_0 < \lambda_1$. Assume the spectrum is a straight line between them. A straight line has a
+constant \textbf{slope}\index{slope}, the rise divided by the run:
+\begin{equation}\label{eq:bandpipeline:slope}
+m = \frac{y_1 - y_0}{\lambda_1 - \lambda_0}.
+\end{equation}
+Starting at $(\lambda_0, y_0)$ and moving a distance $\lambda - \lambda_0$ to the right, the line
+rises by slope times distance:
+\begin{equation}\label{eq:bandpipeline:twopoint}
+y(\lambda) = y_0 + \frac{y_1 - y_0}{\lambda_1 - \lambda_0}\,(\lambda - \lambda_0).
+\end{equation}
+This is the \textbf{two-point form}\index{linear interpolation!two-point form} of the line. Check
+it at both ends. At $\lambda = \lambda_0$ the bracket is $0$, so $y = y_0$. At
+$\lambda = \lambda_1$ the fraction times $(\lambda_1 - \lambda_0)$ is $y_1 - y_0$, so
+$y = y_0 + y_1 - y_0 = y_1$.
+
+\subsection{Weight form}
+
+Name the fraction of the way from $\lambda_0$ to $\lambda_1$:
+\begin{equation}\label{eq:bandpipeline:t}
+t = \frac{\lambda - \lambda_0}{\lambda_1 - \lambda_0}.
+\end{equation}
+$t = 0$ at $\lambda_0$, $t = 1$ at $\lambda_1$, $t = 0.5$ halfway. Substitute $t$ into
+\cref{eq:bandpipeline:twopoint}:
+\begin{align}
+y &= y_0 + (y_1 - y_0)\,t.
+\intertext{Multiply out the bracket:}
+y &= y_0 + y_1 t - y_0 t.
+\intertext{Collect the two $y_0$ terms:}
+y &= (1 - t)\,y_0 + t\,y_1. \label{eq:bandpipeline:weight}
+\end{align}
+This is the \textbf{weight form}\index{linear interpolation!weight form}: the estimate is a weighted
+average of the two neighbours, with weights $1-t$ and $t$ that add to $1$. The nearer neighbour
+gets the larger weight. It is exactly the line the product's resampler computes
+(\file{spectral_resampler.py}, lines 115--118):
+\begin{lstlisting}
+t = np.float32((twl - wl_left) / (wl_right - wl_left))           # scalar weight t
+out_2d[i, valid_cols] = (valid_spectra[idx_left] * (1.0 - t)
+                         + valid_spectra[idx_right] * t)          # (n_valid,): (1-t) y0 + t y1
+\end{lstlisting}
+Here \code{twl} is the target wavelength and \code{valid_spectra} is \code{(C_src, n_valid)}: one
+column per valid pixel, so one line computes the interpolated value for every pixel at once.
+
+\begin{worked}[label={we:bandpipeline:linear}]{Three bands by hand}
+A spectrum is known at three wavelengths: $500$, $600$ and $700$ nm, with values $1$, $2$ and $4$
+(the numbers used by the repository's own interpolation test, quoted in the anomaly-detection
+course, part 22). Estimate it at $550$, $650$ and $680$ nm. Do every line on paper.
+
+\emph{At 550 nm} the neighbours are $(500, 1)$ and $(600, 2)$:
+\begin{align*}
+t &= (550 - 500)/(600 - 500) = 50/100 = 0.5,\\
+y &= (1 - 0.5) \times 1 + 0.5 \times 2 = 0.5 + 1.0 = 1.5.
+\end{align*}
+\emph{At 650 nm} the neighbours are $(600, 2)$ and $(700, 4)$:
+\begin{align*}
+t &= (650 - 600)/(700 - 600) = 50/100 = 0.5,\\
+y &= 0.5 \times 2 + 0.5 \times 4 = 1.0 + 2.0 = 3.0.
+\end{align*}
+\emph{At 680 nm}, same neighbours:
+\begin{align*}
+t &= (680 - 600)/100 = 0.8,\\
+y &= 0.2 \times 2 + 0.8 \times 4 = 0.4 + 3.2 = 3.6.
+\end{align*}
+Check $680$ with the two-point form instead: slope $= (4 - 2)/(700 - 600) = 0.02$ per nm, and
+$y = 2 + 0.02 \times 80 = 2 + 1.6 = 3.6$. Same answer, as the algebra promised.
+\end{worked}
+
+\subsection{Finding the neighbours, and what happens at the ends}
+
+For each target wavelength the resampler finds the bracketing pair with a binary search,
+\code{np.searchsorted(src_wl_sorted, twl, side="right")}, which returns the index of the first
+source wavelength strictly greater than \code{twl}; call it $r$, and $\ell = r - 1$. Both are clamped
+into the array: $r \le C_{\mathrm{src}} - 1$ and $\ell \ge 0$. If the clamping makes $\ell = r$,
+the target lies beyond an end of the sensor's range and the resampler copies the nearest end value
+(\textbf{constant extrapolation}\index{constant extrapolation}).
+
+\begin{worked}[label={we:bandpipeline:resample}]{Resampling one spectrum onto four grid wavelengths}
+A pixel's native samples (illustrative\tagA, roughly EnMAP-like spacing) are
+\begin{center}
+\begin{tabular}{@{}lcccc@{}}\toprule
+native wavelength (nm) & 1003 & 1011 & 1019 & 1027\\
+reflectance & 0.240 & 0.248 & 0.252 & 0.250\\\bottomrule
+\end{tabular}
+\end{center}
+Resample onto the grid wavelengths $1{,}000$, $1{,}010$, $1{,}020$ and $1{,}030$ nm, following the
+code's steps. Indices of the native samples are $0, 1, 2, 3$.
+
+\emph{1,000 nm.} No native wavelength is $\le 1{,}000$; the first one greater is index $0$, so
+$r = 0$, $\ell = \max(-1, 0) = 0$. $\ell = r$: constant extrapolation, $y = 0.240$.
+
+\emph{1,010 nm.} The first native wavelength greater than $1{,}010$ is $1{,}011$ (index $1$), so
+$r = 1$, $\ell = 0$:
+\begin{align*}
+t &= (1{,}010 - 1{,}003)/(1{,}011 - 1{,}003) = 7/8 = 0.875,\\
+y &= 0.125 \times 0.240 + 0.875 \times 0.248 = 0.0300 + 0.2170 = 0.2470.
+\end{align*}
+
+\emph{1,020 nm.} First greater is $1{,}027$ (index $3$), so $r = 3$, $\ell = 2$:
+\begin{align*}
+t &= (1{,}020 - 1{,}019)/(1{,}027 - 1{,}019) = 1/8 = 0.125,\\
+y &= 0.875 \times 0.252 + 0.125 \times 0.250 = 0.2205 + 0.03125 = 0.25175.
+\end{align*}
+
+\emph{1,030 nm.} Nothing is greater, so \code{searchsorted} returns $4$; clamped to $r = 3$, and
+$\ell = 2$. Now $\ell \ne r$, so the code does \emph{not} extrapolate as a constant: it extends the
+last segment's line,
+\begin{align*}
+t &= (1{,}030 - 1{,}019)/(1{,}027 - 1{,}019) = 11/8 = 1.375,\\
+y &= (1 - 1.375) \times 0.252 + 1.375 \times 0.250 = -0.0945 + 0.34375 = 0.24925.
+\end{align*}
+With $t > 1$ the ``weight'' $1 - t$ is negative: this is \emph{linear} extrapolation past the last
+sample, not the constant extrapolation the docstring promises. At the low end, by contrast, the
+clamping produces a true constant. \Cref{fig:bandpipeline:resample} draws the four results.
+\end{worked}
+
+\begin{sourcenote}[: the resampler's upper end extrapolates linearly]
+The docstring of \code{resample_to_common_grid} says it uses ``constant edge extrapolation''. Tracing
+the code (\file{spectral_resampler.py}, lines 103--118) shows constant extrapolation only below the
+first native wavelength; above the last, \code{idx_right} is clamped to the last index and
+\code{idx_left} to the one before it, so the last segment's line is extended (with $t > 1$), as in
+\cref{we:bandpipeline:resample}. On the real grid this rarely matters: the grid ends at $2{,}450$ nm
+and the sensors' last bands lie close to or beyond that. It is recorded here because a reader trusting
+the docstring would compute a different number.
+\end{sourcenote}
+
+\begin{figure}[htbp]\centering
+\begin{tikzpicture}
+\begin{axis}[width=0.9\linewidth,height=6cm,xmin=996,xmax=1034,ymin=0.236,ymax=0.256,
+  xlabel={wavelength (nm)},ylabel={reflectance},axis lines=left,
+  tick label style={font=\small},label style={font=\small},
+  xtick={1000,1003,1010,1011,1019,1020,1027,1030},
+  xticklabel style={font=\scriptsize,rotate=60,anchor=east},
+  yticklabel style={/pgf/number format/fixed,/pgf/number format/precision=3},
+  legend style={font=\scriptsize,at={(0.02,0.98)},anchor=north west}]
+\addplot[spec,thick,mark=*,mark size=2.2pt] coordinates {(1003,0.240) (1011,0.248) (1019,0.252) (1027,0.250)};
+\addlegendentry{native samples, joined by straight lines}
+\addplot[only marks,mark=square*,mark size=2.4pt,loss] coordinates {(1000,0.240) (1010,0.2470) (1020,0.25175) (1030,0.24925)};
+\addlegendentry{values on the common grid}
+\addplot[maskgrey,dashed,forget plot] coordinates {(996,0.240) (1003,0.240)};
+\addplot[loss,dashed,forget plot] coordinates {(1027,0.250) (1030,0.24925)};
+\foreach \x in {1000,1010,1020,1030}{\edef\tmp{\noexpand\draw[loss!40,densely dotted] (axis cs:\x,0.236) -- (axis cs:\x,0.256);}\tmp}
+\node[font=\scriptsize,anchor=north] at (axis cs:1000,0.2395) {constant};
+\node[font=\scriptsize,anchor=north] at (axis cs:1029,0.2488) {linear past the end};
+\end{axis}
+\end{tikzpicture}
+\caption{Resampling one spectrum onto the grid (\cref{we:bandpipeline:resample}). Native samples
+(teal) at $1{,}003$, $1{,}011$, $1{,}019$, $1{,}027$ nm; grid values (amber) at $1{,}000$, $1{,}010$,
+$1{,}020$, $1{,}030$ nm, each read off the straight line between its two neighbours. Below the first
+sample the value is held constant; above the last, the code extends the last line.}
+\label{fig:bandpipeline:resample}
+\end{figure}
+
+\section{Why the wavelengths must go up: a preview of a real bug}\label{sec:bandpipeline:ascending}
+
+Binary search, and therefore both \code{np.searchsorted} and NumPy's \code{np.interp}, assumes the
+sample wavelengths are in \emph{ascending} order. NumPy's documentation for \code{np.interp} says the
+sequence ``is expected to be increasing, but this is not explicitly enforced'', and that otherwise
+``results are meaningless'' (quoted in the anomaly-detection course, part 22). Nothing raises an
+error.
+
+PRISMA lists its bands going \emph{down} in wavelength within each detector, and its builder
+concatenates SWIR before VNIR (\file{prisma_dataset_builder.py}, ``We will arrange as SWIR followd
+by VNIR''). What happens when descending samples meet \code{np.interp}?
+
+\begin{worked}[label={we:bandpipeline:descending}]{The same three samples, listed backwards}
+Give \code{np.interp} the samples of \cref{we:bandpipeline:linear} in descending order:
+wavelengths $(700, 600, 500)$, values $(4, 2, 1)$. Ask for $520$, $550$, $650$ and $690$ nm.
+
+The routine's first check, made for a sorted list, is ``is the query at or beyond the last sample
+wavelength?'' The last listed wavelength is $500$. Every query, $520$, $550$, $650$ and $690$, is
+at least $500$, so for every query the answer is ``yes, beyond the end'', and it returns the last
+listed value, $1$. All four answers are $1$
+(\file{research/textbook/tools/compute_bandpipeline_output.txt})\tagC, where the correct answers are
+$1.2$, $1.5$, $3.0$ and $3.8$. No single answer looks absurd; only the fact that they are all equal
+gives it away. On a whole cube, every resampled band becomes a copy of one band.
+\end{worked}
+
+The product's resampler and gap-filler both sort first (\code{np.argsort} in
+\file{spectral_resampler.py}, lines 70--78, and \file{spectral_interpolator.py}), so the product
+was never affected. The evaluation code was: from 2026-10-17 to 2026-10-18 the evaluator's own
+resample did not sort, turned every PRISMA cube it resampled into copies of one or two bands, and
+rewrote a scoreboard before the bug was found and fixed. \Cref{ch:sortbug} tells that story.
+
+\begin{keypoint}
+Before any interpolation, sort the sample wavelengths ascending and reorder the values with them;
+NumPy will not warn you if you forget.
+\end{keypoint}
+
+\begin{sourcenote}[: family labels are not re-ordered with the wavelengths]
+\code{resample_to_common_grid} sorts the source wavelengths but passes the \emph{unsorted} family
+list to \code{_assign_families} together with the sorted wavelengths
+(\file{spectral_resampler.py}, lines 71 and 125). Inside, the check
+\code{np.all(np.diff(source_wl_sorted) > 0)} is always true for sorted wavelengths, so the family
+list is used in its original order while being indexed by sorted position. For a sensor whose
+bands are not already ascending (PRISMA: SWIR first, each detector descending), the labels on the
+grid come out wrong. Running the function on sources $(2000, 1500, 800, 500)$ nm with families
+$(\mathrm{SWIR}, \mathrm{SWIR}, \mathrm{VNIR}, \mathrm{VNIR})$ labels $500$ nm as SWIR and $2{,}000$
+nm as VNIR (\file{research/textbook/tools/compute_bandpipeline_output.txt})\tagC. Only the
+bookkeeping field \code{spectral_family_order} is affected, not the reflectance values; the one
+consumer found while writing this book is the destriper option of the classical
+\code{StatisticalEnsembler} (\file{app/detectors/statistical_ensembler.py}, line 140), whose
+behaviour with wrong labels was not traced.
+\end{sourcenote}
+
+\section{Stage 7: filling holes without inventing features}\label{sec:bandpipeline:pchip}
+
+After stage 6 a kept pixel may still be invalid in up to $40\%$ of its bands. Stage 7 fills those
+holes from the same pixel's valid bands, along wavelength. Why not a straight line here too, or a
+smoother curve? The danger is a curve that \emph{overshoots}.
+
+A \textbf{cubic spline}\index{cubic spline} joins the samples with cubic polynomials chosen to be as
+smooth as possible. Smoothness has a price: given samples that rise and then level off, a spline can
+swing below the lowest sample or above the highest before settling. An invented dip looks exactly
+like a narrow absorption feature, which is the very evidence used to name a material.
+
+\begin{worked}[label={we:bandpipeline:overshoot}]{A spline overshoots a step}
+Four samples: $(0, 0)$, $(1, 0)$, $(2, 1)$, $(3, 1)$, a step up. With four points, SciPy's default
+spline (the ``not-a-knot'' condition) is the single cubic through all four. Find it by hand. The
+cubic is $0$ at $x = 0$ and $x = 1$, so it has factors $x$ and $(x - 1)$:
+\[ p(x) = x(x-1)(\alpha x + \beta). \]
+Use the other two points:
+\begin{align*}
+p(2) = 2 \times 1 \times (2\alpha + \beta) = 1 \;&\Rightarrow\; 2\alpha + \beta = 0.5,\\
+p(3) = 3 \times 2 \times (3\alpha + \beta) = 1 \;&\Rightarrow\; 3\alpha + \beta = 1/6.
+\end{align*}
+Subtract the first equation from the second: $\alpha = 1/6 - 0.5 = -1/3$. Then
+$\beta = 0.5 - 2\alpha = 0.5 + 2/3 = 7/6$. Evaluate between the samples:
+\begin{align*}
+p(0.5) &= 0.5 \times (-0.5) \times \left(-\tfrac{1}{3}\times 0.5 + \tfrac{7}{6}\right)
+        = -0.25 \times \left(-\tfrac{1}{6} + \tfrac{7}{6}\right) = -0.25 \times 1 = -0.25,\\
+p(2.5) &= 2.5 \times 1.5 \times \left(-\tfrac{1}{3}\times 2.5 + \tfrac{7}{6}\right)
+        = 3.75 \times \left(-\tfrac{5}{6} + \tfrac{7}{6}\right) = 3.75 \times \tfrac{1}{3} = 1.25.
+\end{align*}
+The spline dips to $-0.25$, below every sample, and peaks at $1.25$, above every sample. SciPy gives
+the same two numbers (\file{research/textbook/tools/compute_bandpipeline_output.txt})\tagC.
+\end{worked}
+
+\textbf{PCHIP}\index{PCHIP} (piecewise cubic Hermite interpolating polynomial) also uses one cubic
+per interval, but chooses the slope at each sample to preserve the data's shape. Where the data is
+flat on one side or changes direction, PCHIP sets the slope there to $0$, so it never creates a
+minimum or maximum that is not in the data. On one interval $[x_0, x_1]$ with values $y_0, y_1$ and
+end slopes both $0$, the Hermite cubic reduces to
+\begin{equation}\label{eq:bandpipeline:hermite}
+y(t) = y_0 + (y_1 - y_0)\,(3t^2 - 2t^3), \qquad t = \frac{x - x_0}{x_1 - x_0},
+\end{equation}
+which starts at $y_0$ ($t = 0$), ends at $y_1$ ($3 - 2 = 1$ at $t = 1$) and is flat at both ends.
+
+\begin{worked}[label={we:bandpipeline:pchip}]{PCHIP on the same step}
+The slopes between neighbouring samples (the secants) are $0$ on $[0,1]$, $1$ on $[1,2]$, $0$ on
+$[2,3]$. At $x = 1$ one neighbouring secant is $0$, so PCHIP's slope there is $0$; the same at
+$x = 2$; at the two ends the secants are $0$, so the end slopes are $0$. Every interval therefore uses
+\cref{eq:bandpipeline:hermite}.
+\begin{itemize}
+\item On $[0,1]$: $y_0 = y_1 = 0$, so $y = 0$ everywhere, including $x = 0.5$. No dip.
+\item On $[1,2]$ at $x = 1.5$: $t = 0.5$, $3t^2 - 2t^3 = 0.75 - 0.25 = 0.5$, so
+$y = 0 + 1 \times 0.5 = 0.5$.
+\item On $[2,3]$: $y_0 = y_1 = 1$, so $y = 1$, including $x = 2.5$. No bump.
+\end{itemize}
+SciPy's \code{PchipInterpolator} gives $0$, $0.5$ and $1$ at the three points\tagC. PCHIP gives up
+some smoothness (its second derivative jumps at the samples) to guarantee it never invents a
+feature. In a system that hunts for unusual spectral features, that trade is not close.
+\end{worked}
+
+The filler works per pixel on the wavelength-sorted bands, only on pixels with at least $2$ valid
+bands and at least one hole; fully valid and fully invalid pixels are left alone. Holes beyond the
+first or last valid band are filled with that band's value (constant extrapolation).
+
+\begin{sourcenote}[: PCHIP only for common hole patterns]
+\code{interpolate_spectral_gaps} groups pixels by their exact pattern of invalid bands and runs
+PCHIP once per group. Its docstrings say groups of at least $100$ pixels get PCHIP. The code uses
+\code{MIN_GROUP_SIZE = 5000} (\file{spectral_interpolator.py}, line 64); pixels whose hole pattern
+is shared by fewer than $5{,}000$ pixels are filled by per-pixel \emph{linear} interpolation
+(\code{np.interp}) instead. So ``stage 7 is PCHIP'' is true for common hole patterns (a dead
+detector column across the scene) and false for rare ones.
+\end{sourcenote}
+
+\section{Stage 8: onto the grid}\label{sec:bandpipeline:grid}
+
+With every kept pixel complete, stage 8 resamples each one onto the $165$ grid wavelengths by the
+linear interpolation of \cref{sec:bandpipeline:linear}. The resampler's docstring gives its reason for
+not using PCHIP here: ``the native bands are densely sampled (6-12nm apart) and the target grid is
+10nm [...] the sample points barely move, so PCHIP offers no practical quality gain but costs
+significantly more memory''. Invalid pixels stay $0$ with validity $0$ in every band; valid pixels
+get validity $1$ in every band. FWHM has no meaning on the resampled grid, so
+\code{band_fwhm_order} is left empty; spectral matching reads the native onboarding vendable for
+that reason.
+
+After stage 8 a PRISMA cube and an EnMAP cube have identical shape and identical wavelengths. One
+model can train on shards mixing both, and a laboratory spectrum resampled onto the grid compares
+against either. Resampling loses a little native detail; the pipeline accepts that deliberately,
+because cross-sensor comparability is worth more.
+
+\section{Per-band normalisation inside the model}\label{sec:bandpipeline:zscore}
+
+The vendable's cube is called \code{normalized_hyperspectral_cube}, but that ``normalized'' meant
+``cleaned by the intake pipeline''. A second, different normalisation happens inside the model, at
+run time, in \file{app/foundation_models/components/pixel_normalization.py}.
+
+\subsection{Why normalise}
+
+Neural networks learn badly when inputs are tiny, huge, or on very different scales from each other.
+Reflectance is small (around $0.04$ in the blue) and the bands differ: vegetation is dark in blue and
+bright in the near infrared, so band $0$ and band $40$ have different typical values and different
+spreads (\cref{fig:light:meanspec}). Fed raw, a network would spend its early training learning that
+``band $40$ is usually bigger than band $0$'', a fact we already know. Normalisation tells it.
+
+\begin{definition}[Per-band z-score]\index{z-score}\index{normalisation!per-band}
+For band $c$ with mean $\mu_c$ and standard deviation $\sigma_c$ over a reference corpus, the
+\textbf{z-score} of value $x_c(i,j)$ is
+\begin{equation}\label{eq:bandpipeline:z}
+z_c(i,j) = \frac{x_c(i,j) - \mu_c}{\sigma_c}.
+\end{equation}
+It says how many standard deviations the value is above ($z > 0$) or below ($z < 0$) its band's
+typical value. Each band uses its own $\mu_c$ and $\sigma_c$.
+\end{definition}
+
+\begin{analogy}
+Exam marks from different subjects are not comparable: a $62$ in a hard paper may be better than an
+$80$ in an easy one. Converting each mark to ``standard deviations above that subject's class
+average'' makes them comparable. Here each band is a subject, the corpus is the class, and the
+z-score is the comparable mark. The analogy also explains the inverse: if you know a student's
+z-score and the subject's average and spread, you can recover the raw mark exactly.
+\end{analogy}
+
+\begin{worked}[label={we:bandpipeline:zscore}]{Normalising the 3-band, 2-by-2 cube}
+Use the cube of \cref{we:light:cube}:
+\[
+\mat{X}[0] = \begin{pmatrix} 0.03 & 0.05 \\ 0.05 & 0.03 \end{pmatrix},\quad
+\mat{X}[1] = \begin{pmatrix} 0.20 & 0.30 \\ 0.30 & 0.20 \end{pmatrix},\quad
+\mat{X}[2] = \begin{pmatrix} 0.14 & 0.10 \\ 0.14 & 0.10 \end{pmatrix}.
+\]
+For this exercise, take the ``corpus'' to be these four pixels and divide by $n = 4$ in the standard
+deviation. Work each band separately, on paper.
+
+\emph{Band 0.} Mean:
+\begin{align*}
+0.03 + 0.05 + 0.05 + 0.03 &= 0.16, \qquad \mu_0 = 0.16/4 = 0.04.
+\end{align*}
+Deviations $-0.01, +0.01, +0.01, -0.01$; squares $0.0001$ each; sum $0.0004$; divided by $4$,
+$0.0001$; root $\sigma_0 = 0.01$.
+
+\emph{Band 1.} $0.20 + 0.30 + 0.30 + 0.20 = 1.00$, $\mu_1 = 0.25$. Deviations $\pm 0.05$; squares
+$0.0025$ each; sum $0.0100$; divided by $4$, $0.0025$; $\sigma_1 = 0.05$.
+
+\emph{Band 2.} $0.14 + 0.10 + 0.14 + 0.10 = 0.48$, $\mu_2 = 0.12$. Deviations $\pm 0.02$; squares
+$0.0004$ each; sum $0.0016$; divided by $4$, $0.0004$; $\sigma_2 = 0.02$.
+
+\emph{Z-scores.} Pixel $(0,0)$, spectrum $(0.03, 0.20, 0.14)$:
+\begin{align*}
+z_0 &= (0.03 - 0.04)/0.01 = -0.01/0.01 = -1,\\
+z_1 &= (0.20 - 0.25)/0.05 = -0.05/0.05 = -1,\\
+z_2 &= (0.14 - 0.12)/0.02 = +0.02/0.02 = +1.
+\end{align*}
+The other pixels the same way:
+\[
+\mat{Z}[0] = \begin{pmatrix} -1 & +1 \\ +1 & -1 \end{pmatrix},\quad
+\mat{Z}[1] = \begin{pmatrix} -1 & +1 \\ +1 & -1 \end{pmatrix},\quad
+\mat{Z}[2] = \begin{pmatrix} +1 & -1 \\ +1 & -1 \end{pmatrix}.
+\]
+Raw, band $1$'s values ($0.20$ to $0.30$) were five times band $0$'s ($0.03$ to $0.05$); after
+normalisation every band is centred on $0$ with spread $1$. Note what normalisation does \emph{not}
+do: pixel $(0,0)$'s raw spectrum rose from band 0 to band 1, and its z-scores do not; the z-scores
+describe each value relative to its own band, not the spectrum's shape.
+\end{worked}
+
+\begin{sourcenote}[: $n$ or $n-1$]
+The script that produced \file{app/constants/hyperspectral.json},
+\file{scripts/compute_hyperspectral_pixel_stats.py}, finishes with \code{std = np.sqrt(m2 / (n -
+1))} (line 110): the \emph{sample} standard deviation, dividing by $n - 1$. With $15{,}264{,}937$
+valid pixels per band\tagM{app/constants/hyperspectral.json} the difference from dividing by $n$
+is about one part in thirty million, invisible. In the four-pixel example it would matter
+(dividing by $3$ gives $\sigma_0 \approx 0.01155$), which is why the example states its convention.
+\end{sourcenote}
+
+\subsection{Denormalisation is the inverse map}
+
+At the end of the model, \code{PixelDenormalize} turns the reconstruction back into reflectance with
+$x = z\sigma_c + \mu_c$. Derive it by solving \cref{eq:bandpipeline:z} for $x$:
+\begin{align*}
+z &= \frac{x - \mu_c}{\sigma_c}.
+\intertext{Multiply both sides by $\sigma_c$ (allowed because $\sigma_c > 0$):}
+\sigma_c z &= x - \mu_c.
+\intertext{Add $\mu_c$ to both sides:}
+x &= \sigma_c z + \mu_c.
+\end{align*}
+Call the two maps $N(x) = (x - \mu_c)/\sigma_c$ and $D(z) = \sigma_c z + \mu_c$. Composing them in
+either order gives back what you started with:
+\begin{align*}
+D(N(x)) &= \sigma_c \cdot \frac{x - \mu_c}{\sigma_c} + \mu_c = (x - \mu_c) + \mu_c = x,\\
+N(D(z)) &= \frac{(\sigma_c z + \mu_c) - \mu_c}{\sigma_c} = \frac{\sigma_c z}{\sigma_c} = z.
+\end{align*}
+So $D$ is the \textbf{inverse}\index{inverse map} of $N$. The requirement $\sigma_c > 0$ is real:
+a band with zero spread cannot be divided by, which is why the per-scene override below clamps tiny
+spreads to $1$. With pixel $(0,0)$ band $2$ of \cref{we:bandpipeline:zscore}:
+$D(+1) = 0.02 \times 1 + 0.12 = 0.14$, the original value.
+
+The model is trained and scored in reflectance, after $D$, not in z-scores: an L1 error of $0.008$
+then means ``the average band is off by $0.008$ reflectance'', a statement about the world
+(\cref{ch:losses}).
+
+\subsection{The code, and broadcasting}
+
+\begin{lstlisting}
+class PixelNormalize(nn.Module):
+    def __init__(self, mean: list[float], std: list[float]):
+        super().__init__()
+        # (1, C, 1, 1) for broadcasting against (B, C, H, W)
+        self.register_buffer("mean", torch.tensor(mean, dtype=torch.float32).view(1, -1, 1, 1))
+        self.register_buffer("std",  torch.tensor(std,  dtype=torch.float32).view(1, -1, 1, 1))
+    def forward(self, x):                       # x: (B, 165, H, W)
+        return (x - self.mean) / self.std       # (B, 165, H, W)
+\end{lstlisting}
+\code{.view(1, -1, 1, 1)} reshapes the list of $165$ numbers to shape \shape{(1, 165, 1, 1)}
+without changing any value (the $-1$ means ``work this size out''). Then
+\textbf{broadcasting}\index{broadcasting} lines the shapes up axis by axis: where one array has size
+$1$ and the other a larger size, the size-$1$ array is repeated along that axis.
+\begin{center}
+\begin{tabular}{@{}rl@{}}
+\shape{(B, 165, H, W)} & the batch of cubes\\
+$-$\ \shape{(1, 165, 1, 1)} & the means, repeated over $B$, $H$, $W$\\\midrule
+\shape{(B, 165, H, W)} & each band minus its own mean
+\end{tabular}
+\end{center}
+Band $7$'s mean is subtracted from every pixel of band $7$ in every patch, and from nothing else,
+with no loop over bands.
+
+The statistics are registered as \textbf{buffers}\index{buffer (PyTorch)}, which matters. A plain
+attribute is neither saved nor trained; an \code{nn.Parameter} is saved and trained; a buffer is
+saved in the checkpoint and moved to the GPU with the model, but never trained. So the $165$ means
+and $165$ standard deviations travel \emph{inside} the \code{.pt} file. Normalise and denormalise
+are separate modules with their own copies, so a checkpoint holds
+\[ 2 \text{ modules} \times 2 \text{ statistics} \times 165 = 660 \text{ numbers}, \]
+and you cannot swap the statistics without rebuilding the model: loading checks that every saved
+entry has a slot of the right shape, and a length mismatch fails loudly at load time.
+\Cref{ch:params} uses the $660$ to reconcile two parameter counts.
+
+\subsection{The order of operations, and where invalid pixels land}
+
+The model's \code{forward} masks first and normalises second
+(\file{app/foundation_models/components/hyperspectral_seg_former_mae.py}, lines 126--133):
+\begin{lstlisting}
+if mask is not None:
+    x = x * mask            # (B, 165, H, W): invalid pixels become 0.0
+if self.normalize is not None:
+    x = self.normalize(x)   # (B, 165, H, W): z-scores
+\end{lstlisting}
+An invalid pixel therefore enters the network at $z_c = (0 - \mu_c)/\sigma_c = -\mu_c/\sigma_c$, not
+at $0$.
+
+\begin{worked}[label={we:bandpipeline:real}]{Real statistics, band 0}
+\file{app/constants/hyperspectral.json} gives band $0$ ($460$ nm) $\mu_0 = 0.04301$ and
+$\sigma_0 = 0.03524$\tagM{app/constants/hyperspectral.json}.
+\begin{align*}
+\text{typical pixel, } 0.04301:&\quad (0.04301 - 0.04301)/0.03524 = 0/0.03524 = 0.00,\\
+\text{bright pixel, } 0.07825:&\quad (0.07825 - 0.04301)/0.03524 = 0.03524/0.03524 = 1.00,\\
+\text{dark pixel, } 0.00777:&\quad (0.00777 - 0.04301)/0.03524 = -0.03524/0.03524 = -1.00,\\
+\text{invalid pixel, } 0:&\quad (0 - 0.04301)/0.03524 = -0.04301/0.03524 \approx -1.22.
+\end{align*}
+Over all $165$ bands, an invalid zero lands between $-2.90$ (band $27$, $730$ nm, where the mean is
+large relative to the spread) and $-1.03$ (band $164$, $2{,}450$ nm)\tagC.
+\end{worked}
+
+Had the code normalised first and masked second, invalid pixels would sit at $z = 0$, which means
+``perfectly typical'', indistinguishable from an ordinary pixel. Masking first puts them at a
+consistent value outside the typical range, which the network can learn to recognise as ``not a
+measurement''.
+
+\subsection{When the corpus statistics do not fit: the per-scene override}
+
+Some sensors do not deliver the units a model was fitted on. HotSat-1 ships raw 14-bit numbers
+around $5{,}000 \pm 400$\tagM{app/models/training/inference_config.py}. A model whose buffers expect
+values near $0.04$ would compute $z \approx (5{,}000 - 0.043)/0.035 \approx 143{,}000$: input like
+nothing it has seen. \code{PixelStatsOverride} (\file{app/models/training/inference_config.py}) lets
+the caller replace the buffers with the scene's own per-band mean and spread, so the input arrives
+roughly centred with unit spread. The price is that scores become \emph{scene-relative}: comparable
+within that scene but not across scenes, and the scoring Action records
+\code{normalization_mode="per_scene_dn_zscore"} so the interface can say so. For Indradhanu the
+override does not apply: band-filtered reflectance matches the training distribution, and the mode
+stays \code{"baked"}.
+
+Two details of the override are worth copying into your own code. Spreads below $10^{-6}$ (or not
+finite) are clamped to $1.0$, so a constant scene cannot cause a division by zero. And the moments
+are computed in 64-bit floating point, for a reason worth seeing in numbers.
+
+\begin{worked}[label={we:bandpipeline:cancel}]{Why the moments are computed in float64}
+Variance can be computed as $\E[x^2] - (\E[x])^2$, the mean of the squares minus the square of the
+mean. For values $5{,}000 \pm 400$: $\E[x] = 5{,}000$, $(\E[x])^2 = 25{,}000{,}000$, and
+$\E[x^2] = 25{,}000{,}000 + 400^2 = 25{,}160{,}000$. The answer, $160{,}000$, is the small difference
+of two large, nearly equal numbers.
+
+A 32-bit float carries $24$ binary digits of precision. Between $2^{24} = 16{,}777{,}216$ and
+$2^{25}$ the representable numbers are $2$ apart, so a single squared value near $25{,}000{,}000$ is
+stored to the nearest even integer: harmless. But the code sums squares over a million pixels. That
+running sum reaches about $10^{6} \times 2.5 \times 10^{7} = 2.5 \times 10^{13}$, which lies between
+$2^{44} \approx 1.76 \times 10^{13}$ and $2^{45}$, where float32 numbers are
+$2^{44 - 23} = 2^{21} = 2{,}097{,}152$ apart. Each new term of about $25{,}000{,}000$ is added to a
+total that can only move in steps of about two million, so each addition can be off by up to about a
+million. After a million additions the sum of squares is wrong by far more than the
+$160{,}000 \times 10^{6}$ that separates $\E[x^2]$ from $(\E[x])^2$ in total. The subtraction then
+returns noise. This is \textbf{catastrophic cancellation}\index{catastrophic cancellation}. A 64-bit
+float carries $53$ binary digits; at $2.5 \times 10^{13}$ its spacing is $2^{44 - 52} = 2^{-8}
+\approx 0.004$, and the problem disappears.
+\end{worked}
+
+\begin{sourcenote}[: does the override ever fire?]
+The scoring code builds the override when the vendable's \code{units} string starts with
+\code{"DN_"}. As \cref{ch:product} showed, \code{VendableThermalDataset} declares no \code{units}
+field, so the HotSat-1 builder's \code{units="DN_14bit_relative"} is discarded by Pydantic and
+\code{getattr(vendable, "units", None)} returns \code{None} (checked by constructing one; see
+\cref{sec:product:thermal}). Through this path the override therefore does not fire, despite the
+comments in \file{resolver.py} and \file{_anomaly_scoring_run.py} that describe it as active.
+\end{sourcenote}
+
+\begin{drift}
+\emph{Dated 2026-10-29.} Indradhanu V2 reads native bands and normalises with
+\code{WavelengthStats} (same file, \file{pixel_normalization.py}): the mean and spread are stored as
+curves over wavelength, measured on SpectralEarth, and read at each sensor's own band wavelengths by
+linear interpolation, after sorting the curve because SpectralEarth's band order is not monotonic
+near $900$--$1{,}000$ nm. It is \cref{eq:bandpipeline:z} with $\mu$ and $\sigma$ looked up by
+wavelength instead of by position (\cref{ch:crossstem,ch:pretrain}).
+\end{drift}
+
+\coursefig[0.9\linewidth]{iw-09-normalise}{Why each band is normalised separately (course figure,
+Indradhanu part 9). (a) Raw reflectance puts a dim blue band and a bright near-infrared band on very
+different scales. (b) Subtracting each band's mean and dividing by its standard deviation puts every
+band on one scale, centred at $0$ with spread $1$. Distributions are illustrative.}{fig:bandpipeline:normalise}
+
+\section{The nearest-valid pixel fill}\label{sec:bandpipeline:fill}
+
+After the eight stages, invalid pixels hold $0$ in every band. The \code{band_filter_apply} Action
+then (by default, \code{apply_nearest_valid_fill: true}) replaces each invalid pixel's values with
+those of its nearest valid pixel, leaving the validity cube unchanged
+(\file{backend/allotrope/action_types/band_filter_apply.py}, lines 372--381;
+\file{app/utils/pixel_fill/nearest_valid_fill.py}).
+
+\begin{definition}[Nearest-valid fill]\index{nearest-valid fill}
+For each invalid pixel $(i,j)$, find the valid pixel $(i^*, j^*)$ that minimises the Euclidean
+distance $\sqrt{(i - i^*)^2 + (j - j^*)^2}$, and copy all $C$ band values from $(i^*, j^*)$ to
+$(i,j)$. Valid pixels are their own nearest valid pixel (distance $0$) and are unchanged. Ties are
+broken by the implementation, SciPy's \code{distance_transform_edt}.
+\end{definition}
+
+The motivation given in the module's docstring: a patch embedding whose kernel straddles a boundary
+between valid pixels and invalid zeros sees a cliff, produces contaminated tokens there, and
+attention spreads the contamination, so boundaries light up in the error map and outrank real
+detections. Copying a real neighbouring measurement turns the cliff into a smooth continuation, and
+every filled value is physically plausible because it is a genuine measurement, never an average or
+an interpolation. The masks are untouched, so any loss still excludes those pixels.
+
+\begin{worked}[label={we:bandpipeline:fill}]{Filling a row and a 3-by-3 patch}
+\emph{One row} (the docstring's example; one band): values $30, 32, 0, 0, 0, 25, 28$ with validity
+$1, 1, 0, 0, 0, 1, 1$. Positions $2$, $3$, $4$ are invalid.
+\begin{itemize}
+\item Position 2: valid neighbours at distance $1$ (position $1$, value $32$) and $3$ (position $5$).
+Nearest is position 1: $32$.
+\item Position 3: distance $2$ to position $1$ and $2$ to position $5$, a tie. The implementation
+picked position $1$: $32$.
+\item Position 4: distance $1$ to position $5$: $25$.
+\end{itemize}
+Result $30, 32, 32, 32, 25, 25, 28$\tagC.
+
+\emph{A 3-by-3 patch} (one band, illustrative\tagA):
+\[
+\text{values} = \begin{pmatrix} 0.10 & 0.12 & 0 \\ 0.11 & 0 & 0 \\ 0 & 0 & 0.30 \end{pmatrix},\qquad
+\text{validity} = \begin{pmatrix} 1 & 1 & 0 \\ 1 & 0 & 0 \\ 0 & 0 & 1 \end{pmatrix}.
+\]
+\begin{itemize}
+\item $(0,2)$: nearest valid is $(0,1)$ at distance $1$: $0.12$.
+\item $(1,1)$: $(0,1)$ and $(1,0)$ both at distance $1$, a tie; the implementation picked $(1,0)$:
+$0.11$.
+\item $(1,2)$: $(2,2)$ at distance $1$ ($(0,2)$ is itself invalid): $0.30$.
+\item $(2,0)$: $(1,0)$ at distance $1$: $0.11$.
+\item $(2,1)$: $(2,2)$ at distance $1$: $0.30$.
+\end{itemize}
+\[
+\text{filled} = \begin{pmatrix} 0.10 & 0.12 & 0.12 \\ 0.11 & 0.11 & 0.30 \\ 0.11 & 0.30 & 0.30 \end{pmatrix}
+\]
+(confirmed by running the function, \file{research/textbook/tools/compute_bandpipeline_output.txt})\tagC.
+\end{worked}
+
+\begin{sourcenote}[: the kernel, the cliff, and whether the fill reaches Indradhanu]
+Three corrections, all from reading the source.
+\begin{enumerate}
+\item \emph{The kernel.} The fill's docstring, the anomaly-detection course (part 7) and
+\file{docs/03-data-pipeline.md} speak of the SegFormer's ``7x7 kernel''. The encoder that both
+Chakshu and Indradhanu use builds its first patch embedding with kernel $4$ and stride $4$, and the
+later stages with kernel $3$ (\file{app/foundation_models/components/seg_former_encoder.py}, lines
+110--111). The $7$ is the default in \file{overlap_patch_embedding.py}'s docstring, not what the
+encoder passes. \Cref{ch:patchembed} covers the patch embedding.
+\item \emph{The cliff.} ``Invalid pixels normalise to about $-2.3$'' is the thermal model's number
+(an invalid $0\,^\circ$C pixel). For Indradhanu an invalid zero lands at $-1.22$ in band $0$ and
+between $-2.90$ and $-1.03$ across bands (\cref{we:bandpipeline:real}).
+\item \emph{The re-zeroing.} The scoring code passes the model \code{mask_tensor} built from the same
+spatial validity used by the fill (\file{_anomaly_scoring_run.py}, line 286), and the model's
+\code{forward} multiplies by that mask before normalising (lines 127--128 of
+\file{hyperspectral_seg_former_mae.py}; the inferencer calls \code{self.model(tensor, mask=mask, ...)},
+\file{segformer_mae_inferencer.py}, line 222). The filled pixels are therefore set back to $0$
+before Indradhanu v0.2.0 sees them, and enter at $-\mu_c/\sigma_c$ as in
+\cref{we:bandpipeline:real}. As far as this book could trace, the fill does not change Indradhanu
+v0.2.0's input on this path; it does change what reaches code that reads the cube without
+re-masking it (the evaluator also applies it, \file{app/evaluation/datasets.py}, line 136). Which
+consumers benefit was not established here.
+\end{enumerate}
+\end{sourcenote}
+
+\begin{confusions}
+\confusion{Does resampling lose information?}{Yes, a little, deliberately: cross-sensor
+comparability is worth more than the last few nanometres of native resolution. Spectral matching
+avoids the loss by reading the native onboarding vendable.}
+\confusion{Why not interpolate across the atmospheric windows too?}{There is no signal there to
+interpolate from; the gap is up to $170$ nm wide. Filling it would invent spectrum. The grid keeps the
+hole.}
+\confusion{188 bands survive stage 4 but the grid has 165. Where did the rest go?}{Nowhere: they are
+different axes. The $188$ are surviving sensor bands at sensor wavelengths; the $165$ are grid slots.
+Stage 8 resamples one onto the other.}
+\confusion{Is the 0.4 in stage 6 a fraction of the cube or of the pixel?}{Of that pixel's surviving
+bands. A pixel with more than $40\%$ of its own bands invalid is wiped.}
+\confusion{Is PCHIP or linear interpolation used?}{Both. Stage 7 (gap filling) uses PCHIP for common
+hole patterns and linear for rare ones; stage 8 (onto the grid) is linear.}
+\confusion{Is the vendable's ``normalized'' cube the z-score?}{No. The vendable holds reflectance; the
+z-score is computed inside the model from statistics stored in the checkpoint.}
+\confusion{Why denormalise at the end instead of comparing in z-score space?}{So the loss and the
+score are in reflectance units, which mean something physically.}
+\end{confusions}
+
+\begin{checkyourself}
+\item\label{ex:bandpipeline:1} Linear interpolation: a spectrum is $0.20$ at $1{,}600$ nm and $0.26$
+at $1{,}612$ nm. Estimate it at $1{,}610$ nm using the weight form, then check with the two-point
+form. Show every step.
+\item\label{ex:bandpipeline:2} With $C' = 200$ surviving bands and \code{max_invalid_voxel_fraction}
+$= 0.4$, what is the largest number of invalid bands a kept pixel can have? Is a pixel with exactly
+$80$ invalid bands kept? Why does the answer depend on ``$>$'' versus ``$\ge$''?
+\item\label{ex:bandpipeline:3} Give \code{np.interp} wavelengths $(900, 800, 700)$ and values
+$(0.3, 0.2, 0.1)$, and ask for $750$ nm. What does it return, and what is the correct answer? Explain
+the wrong one using the ``beyond the last sample'' check.
+\item\label{ex:bandpipeline:4} A band has corpus mean $0.25$ and standard deviation $0.05$. Normalise
+the values $0.15$, $0.25$, $0.40$ and an invalid pixel stored as $0$. Then denormalise $z = -0.6$ and
+show algebraically that denormalising the z-score of $0.40$ returns $0.40$.
+\item\label{ex:bandpipeline:5} Apply nearest-valid fill (one band) to the row
+$0, 0.20, 0, 0, 0, 0.35$ with validity $0, 1, 0, 0, 0, 1$. Which position is a tie? Then explain in two sentences why the fill
+copies a measurement rather than averaging the neighbours.
+\end{checkyourself}
+
+\nextchapter{ch:linalg}

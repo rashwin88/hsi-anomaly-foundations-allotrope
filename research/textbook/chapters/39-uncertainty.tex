@@ -1,0 +1,748 @@
+\chapter{The uncertainty head and the Laplace likelihood}\label{ch:uncertainty}
+
+\begin{onething}
+A small extra head can learn, for every pixel, how large an error the model expects there, by minimising a
+Laplace negative log-likelihood whose best answer is exactly that expected error; but when the residual is
+divided by this prediction, real targets fade, because a head that predicts its own error well also predicts
+large errors on anomalies whenever it can see any trace of them.
+\end{onething}
+
+This chapter is history told as a lesson. It covers one idea, the \emph{uncertainty head}, from its proposal
+on 2026-10-19 to its failure on 2026-10-20 as the fine-tuning run FT06. Along the way you meet three pieces of
+mathematics that are worth owning for their own sake: the Laplace distribution, the method of maximum
+likelihood applied to a scale parameter, and Spearman's rank correlation. The chapter then shows, with
+arithmetic you can do on paper, why a head that passed its own sanity check still made detection worse.
+
+A note on the provenance tags in this chapter and the next two. To keep lines short they abbreviate
+paths:
+\begin{itemize}
+\item run folders such as \file{FT06-uncertainty/}: in\\ \file{research/experiments/indradhanu-finetune/};
+\item \file{bench-resolution/}, \file{scoring-gains/} and \file{decoder-capacity/}: in\\
+  \file{research/experiments/};
+\item \file{finetune_trainer.py}: in \file{app/foundation_models/trainers/};
+\item \file{scorers.py}: in \file{app/evaluation/};
+\item \file{uncertainty-head.md} is in \file{docs/proposals/}, and \file{lld/finetune.md} in \file{docs/}.
+\end{itemize}
+
+\section{Where we were, and the gap the score leaves}\label{sec:uncertainty:where}
+
+\Cref{ch:shipping} shipped FT04 as Indradhanu V2. Its detection tied the older v0.2.0 model, and on the same
+day an experiment tried to win detection back on the \emph{score} side while holding FT04's reconstruction
+fixed: blurring the residual, fusing residual Mahalanobis with PCA-RX, and whitening each background type
+separately (\cref{ch:scoringgains}). None of them beat plain residual Mahalanobis on real objects caught. The
+experiment's verdict was that ``the gains question goes to the model side''
+\tagM{scoring-gains/README.md}.
+
+Recall from \cref{ch:residualmaha} what residual Mahalanobis (RM) does. It takes the residual
+$\vect{r}(p)=\vect{x}(p)-\xhat(p)$ at each pixel $p$, fits \emph{one} mean and \emph{one} covariance matrix for
+the whole scene, and scores each pixel by its Mahalanobis distance under that covariance. The covariance
+learns which \emph{directions} of error the scene shares: a haze that lifts the blue bands everywhere, a
+detector stripe, dark water. What it cannot learn is which \emph{places} are hard. The model's errors are not
+alike from place to place. Field edges, fine texture, sun glint, thin cloud and shorelines are hard to
+reconstruct everywhere, and their large residuals are exactly RM's false alarms. RM has no way to know that
+``the model always struggles here''.
+
+\begin{analogy}
+A weather forecaster who says ``20\,mm of rain, give or take 2'' and one who says ``20\,mm, give or take 15''
+can both see 35\,mm fall. For the first it is a shock; for the second it is a wet day. What makes an
+observation surprising is the miss \emph{divided by} how big a miss the forecaster expected. The uncertainty
+head is a forecaster of the reconstruction's own error. Later in the chapter the analogy acquires a twist:
+a forecaster who is never told about your town, only about the towns around it, will still see a storm
+parked over your town spilling rain into every neighbour, and will say ``something big near there, give or
+take a lot''. The storm then stops looking surprising.
+\end{analogy}
+
+The obvious fix is to give each pixel its own ``give or take'': a number $b(p)>0$, the error size the model
+expects at $p$, and to score $\vect{r}(p)/b(p)$ instead of $\vect{r}(p)$. Two pixels with the same residual
+$0.3$ then differ: at a field edge where the head expects $b=0.3$ the ratio is $0.3/0.3=1.0$, ordinary; on a
+flat field where it expects $b=0.05$ the ratio is $0.3/0.05=6.0$, a surprise. The rest of this chapter is about
+how to learn $b(p)$ honestly, and why it still did not work.
+
+\section{A probability model for errors: the Laplace distribution}\label{sec:uncertainty:laplace}
+
+To learn $b$ by optimisation we need a loss whose minimum is ``the right size of error''. The cleanest way to
+build one is to write down a probability model for the error and ask which $b$ makes the observed errors most
+probable. The model chosen is the Laplace distribution, because it is the distribution that matches the L1
+reconstruction loss of \cref{ch:losses}, as you will see in \cref{sec:uncertainty:nll}.
+
+\begin{definition}[Probability density]
+A \emph{probability density}\index{probability density} $f(r)$ for a real-valued quantity $r$ is a function
+with $f(r)\ge 0$ everywhere and $\int_{-\infty}^{\infty} f(r)\,dr=1$. The probability that $r$ lands in a
+small interval of width $\Delta$ around $r_0$ is approximately $f(r_0)\,\Delta$.
+\end{definition}
+
+\begin{definition}[Laplace distribution]
+The \emph{Laplace distribution}\index{Laplace distribution} with centre $0$ and \emph{scale}\index{scale
+parameter} $b>0$ has density
+\begin{equation}\label{eq:uncertainty:laplace}
+  f(r\mid b) \;=\; \frac{1}{2b}\,\exp\!\left(-\frac{\abs{r}}{b}\right).
+\end{equation}
+\end{definition}
+
+Read \cref{eq:uncertainty:laplace} in words: the density is highest at $r=0$, where it equals $1/(2b)$, and
+falls away exponentially on both sides as the size of the error $\abs{r}$ grows, at a rate set by $b$. A small
+$b$ means a tall narrow peak (errors are expected to be small); a large $b$ a low wide one.
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}
+\begin{axis}[width=0.8\linewidth,height=5.5cm,xlabel={error $r$},ylabel={density $f(r\mid b)$},
+  domain=-3:3,samples=241,xmin=-3,xmax=3,ymin=0,ymax=1.05,legend pos=north east,legend cell align=left,
+  grid=major,grid style={gray!20}]
+\addplot[spec,thick] {exp(-abs(x)/0.5)/(2*0.5)};
+\addlegendentry{$b=0.5$}
+\addplot[spat,thick,dashed] {exp(-abs(x)/1)/(2*1)};
+\addlegendentry{$b=1$}
+\addplot[loss,thick,dotted] {exp(-abs(x)/2)/(2*2)};
+\addlegendentry{$b=2$}
+\addplot[maskgrey,thin] {exp(-x^2/2)/sqrt(2*pi)};
+\addlegendentry{Gaussian, $\sigma=1$}
+\end{axis}
+\end{tikzpicture}
+\caption{The Laplace density for three scales, drawn to scale from \cref{eq:uncertainty:laplace}, with a
+standard Gaussian in grey for comparison. The Laplace has a sharp peak at zero and heavier tails: a large
+error is less surprising under a Laplace than under a Gaussian of similar width.}
+\label{fig:uncertainty:laplace}
+\end{figure}
+
+\subsection{It is a density: the integral is one}
+
+You should check that \cref{eq:uncertainty:laplace} really integrates to one. The function is symmetric
+($f(-r)=f(r)$, since $\abs{-r}=\abs{r}$), so the integral is twice the integral over $r\ge 0$, where
+$\abs{r}=r$:
+\begin{align*}
+\int_{-\infty}^{\infty}\frac{1}{2b}e^{-\abs{r}/b}\,dr
+  &= 2\int_{0}^{\infty}\frac{1}{2b}e^{-r/b}\,dr
+  \intertext{cancel the 2 against the $\tfrac12$:}
+  &= \frac{1}{b}\int_{0}^{\infty}e^{-r/b}\,dr
+  \intertext{an antiderivative of $e^{-r/b}$ is $-b\,e^{-r/b}$ (differentiate it to check: $-b\cdot(-\tfrac1b)e^{-r/b}=e^{-r/b}$):}
+  &= \frac{1}{b}\Big[-b\,e^{-r/b}\Big]_{0}^{\infty}
+  \intertext{at $r\to\infty$ the exponential is $0$; at $r=0$ it is $1$:}
+  &= \frac{1}{b}\big(0-(-b)\big) \;=\; \frac{1}{b}\cdot b \;=\; 1.
+\end{align*}
+
+\subsection{The scale is the mean absolute error}
+
+The single most useful fact about the Laplace scale is that it equals the average size of the error,
+$\E\abs{r}=b$. Derive it the same way, using the symmetry and then integration by parts (the rule
+$\int u\,dv = uv-\int v\,du$):
+\begin{align*}
+\E\abs{r} &= \int_{-\infty}^{\infty}\abs{r}\,\frac{1}{2b}e^{-\abs{r}/b}\,dr
+  \;=\; \frac{1}{b}\int_{0}^{\infty} r\,e^{-r/b}\,dr
+  \intertext{take $u=r$ (so $du=dr$) and $dv=e^{-r/b}dr$ (so $v=-b\,e^{-r/b}$):}
+  &= \frac{1}{b}\left(\Big[-b\,r\,e^{-r/b}\Big]_0^{\infty} + b\int_0^{\infty}e^{-r/b}\,dr\right)
+  \intertext{the bracket is $0$ at both ends ($r=0$ kills it at the bottom; the exponential beats $r$ at the top); the integral was found above to be $b$:}
+  &= \frac{1}{b}\left(0 + b\cdot b\right) \;=\; b.
+\end{align*}
+So when the head outputs $b(p)$ it is literally predicting ``the mean absolute error I expect at this
+pixel''. That is why the proposal could describe $b$ in plain words as the expected error size.
+
+\section{Likelihood, and the negative log-likelihood}\label{sec:uncertainty:nll}
+
+\begin{definition}[Likelihood]
+Given an observed value $r$ and a model with parameter $b$, the \emph{likelihood}\index{likelihood} of $b$ is
+the density of the observation viewed as a function of the parameter: $\mathcal{L}(b)=f(r\mid b)$. The
+\emph{maximum-likelihood}\index{maximum likelihood} estimate of $b$ is the value that makes $\mathcal{L}(b)$
+largest.
+\end{definition}
+
+Maximising a product of small numbers is awkward, so we take logarithms (which turns products into sums and
+does not move the maximum, because $\log$ is increasing) and flip the sign (so that maximising becomes
+minimising, which is what an optimiser does). The result is the \emph{negative log-likelihood}\index{negative
+log-likelihood} (NLL). For the Laplace:
+\begin{align}
+-\log f(r\mid b) &= -\log\!\left(\frac{1}{2b}\exp\!\left(-\frac{\abs{r}}{b}\right)\right)
+  \nonumber\\
+  \intertext{the log of a product is the sum of the logs:}
+  &= -\log\frac{1}{2b} \;-\; \log\exp\!\left(-\frac{\abs{r}}{b}\right) \nonumber\\
+  \intertext{$\log(1/y)=-\log y$, and $\log\exp(z)=z$:}
+  &= \log(2b) + \frac{\abs{r}}{b} \nonumber\\
+  \intertext{and $\log(2b)=\log 2+\log b$:}
+  &= \frac{\abs{r}}{b} + \log b + \log 2. \label{eq:uncertainty:nll}
+\end{align}
+The last term, $\log 2\approx 0.693$, does not depend on $b$, so it cannot change which $b$ is best. The code
+drops it. What is left is the per-pixel loss the trainer minimises:
+\begin{equation}\label{eq:uncertainty:loss}
+  \ell(b;\,\abs{r}) \;=\; \frac{\abs{r}}{b} + \log b .
+\end{equation}
+
+Two forces pull on $b$. The first term, $\abs{r}/b$, punishes a $b$ that is too small: claim to be confident
+and then miss, and you pay a lot. The second term, $\log b$, punishes a $b$ that is too large: you cannot
+escape the first term by claiming to know nothing, because vagueness costs $\log b$.
+
+\begin{keypoint}
+The Laplace NLL is the L1 error divided by a predicted scale, plus the log of that scale; with $b$ fixed it is
+the L1 loss of \cref{ch:losses} up to a constant factor and offset, which is why the Laplace is the
+distribution that ``matches'' L1.
+\end{keypoint}
+
+\begin{worked}[label={we:uncertainty:three}]{The loss at three scales}
+Take one pixel whose error is $\abs{r}=0.2$ and try $b=0.1$, $0.2$ and $0.4$. Do it on paper with a
+calculator for the natural logarithm.
+\begin{align*}
+b=0.1:&\quad \frac{0.2}{0.1}+\ln 0.1 = 2.0 + (-2.303) = -0.303\\
+b=0.2:&\quad \frac{0.2}{0.2}+\ln 0.2 = 1.0 + (-1.609) = -0.609\\
+b=0.4:&\quad \frac{0.2}{0.4}+\ln 0.4 = 0.5 + (-0.916) = -0.416
+\end{align*}
+The lowest of the three is at $b=0.2$, the error itself. At $b=0.1$ the first term is large (2.0); at
+$b=0.4$ the first term is small (0.5) but the second has risen from $-1.609$ to $-0.916$. Negative losses are normal here: a density can exceed 1, so its log can be positive and the NLL negative.
+\end{worked}
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}
+\begin{axis}[width=0.75\linewidth,height=5.5cm,xlabel={predicted scale $b$},ylabel={$\ell(b)=0.2/b+\ln b$},
+  domain=0.06:1.0,samples=200,xmin=0,xmax=1.0,ymin=-0.8,ymax=1.0,grid=major,grid style={gray!20}]
+\addplot[loss,thick] {0.2/x+ln(x)};
+\addplot[only marks,mark=*,attn] coordinates {(0.1,-0.303) (0.2,-0.609) (0.4,-0.416)};
+\draw[dashed,spec] (axis cs:0.2,-0.8) -- (axis cs:0.2,-0.609);
+\node[spec,anchor=north west,font=\small] at (axis cs:0.21,-0.62) {minimum at $b=\abs{r}=0.2$};
+\end{axis}
+\end{tikzpicture}
+\caption{The per-pixel loss of \cref{eq:uncertainty:loss} for $\abs{r}=0.2$, drawn to scale, with the three
+points of \cref{we:uncertainty:three}. The curve rises steeply to the left (overconfidence) and slowly to the
+right (vagueness).}
+\label{fig:uncertainty:losscurve}
+\end{figure}
+
+\section{The best scale is the error: minimising over \texorpdfstring{$b$}{b}}\label{sec:uncertainty:min}
+
+The worked example suggests that the minimum sits at $b=\abs{r}$. Prove it with calculus. At a minimum of a
+smooth function the derivative is zero.
+\begin{align*}
+\frac{d\ell}{db} &= \frac{d}{db}\left(\abs{r}\,b^{-1}\right) + \frac{d}{db}\log b
+  \intertext{the power rule gives $\frac{d}{db}b^{-1}=-b^{-2}$; and $\frac{d}{db}\log b = \frac1b$:}
+  &= -\frac{\abs{r}}{b^2} + \frac{1}{b}.
+  \intertext{Set it to zero:}
+  0 &= -\frac{\abs{r}}{b^2} + \frac{1}{b}
+  \intertext{multiply both sides by $b^2$ (allowed, because $b>0$):}
+  0 &= -\abs{r} + b
+  \intertext{so}
+  b^\star &= \abs{r}.
+\end{align*}
+Is it a minimum and not a maximum? Differentiate again:
+\begin{align*}
+\frac{d^2\ell}{db^2} &= \frac{2\abs{r}}{b^3} - \frac{1}{b^2},
+  \intertext{and at $b=\abs{r}$:}
+\frac{d^2\ell}{db^2}\Big|_{b=\abs{r}} &= \frac{2\abs{r}}{\abs{r}^3}-\frac{1}{\abs{r}^2}
+  = \frac{2}{\abs{r}^2}-\frac{1}{\abs{r}^2} = \frac{1}{\abs{r}^2} > 0 .
+\end{align*}
+A positive second derivative means the curve bends upward there: a minimum.
+
+\begin{worked}[label={we:uncertainty:deriv}]{The derivative at three points}
+Keep $\abs{r}=0.2$. Evaluate $d\ell/db=-\abs{r}/b^2+1/b$ at $b=0.1$, $0.2$, $0.4$.
+\begin{align*}
+b=0.1:&\quad -\frac{0.2}{0.01}+\frac{1}{0.1} = -20 + 10 = -10 \quad\text{(negative: increasing $b$ lowers the loss)}\\
+b=0.2:&\quad -\frac{0.2}{0.04}+\frac{1}{0.2} = -5 + 5 = 0 \quad\text{(flat: the minimum)}\\
+b=0.4:&\quad -\frac{0.2}{0.16}+\frac{1}{0.4} = -1.25 + 2.5 = 1.25 \quad\text{(positive: decreasing $b$ lowers the loss)}
+\end{align*}
+Notice the asymmetry: at half the right answer the slope is $-10$, at twice it only $+1.25$. Gradient descent
+pushes hard against overconfidence and gently against vagueness.
+\end{worked}
+
+\subsection{Many pixels sharing one scale: the mean absolute error}
+
+A single pixel's error says nothing about ``how hard this kind of place is''. The head sees context, not the
+pixel, so it cannot tell apart many pixels whose contexts look alike. Suppose $N$ such pixels, with errors
+$\abs{r_1},\dots,\abs{r_N}$, must share one predicted $b$. Their average loss is
+\begin{align*}
+\bar\ell(b) &= \frac1N\sum_{i=1}^N\left(\frac{\abs{r_i}}{b}+\log b\right)
+  \intertext{the $\log b$ is the same in every term, so it comes out of the average; the $1/b$ factors out of the sum:}
+  &= \frac{1}{b}\cdot\frac1N\sum_{i=1}^{N}\abs{r_i} \;+\; \log b
+   \;=\; \frac{m}{b}+\log b, \qquad m=\frac1N\sum_i\abs{r_i}.
+\end{align*}
+This is the single-pixel loss with $\abs{r}$ replaced by $m$, so by the same derivative $b^\star=m$: \textbf{the
+best shared scale is the mean absolute error of the pixels that share it.} With infinitely many pixels, the
+mean becomes the expectation, $b^\star(p)=\E\abs{r(p)}$, the typical error at that kind of place. This matches
+the result $\E\abs{r}=b$ of \cref{sec:uncertainty:laplace}: if errors really were Laplace with scale $b$, the
+maximum-likelihood fit recovers it.
+
+\begin{worked}[label={we:uncertainty:four}]{Four pixels, one scale}
+Four hidden pixels of a field edge have errors $0.10$, $0.30$, $0.20$, $0.40$. Find the best shared $b$ and
+check that it beats a neighbour value. Do it on paper.
+\begin{align*}
+\text{sum of errors} &= 0.10+0.30+0.20+0.40 = 1.00\\
+m &= 1.00/4 = 0.25\\
+\bar\ell(0.25) &= 0.25/0.25 + \ln 0.25 = 1.000 + (-1.386) = -0.386\\
+\bar\ell(0.20) &= 0.25/0.20 + \ln 0.20 = 1.250 + (-1.609) = -0.359\\
+\bar\ell(0.30) &= 0.25/0.30 + \ln 0.30 = 0.833 + (-1.204) = -0.371
+\end{align*}
+$-0.386$ is the lowest: the mean absolute error wins against both neighbours.
+\end{worked}
+
+\section{Predicting \texorpdfstring{$\log b$}{log b}, and the detached residual}\label{sec:uncertainty:logb}
+
+A network's last layer is a convolution, which can output any real number, including negative ones. A scale
+must be positive. The standard trick, used here, is to let the network output $s=\log b$ and compute
+$b=e^{s}$, which is positive for every real $s$. Rewrite the loss in terms of $s$:
+\begin{align*}
+\ell(s) &= \frac{\abs{r}}{e^{s}} + s = \abs{r}\,e^{-s} + s,
+\intertext{and differentiate with respect to $s$ (the chain rule: $\frac{d}{ds}e^{-s}=e^{-s}\cdot(-1)$):}
+\frac{d\ell}{ds} &= -\abs{r}\,e^{-s} + 1 .
+\intertext{Setting it to zero gives $e^{-s}=1/\abs{r}$, so}
+s^\star &= \log\abs{r}, \quad\text{that is } b^\star=e^{s^\star}=\abs{r}.
+\end{align*}
+The minimum is in the same place, as it must be: reparameterising does not move the best answer, only the
+path to it.
+
+\begin{worked}[label={we:uncertainty:chain}]{Gradients with respect to $b$ and to $\log b$}
+This is the chain rule on a tiny example. Keep $\abs{r}=0.2$ and stand at $b=0.1$, so $s=\ln 0.1=-2.303$.
+\begin{align*}
+\frac{d\ell}{ds} &= -0.2\,e^{2.303}+1 = -0.2\times 10.0 + 1 = -2.0 + 1 = -1.0\\
+\frac{d\ell}{db} &= -10 \quad\text{(from \cref{we:uncertainty:deriv})}\\
+\frac{db}{ds} &= e^{s} = b = 0.1\\
+\frac{d\ell}{ds} &= \frac{d\ell}{db}\cdot\frac{db}{ds} = -10\times 0.1 = -1.0 \quad\text{(the same, as the chain rule promises)}
+\end{align*}
+In $b$ the slope was $-10$; in $\log b$ it is $-1$. Near zero, where $b$ is small, the $\log b$ parameterisation
+tames gradients that would otherwise explode as $1/b^2$.
+\end{worked}
+
+\paragraph{The clamp.} Before using the head's output, the trainer clamps it to the range
+$-10\le s\le 5$ \tagM{finetune_trainer.py}. In terms of $b$ that is
+$e^{-10}\approx 0.0000454$ to $e^{5}\approx 148.4$: wide enough never to bind on a sensible error, narrow
+enough that one bad pixel cannot produce an infinite loss.
+
+\paragraph{The detached residual.} The error $\abs{r}$ in the loss is computed inside \code{torch.no_grad()}:
+it is \emph{detached}\index{detach}, meaning no gradient flows from the uncertainty loss back into the
+reconstruction. Without this, the network could lower $\abs{r}/b+\log b$ by changing its \emph{errors} to suit
+$b$, rather than changing $b$ to fit its errors. The docstring of \code{_scale_loss} says it in one line:
+``detached: the target, not something to shrink''.
+
+The trainer's loss, from that docstring:
+\begin{lstlisting}
+e(p) = mean over valid bands of |normalised residual|   # (B, H, W), computed under no_grad
+loss = mean over hidden p of  e(p) / b(p) + log b(p)    # lowest where b(p) = e(p)
+\end{lstlisting}
+Note that $e(p)$ is a per-pixel mean over bands, so $b(p)$ is one number per pixel, not one per band. The
+proposal rejected per-band scales on purpose: the per-band shape is RM's job.
+
+\section{The head itself, counted by hand}\label{sec:uncertainty:head}
+
+The \emph{uncertainty head}\index{uncertainty head} is a third decoder on the shared encoder features, beside
+the reconstruction decoder and the segmentation head (\cref{ch:seghead}). It is a \code{SegFormerDecoder}
+(\cref{ch:decoder}) built with width $64$ and one output channel:
+\begin{lstlisting}
+scale_head = SegFormerDecoder(embed_dims=[32, 64, 160, 256], decoder_dim=64, out_channels=1)
+#   features F1..F4: (B,32,H/4,W/4) (B,64,H/8,W/8) (B,160,H/16,W/16) (B,256,H/32,W/32)
+#   -> 1x1 projections to 64, bilinear up to H/4, concat     (B, 256, H/4, W/4)
+#   -> 1x1 fuse + GELU                                       (B, 64,  H/4, W/4)
+#   -> 3x3 refine + GELU                                     (B, 64,  H/4, W/4)
+#   -> 3x3 conv to 1 x 16 sub-pixel channels                 (B, 16,  H/4, W/4)
+#   -> PixelShuffle(4)                                       (B, 1,   H,   W)    = log b
+\end{lstlisting}
+Every convolution has $c_\text{in}\times c_\text{out}\times k\times k$ weights plus $c_\text{out}$ biases
+(\cref{ch:shapes}).
+
+\begin{worked}[label={we:uncertainty:count}]{The uncertainty head's 95,632 parameters}
+Count each layer on paper, then add.
+\begin{align*}
+\text{projection from }32 &: 32\times 64 + 64 = 2{,}048+64 = 2{,}112\\
+\text{projection from }64 &: 64\times 64 + 64 = 4{,}096+64 = 4{,}160\\
+\text{projection from }160 &: 160\times 64 + 64 = 10{,}240+64 = 10{,}304\\
+\text{projection from }256 &: 256\times 64 + 64 = 16{,}384+64 = 16{,}448\\
+\text{fuse }(4\times 64=256\to 64) &: 256\times 64 + 64 = 16{,}384+64 = 16{,}448\\
+\text{refine }3\times3 &: 64\times 64\times 9 + 64 = 36{,}864 + 64 = 36{,}928\\
+\text{sub-pixel }3\times3 &: 64\times 16\times 9 + 16 = 9{,}216 + 16 = 9{,}232\\[3pt]
+\text{total} &: 2{,}112+4{,}160 = 6{,}272\\
+ &\phantom{:}\ 6{,}272+10{,}304 = 16{,}576\\
+ &\phantom{:}\ 16{,}576+16{,}448 = 33{,}024\\
+ &\phantom{:}\ 33{,}024+16{,}448 = 49{,}472\\
+ &\phantom{:}\ 49{,}472+36{,}928 = 86{,}400\\
+ &\phantom{:}\ 86{,}400+9{,}232 = 95{,}632
+\end{align*}
+\end{worked}
+
+\begin{sourcenote}[: the head's size, verified]
+Building \code{SegFormerDecoder([32, 64, 160, 256], decoder_dim=64, out_channels=1)} on CPU and summing
+\code{p.numel()} gives 95,632 \tagC; with \code{out_channels=2} it gives 104,864 \tagC. Script and output:
+\file{research/textbook/tools/compute_39-41.py} and \file{compute_39-41_output.txt}. The proposal's ``\textasciitilde
+0.1 M parameters'' \tagM{uncertainty-head.md} is this number rounded. For comparison, the
+FT04 model it rides on has 5,886,451 parameters with its segmentation head (\cref{ch:shipping}): the head adds
+under 2\%.
+\end{sourcenote}
+
+\section{The one rule that keeps it honest: hidden pixels only}\label{sec:uncertainty:rule}
+
+The head must judge how hard a place is \emph{from its context, never from the pixel itself}. If the head
+could see the pixel, it would learn ``this pixel looks odd, so expect a big error'', and dividing by that $b$
+would divide every anomaly away. So the loss is averaged only over pixels that were \emph{hidden from the
+encoder} by the masked-autoencoder mask (\cref{ch:masking}), that are valid, and that lie inside the eroded
+valid region. The head reads the same encoder features as the reconstruction decoder, and those features were
+computed with the hidden tokens removed.
+
+Inference matches training. The product reconstructs a scene in two complementary checkerboard passes
+(\cref{ch:inference}), and \code{predict_full_scene_with_scale} runs the same passes with the head switched on,
+taking each pixel's $\log b$ from the pass in which it was hidden.
+
+\paragraph{Frozen means frozen.} FT06 trained in a new trainer mode, \code{mode: "scale"}. In the
+trainer's constructor (\code{__init__} of \code{FineTuneTrainer}) that mode sets \code{requires_grad=True} only for parameter names starting
+with \code{scale_head.}, and builds the optimiser over those alone; the training pass puts the whole model in
+evaluation mode and switches only \code{scale_head} back to training mode, so FT04's BatchNorm statistics are not
+updated either \tagM{lld/finetune.md}. The reconstruction and the masks are therefore exactly FT04's.
+
+\section{The score: dividing by \texorpdfstring{$b$}{b}, with a floor}\label{sec:uncertainty:score}
+
+The scorer \code{scaled_rm} in \file{app/evaluation/scorers.py} does three things:
+\begin{lstlisting}
+b = np.exp(log_b)                                                       # (H, W)
+b = np.maximum(b, np.percentile(b[valid], scale_floor_pct)) ** scale_power   # floor, then power
+score = blurred_mahalanobis((cube - recon) / b[None], valid, spec)       # RM, whitening refitted
+\end{lstlisting}
+The default floor is the 5th percentile \tagM{scorers.py}. The floor exists because dividing by
+a very small $b$ inflates noise wherever the model is usually right (deep water, flat desert): the proposal
+listed this as a risk and floored $b$ per scene. \code{scale_power=1} is the design, residual$/b$;
+\code{scale_power=0.5} is residual$/\sqrt b$, a softer version tried later.
+
+\begin{worked}[label={we:uncertainty:floor}]{The floor at work}
+Suppose a scene's 5th percentile of $b$ is $0.04$. Three pixels have residual $0.20$ and predicted $b$ of
+$0.01$, $0.04$ and $0.10$. Compute each scaled residual with the floor, then without.
+\begin{align*}
+\text{with floor:}\quad & \max(0.01,0.04)=0.04,\quad 0.20/0.04 = 5.0\\
+& \max(0.04,0.04)=0.04,\quad 0.20/0.04 = 5.0\\
+& \max(0.10,0.04)=0.10,\quad 0.20/0.10 = 2.0\\
+\text{without:}\quad & 0.20/0.01 = 20.0,\quad 0.20/0.04 = 5.0,\quad 0.20/0.10=2.0
+\end{align*}
+Without the floor the first pixel's score is four times larger, purely because the head was very confident
+there. The floor caps the reward for confidence.
+\end{worked}
+
+\section{Spearman's rank correlation}\label{sec:uncertainty:spearman}
+
+Before any detection test, the proposal set a sanity check: on held-out tiles, $b(p)$ must \emph{rank}
+pixels by their actual error, with Spearman correlation at least $0.5$. If the head cannot predict its own
+error, the score cannot use it.
+
+\begin{definition}[Rank and Spearman correlation]
+The \emph{rank}\index{rank (ordering)} of a value in a list is its position after sorting from smallest to
+largest (the repo counts from 0). \emph{Spearman's rank correlation}\index{Spearman rank correlation}
+\citep{spearman1904proof} between two equal-length lists $a$ and $e$ is the ordinary (Pearson) correlation of
+their ranks:
+\begin{equation}\label{eq:uncertainty:spearman}
+\rho \;=\; \frac{\sum_i (u_i-\bar u)(v_i-\bar v)}{\sqrt{\sum_i (u_i-\bar u)^2}\,\sqrt{\sum_i(v_i-\bar v)^2}},
+\qquad u_i=\operatorname{rank}(a_i),\; v_i=\operatorname{rank}(e_i).
+\end{equation}
+It is $1$ when the two lists are in the same order, $-1$ when in reverse order, and near $0$ when the orders are
+unrelated.
+\end{definition}
+
+The repo's \code{spearman} in \file{app/foundation_models/trainers/finetune_trainer.py} does exactly this:
+two \code{argsort} calls turn values into ranks, the ranks are centred on their mean, and the result is the dot
+product divided by the product of the two vectors' lengths (with ties broken by order, and at most the first
+50,000 values). Spearman asks ``does a larger $b$ go with a larger error?'', not ``is $b$ the right size?''.
+Doubling every $b$ leaves $\rho$ unchanged.
+
+When there are no ties, \cref{eq:uncertainty:spearman} simplifies to the textbook shortcut
+\begin{equation}\label{eq:uncertainty:spearmand}
+\rho = 1 - \frac{6\sum_i d_i^2}{n(n^2-1)}, \qquad d_i = u_i - v_i,
+\end{equation}
+which you can use to check your arithmetic.
+
+\begin{worked}[label={we:uncertainty:spearman5}]{Spearman on five pairs}
+Five hidden pixels. The head predicts $b$ and the actual mean error is $e$:
+\[
+b = (0.12,\ 0.40,\ 0.08,\ 0.25,\ 0.30),\qquad e=(0.10,\ 0.35,\ 0.15,\ 0.20,\ 0.50).
+\]
+Do every step on paper.
+
+\emph{Step 1, ranks} (0 = smallest). For $b$: the sorted order is $0.08<0.12<0.25<0.30<0.40$, so
+$u=(1,4,0,2,3)$. For $e$: $0.10<0.15<0.20<0.35<0.50$, so $v=(0,3,1,2,4)$.
+
+\emph{Step 2, centre.} The mean of the ranks $0,1,2,3,4$ is $10/5=2$ for both lists.
+\[
+u-\bar u = (-1,\ 2,\ -2,\ 0,\ 1),\qquad v-\bar v=(-2,\ 1,\ -1,\ 0,\ 2).
+\]
+\emph{Step 3, dot product.}
+\begin{align*}
+(-1)(-2) + (2)(1) + (-2)(-1) + (0)(0) + (1)(2) &= 2 + 2 + 2 + 0 + 2 = 8.
+\end{align*}
+\emph{Step 4, lengths.} Both centred vectors are permutations of $(-2,-1,0,1,2)$:
+\[
+\sqrt{4+1+0+1+4} = \sqrt{10} = 3.162 \text{ each};\qquad 3.162\times 3.162 = 10.
+\]
+\emph{Step 5.} $\rho = 8/10 = 0.80$.
+
+\emph{Check with \cref{eq:uncertainty:spearmand}.} $d=u-v=(1,1,-1,0,-1)$, so $\sum d^2=1+1+1+0+1=4$, and
+\[
+\rho = 1-\frac{6\times 4}{5\times(25-1)} = 1-\frac{24}{120} = 1-0.20 = 0.80. \checkmark
+\]
+The head ranks the errors well but not perfectly: it put pixel 2 (error $0.35$) at the top, where pixel 5
+(error $0.50$) belongs.
+\end{worked}
+
+\section{The run: FT06}\label{sec:uncertainty:ft06}
+
+FT06's configuration is FT04's (the same mixed batches of EnMAP, PRISMA and AVIRIS-NG at shares 0.4 / 0.35 /
+0.25), with \code{mode: "scale"}, \code{scale_decoder_dim: 64}, initialisation from FT04's \code{best.pt}, 3
+epochs and learning rate $5\times10^{-4}$ on a cosine schedule
+\tagM{FT06-uncertainty/README.md}. The pass criteria, fixed before
+launch, were:
+\begin{enumerate}
+\item the head predicts its own error: validation Spearman$(b,e)\ge 0.5$ on every sensor;
+\item detection on the real PRISMA bench against FT04 + RM, both with cloud excluded on FT04's masks: pAUC up
+  to 1\% false alarms (\cref{ch:measures}) at least $+0.010$ (0.170 to 0.180), TPR at 0.1\% not lower,
+  \emph{and} objects caught at the top 1\% and 0.1\% not lower;
+\item bench-v2.1 caught top 1\% not lower by more than 0.5 points.
+\end{enumerate}
+
+\subsection{Result 1: the head learned its error}
+
+\begin{table}[htbp]
+\centering
+\begin{tabular}{lcccc}
+\toprule
+epoch & EnMAP & PRISMA & AVIRIS-NG & val NLL\\
+\midrule
+1 & 0.584 & 0.620 & 0.607 & $-1.331$\\
+2 & 0.600 & 0.631 & 0.625 & $-1.338$\\
+3 & 0.604 & 0.636 & 0.640 & $-1.341$ (best)\\
+\bottomrule
+\end{tabular}
+\caption{FT06 validation Spearman$(b,e)$ per sensor and the head's NLL, per epoch. Source:
+\tagM{FT06-uncertainty/README.md} (in \texttt{research/experiments/indradhanu-finetune/}).}
+\label{tab:uncertainty:spearman}
+\end{table}
+
+\Cref{tab:uncertainty:spearman} shows criterion 1 met on every sensor from the first epoch, and rising every
+epoch. The NLL falls each epoch too, and since mode \code{"scale"} ranks epochs by that NLL (``scale by its
+NLL'', \file{docs/lld/finetune.md}), \code{best.pt} is epoch 3. Hold on to that: ``best'' here means best at
+predicting its own error.
+
+\subsection{Result 2: detection got worse}
+
+\begin{table}[htbp]
+\centering\small
+\begin{tabular}{lccccc}
+\toprule
+ & pAUC $\le$1\% & TPR @ 0.1\% & top 1\% & top 0.1\% & ROC-AUC\\
+\midrule
+FT04 + RM (the bar) & \textbf{0.170} & 0.065 & \textbf{46.0\%} & 15.8\% & \textbf{0.852}\\
+FT06 + RM & 0.170 & 0.065 & 46.0\% & 15.8\% & 0.852\\
+FT06 + scaled RM, residual$/b$ & 0.125 & 0.064 & 37.8\% & 13.2\% & 0.708\\
+FT06 + scaled RM, residual$/\sqrt b$ & 0.163 & \textbf{0.072} & 44.8\% & \textbf{16.6\%} & 0.805\\
+\emph{epoch 1} + residual$/\sqrt b$ & 0.176 & 0.079 & 46.1\% & 17.3\% & 0.822\\
+\bottomrule
+\end{tabular}
+\caption{FT06 detection on the real PRISMA bench, cloud excluded on FT04's masks. ``Top'' columns are objects
+caught. Source: \tagM{FT06-uncertainty/README.md}.}
+\label{tab:uncertainty:detect}
+\end{table}
+
+\begin{drift}
+FT06 results, run 2026-10-20 (\file{research/experiments/indradhanu-finetune/FT06-uncertainty/}):
+\cref{tab:uncertainty:spearman,tab:uncertainty:detect}. bench-v2.1 caught top 1\%: FT04 36.2\%, scaled
+33.9\%, sqrt 36.2\%. Subtle tier caught top 1\% with sqrt, cloud excluded: 40.3\% to 37.7\%
+\tagM{FT06-uncertainty/eval_report.md}. Set2 pAUC fell 0.128 to 0.097 under residual$/b$.
+\end{drift}
+
+Read \cref{tab:uncertainty:detect} row by row.
+\begin{itemize}
+\item \textbf{FT06 + RM equals FT04 + RM to every digit.} That is the frozen-backbone check working, not a bug:
+  the reconstruction is FT04's, so plain RM on it is FT04's score.
+\item \textbf{As designed, residual$/b$ loses about a quarter of its pAUC}: $0.170-0.125=0.045$, and
+  $0.045/0.170=0.26$. It loses $46.0-37.8=8.2$ points of objects caught at the top 1\%.
+\item \textbf{The square-root variant lifts the very top and loses overall}: TPR at 0.1\% goes 0.065 to 0.072,
+  but pAUC drops to 0.163.
+\item The proposal expected most of any gain on medium and subtle objects. The opposite happened.
+\end{itemize}
+No row meets criterion 2. FT06 was not adopted.
+
+\section{Why: the head expects large errors exactly where targets are}\label{sec:uncertainty:why}
+
+The diagnosis script \file{b_at_targets.py} asks where the head puts its expected error, on PRISMA sets 1, 2
+and 4, for epochs 1 and 3. For each scene it takes the target pixels $T$ and a \emph{ring}\index{ring (around a
+target)} around them,
+\begin{lstlisting}
+ring = binary_dilation(t, iterations=8) & ~binary_dilation(t, iterations=3) & valid
+\end{lstlisting}
+and reports two numbers: the percentile of $b$ at target pixels against every valid pixel in the scene, and
+the \emph{target / ring ratio}
+\begin{equation}\label{eq:uncertainty:ratio}
+\text{ratio} = \exp\!\big(\operatorname{median}_{T}\log b - \operatorname{median}_{\text{ring}}\log b\big)
+ = \frac{\operatorname{median}_T b}{\operatorname{median}_\text{ring} b},
+\end{equation}
+where the second form holds because $\exp$ is increasing (the median of $\log b$ is the log of the median of
+$b$) and $e^{x-y}=e^x/e^y$.
+
+\begin{sourcenote}[: what ``3--8 px'' means]
+The FT06 README's observations call the ring ``3-8 px'', and the course repeats it. The code
+(\file{FT06-uncertainty/b_at_targets.py}) removes everything within 3 dilation steps and keeps up to 8, so the
+ring is pixels at distance 4 to 8 from the target. \code{binary_dilation}'s default structuring element is a
+cross, so the distance is the city-block distance $\abs{\Delta x}+\abs{\Delta y}$. The README's evidence line
+says this correctly: ``the ring is 4-8 dilation steps, city-block distance''.
+\end{sourcenote}
+
+\begin{table}[htbp]
+\centering
+\begin{tabular}{lccc}
+\toprule
+ & set1 & set2 & set4\\
+\midrule
+target / ring $b$ ratio, epoch 1 & 1.05 & 1.12 & 1.04\\
+target / ring $b$ ratio, epoch 3 & 1.07 & 1.19 & 1.13\\
+\bottomrule
+\end{tabular}
+\caption{Median $b$ on targets over median $b$ on their own 4--8 px ring. Target pixels also sit at the 87th--90th
+percentile of $b$ across each scene. Source: \tagM{FT06-uncertainty/README.md}.}
+\label{tab:uncertainty:ratio}
+\end{table}
+
+Two separate facts, and both hurt.
+\begin{itemize}
+\item \textbf{Across the scene}, targets sit on built-up surfaces, which are hard to reconstruct, so the head
+  rightly expects large errors there (the 87th--90th percentile).
+\item \textbf{Locally}, $b$ on the target is higher than on its own ring. That should not happen if the head only
+  judged ``how hard is this kind of place'': the ring is the same kind of place.
+\end{itemize}
+
+\subsection{Why the hidden-pixel rule did not stop it: halo arithmetic}
+
+The rule hides the pixel from the encoder. But the encoder hides whole $4\times4$-pixel tokens (stage 1 is a
+non-overlapping kernel-4, stride-4 convolution, \cref{ch:patchembed}), and a target is not confined to its
+token. Its \emph{PSF halo}\index{PSF halo} (the sensor's blur that spreads some of a target's light into
+neighbouring pixels, \cref{ch:benchmarks}) and any part of a target larger than one token can sit in the
+\emph{neighbouring} tokens, which are visible about 35\% of the time.
+
+\begin{worked}[label={we:uncertainty:halo}]{How often a halo leaks out of its token}
+Take a one-pixel target whose light reaches $h$ pixels on either side. Its footprint along one axis is
+$2h+1$ pixels wide. Assume (an illustrative assumption \tagA) the target's position within its 4-pixel token is
+equally likely to be any of the 4 offsets $0,1,2,3$. The footprint stays inside the token along that axis only
+if it starts at offset $\ge 0$ and ends at offset $\le 3$.
+\begin{align*}
+h=0:&\ \text{width }1;\ \text{fits at offsets }0,1,2,3 \to 4\text{ of }4 = 1\\
+h=1:&\ \text{width }3;\ \text{the target must be at offset 1 or 2} \to 2\text{ of }4 = 1/2\\
+h=2:&\ \text{width }5 > 4 \to 0\text{ of }4 = 0
+\end{align*}
+Both axes must fit, so for $h=1$ the footprint is inside one token with probability
+$\tfrac12\times\tfrac12=\tfrac14$: three times in four, some of the target's light lands in a neighbouring
+token. For $h=2$ it always does. So for almost every target, a visible neighbour carries a trace of it.
+\end{worked}
+
+The head learns ``something odd is next to here, expect a big error''. It is right about that: the odd
+spectrum next door genuinely predicts a large reconstruction error. And dividing by $b$ then explains the
+anomaly away.
+
+\begin{keypoint}
+A head trained to predict its own error will predict a large error on an anomaly whenever it can see any
+trace of it, and then the anomaly is no longer surprising.
+\end{keypoint}
+
+\begin{worked}[label={we:uncertainty:divide}]{Dividing by $b$, by hand}
+Use set2's epoch-3 ratio, $1.19$. Keep to one whitened band, ignore that the whitening is refitted (it rescales
+every pixel alike, so it does not change the order), and score by squared distance from a ring mean of $0$
+(RM's score is a squared distance). Three pixels: a target with residual $3.0$ and $b=1.19$; a pixel in its ring
+with residual $1.0$ and $b=1.00$; a flat-field pixel elsewhere with residual $2.6$ and $b=1.00$. The residuals
+are illustrative \tagA; only the ratio $1.19$ is measured.
+
+\emph{Plain RM:}
+\begin{align*}
+\text{target} &: 3.0^2 = 9.00\\
+\text{ring pixel} &: 1.0^2 = 1.00\\
+\text{flat field} &: 2.6^2 = 6.76 \qquad\text{(target ranks first)}
+\end{align*}
+\emph{Residual$/b$:}
+\begin{align*}
+\text{target} &: 3.0/1.19 = 2.521,\quad 2.521^2 = 6.36\\
+\text{ring pixel} &: 1.0/1.00 = 1.000,\quad 1.000^2 = 1.00\\
+\text{flat field} &: 2.6/1.00 = 2.600,\quad 2.600^2 = 6.76 \qquad\text{(the flat field now outranks the target)}
+\end{align*}
+The target's score fell from $9.00$ to $6.36$: divided by $1.19\times1.19=1.416$, about 29\% lower. It fell
+below an ordinary bright pixel elsewhere, which is how objects drop out of the top 1\%.
+
+\emph{Residual$/\sqrt b$:} $\sqrt{1.19}=1.091$, so $3.0/1.091=2.750$, and $2.750^2=7.56$, still above 6.76,
+which is why the square-root variant hurts less.
+\end{worked}
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}
+\begin{axis}[ybar,width=0.85\linewidth,height=5.5cm,bar width=12pt,ymin=0,ymax=10,
+  symbolic x coords={plain RM,residual/sqrt b,residual/b},xtick=data,ylabel={squared score},
+  legend style={at={(0.5,1.02)},anchor=south,legend columns=3},enlarge x limits=0.25,
+  nodes near coords,every node near coord/.append style={font=\scriptsize}]
+\addplot[fill=loss!70] coordinates {(plain RM,9.00) (residual/sqrt b,7.56) (residual/b,6.36)};
+\addplot[fill=maskgrey!60] coordinates {(plain RM,6.76) (residual/sqrt b,6.76) (residual/b,6.76)};
+\addplot[fill=spec!50] coordinates {(plain RM,1.00) (residual/sqrt b,1.00) (residual/b,1.00)};
+\legend{target,flat field,ring pixel}
+\end{axis}
+\end{tikzpicture}
+\caption{The three pixels of \cref{we:uncertainty:divide}, drawn to scale. Dividing by $b$ with a target/ring
+ratio of 1.19 drops the target below an ordinary flat-field pixel; the square root keeps it a little above.}
+\label{fig:uncertainty:divide}
+\end{figure}
+
+\subsection{Why epoch 1 looked better than epoch 3}
+
+The ratios in \cref{tab:uncertainty:ratio} grew with training: set1 1.05 to 1.07, set2 1.12 to 1.19, set4 1.04
+to 1.13. As the head got better at its own job (Spearman up every epoch), it also learned more of the
+``something odd next door'' signal, because that signal genuinely predicts large errors. More of it means more
+of each target divided away. So epoch 1 with the square root scored pAUC 0.176, and epoch 3, the
+\code{best.pt} by NLL, fell below FT04.
+
+\begin{keypoint}
+Predicting your own error well is not the same goal as detection: the checkpoint chosen by the head's own
+loss was the worst one for the product.
+\end{keypoint}
+
+\subsection{The selection-risk caveat}
+
+Do not read the epoch-1 row as a gain to ship. The square-root variant was \emph{chosen after seeing epoch-1
+results on the real bench}, and then judged on the same bench. When you try variants and keep the one that
+looks best on the data that will also grade it, part of the improvement is luck in that data, and you cannot
+tell how much. This is \emph{selection risk}\index{selection risk}. Even at face value, epoch 1's pAUC of 0.176
+is below the 0.180 bar. \Cref{ch:bootstrap} later put a paired bootstrap interval on the epoch-3 square-root
+row: $-0.0067\ [-0.0174, +0.0037]$ \tagM{bench-resolution/README.md}, a tie.
+
+\section{What might rescue it, and what it taught}\label{sec:uncertainty:rescue}
+
+The FT06 README lists two ideas, both untried and both costing a retrain:
+\begin{enumerate}
+\item hide a wider context when training the head, for example $3\times3$ tokens around each predicted one, so
+  the head never sees a target's halo or its other parts;
+\item predict $b$ from the reconstruction branch's features of a heavily masked pass only.
+\end{enumerate}
+The README recommends neither before a cheaper idea. The halo problem did not go away: it is the motivation
+for the block masking of \cref{ch:decoderwork}.
+
+A practical note from the run: the evaluation took about 2.3 hours rather than the expected 1, because two
+models plus the scale pass filled the laptop GPU's 20\,GB \tagM{FT06-uncertainty/README.md}.
+
+\begin{confusions}
+\confusion{Spearman met its bar, so the head works.}{It works at its own goal. Criterion 1 was a sanity check:
+a head that cannot predict its error is useless. Passing it was necessary, not sufficient; detection is the
+criterion that counts.}
+\confusion{The hidden-pixel rule should have prevented this.}{It prevents the head from seeing the pixel. It
+does not stop the head from seeing neighbouring tokens, which carry the target's halo and any part larger than
+one $4\times4$ token (\cref{we:uncertainty:halo}).}
+\confusion{FT06 + RM matching FT04 to every digit means the evaluation is broken.}{It is the check that the
+backbone stayed frozen. Different numbers there would have been the bug.}
+\confusion{The 1.19 is a percentile.}{No. It is a ratio of medians, target $b$ over ring $b$. The 87th--90th
+percentile is a separate measure, of target $b$ against the whole scene.}
+\confusion{The Laplace NLL has a log 2 that the code forgot.}{It was dropped on purpose: a constant does not
+change where the minimum is, so it does not change any gradient.}
+\confusion{Why predict log b instead of b?}{A convolution can output negative numbers; $e^{s}$ is always
+positive. It also turns the $1/b^2$ gradient near zero into a gentle one (\cref{we:uncertainty:chain}).}
+\confusion{This is the same as RM's whitening.}{RM divides by a per-scene spread along each error
+\emph{direction}. $b(p)$ is a per-\emph{pixel} scale. The design keeps per-band shape with RM on purpose.}
+\confusion{best.pt is the best model.}{It is the epoch with the lowest scale NLL, which mode
+\texttt{"scale"} uses to rank epochs. Here that was the worst epoch for detection.}
+\end{confusions}
+
+\begin{checkyourself}
+\item\label{ex:uncertainty:1} For $\abs{r}=0.5$, compute $\ell=\abs{r}/b+\ln b$ at $b=0.25$, $0.5$ and $1.0$.
+Which is lowest? Then compute $d\ell/db$ at each of the three.
+\item\label{ex:uncertainty:2} Five pixels have $b=(0.3, 0.1, 0.5, 0.2, 0.4)$ and errors
+$e=(0.25,\allowbreak 0.05,\allowbreak 0.30,\allowbreak 0.40,\allowbreak 0.45)$. Compute Spearman's $\rho$ in two ways: with \cref{eq:uncertainty:spearman},
+and with \cref{eq:uncertainty:spearmand}.
+\item\label{ex:uncertainty:3} What would the head's parameter count be with decoder width 32 (and still one output
+channel)? Count every layer.
+\item\label{ex:uncertainty:4} Redo \cref{we:uncertainty:divide} with set1's epoch-3 ratio, 1.07. What is the
+target's squared score under residual$/b$, and does it still outrank the flat field at 6.76? By what factor
+does residual$/\sqrt b$ shrink the squared score with ratio 1.19?
+\item\label{ex:uncertainty:5} A Gaussian error model gives the NLL $r^2/(2\sigma^2)+\log\sigma$ (constants
+dropped). Find the best $\sigma$ for one error $r$, and for $N$ errors sharing one $\sigma$. Compare with the
+Laplace result.
+\item\label{ex:uncertainty:6} Spearman rose every epoch while detection fell. Name the mechanism, and say why
+the epoch-1 square-root row is not evidence of a gain.
+\end{checkyourself}
+
+\nextchapter{ch:decoderwork}

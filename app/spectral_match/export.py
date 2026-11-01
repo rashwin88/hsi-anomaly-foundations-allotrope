@@ -14,6 +14,8 @@ flat CSV, and a manifest. Every path inside the zip is prefixed with
         hyper_anomaly_materials.cpg
         hyper_material_legend.json          # id → name/chapter/asd_subtype
         hyper_match_summary.csv             # flat table, no geometry
+        hyper_namer_level1.tif              # int8 GeoTIFF, man-made vs natural (namer actions)
+        hyper_namer_objects.csv             # one row per object (namer actions)
         MANIFEST.json                       # audit trail
 
 Hard requirements from the submission rules:
@@ -31,8 +33,16 @@ Materials-as-metadata channels (belt-and-suspenders):
   - ``hyper_material_legend.json`` — separate file, redundant with the
     TIFF tag for humans who don't use GDAL.
 
-Two bundle layouts, chosen by what the action wrote (schema in MANIFEST.json):
+Three bundle layouts, chosen by what the action wrote (schema in MANIFEST.json):
 
+  - ``allotrope-export-hyper/3`` — actions where the spectral namer ran
+    (``namer_pixels.parquet``). One point per anomaly pixel, natural ones included. Leading
+    DBF / CSV columns ``nm_mm`` (the object's P(man-made)), ``nm_call`` (manmade / natural),
+    ``nm_cls`` (closest known class, man-made only), ``nm_p`` (its P(class | man-made)),
+    ``nm_conf`` (1 confident, 0 tentative), ``nm_obj`` (object id), then the /2 family columns
+    (natural pixels: family ``namer_natural``, not matched) and SAM's. Adds
+    ``hyper_namer_level1.tif`` (-1 outside the mask, 0 natural, 1 man-made, same georef as the
+    main raster) and ``hyper_namer_objects.csv`` (centroid lat / lon per object).
   - ``allotrope-export-hyper/2`` — actions with family matching
     (``family_matches.parquet``). The raster holds family codes (-2 outside the mask,
     -1 not scored, 0 man-made type unconfirmed, 1..F a family) and the legend maps them.
@@ -41,6 +51,17 @@ Two bundle layouts, chosen by what the action wrote (schema in MANIFEST.json):
     the SAM library legend.
   - ``allotrope-export-hyper/1`` — SAM-only actions from before family matching: top-1
     library index raster, ``conf = angle < confidence_threshold_deg``. Unchanged.
+
+Subset bundles (``ExportSpec.subset`` "manmade" / "natural", namer actions only) keep only the
+pixels of objects the namer gave that call, and replace every coded raster with one boolean
+map - the submission shape (boolean GeoTIFF + shapefile), no heatmaps:
+
+    hyper_<scene_id>_<action_id>_<subset>/
+        hyper_anomaly_mask_<subset>.tif     # uint8 0/1 on the subset's pixels, scene CRS
+        hyper_anomaly_materials_<subset>.*  # one point per subset pixel, /3 columns
+        hyper_match_summary_<subset>.csv
+        hyper_namer_objects_<subset>.csv
+        MANIFEST.json                       # schema /3, "subset" names the call
 """
 
 from __future__ import annotations
@@ -57,6 +78,14 @@ from typing import Any
 class MissingCRSError(Exception):
     """Raised when the source GeoTIFF has no CRS — we refuse to silently
     ship a bundle that the evaluation script will disqualify."""
+
+
+class SubsetUnavailableError(Exception):
+    """A man-made / natural subset was asked of an action the spectral namer did not run on."""
+
+
+# ExportSpec.subset values. "all" is the whole bundle; the others are the namer's object calls.
+SUBSETS = ("all", "manmade", "natural")
 
 
 # Default confidence threshold (degrees). SAM angles below this are
@@ -84,6 +113,14 @@ _SHP_COLUMN_RENAME = {
 # Family bundles: CSV / DBF columns ahead of SAM's material_k / score_k.
 _FAMILY_KEYS = ["row", "col", "latitude", "longitude", "family", "family_group",
                 "family_confidence", "family_named", "best_entry"]
+# Namer bundles: the object's namer result, per pixel, after row / col / lat / lon. Already
+# within the shapefile's 10-character limit.
+_NAMER_KEYS = ["nm_mm", "nm_call", "nm_cls", "nm_p", "nm_conf", "nm_obj"]
+# Family columns of an anomaly pixel the namer called natural (not matched).
+_NAMER_NATURAL_FAMILY = {"family": "namer_natural", "family_group": "natural",
+                         "family_confidence": 0.0, "family_named": 0, "best_entry": ""}
+_OBJECT_KEYS = ["obj_id", "n_px", "latitude", "longitude", "row", "col", "p_manmade", "call",
+                "cls", "p_cls", "confident", "fill"]
 
 
 @dataclass(frozen=True)
@@ -103,6 +140,7 @@ class ExportSpec:
     # ``app.georef.resolve_scene_georef`` and threads it in here.
     override_transform: Any = None     # rasterio.transform.Affine
     override_crs: Any = None           # rasterio.crs.CRS
+    subset: str = "all"                # "manmade" / "natural": only those objects' pixels
 
 
 def build_hyper_bundle(spec: ExportSpec) -> tuple[bytes, str]:
@@ -110,6 +148,7 @@ def build_hyper_bundle(spec: ExportSpec) -> tuple[bytes, str]:
 
     Raises ``MissingCRSError`` if the source GeoTIFF has no CRS.
     Raises ``FileNotFoundError`` if required input artifacts are missing.
+    Raises ``SubsetUnavailableError`` for a man-made / natural subset without namer files.
     """
     import numpy as np
     import rasterio
@@ -131,6 +170,16 @@ def build_hyper_bundle(spec: ExportSpec) -> tuple[bytes, str]:
                                       "family_legend.json")]
     is_family = all(p.is_file() for p in family_files)
     raster_tif = family_files[1] if is_family else match_map_tif
+    namer_files = [art / f for f in ("namer_pixels.parquet", "namer_objects.parquet",
+                                     "namer_level1_map.tif")]
+    is_namer = all(p.is_file() for p in namer_files)
+    if spec.subset not in SUBSETS:
+        raise ValueError(f"subset must be one of {SUBSETS}, got {spec.subset!r}")
+    subset = None if spec.subset == "all" else spec.subset
+    if subset and not is_namer:
+        raise SubsetUnavailableError(
+            "this action has no spectral-namer results, so it cannot be split into "
+            "man-made and natural objects; export it without a subset")
 
     # ---- 1. Read the match map and (if needed) override georef -----
     with rasterio.open(raster_tif) as src:
@@ -175,15 +224,26 @@ def build_hyper_bundle(spec: ExportSpec) -> tuple[bytes, str]:
     legend = family_legend["codes"] if is_family else sam_legend
 
     # ---- 3. Build features ------------------------------------------
+    # Namer bundles: one point per anomaly pixel; family / SAM attached where they matched.
     # Family bundles: one point per anomaly pixel, SAM ranks attached where SAM matched.
     # SAM bundles: one point per SAM-matched pixel.
-    if is_family:
-        pixels = [(int(f["row"]), int(f["col"]), f)
-                  for f in pq.read_table(family_files[0]).to_pylist()]
+    fam_by_px = ({(int(f["row"]), int(f["col"])): f
+                  for f in pq.read_table(family_files[0]).to_pylist()} if is_family else {})
+    objects = pq.read_table(namer_files[1]).to_pylist() if is_namer else []
+    obj_by_id = {int(o["obj_id"]): o for o in objects}
+    if is_namer:
+        pixels = [(int(n["row"]), int(n["col"]), fam_by_px.get((int(n["row"]), int(n["col"]))),
+                   obj_by_id[int(n["obj_id"])])
+                  for n in pq.read_table(namer_files[0], columns=["row", "col", "obj_id"]).to_pylist()]
+    elif is_family:
+        pixels = [(r, c, f, None) for (r, c), f in fam_by_px.items()]
     else:
-        pixels = [(r, c, None) for (r, c) in by_pixel]
+        pixels = [(r, c, None, None) for (r, c) in by_pixel]
+    if subset:
+        pixels = [p for p in pixels if p[3]["call"] == subset]
+        objects = [o for o in objects if o["call"] == subset]
     records: list[dict[str, Any]] = []
-    for r, c, fam in pixels:
+    for r, c, fam, obj in pixels:
         # Pixel-centre lon/lat from the source raster's affine.
         lon, lat = rasterio.transform.xy(src_transform, r, c, offset="center")
         rec: dict[str, Any] = {
@@ -192,25 +252,31 @@ def build_hyper_bundle(spec: ExportSpec) -> tuple[bytes, str]:
             "latitude": float(lat),
             "longitude": float(lon),
         }
+        if obj is not None:
+            rec.update(_namer_fields(obj))
         if fam is not None:
             rec.update(_family_fields(fam, family_legend["codes"]))
+        elif is_family:
+            rec.update(_NAMER_NATURAL_FAMILY)
         ranks = by_pixel.get((r, c), [])
         for k, hit in enumerate(ranks):
             rec[f"material_{k+1}"] = hit["name"]
             rec[f"score_{k+1}"] = round(float(hit["angle_deg"]), 5)
-        if fam is None:
+        if not is_family:
             rec["confident"] = int(
-                float(ranks[0]["angle_deg"]) < spec.confidence_threshold_deg
+                bool(ranks) and float(ranks[0]["angle_deg"]) < spec.confidence_threshold_deg
             )
         rec["geometry"] = Point(lon, lat)
         records.append(rec)
 
-    gdf = gpd.GeoDataFrame(records, geometry="geometry", crs=src_crs)
+    # An empty subset (no man-made objects, say) still ships its all-zero mask and manifest.
+    gdf = (gpd.GeoDataFrame(records, geometry="geometry", crs=src_crs) if records
+           else gpd.GeoDataFrame(geometry=[], crs=src_crs))
 
     # Reproject to EPSG:4326 if we're not already there — common GIS
     # convention for shapefile/CSV, and matches what `latitude/longitude`
     # field names imply.
-    if str(gdf.crs).lower() not in ("epsg:4326",):
+    if records and str(gdf.crs).lower() not in ("epsg:4326",):
         # Compute lat/lon in EPSG:4326 explicitly for the attribute table,
         # but keep the geometry in the native CRS so it overlays the
         # source raster correctly in QGIS/ArcGIS.
@@ -221,39 +287,60 @@ def build_hyper_bundle(spec: ExportSpec) -> tuple[bytes, str]:
         gdf["longitude"] = gdf_4326.geometry.x
 
     # ---- 4. Assemble the zip in-memory -------------------------------
-    folder = f"hyper_{_short(spec.scene_id)}_{_short(spec.action_id)}"
+    # A subset bundle names the folder and every member after the subset.
+    sfx = f"_{subset}" if subset else ""
+    folder = f"hyper_{_short(spec.scene_id)}_{_short(spec.action_id)}{sfx}"
     zip_buf = io.BytesIO()
     with zipfile.ZipFile(zip_buf, "w", zipfile.ZIP_DEFLATED) as zf:
 
-        # 4a. GeoTIFF with MATERIAL_IDS tag
-        tif_bytes = _write_geotiff_bytes(
-            raster=raster, profile=profile, legend=legend,
-            nodata=-2 if is_family else -1,
-        )
-        zf.writestr(f"{folder}/hyper_anomaly_materials.tif", tif_bytes)
+        # 4a. GeoTIFF: the subset's boolean mask, or the coded raster with its MATERIAL_IDS tag.
+        if subset:
+            zf.writestr(f"{folder}/hyper_anomaly_mask_{subset}.tif",
+                        _write_subset_mask_bytes(namer_files[2], subset, crs=src_crs,
+                                                 transform=src_transform))
+        else:
+            tif_bytes = _write_geotiff_bytes(
+                raster=raster, profile=profile, legend=legend,
+                nodata=-2 if is_family else -1,
+            )
+            zf.writestr(f"{folder}/hyper_anomaly_materials.tif", tif_bytes)
 
         # 4b. Shapefile + sidecars (geopandas writes them to a tmpdir;
         # we read each back as bytes and stuff into the zip).
         shp_files = _write_shapefile_sidecars(
             gdf=gdf,
             top_k_for_shapefile=3,
-            lead_cols=_FAMILY_KEYS[4:] if is_family else [],
-        )
+            lead_cols=(_NAMER_KEYS if is_namer else []) + (_FAMILY_KEYS[4:] if is_family else []),
+        ) if records else {}
         for fname, blob in shp_files.items():
-            zf.writestr(f"{folder}/hyper_anomaly_materials.{fname}", blob)
+            zf.writestr(f"{folder}/hyper_anomaly_materials{sfx}.{fname}", blob)
 
-        # 4c. Legend JSON
-        zf.writestr(
-            f"{folder}/hyper_material_legend.json",
-            json.dumps(family_legend if is_family else legend, indent=2),
-        )
-        if is_family:
+        # 4c. Legend JSON: the codes of the coded raster, which a subset bundle does not carry.
+        if not subset:
+            zf.writestr(
+                f"{folder}/hyper_material_legend.json",
+                json.dumps(family_legend if is_family else legend, indent=2),
+            )
+        if is_family and not subset:
             zf.writestr(f"{folder}/hyper_sam_legend.json", json.dumps(sam_legend, indent=2))
 
         # 4d. Flat CSV (no geometry, all top-K)
+        base_keys = _FAMILY_KEYS if is_family else ["row", "col", "latitude", "longitude",
+                                                     "confident"]
+        if is_namer:
+            base_keys = base_keys[:4] + _NAMER_KEYS + base_keys[4:]
         csv_bytes = _records_to_csv_bytes(
-            records, base_keys=_FAMILY_KEYS if is_family else None)
-        zf.writestr(f"{folder}/hyper_match_summary.csv", csv_bytes)
+            records, base_keys=base_keys if (is_family or is_namer) else None)
+        zf.writestr(f"{folder}/hyper_match_summary{sfx}.csv", csv_bytes)
+
+        # 4d'. The namer's level-1 map (same georef as the main raster) and its objects.
+        if is_namer and not subset:
+            zf.writestr(f"{folder}/hyper_namer_level1.tif",
+                        _write_level1_geotiff_bytes(namer_files[2], crs=src_crs,
+                                                    transform=src_transform))
+        if is_namer:
+            zf.writestr(f"{folder}/hyper_namer_objects{sfx}.csv",
+                        _objects_csv_bytes(objects, src_transform, src_crs))
 
         # 4e. Manifest
         manifest = {
@@ -273,6 +360,16 @@ def build_hyper_bundle(spec: ExportSpec) -> tuple[bytes, str]:
                 "experiences, and approaches (30% of marks). Author manually."
             ),
         }
+        if is_namer:
+            manifest["schema"] = "allotrope-export-hyper/3"
+            manifest["namer"] = _namer_manifest(art, objects)
+            manifest["namer"]["n_pixels_natural"] = sum(1 for rec in records
+                                                       if rec["nm_call"] == "natural")
+            manifest["subset"] = subset or "all"
+        if subset:
+            manifest["subset_note"] = (
+                f"only the pixels of objects the spectral namer called {subset}; "
+                f"hyper_anomaly_mask_{subset}.tif is 1 on exactly those pixels, 0 elsewhere")
         if is_family:
             manifest.update({
                 "matcher": "family_v1 (calibrated Simplex ACE) + SAM top-K alongside",
@@ -316,6 +413,105 @@ def _family_fields(fam: dict, codes: dict) -> dict[str, Any]:
         "family_named": int(bool(fam["answered"])),
         "best_entry": fam["best_entry"],
     }
+
+
+def _namer_fields(obj: dict) -> dict[str, Any]:
+    """CSV / DBF namer columns for a pixel: its object's call, class and confidence."""
+    manmade = obj["call"] == "manmade"
+    return {
+        "nm_mm": round(float(obj["p_manmade"]), 4),
+        "nm_call": obj["call"],
+        "nm_cls": obj["cls"] if manmade else "",
+        "nm_p": round(float(obj["p_cls"]), 4) if manmade else None,
+        "nm_conf": int(bool(obj["confident"])),
+        "nm_obj": int(obj["obj_id"]),
+    }
+
+
+def _namer_manifest(art: Path, objects: list[dict]) -> dict[str, Any]:
+    """MANIFEST.json "namer" block: what named the objects and how many of each."""
+    legend_path = art / "namer_legend.json"
+    legend = json.loads(legend_path.read_text()) if legend_path.is_file() else {}
+    manmade = [o for o in objects if o["call"] == "manmade"]
+    return {
+        "codename": legend.get("codename"),
+        "checkpoint": legend.get("checkpoint"),
+        "confident_p": legend.get("confident_p"),
+        "n_objects": len(objects),
+        "n_objects_manmade": len(manmade),
+        "n_objects_natural": len(objects) - len(manmade),
+        "class_counts": _counts(o["cls"] for o in manmade),
+        "n_objects_confident": sum(1 for o in manmade if o["confident"]),
+        "nm_meaning": ("per-pixel columns carry the pixel's OBJECT result; nm_cls is the closest "
+                       "known class (nm_conf 0 = tentative), not a closed-world answer"),
+    }
+
+
+def _write_level1_geotiff_bytes(path: Path, *, crs, transform) -> bytes:
+    """namer_level1_map.tif with the scene's georef (the action wrote an identity transform)."""
+    import rasterio
+    from rasterio.io import MemoryFile
+
+    with rasterio.open(path) as src:
+        raster = src.read(1)
+        profile = dict(src.profile)
+    profile.update(driver="GTiff", count=1, dtype="int8", nodata=-1, compress="lzw",
+                   crs=crs, transform=transform)
+    profile.pop("predictor", None)
+    with MemoryFile() as memfile:
+        with memfile.open(**profile) as dst:
+            dst.write(raster.astype("int8"), 1)
+            dst.update_tags(NAMER_LEVEL1_CODES=json.dumps(
+                {"-1": "outside the anomaly mask", "0": "natural", "1": "man-made"}))
+        return memfile.read()
+
+
+def _write_subset_mask_bytes(level1_path: Path, subset: str, *, crs, transform) -> bytes:
+    """uint8 0/1 GeoTIFF, 1 on the pixels of the subset's objects (from namer_level1_map.tif).
+
+    No nodata: 0 is an answer ("not a man-made anomaly"), which is what a boolean map means.
+    """
+    import numpy as np
+    import rasterio
+    from rasterio.io import MemoryFile
+
+    with rasterio.open(level1_path) as src:
+        level1 = src.read(1)
+        profile = dict(src.profile)
+    mask = (level1 == (1 if subset == "manmade" else 0)).astype(np.uint8)
+    profile.update(driver="GTiff", count=1, dtype="uint8", nodata=None, compress="lzw",
+                   crs=crs, transform=transform)
+    profile.pop("predictor", None)
+    with MemoryFile() as memfile:
+        with memfile.open(**profile) as dst:
+            dst.write(mask, 1)
+            dst.update_tags(ANOMALY_MASK=f"1 = anomaly pixel of a {subset} object, 0 = not")
+        return memfile.read()
+
+
+def _objects_csv_bytes(objects: list[dict], transform, crs) -> bytes:
+    """One row per object, centroid lat / lon in EPSG:4326."""
+    import csv
+
+    import rasterio
+    from rasterio.warp import transform as warp
+
+    if not objects:
+        return b""
+    xs, ys = zip(*(rasterio.transform.xy(transform, float(o["row"]), float(o["col"]),
+                                         offset="center") for o in objects))
+    lons, lats = warp(crs, "EPSG:4326", list(xs), list(ys))
+    buf = io.StringIO()
+    writer = csv.DictWriter(buf, fieldnames=_OBJECT_KEYS, extrasaction="ignore")
+    writer.writeheader()
+    for o, lon, lat in zip(objects, lons, lats):
+        writer.writerow({**o, "latitude": round(lat, 7), "longitude": round(lon, 7),
+                         "row": round(float(o["row"]), 2), "col": round(float(o["col"]), 2),
+                         "p_manmade": round(float(o["p_manmade"]), 4),
+                         "p_cls": "" if o["call"] != "manmade" else round(float(o["p_cls"]), 4),
+                         "confident": int(bool(o["confident"])),
+                         "fill": round(float(o["fill"]), 4)})
+    return buf.getvalue().encode("utf-8")
 
 
 def _counts(values) -> dict[str, int]:

@@ -11,7 +11,9 @@ Sequence diagrams:
     final design/diagrams/scene-onboard.drawio   (Step 7e)
 """
 
+import json
 import logging
+import re
 import shutil
 import uuid
 from datetime import datetime, timezone
@@ -44,7 +46,12 @@ logger = logging.getLogger("allotrope.api.scenes")
 
 # v1 sensor types — kept here (not in a shared enum) until a second route
 # needs them. List per abstractions-spec § 5.2.
-_SUPPORTED_SENSORS = {"prisma", "landsat9", "enmap", "aviris_ng", "hotsat1"}
+_SUPPORTED_SENSORS = {"prisma", "landsat9", "enmap", "aviris_ng", "hotsat1", "tanager", "generic_hsi"}
+
+# generic_hsi's operator scale override (docs/lld/generic-hsi.md). The form value is written
+# into the upload as this sidecar, so every later re-vend (band_filter_apply) reads it too.
+_INGEST_OPTIONS_NAME = "allotrope_ingest.json"
+_SCALE_OVERRIDE_RE = r"^(auto|radiance|not_reflectance|x\d*\.?\d+(e-?\d+)?)$"
 
 # Streaming chunk size for upload → disk. 1 MiB is a good balance between
 # syscall count and per-request RAM. UploadFile is a SpooledTemporaryFile
@@ -149,7 +156,7 @@ def list_scenes(
     offset: int = Query(0, ge=0, description="Offset into the result set"),
     sensor_type: str | None = Query(
         None,
-        description="Optional filter: prisma | landsat9 | enmap",
+        description="Optional filter: prisma | enmap | aviris_ng | tanager | generic_hsi | landsat9 | hotsat1",
     ),
     q: str | None = Query(
         None,
@@ -292,7 +299,12 @@ def _safe_relative_path(filename: str | None) -> PurePosixPath:
     summary="Stage uploaded files and enqueue a scene_onboard job",
 )
 def onboard_scene(
-    sensor_type: str = Form(..., description="One of: prisma | landsat9 | enmap"),
+    sensor_type: str = Form(..., description="One of: prisma | enmap | aviris_ng | tanager | generic_hsi | landsat9 | hotsat1"),
+    scale_override: str | None = Form(
+        None,
+        description="generic_hsi only: auto | x1 | x0.0001 | x<factor> | radiance. Overrides the reader's scale "
+        "detection; stored in the upload as allotrope_ingest.json.",
+    ),
     files: list[UploadFile] = File(..., description="One or more files; multi-file sensors preserve folder structure via filename"),
     claims: Claims = Depends(current_user_claims),
     db: Session = Depends(get_db),
@@ -324,6 +336,12 @@ def onboard_scene(
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="no_files",
+        )
+    override = (scale_override or "").strip().lower() or None
+    if override is not None and (sensor_type != "generic_hsi" or not re.match(_SCALE_OVERRIDE_RE, override)):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="scale_override must be auto, x1, x0.0001, x<factor> or radiance, and generic_hsi only",
         )
 
     # 2. job_id + staging dir ---------------------------------------------
@@ -362,6 +380,10 @@ def onboard_scene(
                     out.write(chunk)
                     total_bytes += len(chunk)
             staged.append(str(rel))
+        if override not in (None, "auto"):
+            # Beside the cube; the reader looks for it anywhere under the cube's folder.
+            (staging_root / _INGEST_OPTIONS_NAME).write_text(json.dumps({"scale": override}))
+            staged.append(_INGEST_OPTIONS_NAME)
     except HTTPException:
         # Validation errors raised by _safe_relative_path — keep their
         # status/detail intact, but still rmtree the staging dir so a

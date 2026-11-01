@@ -1,0 +1,27 @@
+\glossentry{Axis}{One direction along which a tensor is indexed; also called a dimension.}
+\glossentry{Shape}{The list of a tensor's axis lengths, for example (B, 165, 128, 128).}
+\glossentry{Rank (of a tensor)}{The number of axes a tensor has.}
+\glossentry{Batch}{A group of examples processed together; its size B is the first axis of almost every tensor in the model.}
+\glossentry{Row-major order}{The memory layout in which the last axis changes fastest.}
+\glossentry{Stride (of a tensor)}{The memory distance between neighbouring elements along one axis.}
+\glossentry{Spatial layout}{The arrangement (B, C, H, W): a picture with C channels, used by convolutions.}
+\glossentry{Sequence layout}{The arrangement (B, N, C): a list of N tokens of C numbers each, used by attention, LayerNorm and linear layers.}
+\glossentry{Flatten}{An operation that merges several neighbouring axes into one without moving any number in memory.}
+\glossentry{Transpose}{An operation that swaps two axes, changing which number sits at each index.}
+\glossentry{Reshape}{An operation that changes a tensor's shape while keeping its numbers in the same memory order.}
+\glossentry{Broadcasting}{Stretching an axis of length 1 to match another tensor's axis, so that one value is reused across it.}
+\glossentry{Neuron}{A weighted sum of inputs plus a bias, usually followed by an activation function.}
+\glossentry{Weight}{A learned multiplier applied to one input of a neuron or one entry of a kernel.}
+\glossentry{Bias}{A learned constant added to a neuron's or channel's output.}
+\glossentry{Linear layer}{A layer computing y = W x + b; it has in times out plus out parameters.}
+\glossentry{Activation function}{A nonlinear function applied after a linear layer, such as GELU or ReLU.}
+\glossentry{Convolution}{A layer that slides a small kernel of shared weights over the input and takes a weighted sum at each position; in deep learning, a cross-correlation.}
+\glossentry{Cross-correlation}{Sliding a kernel over an input and summing products without flipping the kernel.}
+\glossentry{Kernel}{The small block of weights a convolution slides over its input; its side length is the kernel size k.}
+\glossentry{Stride (of a convolution)}{How far the kernel jumps between neighbouring output positions.}
+\glossentry{Padding}{A border of zeros added around the input before a convolution.}
+\glossentry{Output-size formula}{For kernel k, stride s and padding p, an axis of length H becomes floor((H + 2p - k)/s) + 1.}
+\glossentry{Weight sharing}{Using the same kernel weights at every position, which makes a convolution's parameter count independent of image size.}
+\glossentry{Receptive field}{The region of input pixels that can affect one output value.}
+\glossentry{Jump}{The distance in input pixels between neighbouring outputs of a layer; the product of the strides so far.}
+\glossentry{1x1 convolution}{A convolution with a one-pixel kernel: a linear layer applied independently at every pixel, mixing channels only.}

@@ -1,0 +1,5 @@
+\glossentry{Per-scene min-max scaling}{Rescaling each band so that the scene's darkest pixel in that band is 0 and its brightest 1: x' = (x - min) / (max - min), with min and max taken over the scene. HyperSL's input scaling.}
+\glossentry{Per-band affine map}{A map that multiplies each band by its own number and adds its own number; min-max and the fixed z-score are both of this form.}
+\glossentry{Per-curve scaling}{Rescaling one spectrum by its own minimum and maximum over its bands; used in the HyperSL matching run so that pixel and library were treated alike.}
+\glossentry{Kernel span}{The wavelength range covered by a convolution window over band index: the last band's wavelength minus the first's.}
+\glossentry{Circular procedure}{A procedure whose answer is needed to set up its own input; borrowing a scene's min-max frame to place a library spectrum is one.}

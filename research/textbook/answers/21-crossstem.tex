@@ -1,0 +1,76 @@
+\answersfor{ch:crossstem}
+
+\begin{solution}{ex:crossstem:1}
+With $d = 16$, $D = 32$, apply $n_{\text{out}}\times n_{\text{in}} + n_{\text{out}}$ to each layer:
+\begin{align*}
+  \text{value stretch, Linear(1, 16)}:&\quad 16\times1 + 16 = 32\\
+  \text{queries, table (32, 16)}:&\quad 32\times16 = 512\\
+  \text{Q, K, V, O, each Linear(16, 16)}:&\quad 16\times16 + 16 = 256 + 16 = 272\\
+  \text{four of them}:&\quad 4\times272 = 1{,}088\\
+  \text{to channel, Linear(16, 1)}:&\quad 16 + 1 = 17
+\end{align*}
+Total:
+\begin{align*}
+  32 + 512 + 1{,}088 + 17 &= 544 + 1{,}088 + 17 = 1{,}632 + 17 = 1{,}649 .
+\end{align*}
+Formula check, $4d^2 + Dd + 7d + 1$ at $d = 16$, $D = 32$:
+\begin{align*}
+  4\times256 + 32\times16 + 7\times16 + 1 &= 1{,}024 + 512 + 112 + 1 = 1{,}649 .
+\end{align*}
+Instantiating the real compressor with $D = 32$, $d = 16$ and 4 heads also reports 1,649.
+\end{solution}
+
+\begin{solution}{ex:crossstem:2}
+Masked scores $[3, -\infty, 1]$. Exponentials:
+\begin{align*}
+  e^{3} &= 20.0855, & e^{-\infty} &= 0, & e^{1} &= 2.7183 .
+\end{align*}
+Sum: $20.0855 + 0 + 2.7183 = 22.8038$. Weights:
+\begin{align*}
+  20.0855/22.8038 &= 0.8808,\\
+  0/22.8038 &= 0,\\
+  2.7183/22.8038 &= 0.1192 .
+\end{align*}
+They sum to $0.8808 + 0 + 0.1192 = 1.0000$. Before masking the exponentials were $20.0855$, $2.7183$ and $2.7183$, with sum $25.5221$, giving weights $0.7870$, $0.1065$ and $0.1065$. The ratio of first to third surviving weight: before, $0.7870/0.1065 = 7.389$; after, $0.8808/0.1192 = 7.389$. Both equal $e^{3-1} = e^2 = 7.389$.
+\end{solution}
+
+\begin{solution}{ex:crossstem:3}
+\begin{align*}
+  \text{K, V}:&\quad 2\times224\times1{,}024 = 448\times1{,}024 = 458{,}752\\
+  \text{scores}:&\quad 32\times224\times32 = 7{,}168\times32 = 229{,}376\\
+  \text{values}:&\quad 32\times224\times32 = 229{,}376\\
+  \text{output + to channel}:&\quad 32{,}768 + 1{,}024 = 33{,}792
+\end{align*}
+Total:
+\begin{align*}
+  458{,}752 + 229{,}376 + 229{,}376 + 33{,}792 &= 688{,}128 + 229{,}376 + 33{,}792\\
+  &= 917{,}504 + 33{,}792 = 951{,}296 .
+\end{align*}
+The output stage does not depend on the band count; the other three grow linearly with it.
+\end{solution}
+
+\begin{solution}{ex:crossstem:4}
+\begin{align*}
+  16{,}384\times2 &= 32{,}768,\\
+  32{,}768\times224 &= 7{,}340{,}032,\\
+  7{,}340{,}032\times32 &= 234{,}881{,}024 \text{ numbers},\\
+  234{,}881{,}024\times2 \text{ bytes} &= 469{,}762{,}048 \text{ bytes},\\
+  469{,}762{,}048/1{,}048{,}576 &= 448 \text{ MiB}.
+\end{align*}
+\end{solution}
+
+\begin{solution}{ex:crossstem:5}
+Available memory: $48 - 4 = 44$\,GB. Patches: $44/3.7 = 11.9$, and a batch must be a whole number of patches that fits, so 11. Pixel rows: $11\times16{,}384 = 180{,}224$, far over the 65,535 limit. \texttt{\_attend} splits them into chunks of 32,768: $180{,}224/32{,}768 = 5.5$, rounded up to 6 calls (five full chunks of 32,768 and one of $180{,}224 - 5\times32{,}768 = 16{,}384$ rows). (Strictly, 48\,GB and 3.7\,GiB use different units; using 44\,GiB instead gives the same answer, 11.)
+\end{solution}
+
+\begin{solution}{ex:crossstem:6}
+With one head and frozen weights, \cref{eq:crossstem:special} without offsets is $y_c = \kappa(a_0 v_0 + a_1 v_1)$ with $a_0, a_1 > 0$ and $a_0 + a_1 = 1$. To equal $v_0 - v_1$ for every $v_0, v_1$ we need $\kappa a_0 = 1$ and $\kappa a_1 = -1$. Dividing, $a_0/a_1 = -1$, which is impossible because both are positive. So a single head cannot form a difference.
+
+With two heads, take head 1 weights $[0.9, 0.1]$, head 2 weights $[0.1, 0.9]$, $\kappa_1 = 1.25$, $\kappa_2 = -1.25$:
+\begin{align*}
+  y_c &= 1.25(0.9v_0 + 0.1v_1) - 1.25(0.1v_0 + 0.9v_1)\\
+  &= (1.125 - 0.125)v_0 + (0.125 - 1.125)v_1\\
+  &= 1.0\,v_0 - 1.0\,v_1 .
+\end{align*}
+The difference of two weighted averages with opposite-signed $\kappa$ gives the slope.
+\end{solution}

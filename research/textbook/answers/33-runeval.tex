@@ -1,0 +1,57 @@
+\answersfor{ch:runeval}
+
+\begin{solution}{ex:runeval:1}
+\begin{align*}
+\text{score maps per scene} &= 3 \times 3 + 1 = 9 + 1 = 10\\
+\text{score maps in all} &= 5 \times 10 = 50\\
+\text{reconstructions} &= 5 \text{ scenes} \times 3 \text{ models} = 15.
+\end{align*}
+A second run after adding a measure computes no score map and no reconstruction: all 50 maps come from the cache,
+because the measure is not part of any cache key.
+\end{solution}
+
+\begin{solution}{ex:runeval:2}
+After excluding water: glint $\to 0$, the 0.1 water pixel $\to 0$; A stays 0.9 and B stays 0.6 (on land).
+\begin{align*}
+\text{A beats } 0, 0.5, 0.2, 0 &\to 4 \text{ of } 4\\
+\text{B beats } 0, 0.5, 0.2, 0 &\to 4 \text{ of } 4\\
+\text{AUC} &= (4 + 4)/8 = 1.0.
+\end{align*}
+The top pixel is A. With no target inside the mask, exclusion can only help: the fall in stage 3 comes from targets
+inside it.
+\end{solution}
+
+\begin{solution}{ex:runeval:3}
+\begin{align*}
+\text{scan: } & 0.07 < 0.04? \text{ No} \to \text{land}\\
+\mathrm{NDVI} &= (0.02 - 0.05)/(0.02 + 0.05) = -0.03 / 0.07 = -0.43\\
+\text{builder: } & \mathrm{NIR}\ 0.02 < 0.08 \text{ and } \mathrm{NDVI} < 0 \to \text{water.}
+\end{align*}
+\end{solution}
+
+\begin{solution}{ex:runeval:4}
+\begin{align*}
+\text{plain} &: 101 + 103 + 48 + 161 = 413, \quad 413/909 = 0.454 = 45.4\%\\
+\text{cloud only} &: 101 + 103 + 54 + 161 = 419, \quad 419/909 = 0.461 = 46.1\%\\
+\text{water + cloud} &: 98 + 107 + 53 + 161 = 419, \quad 419/909 = 46.1\%.
+\end{align*}
+Same total, different objects: compared with cloud only, water exclusion loses 3 on set1 ($101 \to 98$) and 1 on set3
+($54 \to 53$), and gains 4 on set2 ($103 \to 107$).
+\end{solution}
+
+\begin{solution}{ex:runeval:5}
+The largest finite float16 is 65,504, so 70,000 becomes infinity, which would sit at the top of every ranking computed
+from the cache. The runner checks \code{np.abs(s).max() < 6e4} and stores such a map as float32 instead.
+Uncompressed sizes: float16, $1{,}000{,}000 \times 2 = 2{,}000{,}000$ bytes (2 MB); float32,
+$1{,}000{,}000 \times 4 = 4{,}000{,}000$ bytes (4 MB).
+\end{solution}
+
+\begin{solution}{ex:runeval:6}
+\begin{enumerate}
+\item Scope: is anything the product must find ever on snow (for example vehicles or structures in snowfields)?
+\item Price: how many labelled objects lie wholly inside the snow mask on the real bench? Count them by hand.
+\item Mask quality: where does the mask fire wrongly (bright rock, cloud)? Check against a true-colour view.
+\item Measure: judge on pAUC, TPR at 0.1\% and objects caught, with ROC-AUC reported beside them, knowing that ties at
+0 lower it by construction.
+\end{enumerate}
+\end{solution}

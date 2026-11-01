@@ -1,0 +1,455 @@
+\chapter{What HyperSL is, and what it does well}\label{ch:hslwhat}
+\def\tbrk{\hfil\penalty50\hfilneg}% local: a line may break before a provenance tag
+
+\begin{onething}
+HyperSL is a 9.03-million-parameter masked autoencoder that reads \emph{one pixel's spectrum} at a time, after every
+band has been min-max scaled over the scene it came from; we checked it against its own code and checkpoint and
+reproduced its paper's clustering result almost to the decimal, so what the next five chapters find is not a broken
+download but a good model built for a different job.
+\end{onething}
+
+This chapter opens Part~X. The whole part answers one question the team was asked more than once in September and
+October 2026: \emph{there is a published spectral foundation model with open weights; why do we not use it?} The
+honest answer has two halves. The first half, this chapter, is what the model is and what it is good at, checked
+against its source rather than its abstract. The second half, \cref{ch:hslnorm,ch:hsldetect,ch:hslunmix,ch:hslcloud},
+is what happened when it was tried on each of the jobs this product needs done, with every number from a recorded
+run. \Cref{ch:hslverdict} puts the two halves side by side.
+
+Paths abbreviate. \file{upstream/} is the authors' code as we hold it, byte-identical to their GitHub commit
+\code{e56de7e}. It is kept outside the repository, in the folder
+\begin{center}\file{C:/Users/FITT/Documents/hypersl_match_data/hypersl_model/}\end{center}
+Experiment records that are no longer in the working tree are cited by the commit that holds them, for example
+\file{2d893e6:hypersl-validation/summary.md}, which you read with
+\code{git show 2d893e6:research/experiments/hypersl-validation/summary.md}.
+
+\begin{analogy}
+A concert pianist who learned every piece from recordings that a studio had normalised so that the loudest note of
+each recording was exactly as loud as every other recording's loudest note. She plays beautifully, she can tell a
+Chopin nocturne from a Bach fugue with her eyes closed, and if you hum her half a phrase she finishes it. Ask her
+instead whether \emph{this} hall is louder than last night's, and she cannot say: the one thing every recording
+she learned from had removed was the absolute level. HyperSL is the pianist. The level is reflectance.
+\end{analogy}
+
+%======================================================================
+\section{Why look at an outside model at all}\label{sec:hslwhat:why}
+
+The product needs three things from spectra, and in autumn 2026 each had a weak spot.
+\begin{enumerate}
+\item \textbf{Naming a material} by comparing a pixel with a laboratory library (USGS splib07, ECOSTRESS):
+\cref{ch:material,ch:namer}. Whole-pixel spectral angle named the right man-made family for 6\% of pixels at 30\%
+fill\tbrk\tagM{docs/lld/spectral-family-match.md}.
+\item \textbf{Detecting anomalies}: Indradhanu's residual, scored by residual Mahalanobis (\cref{ch:residualmaha}).
+\item \textbf{Masking cloud}, so that detections on cloud are not reported (\cref{ch:seghead}).
+\end{enumerate}
+A \emph{foundation model}\index{foundation model} is a network pretrained on a large, broad, unlabelled data set so
+that its internal representation can be reused for many tasks with little or no task-specific training. HyperSL
+\citep{kong2025hypersl} advertises exactly that for spectra: pretrained ``on over 300 million spectral instances
+worldwide'', able to process ``all forms of hyperspectral data across diverse spectral bands and ranges'', with code
+and weights public. If any outside model could cover all three weak spots at once, it was this one. That is why it
+was evaluated four separate times between 2026-09-20 and 2026-10-14.
+
+\begin{definition}[Embedding, reconstruction, residual]
+An \emph{embedding}\index{embedding} is the short vector a network makes of its input (HyperSL's has 256 numbers).
+A \emph{reconstruction} $\hat{\vect{x}}$ is the network's attempt to reproduce its input $\vect{x}$ from partial
+information. The \emph{residual} $\vect{r}=\vect{x}-\hat{\vect{x}}$ is what the reconstruction got wrong
+(\cref{ch:recon}).
+\end{definition}
+
+%======================================================================
+\section{What it is, read from the code}\label{sec:hslwhat:arch}
+
+\subsection{One pixel in, one pixel out}
+
+HyperSL's forward pass is the method \code{forward(x, wave, mask_ratio)} of \code{SpectralSharedEncoder} in \file{upstream/model.py}.
+Its input $x$ has the shape \shape{(B, 1, L)}: $B$ pixels, one channel, $L$ bands. It has no height and no
+width.
+\textbf{Each pixel is processed alone; no pixel ever sees another.} Keep that sentence in mind through the whole part:
+it is the root of \cref{ch:hsldetect}'s result.
+
+\Cref{tab:hslwhat:trace} traces one PRISMA pixel on the 149-band axis the experiments in this part used (the reason
+for 149 bands comes in \cref{sec:hslnorm:conv}).
+
+\begin{table}[htbp]
+\centering\small
+\begin{tabular}{@{}r>{\raggedright\arraybackslash}p{48mm}l>{\raggedright\arraybackslash}p{50mm}@{}}
+\toprule
+step & operation & shape & where in \file{model.py} \\
+\midrule
+0 & min-max scaled spectrum and its wavelengths & \shape{(1, 1, 149)}, \shape{(1, 149)} & input, scaled by the caller \\
+1 & three 1-D convolutions over band index, kernels 5, 9, 13, stride 1, \code{padding='same'}; BatchNorm; GELU & 3 $\times$ \shape{(1, 256, 149)} & \code{embedding_layer_1..3} \\
+2 & concatenate, then a $1\times1$ convolution $768\to256$; BatchNorm; GELU & \shape{(1, 256, 149)} & \code{embedding_layer_4} \\
+3 & transpose to tokens: one token per band & \shape{(1, 149, 256)} & \code{x.transpose(2, 1)} \\
+4 & add the wavelength code $\sin/\cos$ of $(\lambda-400)/10$ & \shape{(1, 149, 256)} & \code{pos_tokens} \\
+5 & keep a random 5\%: \code{int(149 * 0.05)} $=7$ tokens & \shape{(1, 7, 256)} & \code{random_masking} \\
+6 & prepend a learned global token & \shape{(1, 8, 256)} & \code{global_token} \\
+7 & 7 transformer blocks, then one more layer that also returns its keys and values & \shape{(1, 8, 256)} & \code{encoder_blocks}, \code{transformer_encoder_layer} \\
+8 & embedding $\vect{z}$ = global token + mean of the 7 band tokens & \shape{(1, 1, 256)} & \code{aggregate} \\
+9 & cross-attention from $\vect{z}$ back onto the 7 kept tokens & \shape{(1, 7, 256)} & \code{corss_attn} \\
+10 & append 142 mask tokens, unshuffle, add the wavelength code again & \shape{(1, 149, 256)} & \code{decoder_forward} \\
+11 & 3 transformer blocks; LayerNorm & \shape{(1, 149, 256)} & \code{decoder_blocks} \\
+12 & 1-D convolution $256\to1$, kernel 3; sigmoid & \shape{(1, 1, 149)} & \code{decoder_layer} \\
+\bottomrule
+\end{tabular}
+\caption{One pixel through HyperSL, shapes from the code. The reconstruction at step 12 covers all 149 bands, visible
+and hidden, and passes through a sigmoid, so every output lies between 0 and 1.}
+\label{tab:hslwhat:trace}
+\end{table}
+
+Three facts in that table matter later.
+\begin{itemize}
+\item \textbf{It hides bands, not pixels} (step 5). Indradhanu hides whole pixels and rebuilds them from their
+neighbours (\cref{ch:masking}); HyperSL hides 142 of a pixel's own 149 bands and rebuilds them from the other 7 of
+the \emph{same} pixel. \Cref{ch:hsldetect} is about what that does to anomalies.
+\item \textbf{The tokenizer convolves over band index} (step 1): band $i$'s token mixes bands $i-2\dots i+2$, $i-4\dots
+i+4$ and $i-6\dots i+6$ whatever their wavelengths. \Cref{sec:hslnorm:conv} measures what that means on a band list
+with gaps.
+\item \textbf{The output is squashed into $(0,1)$} (step 12). That only makes sense if every input lies in $[0,1]$,
+which is what the per-scene min-max scaling of \cref{sec:hslwhat:data} guarantees.
+\end{itemize}
+
+\subsection{The wavelength code}
+
+\begin{definition}[Sinusoidal position code]
+A \emph{position code}\index{position code} adds to each token a fixed vector that says where the token sits. HyperSL's
+says which wavelength a band token stands for. With $p=(\lambda-400)/10$ and frequencies $\omega_j$, entry $2j$ of
+the code is $\sin(p\,\omega_j)$ and entry $2j+1$ is $\cos(p\,\omega_j)$, for $j=0,\dots,127$.
+\end{definition}
+
+The code computes the frequencies as
+\code{div_term = exp(arange(0, 256, 2) * -(log(100.0) / 256))}, that is
+\begin{align}
+\omega_j &= \exp\!\left(2j\cdot\left(-\frac{\ln 100}{256}\right)\right) && \text{the line above, with }2j\text{ for }\texttt{arange(0,256,2)}\notag\\
+&= \exp\!\left(\ln 100\right)^{-2j/256} && \text{since }e^{-ab}=(e^{a})^{-b}\notag\\
+&= 100^{-2j/256}. \label{eq:hslwhat:omega}
+\end{align}
+So $\omega_0=100^0=1$, $\omega_1=100^{-2/256}=0.964662$, and $\omega_{127}=100^{-254/256}=0.010366$\tagC.
+
+\begin{worked}[label={we:hslwhat:pe}]{The wavelength code at 450\,nm}
+\begin{align*}
+p &= (450-400)/10 = 50/10 = 5.0,\\
+\text{entry }0 &= \sin(5.0\times1) = \sin 5.0 = -0.9589,\\
+\text{entry }1 &= \cos(5.0\times1) = \cos 5.0 = +0.2837,\\
+\text{entry }254 &= \sin(5.0\times0.010366) = \sin 0.05183 = +0.0518 .
+\end{align*}
+The fastest pair turns through $5.0$ radians, the slowest through $0.052$: the slow entries tell 450\,nm from 2400\,nm
+($p=200$, entry 254 is $\sin 2.0732=+0.8764$), the fast ones tell neighbours apart\tagC. Any wavelength has a code,
+so the model can be fed any band list.
+\end{worked}
+
+\begin{sourcenote}[: the base is 100 in the code, 10,000 in the paper]
+The paper's equations (5) and (6) divide $w_i-400$ by $10\,000^{2j/d}$ \citep{kong2025hypersl}. The code divides by
+\code{100} raised to that power (\code{math.log(100.0)}). The released weights were trained with the code, so the
+code is right for them; feeding the paper's frequencies to the checkpoint would be off-distribution. A second
+check: the wavelengths must be in nanometres. In micrometres, 1.0\,$\mu$m gives $p=(1.0-400)/10=-39.9$, and the
+validation run measured the loss rising from 0.0024 to 0.173 on EnMAP\tbrk\tagMr{\texttt{2d893e6}: summary.md, step 2,
+row G}.
+\end{sourcenote}
+
+\begin{sourcenote}[: the last encoder layer has no skip connection]
+\code{TransformerEncoderLayer.forward} reads \code{x, k, v = self.attn(self.norm1(x))} and then
+\code{x = x + self.drop_path(x)}. The second \code{x} is the attention output, not the layer's input, so the line
+doubles the attention output and the usual residual (skip) connection of \cref{ch:block} is lost in this one layer.
+The weights were trained this way, so ``fixing'' it would break the checkpoint. It does not change any conclusion in
+this part; it is the kind of thing you only find by reading the source.
+\end{sourcenote}
+
+\subsection{Counting the parameters, by hand}
+
+\begin{worked}[label={we:hslwhat:params}]{HyperSL's 9,027,841 trainable parameters}
+A linear layer from $i$ to $o$ numbers has $i\times o$ weights and $o$ biases; a LayerNorm or BatchNorm over $D$
+numbers has $2D$ (a scale and a shift). With $D=256$ and the feed-forward width $4D=1024$, one transformer block is
+\begin{align*}
+\text{two LayerNorms} &= 2\times(2\times256) = 1{,}024,\\
+\text{query, key, value} &= 256\times768+768 = 196{,}608+768 = 197{,}376,\\
+\text{output projection} &= 256\times256+256 = 65{,}792,\\
+\text{feed-forward} &= (256\times1024+1024)+(1024\times256+256)\\
+ &= 263{,}168+262{,}400 = 525{,}568,\\
+\text{block} &= 1{,}024+197{,}376+65{,}792+525{,}568 = 789{,}760 .
+\end{align*}
+The encoder has 8 such layers and the decoder 3:
+\begin{align*}
+\text{encoder} &= 8\times789{,}760 = 6{,}318{,}080,\\
+\text{decoder} &= 3\times789{,}760 = 2{,}369{,}280,\\
+\text{cross-attention} &= 2\times(256\times256+256) = 131{,}584,\\
+\text{tokenizer convolutions} &= \underbrace{(5\cdot256+256)}_{1{,}536}+\underbrace{(9\cdot256+256)}_{2{,}560}
+ +\underbrace{(13\cdot256+256)}_{3{,}584}\\
+ &\quad+\underbrace{(768\cdot256+256)}_{196{,}864} = 204{,}544,\\
+\text{tokenizer BatchNorms} &= 4\times(2\times256) = 2{,}048,\\
+\text{global and mask tokens} &= 2\times256 = 512,\\
+\text{two final LayerNorms} &= 2\times(2\times256) = 1{,}024,\\
+\text{output convolution} &= 256\times3+1 = 769,\\
+\text{total} &= 6{,}318{,}080+2{,}369{,}280+131{,}584+204{,}544\\
+&\quad+2{,}048+512+1{,}024+769\\
+&= 9{,}027{,}841 .
+\end{align*}
+The released checkpoint holds 9,158,021 numbers. The difference, $9{,}158{,}021-9{,}027{,}841=130{,}180$, is exactly
+its stored buffers: the position table \code{pe} ($500\times256=128{,}000$), \code{div_term} (128), and the
+BatchNorms' running means and variances ($4\times2\times256=2{,}048$) with their four step counters
+($128{,}000+128+2{,}048+4=130{,}180$)\tagC. The ``$\sim$9.16\,M parameters'' quoted in the team's notes counts the
+buffers too.
+\end{worked}
+
+The detection run of \cref{ch:hsldetect} logged the model's \code{parameters()} as 9,155,969\tbrk\tagM{research/experiments/hypersl-anomaly-bench/results.json}: the trainable 9,027,841 plus
+\code{pe} and \code{div_term}, which the code declares as frozen parameters rather than buffers ($9{,}027{,}841+128{,}000+
+128=9{,}155{,}969$)\tagC. The tokenizer is $(204{,}544+2{,}048)/9{,}027{,}841=2.29\%$ of the model, and 96\% of the tokenizer is its $1\times1$
+fusion convolution: the part that ``reads the band list'' is tiny\tagC.
+
+\begin{sourcenote}[: the class defaults are not the checkpoint]
+\code{SpectralSharedEncoder}'s defaults are \code{embedding_dim=1024, encoder_depth=32, decoder_depth=16}. The
+checkpoint loads only into 256 / 8 / 4 with 8 heads, the configuration \file{upstream/train.py} builds. A strict
+state-dict load checks the sizes but not the head count, which was confirmed by behaviour: 4 or 16 heads load
+without error and raise the EnMAP test loss from 0.0024 to 0.087 or 0.008\tbrk\tagMr{\texttt{2d893e6}: summary.md,
+step 2}. Every upstream downstream script ships with its checkpoint-load lines commented out, so running one
+unmodified evaluates a randomly initialised network.
+\end{sourcenote}
+
+%======================================================================
+\section{What it was trained on}\label{sec:hslwhat:data}
+
+\subsection{The data path, as code}
+
+\file{upstream/mutihsi.py} builds the pretraining file. For an EnMAP scene, \code{read_EnMap} reads the L2A
+reflectance, multiplies by $10^{-4}$, deletes band indices 128 to 134 (the paper's ``bad bands [128--134]''), sets
+nodata to NaN, reshapes the cube to a table of pixels by bands, and calls \code{self.scale}, which is
+\code{sklearn.preprocessing.minmax_scale}. DESIS loses bands 0 to 5. The scaling is applied per \emph{column} of that
+table, which is per band, over every pixel of the scene:
+\begin{equation}
+x'_{b}=\frac{x_b-\min_b}{\max_b-\min_b},\qquad \min_b,\ \max_b \text{ taken over the scene's pixels in band } b.
+\label{eq:hslwhat:minmax}
+\end{equation}
+\Cref{ch:hslnorm} takes this formula apart. Here note only what it means for training: \textbf{HyperSL has never seen
+a reflectance.} Every spectrum it learned from was rescaled so that, in each band, the darkest pixel of its own scene
+was 0 and the brightest 1. Water-absorption bands were kept: 217 of EnMAP's 224 bands went in, and all but the first 6 of DESIS's.
+
+\begin{sourcenote}[: the paper describes the scaling in four words]
+The paper says ``to ensure that the features of each band are on the same scale, we performed layer-by-layer
+normalization'' \citep{kong2025hypersl}. It does not say min-max, and it does not say per scene; both are visible only
+in the code (\file{mutihsi.py}, and again in every \file{downstream_*.py} reader). The team's earlier note that ``the
+paper does not mention it'' is slightly too strong: it mentions a normalisation, not which one.
+\end{sourcenote}
+
+\subsection{What the training set is, and what it is not}
+
+\begin{center}\small
+\begin{tabular}{@{}>{\raggedright\arraybackslash}p{30mm}>{\raggedright\arraybackslash}p{106mm}@{}}
+\toprule
+claim & what the code and files show \\
+\midrule
+sensors & EnMAP and DESIS L2A only (\file{train.py} builds two loaders, \code{'ENMap'} and \code{'DESIS'}). A GF5 reader
+exists in \file{mutihsi.py} and is never called. The paper's 439-band Shanghai airborne set is not in \file{train.py}. \\
+size & ``over 300 million spectral instances'' (abstract); ``approximately 200 million spectral data points'' (section
+IV-A). The team's reading: about 300 one-megapixel tiles\tbrk\tagMr{memory note on HyperSL, 2026-10-04}. \\
+clouds & ``cloud cover near zero''; ``overall cloud coverage of the data is below 10\%'' (paper, Fig.~6 caption).
+\Cref{ch:hslcloud} needs this. \\
+training schedule & 10 epochs, AdamW $5\times10^{-4}$, batch 256 per sensor, mask ratio 0.95, a checkpoint every 5
+epochs (\file{train.py}); the released \code{10_base_mask95} is epoch 10\tbrk\tagC. \\
+loss & $\text{MSE}+(1-\cos)$ over the \emph{whole} reconstructed spectrum, visible bands included
+(\file{loss.py}, \code{MSE_SAM_loss}). \\
+where the data is & the $\sim$265\,GB training corpus is on Baidu Netdisk only; Hugging Face has the 10.5\,GB
+\emph{test} split (about 12 million spectra)\tbrk\tagMr{memory note on HyperSL}. \\
+licence & no LICENSE file in the GitHub repository; the Hugging Face card says MIT\tbrk\tagMr{memory note on
+HyperSL, ``verify before shipping''}. \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+%======================================================================
+\section{Did we have the right model? The reproduction}\label{sec:hslwhat:repro}
+
+Before blaming a model you must show you ran it right. The validation (2026-10-02/03) did that in four steps; all
+numbers below are from \texttt{2d893e6:hypersl-validation/summary.md}.
+
+\subsection{Step 1: provenance}
+
+The checkpoint's sha256 is \code{3d5f1914...a74a68c}, identical to Hugging Face's \code{10_base_mask95_checkpoint.pt};
+the model, data and downstream scripts are byte-identical to upstream \code{e56de7e} (2026-02-03); the configuration
+256 / 8 / 4 / 8 heads matches \file{train.py}. This book's own script re-hashed the file and read its
+\code{epoch} field: 10\tbrk\tagC.
+
+\subsection{Step 2: the right settings, by elimination}
+
+There is no published loss on the test split, so the validation ran nine variants on 20,000 test spectra per sensor
+(loss $\text{MSE}+(1-\cos)$ at mask 0.95, mean of 3 mask seeds; lower is better):
+
+\begin{center}\small
+\begin{tabular}{@{}llllll@{}}
+\toprule
+& variant & DESIS loss & EnMAP loss & DESIS SAM & EnMAP SAM \\
+\midrule
+A & \textbf{ours: epoch 10, 8 heads, nm} & \textbf{0.0050} & \textbf{0.0024} & \textbf{4.4°} & \textbf{2.8°} \\
+B & epoch 5 & 0.0054 & 0.0032 & 4.7° & 3.3° \\
+C & epoch 0 & 0.0066 & 0.0053 & 5.5° & 4.1° \\
+D & untrained & 0.183 & 0.218 & 25.4° & 26.7° \\
+E & 4 heads & 0.054 & 0.087 & 16.2° & 19.2° \\
+F & 16 heads & 0.012 & 0.008 & 7.4° & 5.7° \\
+G & wavelengths in $\mu$m & 0.132 & 0.173 & 24.1° & 27.9° \\
+H & wavelengths $+20$\,nm & 0.0081 & 0.0073 & 5.9° & 5.3° \\
+I & per-spectrum 0--1 scaling & 0.0137 & 0.0063 & 6.8° & 4.1° \\
+\bottomrule
+\end{tabular}
+\end{center}
+Row A wins every column, and epochs 0, 5, 10 improve in order: the setup is right. Row I matters for
+\cref{ch:hslnorm}: rescaling each spectrum by its \emph{own} minimum and maximum instead of the scene's roughly doubles
+the loss. A second finding from the same run: with mask ratio 0 (all bands visible) the loss is \emph{worse} than at
+0.95 (0.0081 / 0.0073 against 0.0050 / 0.0024), because the model only ever trained at 0.95.
+
+\subsection{Step 3: the paper's own benchmarks}
+
+\paragraph{Zero-shot reconstruction (paper Table III).} On Indian Pines, an AVIRIS scene HyperSL never saw, the
+reproduction was equal to or better than the paper on every measure (SAM 7.86° at mask 0.95 against the paper's
+8.43°). On Botswana (Hyperion) MSE was ten times better but SAM 2--3° worse (8.84° against 5.67°), most likely
+because the authors' wavelength file for Botswana is unpublished.
+
+\paragraph{Unsupervised classification on Chikusei (paper Table XII).} Chikusei is a labelled 19-class airborne scene.
+Embed every labelled pixel (77,592), cluster the embeddings with K-means into 19 groups, map clusters to classes
+one-to-one by the best assignment, and score:
+
+\begin{definition}[Overall accuracy, adjusted Rand index]
+\emph{Overall accuracy}\index{overall accuracy} (OA) is the share of pixels whose mapped cluster equals their class.
+The \emph{adjusted Rand index}\index{adjusted Rand index} (ARI) compares two groupings pair by pair, corrected so that a
+random grouping scores 0 and an identical one 1 \citep{hubert1985comparing}.
+\end{definition}
+
+\begin{center}\small
+\begin{tabular}{@{}lll@{}}
+\toprule
+features + K-means & OA (\%) ours / paper & ARI ours / paper \\
+\midrule
+raw spectra & 39.60 / 42.69 & 0.268 / 0.289 \\
+PCA & 37.68 / 41.11 & 0.259 / 0.276 \\
+\textbf{HyperSL (band 0--1 input)} & \textbf{59.60 / 60.23} & \textbf{0.5404 / 0.5405} \\
+HyperSL (raw input) & 48.19 / -- & 0.418 / -- \\
+\bottomrule
+\end{tabular}
+\end{center}
+HyperSL's row matches the paper to 0.63 OA points and 0.0001 ARI\tagC. Look at the last row: the same embeddings from
+\emph{raw} reflectance lose $59.60-48.19=11.41$ points\tagC. The authors' commented-out recipe in their script feeds
+raw values, so ``the paper's numbers were not produced by that code as written''; they need the per-band scaling.
+Two rows did not reproduce: agglomerative clustering on HyperSL features reached 62.23 against the paper's 73.43,
+unexplained; spectral clustering is not comparable because its affinity is unpublished.
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}
+\begin{axis}[ybar, bar width=9pt, width=0.85\linewidth, height=55mm, ymin=0, ymax=70,
+  symbolic x coords={raw,PCA,HyperSL 0-1,HyperSL raw}, xtick=data, ylabel={OA (\%)},
+  legend style={at={(0.02,0.98)},anchor=north west,font=\small}, nodes near coords, nodes near coords style={font=\tiny},
+  enlarge x limits=0.18]
+\addplot[fill=spat!60] coordinates {(raw,39.60) (PCA,37.68) (HyperSL 0-1,59.60) (HyperSL raw,48.19)};
+\addplot[fill=maskgrey!70] coordinates {(raw,42.69) (PCA,41.11) (HyperSL 0-1,60.23)};
+\legend{ours (2026-10-02), paper Table XII}
+\end{axis}
+\end{tikzpicture}
+\caption[Chikusei clustering: HyperSL features against raw spectra and PCA]{Chikusei, K-means on 19 clusters.
+HyperSL's features add 20 points of overall accuracy over the raw spectra, as the paper says, but only when the input is
+scaled per band; on raw reflectance the gain halves. Numbers from
+\texttt{2d893e6:\allowbreak hypersl-validation/\allowbreak summary.md}.}
+\label{fig:hslwhat:chikusei}
+\end{figure}
+
+\paragraph{Fine-tuning (paper Tables VI and VII).} Ten seeds on Colab, the paper's protocol (patch 5, 10\% of each class,
+150 epochs, AdamW $10^{-4}$, weight decay 0.05):
+
+\begin{center}\small
+\begin{tabular}{@{}lll@{}}
+\toprule
+data, initialisation & OA ours & OA paper \\
+\midrule
+Botswana, pretrained & $99.01\pm0.51$ & $99.66\pm0.22$ \\
+Botswana, random & $97.55\pm2.13$ & $97.05\pm1.48$ \\
+Indian Pines, pretrained & $97.73\pm0.52$ & $98.48\pm0.39$ \\
+Indian Pines, random & $94.94\pm3.05$ & $95.04\pm1.78$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\begin{worked}[label={we:hslwhat:gain}]{How much does pretraining buy?}
+The gain is pretrained minus random.
+\begin{align*}
+\text{Botswana, ours} &= 99.01-97.55 = +1.46, & \text{paper} &= 99.66-97.05 = +2.61,\\
+\text{ratio} &= 1.46/2.61 = 0.56,\\
+\text{Indian Pines, ours} &= 97.73-94.94 = +2.79, & \text{paper} &= 98.48-95.04 = +3.44,\\
+\text{ratio} &= 2.79/3.44 = 0.81 .
+\end{align*}
+Pretraining helps on both, as claimed, by 56\% and 81\% of the paper's gain\tagC. The random-initialisation rows match
+the paper, so data, split and head agree with the authors'; the remaining gap sits in unpublished fine-tuning details.
+(The summary's own rounding, ``+1.45'' and ``+2.80'', differs from these by 0.01 in the last digit.)
+\end{worked}
+
+%======================================================================
+\section{What it is good at}\label{sec:hslwhat:good}
+
+Put the reproduction together and HyperSL's strengths are real and specific.
+\begin{itemize}
+\item \textbf{It learns the shape of spectra.} On a scene it never saw, from a sensor it never saw (Indian Pines), it
+reconstructs 95\% hidden bands at 7.9° from seven visible ones.
+\item \textbf{Its embedding groups land cover without labels}, 20 points better than raw spectra on Chikusei.
+\item \textbf{It is a good starting point for supervised classification}, worth 1.5 to 2.8 OA points over random
+initialisation on two classic scenes.
+\item \textbf{It accepts any band list}, because its position code is a function of wavelength, not of band number.
+Our own stem has the same property (\cref{ch:crossstem,ch:specdecoder}); the idea is sound.
+\end{itemize}
+All four strengths share a setting: \emph{one scene at a time, classes that cover many pixels, and a frame in which only
+relative differences inside that scene matter}. Classification of a labelled benchmark scene is exactly that setting.
+
+\begin{keypoint}
+HyperSL is well built for describing land cover inside one scene. Each of our three jobs asks something it was not
+built for: absolute reflectance that can be compared with a laboratory (library matching), surprise at a few pixels
+that do not fit their surroundings (anomaly detection), and recognising a class its training data excluded (cloud).
+\end{keypoint}
+
+\begin{center}\small
+\begin{tabular}{@{}>{\raggedright\arraybackslash}p{30mm}>{\raggedright\arraybackslash}p{52mm}>{\raggedright\arraybackslash}p{52mm}@{}}
+\toprule
+our job & what it needs from a model & HyperSL's design \\
+\midrule
+library matching & the same spectrum gives the same input in every scene, and so does a library spectrum &
+input depends on the scene's extremes; a library spectrum has no scene (\cref{ch:hslnorm}) \\
+anomaly detection & a pixel must not help predict itself; context from neighbours &
+predicts a pixel's bands from its own bands; no neighbours (\cref{ch:hsldetect}) \\
+unmixing, sub-pixel naming & per-pixel abundances that keep a 0.1-pixel target &
+deep unmixing head smooths over $3\times3$ (\cref{ch:hslunmix}) \\
+cloud masking & clouds in the training data, brightness kept &
+trained on near-cloud-free scenes, brightness rescaled away (\cref{ch:hslcloud}) \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\begin{drift}
+The checkpoint (\code{10_base_mask95}, epoch 10), the upstream commit \code{e56de7e}, the licence status, the test split
+on Hugging Face and the reproduction numbers are as of 2026-10-04. A later HyperSL release could change any of them.
+\end{drift}
+
+%======================================================================
+\begin{confusions}
+\confusion{HyperSL looks at image patches like Indradhanu.}{It looks at one pixel's spectrum. Its ``tokens'' are bands,
+and it never sees a neighbour. (Its classification fine-tune uses $5\times5$ patches, but that is a downstream head, not
+the pretrained model.)}
+\confusion{It has 9.16 million parameters.}{9,027,841 trainable; 9,158,021 counting stored buffers, of which 128,000 is
+the position table.}
+\confusion{The wavelength code makes the tokenizer wavelength-aware.}{The code is added \emph{after} the convolutions. The
+convolutions themselves mix neighbouring band indices, whatever their wavelengths (\cref{sec:hslnorm:conv}).}
+\confusion{Mask 0 (show every band) gives the best embedding.}{The model never trained at mask 0; its loss there is worse
+than at 0.95.}
+\confusion{The reproduction proves HyperSL suits our product.}{It proves we ran the model the authors trained, as they
+ran it. Whether it suits a different job is a separate question, answered in the next four chapters.}
+\confusion{The paper hides the normalisation.}{It names ``layer-by-layer normalization''; the code shows it is min-max per
+band per scene.}
+\end{confusions}
+
+\begin{checkyourself}
+\item\label{ex:hslwhat:1} A HyperSL with embedding width $D=128$ and the same depths (8 encoder layers, 3 decoder blocks, feed-forward
+  $4D$). Count one transformer block's parameters.
+\item\label{ex:hslwhat:2} Compute entries 0 and 1 of the wavelength code at 1000\,nm, and say what $p$ would be if someone passed the
+  wavelength as 1.0 (micrometres).
+\item\label{ex:hslwhat:3} EnMAP L2A has 224 bands and HyperSL drops 7. At mask ratio 0.95, how many bands does the encoder see? How many
+  for SpectralEarth's 202-band list?
+\item\label{ex:hslwhat:4} On Chikusei, by how many points does HyperSL beat raw spectra with band 0--1 input, and with raw input? What
+  share of the first gain survives without the scaling?
+\item\label{ex:hslwhat:5} The checkpoint holds 9,158,021 numbers. Without looking, list the four kinds of stored buffer and their sizes,
+  and check they sum to the difference from 9,027,841.
+\item\label{ex:hslwhat:6} Why does a sigmoid at the output require the per-scene min-max at the input? What would happen to a reflectance
+  of 1.2 (a specular glint) fed raw?
+\end{checkyourself}
+
+\nextchapter{ch:hslnorm}

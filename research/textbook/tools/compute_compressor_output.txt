@@ -1,0 +1,15 @@
+compressor params: 5376  decompressor params: 5445  total: 10821
+fraction of 5,506,629: 0.0019650860807946206
+compressor buffers: {'norm.running_mean': (32,), 'norm.running_var': (32,), 'norm.num_batches_tracked': ()}
+Conv2d(165,24,1): 3984
+stage-1 conv weights 165->32 k4: 84480  32->32 k4: 16384
+eps, momentum: 1e-05 0.1
+train-mode output: [-1.069, -0.5345, 0.0, 1.6036]
+running_mean, running_var after one step: 0.30000001192092896 1.36667
+eval-mode output for the same values: [0.5988, 1.4542, 2.3096, 4.8758]
+train-mode with gamma=2, beta=0.5: [-1.6381, -0.569, 0.5, 3.7071]
+bias shift changes train-mode BN output: False
+y = W x: [0.20000000298023224, 0.5]  xhat = V W x: [0.20000000298023224, 0.5, 0.5]
+V W = [[1.0, 0.0, 0.0], [0.0, 0.5, 0.5], [0.0, 0.5, 0.5]]  rank: 2
+W (0,1,-1) = [0.0, 0.0]
+rank of real compressor weight (random init): 32

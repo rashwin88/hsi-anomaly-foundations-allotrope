@@ -1,0 +1,1141 @@
+\chapter{Indradhanu Heavy: capacity, a fair control and the haze}\label{ch:heavy}
+
+\begin{onething}
+Tripling the encoder's width multiplies its parameters by about nine, because almost every weight sits in a
+$C\times C$ matrix; the resulting 33.9\,M-parameter Indradhanu Heavy, re-pretrained and fine-tuned beside a
+control given exactly the same recipe, beat the control and the shipped model on detection at every
+neighbouring checkpoint, once a thin-cloud mask that fired on haze was left out, while it reconstructed
+no better than the control.
+\end{onething}
+
+This chapter closes Part VIII with the experiment that finally moved detection. It has four strands: the
+arithmetic of width (why parameters grow like width squared, counted to the last parameter); the pretraining run
+on a rented H100 and the two operational traps it hit; the logic of a fair comparison (a control, and three
+neighbouring checkpoints); and a mask head that called haze ``cloud'' and so deleted most of a scene's targets.
+Its lesson is the one \cref{ch:uncertainty,ch:decoderwork} pointed towards: judge detectors on detection.
+
+Provenance tags abbreviate paths:
+\begin{itemize}
+\item \file{F002-heavy/} is under \file{research/experiments/indradhanu-se-pretrain/};
+\item \file{FTH1-heavy-joint/} and \file{FTH2-heavy-joint-more/},
+\item \file{FTH3-heavy-joint-more2/} and \file{FTB1-base-joint/}:
+  all four are under\\ \file{research/experiments/indradhanu-finetune/}.
+\end{itemize}
+
+\begin{analogy}
+You want to know whether a new engine makes a car faster. Last year's car won with a driver who practised the
+track for a month. Put the new engine in a car, hand it to a driver who has had one afternoon, and if it loses,
+you have learned nothing about the engine. The fair test is two cars, old engine and new, with the same driver,
+the same afternoon of practice, the same tyres. Here the engine is the pretrained model (Heavy against F001),
+the month of practice is FT04's four-stage curriculum, and the afternoon is a single joint fine-tuning run that
+both engines get.
+\end{analogy}
+
+\section{Why capacity was the untested question}\label{sec:heavy:why}
+
+Look back at \cref{tab:decoderwork:cumulative}. Cloud exclusion was a real gain; FT07 and FT08 cost a little;
+FT09b gained by a hair and FT09c showed the gain was a lucky checkpoint. Every one of those runs \emph{kept
+FT04's encoder at the same size}: widths 32, 64, 160 and 256 across its four stages. \Cref{ch:decoderwork} found
+the limit they could not move: each stage-1 token squeezes 512 numbers into 32. FT09 attacked the decoder side of
+that; it did not change how much the encoder can hold. As the F002 README puts it: ``A wider encoder needs
+re-pretraining'' \tagM{F002-heavy/README.md}. You cannot widen a trained encoder and keep its weights, because
+every weight matrix changes shape.
+
+\begin{definition}[Capacity and width]
+The \emph{capacity}\index{capacity} of a model is how much it can represent. For a network of fixed depth it
+grows with its \emph{width}\index{width (of a layer)}: the number of channels each layer carries.
+\end{definition}
+
+\section{The architecture}\label{sec:heavy:arch}
+
+\begin{table}[htbp]
+\centering\small
+\begin{tabular}{llll}
+\toprule
+setting & F001 / FT04 & Heavy & ratio\\
+\midrule
+\texttt{embed\_dims} (stage widths) & 32, 64, 160, 256 & 96, 192, 480, 768 & 3$\times$\\
+\texttt{num\_heads} & 2, 2, 5, 8 & 3, 6, 10, 12 & \\
+channels per head & 16, 32, 32, 32 & 32, 32, 48, 64 & \\
+spectral latent (\texttt{compressed\_channels}) & 32 & 64 & 2$\times$\\
+\texttt{token\_dim} & 32 & 32 & 1$\times$\\
+decoder & SegFormer, dim 256 & progressive, dim 512 & \\
+decoder stage dims & -- & 256 / 128 & \\
+reduction ratios; blocks & 8 4 2 1;\ 2 2 2 2 & same & \\
+mask ratio & 0.65 & 0.65 & \\
+\bottomrule
+\end{tabular}
+\caption{F001 (FT04's pretrained parent, \cref{ch:pretrain}) against Heavy, both built by
+\texttt{SpectralStemSegFormerMAE}. Source: \tagM{F002-heavy/config.json}.}
+\label{tab:heavy:arch}
+\end{table}
+
+\begin{sourcenote}[: ``4x wide'' is a name, the widths are 3x]
+The run was launched on the user's ``Go, but 4x wide''. The course (part 68) records that the README title, the
+config's \texttt{\_description} and the commit all said ``4x wide''. The configuration has encoder widths
+$96/32=3$ and $768/256=3$ times FT04's, and the spectral latent and decoder 2 times; nothing in the model is 4
+times. The source now agrees: the README title reads ``3x-wide pretraining'', with ``implemented as 3x encoder
+widths \ldots{} which this README first called 4x (corrected 2026-10-29)'', and the \texttt{\_description} reads
+``3x-wide (encoder)'' (\file{research/experiments/indradhanu-se-pretrain/F002-heavy/README.md},
+\file{config.json}). Read ``4x'' as the launch instruction, not a measurement.
+\end{sourcenote}
+
+The decoder is FT09's progressive decoder (\cref{ch:decoderwork}). It did not help FT04 on its own; here it is
+pretrained from the start, so it never has the warm-start problem. \texttt{token\_dim} stays 32 because ``the
+reduced stem's wavelength encoding is 32 wide''.
+
+\subsection{The stage-1 squeeze, three times wider}
+
+\begin{align*}
+\text{FT04} &: 16\text{ pixels}\times32\text{ channels} = 512 \text{ in};\ 32\text{ out};\ 512/32 = 16\text{ to }1;\ 32/16 = 2\text{ per pixel}\\
+\text{Heavy} &: 16\times64 = 1{,}024 \text{ in};\ 96\text{ out};\ 1{,}024/96 = 10.7\text{ to }1;\ 96/16 = 6\text{ per pixel}
+\end{align*}
+
+\section{Why parameters grow like width squared}\label{sec:heavy:width}
+
+\subsection{One encoder block, as a formula}
+
+A transformer block (\cref{ch:block}) is LayerNorm, efficient self-attention with spatial reduction ratio $R$
+(\cref{ch:esa}), LayerNorm, Mix-FFN with expansion 4. Count its parameters for width $C$, layer by layer. A
+linear layer from $a$ to $b$ channels has $ab+b$ parameters; a LayerNorm over $C$ channels has $2C$ (a weight and a
+bias each).
+\begin{align*}
+\text{norm1} &: 2C\\
+q,k,v,\text{proj} &: 4\,(C\cdot C + C) = 4C^2 + 4C\\
+\text{reduction conv } (R\times R,\ \text{if } R>1) &: C\cdot C\cdot R^2 + C = R^2C^2 + C\\
+\text{reduction norm (if } R>1) &: 2C\\
+\text{norm2} &: 2C\\
+\text{fc1 } (C\to4C) &: C\cdot4C + 4C = 4C^2 + 4C\\
+\text{depthwise }3\times3\text{ conv on }4C &: 4C\cdot1\cdot9 + 4C = 40C\\
+\text{fc2 } (4C\to C) &: 4C\cdot C + C = 4C^2 + C
+\end{align*}
+Collect the $C^2$ terms: attention $4C^2$, reduction $R^2C^2$, FFN $4C^2+4C^2=8C^2$. Collect the $C$ terms:
+$2+4+1+2+2+4+40+1=56$. So
+\begin{equation}\label{eq:heavy:block}
+P_\text{block}(C,R) = (12+R^2)\,C^2 + 56\,C \quad (R>1),\qquad P_\text{block}(C,1) = 12\,C^2 + 53\,C,
+\end{equation}
+where for $R=1$ the reduction convolution and its norm are absent ($56-1-2=53$).
+
+\begin{worked}[label={we:heavy:block1}]{Stage-1 block, FT04 and Heavy}
+Stage 1 has $R=8$, so the $C^2$ coefficient is $12+64=76$. Do it on paper.
+\begin{align*}
+\text{FT04, } C=32 &: 76\times32^2 + 56\times32 = 76\times1{,}024 + 1{,}792 = 77{,}824 + 1{,}792 = 79{,}616\\
+\text{Heavy, } C=96 &: 76\times96^2 + 56\times96 = 76\times9{,}216 + 5{,}376 = 700{,}416 + 5{,}376 = 705{,}792\\
+\text{ratio} &: 705{,}792/79{,}616 = 8.86
+\end{align*}
+Line by line for Heavy: norm1 192; q,k,v,proj $4\times(9{,}216+96)=37{,}248$; reduction
+$96\times96\times64+96=589{,}920$; reduction norm 192; norm2 192; fc1 $96\times384+384=37{,}248$; dwconv
+$384\times9+384=3{,}840$; fc2 $384\times96+96=36{,}960$. Sum: $192+37{,}248+589{,}920+192+192+37{,}248+3{,}840+36{,}960=705{,}792$.
+The $8\times8$ reduction convolution alone is $589{,}920/705{,}792=84\%$ of the block.
+\end{worked}
+
+\paragraph{Why the ratio is a little under 9.} Tripling $C$ multiplies the $C^2$ term by $3^2=9$ and the $C$
+term by only 3:
+\begin{align*}
+\frac{P(3C)}{P(C)} = \frac{9\,aC^2 + 3\cdot56\,C}{aC^2 + 56\,C}
+ = 9 - \frac{6\cdot56\,C}{aC^2+56\,C}.
+\intertext{For stage 1 of FT04 ($a=76$, $C=32$):}
+\frac{6\times56\times32}{79{,}616} = \frac{10{,}752}{79{,}616} = 0.135,\qquad 9-0.135 = 8.865 .
+\end{align*}
+The wider the layer, the smaller the correction: width scaling is ``about width squared'' because the $C^2$
+terms dominate.
+
+\begin{table}[htbp]
+\centering\small
+\begin{tabular}{lrrrr}
+\toprule
+stage ($C_\text{FT04}\to C_\text{Heavy}$, $R$) & FT04 block & Heavy block & ratio & formula check (Heavy)\\
+\midrule
+1 ($32\to96$, 8) & 79,616 & 705,792 & 8.86 & $76\cdot9{,}216+5{,}376$\\
+2 ($64\to192$, 4) & 118,272 & 1,042,944 & 8.82 & $28\cdot36{,}864+10{,}752$\\
+3 ($160\to480$, 2) & 418,560 & 3,713,280 & 8.87 & $16\cdot230{,}400+26{,}880$\\
+4 ($256\to768$, 1) & 800,000 & 7,118,592 & 8.90 & $12\cdot589{,}824+40{,}704$\\
+\bottomrule
+\end{tabular}
+\caption{One block per stage. Counts from building both models on CPU \tagC
+(\texttt{tools/compute\_39-41\_output.txt}); every one matches \cref{eq:heavy:block}.}
+\label{tab:heavy:blocks}
+\end{table}
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}
+\begin{axis}[width=0.75\linewidth,height=5.5cm,xlabel={width multiplier $k$},ylabel={$P(kC)/P(C)$},
+  xmin=1,xmax=4,ymin=0,ymax=16,domain=1:4,samples=60,grid=major,grid style={gray!20},
+  legend pos=north west,legend cell align=left]
+\addplot[loss,thick] {(76*1024*x^2+56*32*x)/(76*1024+56*32)};
+\addlegendentry{stage-1 block, block formula}
+\addplot[maskgrey,dashed] {x^2};
+\addlegendentry{$k^2$}
+\addplot[only marks,mark=*,attn] coordinates {(3,8.865)};
+\node[attn,anchor=west,font=\small] at (axis cs:3.05,7.6) {Heavy: 8.86};
+\end{axis}
+\end{tikzpicture}
+\caption{Parameter growth of a stage-1 block with width, drawn to scale. The curve hugs $k^2$; the gap is the
+linear (bias and norm) terms.}
+\label{fig:heavy:growth}
+\end{figure}
+
+\subsection{The whole encoder, counted}
+
+The patch embeddings (\cref{ch:patchembed}): stage 1 is a $4\times4$ convolution with stride 4 from the spectral
+latent; stages 2--4 are $3\times3$, stride 2, from the previous stage. Each is followed by a LayerNorm.
+\begin{align*}
+\text{stage 1} &: 64\times96\times16 + 96 + 2\times96 = 98{,}304 + 96 + 192 = 98{,}592\\
+\text{stage 2} &: 96\times192\times9 + 192 + 384 = 165{,}888 + 576 = 166{,}464\\
+\text{stage 3} &: 192\times480\times9 + 480 + 960 = 829{,}440 + 1{,}440 = 830{,}880\\
+\text{stage 4} &: 480\times768\times9 + 768 + 1{,}536 = 3{,}317{,}760 + 2{,}304 = 3{,}320{,}064\\
+\text{sum} &: 98{,}592+166{,}464 = 265{,}056;\ +830{,}880 = 1{,}095{,}936;\ +3{,}320{,}064 = 4{,}416{,}000
+\end{align*}
+(FT04's stage-1 embedding: $32\times32\times16+32+64=16{,}480$.) Two blocks per stage:
+\begin{align*}
+2\times705{,}792 &= 1{,}411{,}584\\
+2\times1{,}042{,}944 &= 2{,}085{,}888\\
+2\times3{,}713{,}280 &= 7{,}426{,}560\\
+2\times7{,}118{,}592 &= 14{,}237{,}184\\
+\text{blocks} &: 1{,}411{,}584+2{,}085{,}888 = 3{,}497{,}472;\ +7{,}426{,}560 = 10{,}924{,}032\\
+&\phantom{:}\ 10{,}924{,}032+14{,}237{,}184 = 25{,}161{,}216
+\end{align*}
+and a LayerNorm after each stage, $2\times(96+192+480+768)=2\times1{,}536=3{,}072$. The encoder:
+\[
+25{,}161{,}216 + 4{,}416{,}000 + 3{,}072 = 29{,}580{,}288 .
+\]
+
+\subsection{The decoder and the whole model}
+
+\begin{worked}[label={we:heavy:decoder}]{Heavy's progressive decoder, 4,279,616 parameters}
+Widths: stages $[96,192,480,768]$, \code{decoder_dim} 512, skip 64 channels (the spectral latent), stage dims
+(256, 128), 64 output channels.
+\begin{align*}
+\text{projections} &: (96+192+480+768)\times512 + 4\times512 = 786{,}432 + 2{,}048 = 788{,}480\\
+\text{fuse} &: 2{,}048\times512 + 512 = 1{,}048{,}576 + 512 = 1{,}049{,}088\\
+\texttt{up\_half}\ 1 &: (512+64)\times256\times9 + 256 = 1{,}327{,}104 + 256 = 1{,}327{,}360\\
+\texttt{up\_half}\ 2 &: 256\times256\times9 + 256 = 589{,}824 + 256 = 590{,}080\\
+\texttt{up\_full}\ 1 &: (256+64)\times128\times9 + 128 = 368{,}640 + 128 = 368{,}768\\
+\texttt{up\_full}\ 2 &: 128\times128\times9 + 128 = 147{,}456 + 128 = 147{,}584\\
+\texttt{head} &: 128\times64 + 64 = 8{,}192 + 64 = 8{,}256\\[3pt]
+\text{running total} &: 788{,}480+1{,}049{,}088 = 1{,}837{,}568;\ +1{,}327{,}360 = 3{,}164{,}928\\
+&\phantom{:}\ +590{,}080 = 3{,}755{,}008;\ +368{,}768 = 4{,}123{,}776\\
+&\phantom{:}\ +147{,}584 = 4{,}271{,}360;\ +8{,}256 = 4{,}279{,}616
+\end{align*}
+\end{worked}
+
+\begin{table}[htbp]
+\centering
+\begin{tabular}{lrr}
+\toprule
+part & FT04 size (no seg head) & Heavy\\
+\midrule
+\texttt{spectral\_in} (stem) & 14,721 & 17,825\\
+\texttt{norm} (BatchNorm, $2D$) & 64 & 128\\
+encoder & 3,331,072 & 29,580,288\\
+decoder & 2,164,736 & 4,279,616\\
+\texttt{spectral\_out} & 4,257 & 6,337\\
+\midrule
+total & \textbf{5,514,850} & \textbf{33,884,194}\\
+\bottomrule
+\end{tabular}
+\caption{Whole-model counts. The encoder and decoder rows are derived by hand above, Heavy's stem rows in
+\cref{sec:heavy:stemcount}; all match the built models \tagC.}
+\label{tab:heavy:total}
+\end{table}
+
+Add Heavy's column: $17{,}825+128=17{,}953$; $+29{,}580{,}288=29{,}598{,}241$; $+4{,}279{,}616=33{,}877{,}857$;
+$+6{,}337=33{,}884{,}194$. That is the README's ``33.9\,M parameters (encoder 29.6\,M, decoder 4.3\,M) vs FT04
+5.9\,M''. The 5.9\,M is the shipped FT04 \emph{with} its segmentation head (5,886,451, \cref{ch:shipping});
+without the head, $33{,}884{,}194/5{,}514{,}850=6.1$. \textbf{Heavy is about six times FT04, with nine times its
+encoder} ($29{,}580{,}288/3{,}331{,}072=8.9$).
+
+\begin{sourcenote}[: every count verified]
+Building both models on CPU (\file{research/textbook/tools/compute_39-41.py}) gives Heavy 33,884,194 total,
+encoder 29,580,288, decoder 4,279,616, \code{encoder.patch_embeds[0]} 98,592, one stage-1 block 705,792; the
+FT04-sized model 5,514,850, stage-1 block 79,616 \tagC.
+\end{sourcenote}
+
+%======================================================================
+\section{One forward pass of Heavy, at full size}\label{sec:heavy:trace}
+
+The counts above are a budget. This section follows the money: one batch through the model the product serves,
+Indradhanu~V2 \texttt{v2.1.0} (FTH3 epoch~5, Heavy fine-tuned with its segmentation head, \cref{sec:heavy:product}),
+at real sizes, with every tensor's shape. It is where \cref{ch:decoder}'s trace of the small model, \cref{ch:namer}'s
+trace of the stem, and the counts above meet. The sizes:
+\begin{itemize}
+\item $B=2$ tiles of $128\times128$, the product's tile size (\code{default_patch_size} 128,
+  \file{backend/allotrope/foundation_models/resolver.py});
+\item the native bands of PRISMA bench scene set1 after \code{trained_band_mask} (below);
+\item the training mask ratio $\rho=0.65$ (the same file), so $\lfloor1{,}024\times0.65\rfloor=665$ of the 1,024
+  stage-1 tokens are hidden and 359 kept (\cref{ch:masking}).
+\end{itemize}
+Every shape in this section was recorded by forward hooks on the shipped checkpoint, loaded strictly into the real
+class, by \file{research/textbook/tools/compute_heavy_trace.py}; its output is
+\file{compute_heavy_trace_output.txt} \tagC. The script reads set1 exactly as the evaluator does
+(\lstinline!load_prisma_scene(..., "native")!).
+
+\subsection{How many bands: 185, all kept}
+
+Set1's native cube after the product's band filter has 185 bands, 453.4 to 2,477.1\,nm \tagC. The model then drops
+any band farther than 15\,nm from every wavelength it has trained on (\code{trained_band_mask},
+\cref{ch:specdecoder}). Which wavelengths count as ``trained on'' is the buffer \code{trained_wl}, which starts as the
+202-wavelength SpectralEarth curve and grows during fine-tuning.
+\begin{center}\small
+\begin{tabular}{@{}lrr@{}}
+\toprule
+record used & wavelengths in the record & set1 bands kept\\
+\midrule
+the pretraining curve alone (a pretrained model) & 202 & 165 (20 dropped)\\
+v2.1.0's \code{trained_wl}, after fine-tuning & 733 & 185 (none dropped)\\
+\bottomrule
+\end{tabular}
+\end{center}
+The 20 bands a pretrained record drops are the three past 2,445\,nm (2,463.0 to 2,477.1), one at 1,958.6, seven
+from 1,736.5 to 1,794.0, five from 1,459.3 to 1,502.0 and four from 1,306.2 to 1,339.1, the edges of
+SpectralEarth's water-vapour gaps: $3+1+7+5+4=20$ \tagC. Fine-tuning on EnMAP (224 bands), PRISMA and AVIRIS-NG
+(372 bands) filled those gaps in the record; it now runs to 2,500.4\,nm with no gap wider than 30\,nm.
+
+\begin{sourcenote}[: 185 to 165 is a pretrained model's number]
+\file{docs/lld/spectral-stem.md} (``set1 native: 185 -> 165'') and \cref{ch:specdecoder} quote 20 of 185 bands
+dropped. That is right for a model whose record is the pretraining curve. The served v2.1.0 keeps all 185, because its
+\code{trained_wl} has 733 entries \tagC. The FTH3 README's CPU timing (``1186 x 1196 x 185 bands'') is consistent with
+the served model. So $N=185$ below.
+\end{sourcenote}
+
+\subsection{The stem, at 32,768 pixels}
+
+The stem treats every pixel separately, so it flattens the batch to $P=B\times H\times W=2\times128\times128=32{,}768$
+rows (\cref{ch:namer}, next, walks the same code step by step at the namer's sizes). The 185 kept bands fall into 45 of the 53 bins of
+40\,nm, at most 6 to a bin \tagC.
+
+\begin{table}[htbp]
+\centering\small
+\begin{tabular}{@{}lp{0.43\linewidth}l@{}}
+\toprule
+\# & operation & shape\\
+\midrule
+0 & reflectance in; normalised by the wavelength curve & \shape{(2, 185, 128, 128)}\\
+1 & wavelength encoding of every band & \shape{(185, 32)}\\
+2 & bin membership (one-hot) & \shape{(185, 53)}\\
+3 & width-weighted values; weight per bin & \shape{(32768, 185)}; \shape{(32768, 53)}\\
+4 & band vectors $\vect{k}(\lambda)$; their matrix $\mat{K}$; bin tokens & \shape{(185, 32)}; \shape{(185, 1696)};\\
+ & & \shape{(32768, 53, 32)}\\
+4 & bin position bias & \shape{(53, 32)}\\
+5 & queries (64 of them, 4 heads of 8); keys and values & \shape{(32768, 4, 64, 8)}; \shape{(32768, 4, 53, 8)}\\
+5 & attention weights (never stored) & \shape{(32768, 4, 64, 53)}\\
+6 & answers; \code{to_channel}; skip path & \shape{(32768, 64, 32)}; \shape{(32768, 64)}; \shape{(32768, 64)}\\
+7 & sum, back to a picture; BatchNorm & $\vect{z}$: \shape{(2, 64, 128, 128)}\\
+\bottomrule
+\end{tabular}
+\caption{The reduced-attention stem of Heavy, $D=64$, token width 32, 4 heads, 40\,nm bins, at $N=185$ bands
+\tagC. The weights of row 5, if stored, would be $32{,}768\times4\times64\times53=444{,}596{,}224$ numbers, 1,696\,MiB in
+float32; the fused attention kernel never forms them, and 32,768 rows is exactly the stem's \texttt{SDPA\_MAX\_ROWS}, so
+one call suffices.}
+\label{tab:heavy:stemtrace}
+\end{table}
+
+\subsection{The encoder}
+
+\begin{table}[htbp]
+\centering\small
+\begin{tabular}{@{}llll@{}}
+\toprule
+stage & step & shape & attention\\
+\midrule
+1 & patch embed $k4\,s4$, $64\to96$ & \shape{(2, 1024, 96)} & \\
+ & remove 665 hidden tokens & \shape{(2, 359, 96)} & \\
+ & 2 blocks; FFN $96\to384\to96$ & \shape{(2, 359, 96)} & 3 heads $\times$ 32; full, $359^2$\\
+ & norm, restore, reshape & F1 \shape{(2, 96, 32, 32)} & \\\midrule
+2 & embed $k3\,s2$, $96\to192$; 2 blocks & \shape{(2, 256, 192)} & 6 $\times$ 32; 16 keys\\
+ & FFN $192\to768\to192$; reshape & F2 \shape{(2, 192, 16, 16)} & \\\midrule
+3 & embed, $192\to480$; 2 blocks & \shape{(2, 64, 480)} & 10 $\times$ 48; 16 keys\\
+ & FFN $480\to1920\to480$; reshape & F3 \shape{(2, 480, 8, 8)} & \\\midrule
+4 & embed, $480\to768$; 2 blocks & \shape{(2, 16, 768)} & 12 $\times$ 64; 16 keys\\
+ & FFN $768\to3072\to768$; reshape & F4 \shape{(2, 768, 4, 4)} & \\
+\bottomrule
+\end{tabular}
+\caption{Heavy's encoder on a masked pass, $B=2$, $128\times128$, $\rho=0.65$ \tagC. ``Keys'' is the reduced key
+count: $(32/8)^2=(16/4)^2=(8/2)^2=16$, and 16 tokens at stage~4.}
+\label{tab:heavy:enctrace}
+\end{table}
+
+\begin{worked}[label={we:heavy:squeeze}]{What the masked stage~1 costs and holds}
+Masked, stage~1 attends among the 359 kept tokens (\cref{ch:esa}): $359^2=128{,}881$ scores per head, three heads,
+$3\times128{,}881=386{,}643$ per tile per block. Unmasked it would use 16 keys: $1{,}024\times16=16{,}384$ per head. The
+masked pass is the expensive one, by $128{,}881/16{,}384=7.9$ times per head.
+
+What flows where, per tile:
+\begin{align*}
+\text{input} &: 185\times128\times128 = 185\times16{,}384 = 3{,}031{,}040\\
+\text{stem output } \vect{z} &: 64\times16{,}384 = 1{,}048{,}576\\
+\text{F1} &: 96\times32\times32 = 96\times1{,}024 = 98{,}304\\
+\text{F4} &: 768\times4\times4 = 12{,}288
+\end{align*}
+The stem cuts the values by $3{,}031{,}040/1{,}048{,}576=2.9$; stage~1 by another $1{,}048{,}576/98{,}304=10.7$, the
+``10.7 to 1'' squeeze of \cref{sec:heavy:arch}.
+\end{worked}
+
+\subsection{The progressive decoder and the way back to 185 bands}
+
+\begin{table}[htbp]
+\centering\small
+\begin{tabular}{@{}lp{0.45\linewidth}l@{}}
+\toprule
+\# & operation & shape\\
+\midrule
+1 & $1\times1$ projections of F1--F4 to 512; bilinear to $32\times32$ & four of \shape{(2, 512, 32, 32)}\\
+2 & concatenate; fuse $2048\to512$, GELU & \shape{(2, 2048, 32, 32)} $\to$ \shape{(2, 512, 32, 32)}\\
+3 & upsample $\times2$ & \shape{(2, 512, 64, 64)}\\
+4 & skip: $\vect{z}$ with hidden tokens zeroed, $2\times2$ average & \shape{(2, 64, 64, 64)}\\
+5 & concatenate; \texttt{up\_half}: two $3\times3$ convs, GELU & \shape{(2, 576, 64, 64)} $\to$ \shape{(2, 256, 64, 64)}\\
+6 & upsample $\times2$; concatenate the full-resolution skip & \shape{(2, 256, 128, 128)}; \shape{(2, 320, 128, 128)}\\
+7 & \texttt{up\_full}: two $3\times3$ convs, GELU & \shape{(2, 128, 128, 128)}\\
+8 & head, $1\times1$ conv $128\to64$ & \shape{(2, 64, 128, 128)}\\
+9 & per-band output weights $[\vect{u}(\lambda)\,|\,c(\lambda)]$ & \shape{(185, 65)}\\
+10 & $\hat x_n=\vect{u}(\lambda_n)\cdot\hat{\vect{z}}+c(\lambda_n)$; denormalise & \shape{(2, 185, 128, 128)}\\
+\bottomrule
+\end{tabular}
+\caption{The progressive decoder (\cref{ch:decoderwork}) and the wavelength decoder at Heavy's widths \tagC. Rows 4 and
+6 are the skip that lets the decoder render detail below a token: the stem output itself, with every pixel of a
+hidden token set to 0 so no hidden value reaches the reconstruction.}
+\label{tab:heavy:dectrace}
+\end{table}
+
+\paragraph{The segmentation path.} The class map comes from a second, \emph{unmasked} pass through the same stem and
+encoder (\code{segment}), into a \code{SegFormerDecoder} of width 256 with five outputs per sub-pixel:
+four projections to \shape{(2, 256, 32, 32)}, concatenated to \shape{(2, 1024, 32, 32)}, fused to
+\shape{(2, 256, 32, 32)}, refined, a sub-pixel convolution to $5\times16=80$ channels, \shape{(2, 80, 32, 32)}, and
+the pixel shuffle to \shape{(2, 5, 128, 128)}: one logit per class per pixel, land being ``none of the five''
+(\cref{ch:seghead}) \tagC.
+
+\begin{figure}[htbp]\centering
+\begin{tikzpicture}[node distance=3.2mm,
+  box/.style={draw,rounded corners=2pt,minimum height=6mm,font=\small,align=center,text width=44mm},
+  lab/.style={font=\scriptsize\ttfamily,anchor=west},
+  ar/.style={-{Stealth}}]
+\node[box,fill=spec!12] (in) {185 native bands};
+\node[box,below=of in,fill=spec!22] (stem) {stem: 53 bins, 64 queries};
+\node[box,below=of stem,fill=spec!12] (bn) {BatchNorm (64)};
+\node[box,below=of bn,fill=spat!15] (e1) {stage 1: delete 665 of 1,024};
+\node[box,below=of e1,fill=spat!15] (e2) {stages 2--4};
+\node[box,below=of e2,fill=attn!12] (fuse) {fuse four maps to 512};
+\node[box,below=of fuse,fill=attn!12] (uh) {$\times2$, + skip, \texttt{up\_half}};
+\node[box,below=of uh,fill=attn!12] (uf) {$\times2$, + skip, \texttt{up\_full}, head};
+\node[box,below=of uf,fill=spec!22] (out) {per-band output};
+\foreach \a/\b in {in/stem,stem/bn,bn/e1,e1/e2,e2/fuse,fuse/uh,uh/uf,uf/out} \draw[ar] (\a) -- (\b);
+\node[lab] at ($(in.east)+(1.5mm,0)$) {(2, 185, 128, 128)};
+\node[lab] at ($(stem.east)+(1.5mm,0)$) {P = 32768 rows};
+\node[lab] at ($(bn.east)+(1.5mm,0)$) {z (2, 64, 128, 128)};
+\node[lab] at ($(e1.east)+(1.5mm,0)$) {(2, 359, 96) -> F1 (2, 96, 32, 32)};
+\node[lab] at ($(e2.east)+(1.5mm,0)$) {F2 192/16, F3 480/8, F4 768/4};
+\node[lab] at ($(fuse.east)+(1.5mm,0)$) {(2, 512, 32, 32)};
+\node[lab] at ($(uh.east)+(1.5mm,0)$) {(2, 256, 64, 64)};
+\node[lab] at ($(uf.east)+(1.5mm,0)$) {(2, 64, 128, 128)};
+\node[lab] at ($(out.east)+(1.5mm,0)$) {(2, 185, 128, 128)};
+% skip path
+\draw[ar,spec,dashed] (bn.west) -- ++(-6mm,0) |- (uh.west);
+\draw[ar,spec,dashed] ($(bn.west)+(-6mm,0)$) |- (uf.west);
+\node[font=\scriptsize,text=spec,anchor=east,align=right] at ($(uh.west)+(-7mm,0)$) {skip:\\ hidden = 0};
+% segmentation head
+\node[box,fill=loss!15,text width=26mm,left=20mm of e2] (seg) {segmentation head, width 256, unmasked pass};
+\draw[ar,loss] (e2.west) -- (seg.east);
+\node[font=\scriptsize\ttfamily,below=1mm of seg] {(2, 5, 128, 128)};
+\end{tikzpicture}
+\caption{Indradhanu Heavy as served, one masked pass over two $128\times128$ PRISMA tiles with 185 bands, drawn from
+the shapes the forward hooks recorded \tagC. Teal: spectral stem and output; blue: encoder; plum: progressive decoder;
+dashed teal: the skip from the stem output with hidden tokens zeroed; amber: the segmentation head, fed by a separate,
+unmasked encoder pass.}
+\label{fig:heavy:trace}
+\end{figure}
+
+\subsection{The stem, the output and the segmentation head, counted by hand}\label{sec:heavy:stemcount}
+
+\Cref{tab:heavy:total} took its stem rows from the built model. Count them. Every small network in the stem is a
+two-layer perceptron of the 32-number wavelength encoding, $32\to64\to\text{out}$ (\file{app/foundation_models/components/spectral_reduced.py},
+\code{_hyper}), so it has $(32\times64+64)+(64\times\text{out}+\text{out})=2{,}112+65\,\text{out}$ parameters.
+\begin{align*}
+\text{band weights } \vect{k}(\lambda),\ \text{out}=32 &: 2{,}112+65\times32 = 2{,}112+2{,}080 = 4{,}192\\
+\text{skip weights } W(\lambda),\ \text{out}=64 &: 2{,}112+65\times64 = 2{,}112+4{,}160 = 6{,}272\\
+\text{bin bias, } 32\to32 &: 32\times32+32 = 1{,}056\\
+\text{queries} &: 64\times32 = 2{,}048\\
+\text{q, k, v, o, each } 32\to32 &: 4\times1{,}056 = 4{,}224\\
+\text{to\_channel, } 32\to1 &: 32+1 = 33\\
+\text{stem} &: 4{,}192+6{,}272 = 10{,}464;\ +1{,}056 = 11{,}520;\ +2{,}048 = 13{,}568;\\
+&\phantom{:}\ +4{,}224 = 17{,}792;\ +33 = 17{,}825\\[3pt]
+\text{output weights } [\vect{u}\,|\,c],\ \text{out}=64+1 &: 2{,}112+65\times65 = 2{,}112+4{,}225 = 6{,}337\\
+\text{BatchNorm on } D=64 &: 2\times64 = 128
+\end{align*}
+These are the 17,825, 6,337 and 128 of \cref{tab:heavy:total}; none depends on the band count. The segmentation
+head is a \code{SegFormerDecoder} of width 256 writing $5\times16=80$ channels:
+\begin{align*}
+\text{projections} &: (96+192+480+768)\times256+4\times256 = 1{,}536\times256+1{,}024\\
+&\phantom{:}\ = 393{,}216+1{,}024 = 394{,}240\\
+\text{fuse} &: 1{,}024\times256+256 = 262{,}144+256 = 262{,}400\\
+\text{refine } 3\times3 &: 256\times256\times9+256 = 589{,}824+256 = 590{,}080\\
+\text{sub-pixel } 3\times3 &: 256\times80\times9+80 = 184{,}320+80 = 184{,}400\\
+\text{head} &: 394{,}240+262{,}400 = 656{,}640;\ +590{,}080 = 1{,}246{,}720;\\
+&\phantom{:}\ +184{,}400 = 1{,}431{,}120
+\end{align*}
+\begin{equation}\label{eq:heavy:served}
+33{,}884{,}194+1{,}431{,}120 = 35{,}315{,}314
+\end{equation}
+trainable numbers in the served model, the documents' 35.3\,M. Loading the shipped checkpoint strictly and summing its
+parameters gives 35,315,314 \tagC.
+
+\begin{sourcenote}[: the manifest's 35,315,443]
+The v2.1.0 manifest gives \code{params} 35,315,443. \file{scripts/make_model_manifest.py} counts every value in the
+state dictionary except the \code{stats.*} curve and \code{trained_wl}, so it includes the stem BatchNorm's running mean
+and variance ($2\times64=128$) and its batch counter (1): $35{,}315{,}314+129=35{,}315{,}443$. The difference is buffers,
+not parameters, as for Indradhanu (\cref{ch:recon}) and Chakshu (\cref{ch:chakshu}).
+\end{sourcenote}
+
+\section{Pretraining on a rented H100}\label{sec:heavy:pretrain}
+
+The run used an \emph{H100 capacity block}\index{capacity block}: AWS rents a GPU instance for a fixed window
+booked in advance, here a \texttt{p5.4xlarge} (one H100 with 80\,GB, 16 vCPU) from 2026-10-28 11:30 to 2026-10-29
+11:30 UTC \tagM{F002-heavy/README.md}. The window runs whether or not your job does, like a hired hall: an hour
+spent setting up is an hour of the booking gone.
+
+\begin{table}[htbp]
+\centering\small
+\begin{tabular}{ll}
+\toprule
+UTC & event\\
+\midrule
+10-28 11:30 & block starts\\
+12:38 & launch (68 minutes into the block)\\
+12:48 & first start; crashes at the first validation, three times\\
+13:10 & the driver gives up after the third failure; GPU idle\\
+14:05 & restart with the fix, batch $32\times1$\\
+22:55 & 80 epochs done\\
+10-29 01:02--10:39 & FTH1, FTB1, FTH2, FTB2, FTH3 (\cref{sec:heavy:control})\\
+11:30 & block ends\\
+\bottomrule
+\end{tabular}
+\caption{Block 1. Source: \tagM{F002-heavy/README.md} and the FTH READMEs.}
+\label{tab:heavy:timeline}
+\end{table}
+
+From 11:30 to 14:05 is 2\,h\,35\,min $=155$ minutes, $155/1{,}440=0.108$ of the 24-hour booking: the README's
+``\textasciitilde2.5\,h of block 1 were lost''. Split by the timeline: $68$ before launch, $10$ of start-up, $22$
+in three failed starts, $55$ idle; $68+10+22+55=155$.
+
+\subsection{The crash: 10 test shards, 12 loader workers}
+
+Training data arrives in \emph{shards}\index{shard}: tar files of patches, read by \texttt{webdataset}. A data
+\emph{loader worker}\index{loader worker} is a separate process that reads and decodes data while the GPU trains;
+the configuration asked for 12. Webdataset deals shards to workers in turn, and a worker with no shard has nothing
+to yield.
+
+\begin{worked}[label={we:heavy:shards}]{Dealing shards to workers}
+Deal shards $0,1,2,\dots$ round-robin: shard $i$ goes to worker $i \bmod 12$.
+\begin{align*}
+10\text{ shards} &: \text{workers }0\text{--}9\text{ get one each};\ \text{workers 10 and 11 get none}\\
+16\text{ shards} &: \text{workers }0\text{--}3\text{ get two (shards } i,\ i+12);\ \text{workers }4\text{--}11\text{ get one}\\
+\text{check} &: 4\times2 + 8\times1 = 8 + 8 = 16
+\end{align*}
+With 10 shards, two workers are empty and webdataset raised ``No samples found \ldots{} fewer shards than
+workers''. The rule: shards $\ge$ workers. The fix was \lstinline!test_shards_per_size: 16!.
+\end{worked}
+
+Why it went unseen for about 55 minutes, in the README's words: ``My epoch watcher only looked for an epoch-1
+row''. A watcher that waits for success says nothing when the job fails; it waits. The watcher was changed to
+alert on any trainer exit or the driver stopping.
+
+\subsection{The stale log line}
+
+The second trap was in \file{h100_chain.sh}, the script that waits for pretraining and then runs the fine-tunes.
+Its committed version waited for the sentence ``F002-heavy driver finished'' in a log file, then checked that
+\file{metrics.csv} had 80 epochs and stopped if not. But the driver prints that sentence whenever its loop ends,
+including after the three failed starts at 13:10, and the log is appended across restarts. So the \code{grep}
+found the crashed run's line, counted fewer than 80 epochs, and the chain stopped itself. The fix waits on the
+thing it needs, the epoch count, and stops only if the driver process is gone:
+\begin{lstlisting}[language=bash]
+# wait on the epoch count, not a log line: heavy.log is appended across restarts and keeps old "finished" lines
+epochs() { echo $(( $(wc -l < $N/runs/F002-heavy/metrics.csv 2>/dev/null || echo 1) - 1 )); }
+until [ $(epochs) -ge 80 ]; do
+  pgrep -f heavy_run.sh >/dev/null || { log "driver not running at $(epochs) epochs - chain stops"; exit 1; }
+  sleep 120
+done
+\end{lstlisting}
+
+\begin{keypoint}
+Watch for failure, not only for success, and wait on the state you need (80 rows in \texttt{metrics.csv}), never
+on a message an earlier run may have left behind.
+\end{keypoint}
+
+\subsection{Batch size, throughput and the schedule}
+
+The first start used batch 16 with 2 accumulation steps; the restart used $32\times1$. The effective batch is 32
+either way. At $16\times2$ the GPU ran 63--85\% busy with 86\% of the CPUs idle; at $32\times1$, 85--100\%
+\tagM{F002-heavy/README.md}. Epoch 1 took 369.4\,s, $30{,}000/369.4=81.2$ patches per second. All 80 epochs took
+30,690 seconds of training, 8.5 hours.
+
+F001 ran a 200-epoch cosine schedule (\cref{ch:pretrain}); Heavy ran 80, ``cosine fully decayed'', on the user's
+``we will lose steam after epoch 50-75''. A cosine schedule (\cref{ch:trainloop}) lowers the learning rate along
+half a cosine wave from $3\times10^{-4}$ to the floor $10^{-6}$:
+\begin{equation}\label{eq:heavy:cosine}
+\eta(e) = 10^{-6} + \left(3\times10^{-4}-10^{-6}\right)\frac{1+\cos(\pi e/80)}{2}.
+\end{equation}
+
+\begin{worked}[label={we:heavy:lr}]{The learning rate at epochs 40 and 60}
+\begin{align*}
+e=40 &: \cos(\pi/2) = 0;\ \tfrac{1+0}{2} = 0.5;\ 2.99\times10^{-4}\times0.5 = 1.495\times10^{-4};\ +10^{-6} = 1.505\times10^{-4}\\
+e=60 &: \cos(3\pi/4) = -0.7071;\ \tfrac{1-0.7071}{2} = 0.14645;\ 2.99\times10^{-4}\times0.14645 = 4.379\times10^{-5};\\
+&\phantom{:}\ +10^{-6} = 4.479\times10^{-5}
+\end{align*}
+\file{metrics.csv} logs $1.5050\times10^{-4}$ and $4.4788\times10^{-5}$ \tagM{F002-heavy/metrics.csv}: the schedule
+is evaluated at the epoch number itself.
+\end{worked}
+
+The data rotated: training shards in blocks of 200, a new block every 5 epochs (F001: every 20), 16 blocks, 3,200
+of the 3,419 training shards, 30,000 patches per epoch.
+
+\section{The curve: did it overfit?}\label{sec:heavy:curve}
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}
+\begin{groupplot}[group style={group size=1 by 2,vertical sep=1.3cm},width=0.9\linewidth,height=5.2cm,
+  xmin=0,xmax=81,grid=major,grid style={gray!15},legend cell align=left,
+  yticklabel style={/pgf/number format/fixed,/pgf/number format/precision=3}]
+\nextgroupplot[ylabel={L1 (normalised)},ymin=0.015,ymax=0.042,legend pos=north east,
+  scaled y ticks=false]
+\addplot[loss,thick] coordinates {(1,0.04121) (2,0.03364) (3,0.03041) (4,0.02826) (5,0.02723) (6,0.02622) (7,0.02629) (8,0.02544) (9,0.02520) (10,0.02476) (11,0.02451) (12,0.02381) (13,0.02374) (14,0.02341) (15,0.02329) (16,0.02313) (17,0.02282) (18,0.02265) (19,0.02256) (20,0.02241) (21,0.02253) (22,0.02236) (23,0.02215) (24,0.02210) (25,0.02205) (26,0.02193) (27,0.02186) (28,0.02169) (29,0.02159) (30,0.02139) (31,0.02147) (32,0.02132) (33,0.02116) (34,0.02109) (35,0.02104) (36,0.02104) (37,0.02098) (38,0.02093) (39,0.02075) (40,0.02074) (41,0.02080) (42,0.02074) (43,0.02062) (44,0.02058) (45,0.02046) (46,0.02040) (47,0.02031) (48,0.02024) (49,0.02016) (50,0.02006) (51,0.01997) (52,0.01993) (53,0.01984) (54,0.01978) (55,0.01978) (56,0.01982) (57,0.01973) (58,0.01968) (59,0.01962) (60,0.01958) (61,0.01945) (62,0.01944) (63,0.01938) (64,0.01937) (65,0.01934) (66,0.01944) (67,0.01943) (68,0.01936) (69,0.01935) (70,0.01931) (71,0.01926) (72,0.01924) (73,0.01926) (74,0.01919) (75,0.01921) (76,0.01915) (77,0.01917) (78,0.01916) (79,0.01913) (80,0.01914)};
+\addlegendentry{train L1}
+\addplot[spec,thick] coordinates {(1,0.02854) (2,0.02709) (3,0.02403) (4,0.02286) (5,0.02221) (6,0.02064) (7,0.02069) (8,0.02100) (9,0.02004) (10,0.01960) (11,0.02029) (12,0.02085) (13,0.02052) (14,0.01964) (15,0.02078) (16,0.02088) (17,0.02036) (18,0.01976) (19,0.02005) (20,0.02016) (21,0.01942) (22,0.01877) (23,0.01868) (24,0.01873) (25,0.01839) (26,0.01900) (27,0.01837) (28,0.01856) (29,0.01807) (30,0.01784) (31,0.01898) (32,0.01858) (33,0.01914) (34,0.01777) (35,0.01797) (36,0.01801) (37,0.01767) (38,0.01856) (39,0.01774) (40,0.01761) (41,0.01719) (42,0.01729) (43,0.01730) (44,0.01740) (45,0.01767) (46,0.01709) (47,0.01754) (48,0.01749) (49,0.01711) (50,0.01681) (51,0.01736) (52,0.01745) (53,0.01705) (54,0.01694) (55,0.01729) (56,0.01742) (57,0.01722) (58,0.01703) (59,0.01706) (60,0.01714) (61,0.01680) (62,0.01668) (63,0.01669) (64,0.01668) (65,0.01657) (66,0.01657) (67,0.01640) (68,0.01646) (69,0.01637) (70,0.01672) (71,0.01631) (72,0.01619) (73,0.01629) (74,0.01627) (75,0.01624) (76,0.01644) (77,0.01631) (78,0.01635) (79,0.01634) (80,0.01636)};
+\addlegendentry{val L1}
+\addplot[maskgrey,dashed,domain=0:81] {0.0182};
+\addlegendentry{F001 best val L1 (0.0182)}
+\nextgroupplot[xlabel={epoch},ylabel={val SAM (deg)},ymin=3.5,ymax=9]
+\addplot[attn,thick] coordinates {(1,8.84) (2,8.42) (3,7.37) (4,6.71) (5,6.42) (6,5.71) (7,5.57) (8,5.41) (9,5.19) (10,5.06) (11,5.09) (12,5.26) (13,5.18) (14,4.84) (15,5.30) (16,5.37) (17,5.16) (18,5.09) (19,4.97) (20,5.03) (21,4.83) (22,4.45) (23,4.58) (24,4.56) (25,4.47) (26,5.30) (27,4.56) (28,4.48) (29,4.47) (30,4.43) (31,4.97) (32,4.42) (33,4.76) (34,4.31) (35,4.51) (36,4.32) (37,4.27) (38,5.16) (39,5.16) (40,4.43) (41,4.02) (42,4.13) (43,4.19) (44,4.42) (45,4.24) (46,3.99) (47,4.32) (48,4.28) (49,4.01) (50,3.98) (51,4.28) (52,4.65) (53,4.03) (54,4.18) (55,4.13) (56,4.16) (57,4.00) (58,4.01) (59,4.06) (60,4.34) (61,4.03) (62,4.08) (63,4.01) (64,4.09) (65,3.97) (66,3.91) (67,3.88) (68,3.89) (69,3.85) (70,4.00) (71,3.84) (72,3.77) (73,3.81) (74,3.80) (75,3.78) (76,3.88) (77,3.85) (78,3.90) (79,3.92) (80,3.89)};
+\addplot[maskgrey,dashed,domain=0:81] {4.06};
+\addplot[only marks,mark=*,loss] coordinates {(72,3.77)};
+\node[loss,anchor=south,font=\small] at (axis cs:72,3.85) {best, epoch 72};
+\node[maskgrey,anchor=south west,font=\small] at (axis cs:2,4.08) {F001 best (4.06)};
+\end{groupplot}
+\end{tikzpicture}
+\caption{Indradhanu Heavy's pretraining, all 80 epochs drawn from \texttt{metrics.csv}
+\tagM{F002-heavy/metrics.csv}. Train L1 lies above validation L1 throughout (see the text), and both keep falling.}
+\label{fig:heavy:curve}
+\end{figure}
+
+\begin{drift}
+F002-heavy, 2026-10-28: best validation L1 / SAM 0.0162 / 3.77° at epoch 72; epoch 80 0.0164 / 3.89°. F001's best
+in 113 epochs: 0.0182 / 4.06° at epoch 100 \tagM{F002-heavy/README.md}. Heavy first beat F001's L1 at epoch 29
+(0.0181) and its SAM at epoch 41 (4.02°).
+\end{drift}
+
+The user's prediction holds in the numbers: from epoch 1 to 20 validation L1 fell $0.0285-0.0202=0.0083$; from 50
+to 72, $0.0168-0.0162=0.0006$, fourteen times less ($0.0083/0.0006=13.8$).
+
+One caveat the README does not make: F001 validated on test shards 0--9, Heavy on 16 test shards because of the
+crash fix. Both draw 1,500 patches per validation, but not the same 1,500. The gap is large next to epoch-to-epoch
+wobble, so its direction is safe; its exact size is not.
+
+\begin{definition}[Overfitting]
+A model \emph{overfits}\index{overfitting} when it learns its training examples rather than the pattern behind
+them: training loss keeps falling while validation loss rises.
+\end{definition}
+
+Two pieces of evidence say Heavy did not.
+\begin{enumerate}
+\item \textbf{The train--validation gap is steady.} Train L1 sits above validation L1 throughout, with no trend.
+  Train above validation is expected here: training hides 65\% of tokens, reads a random band subset in 80\% of
+  batches and runs with dropout 0.4, while validation hides 50\% twice with complementary masks and no
+  augmentation.
+\item \textbf{Nothing is memorised within a block.} Each block's 200 shards are seen for 5 epochs. A model
+  memorising them would show train loss falling inside a block and jumping back up at the next block. Across the
+  15 block changes the largest rise is $+0.00012$ (epoch 20 to 21), and train L1 falls inside all 16 blocks;
+  validation falls inside 13 of 16 \tagC.
+\end{enumerate}
+
+\begin{sourcenote}[: the size of the gap]
+The course (part 68) gives the gap as 0.0023 to 0.0033 from epoch 20 to 80. Computing it from every row of
+\file{F002-heavy/metrics.csv} gives 0.00201 to 0.00366 \tagC (\file{research/textbook/tools/compute_39-41_output.txt});
+the course's range comes from the rounded summary rows. The conclusion, a steady gap with no trend, is unchanged.
+The block-change jump ($+0.00012$) and the 16 and 13 blocks reproduce exactly.
+\end{sourcenote}
+
+\section{Pretrained detection, and the decision}\label{sec:heavy:pretraineddet}
+
+\begin{table}[htbp]
+\centering
+\begin{tabular}{lccc}
+\toprule
+ & pAUC & caught top 1\% / 0.1\% & TPR @ 0.1\%\\
+\midrule
+F001 (pretrained, FT04 size) & 0.155 & 45.1\% / \textbf{14.0\%} & 0.059\\
+Heavy (pretrained, epoch 72) & \textbf{0.166} & \textbf{47.4\%} / 12.4\% & 0.058\\
+FT04 (F001 + fine-tuning) & 0.170 & 46.0\% / 15.8\% & 0.065\\
+\bottomrule
+\end{tabular}
+\caption{Pretrained detection, real PRISMA bench, residual Mahalanobis, cloud excluded on FT04's masks. Source:
+\tagM{F002-heavy/README.md}.}
+\label{tab:heavy:pretrained}
+\end{table}
+
+Paired bootstrap, Heavy $-$ F001: pAUC $+0.0111\ [-0.0003,+0.0223]$, $P=0.971$: the interval touches zero, not
+resolved, by a hair. Caught at the top 0.1\%: $-1.5$ points $[-3.0,-0.2]$, a resolved loss.
+
+\begin{worked}[label={we:heavy:set4}]{Where the top-0.1\% loss sits}
+Per-scene pAUC, Heavy 0.259 / 0.150 / 0.071 / 0.185, F001 0.220 / 0.126 / 0.080 / 0.195:
+\begin{align*}
+\text{Heavy} &: 0.259+0.150+0.071+0.185 = 0.665;\quad 0.665/4 = 0.166\\
+\text{F001} &: 0.220+0.126+0.080+0.195 = 0.621;\quad 0.621/4 = 0.155
+\end{align*}
+Objects caught at the top 0.1\%, Heavy 53 / 23 / 12 / 25, F001 52 / 27 / 11 / 37:
+\begin{align*}
+\text{Heavy} &: 53+23+12+25 = 113;\quad 113/909 = 0.124\\
+\text{F001} &: 52+27+11+37 = 127;\quad 127/909 = 0.140\\
+\text{loss} &: 127-113 = 14 \text{ objects, of which set4 } 37-25 = 12
+\end{align*}
+Twelve of the fourteen lost objects are on set4, the hazy scene. FT04's lead over F001 is
+$0.170-0.155=0.015$; pretrained Heavy recovers $0.166-0.155=0.011$ of it, $0.011/0.015=0.73$ (the README rounds
+to ``\textasciitilde75\%'').
+\end{worked}
+
+The decision, 2026-10-29: ``Indradhanu Heavy is the base pretrained model'' (user: ``I think heavy is our base
+model now''). Be clear what the evidence was at that moment: better reconstruction, a near-resolved pAUC gain as a
+pretrained model, and a resolved loss at the top 0.1\%. It was a judgement on the better general representation,
+not a detection win. That came next.
+
+\section{The fair test: a control and three checkpoints}\label{sec:heavy:control}
+
+FT04 is F001 plus a four-stage curriculum (\cref{ch:finetune,ch:ftruns}). Block 1 had about 12 hours left after
+pretraining, not enough to repeat four stages for Heavy. So Heavy got FT04's \emph{final} recipe in one joint run.
+If that model beat FT04, you could not say whether the bigger model won or something else in the change did; if it
+lost, it might be the short recipe. Two causes mixed into one comparison: that is
+\emph{confounding}\index{confounding}.
+
+\begin{definition}[Control]
+A \emph{control}\index{control (experiment)} is a run identical to the experiment in every way except the thing
+under test.
+\end{definition}
+
+\file{FTB1-base-joint/config.json} says it directly: ``F001 (FT04's size, SegFormer decoder) fine-tuned with exactly
+FTH1's one-run recipe, so Heavy vs FTB1 isolates size + decoder + pretraining from the recipe.'' The control
+separates the \emph{model} from the \emph{recipe}; it does not separate size alone, because Heavy also differs in
+decoder, pretraining run and segmentation-head width (256 against 128).
+
+\begin{center}\small
+\begin{tabular}{lllll}
+\toprule
+run & starts from & joint epochs & lr (cosine) & total joint epochs\\
+\midrule
+FTH1 & Heavy, epoch 72 & 10 & $10^{-4}$ & 10\\
+FTB1 (control) & F001 epoch 109 & 10 & $10^{-4}$ & 10\\
+FTH2 & FTH1 & 8 & $5\times10^{-5}$ & 18\\
+FTB2 (control) & FTB1 & 8 & $5\times10^{-5}$ & 18\\
+FTH3 & FTH2 & 6 & $3\times10^{-5}$ & 24 (no control)\\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\Cref{ch:decoderwork} ended on a lesson: FT09b's gain cleared the object bootstrap and vanished five epochs later.
+So these runs kept a checkpoint after every epoch, and every comparison is made at \textbf{three neighbouring
+checkpoints}. A gain counts if it holds at all three.
+
+\subsection{FTH1 and FTB1}
+
+At epoch 10 both one-run models fall short of FT04's curriculum on PRISMA reconstruction and masks, and Heavy
+reconstructs \emph{worse} than the control: SAM 3.94 / 4.74 / 5.60° against FTB1's 3.90 / 4.48 / 5.34° (FT04 3.88 /
+4.11 / 5.46°) \tagM{FTH1-heavy-joint/README.md}. On these numbers alone Heavy looked like a disappointment.
+
+Detection, with cloud excluded on FT04's masks for both, so only the detector differs:
+\begin{center}\small
+\begin{tabular}{lccc}
+\toprule
+checkpoint & FTB1 pAUC & FTH1 pAUC & FTH1 $-$ FTB1 [95\%]\\
+\midrule
+epoch 8 & 0.162 & \textbf{0.175} & $+0.0132\ [+0.0022,+0.0243]$\\
+epoch 9 & 0.162 & \textbf{0.171} & $+0.0093\ [-0.0013,+0.0195]$\\
+epoch 10 & 0.161 & \textbf{0.175} & $+0.0145\ [+0.0045,+0.0246]$\\
+\bottomrule
+\end{tabular}
+\end{center}
+Heavy ahead at all three, resolved at two. \textbf{Worse reconstruction, better detection.}
+
+\begin{sourcenote}[: 0.182 or 0.183]
+Against shipped FT04 with the control's masks, the FTH1 README gives epochs 8 / 9 / 10 pAUC 0.182 / 0.178 / 0.182.
+Its \file{eval_report.md} row for epoch 8 reads 0.183 (\file{FTH1-heavy-joint/eval_report.md}, line 17). The two
+are the same number rounded differently; the bootstrap's $+0.0130$ over FT04's 0.1695 puts it at 0.1825.
+\end{sourcenote}
+
+\section{The mask failure: haze in the thin-cloud head}\label{sec:heavy:haze}
+
+Excluding cloud with FTH1's \emph{own} head wrecked every detector it was applied to: FT04 fell from 0.170 to 0.127
+pAUC with FTH1's masks, and FTH1 itself from 0.182 to 0.133 (ROC-AUC 0.742, caught top 1\% 32.8\%)
+\tagM{FTH1-heavy-joint/eval_report.md}. Yet FTH1's EnMAP validation cloud IoU, 0.717, was close to FTB1's 0.721.
+
+The product's class map comes from \code{segment_full_scene}. The head predicts five independent probabilities
+per pixel (water, cloud, thin cloud, shadow, snow; \cref{ch:seghead}), and the class map sets priorities by
+assignment order, cloud last so it wins:
+\begin{lstlisting}
+cls[prob[0] > 0.5] = 1                              # water
+cls[prob[3] > 0.5] = 3                              # shadow
+cls[prob[4] > 0.5] = 4                              # snow
+cls[np.maximum(prob[1], prob[2]) > 0.5] = 2         # cloud: cloud OR thin cloud
+\end{lstlisting}
+A pixel is excluded as cloud if \emph{either} cloud output passes 0.5.
+
+\begin{table}[htbp]
+\centering
+\begin{tabular}{lcccc}
+\toprule
+ & set1 & set2 & set3 & set4\\
+\midrule
+FT04 & 0.0\% / 0 & 0.0\% / 0 & 0.8\% / 0 & 11.8\% / 2\\
+FTB1 & 0.0\% / 0 & 0.0\% / 0 & 1.7\% / 0 & 0.3\% / 0\\
+FTH1 & 0.4\% / 17 & 0.0\% / 0 & 2.1\% / 0 & \textbf{75.4\% / 209 of 230}\\
+\bottomrule
+\end{tabular}
+\caption{Share of each bench scene called cloud, and targets inside it. Source: \tagM{FTH1-heavy-joint/README.md}.}
+\label{tab:heavy:cloudshare}
+\end{table}
+
+``All of it is the thin-cloud output'': on set4, FTH1's thick-cloud channel covers 0.4\% (no targets), its
+thin-cloud channel 75.4\% (209 targets). That is the haze over set4. Thin cloud was always the weak label (its IoU
+was 0.07 for FTH1), and the validation IoU above measures the \emph{cloud} channel, which is why it did not warn
+anyone.
+
+\subsection{Why zeroing targets wrecks pAUC}
+
+Cloud exclusion sets the score of every excluded pixel to 0 after scoring. Recall from
+\cref{ch:measures,ch:bootstrap} the per-target credit $c(p)=\max(0,\ 0.01-\mathrm{FPR}(p))/0.01$, where
+$\mathrm{FPR}(p)$ is the share of background pixels scoring at or above target pixel $p$, and pAUC is the mean
+credit. A target scored 0 has every background pixel at or above it: $\mathrm{FPR}=1$, so
+$c=\max(0,0.01-1)/0.01=0$.
+
+\begin{worked}[label={we:heavy:zero}]{Switching off a scene's targets}
+Ten one-pixel targets, each with $c=0.5$. Zero nine of them.
+\begin{align*}
+\text{before} &: (10\times0.5)/10 = 5.0/10 = 0.50\\
+\text{after} &: (1\times0.5 + 9\times0)/10 = 0.5/10 = 0.05
+\end{align*}
+Now set4, as an estimate. FTH1 epoch 10 with thick-cloud-only exclusion (below) scores set4 at 0.222. Assume
+(\tagA) the 209 excluded targets are typical of set4's 230, so the 21 kept ones carry their share:
+\begin{align*}
+\text{kept share} &: 21/230 = 0.0913\\
+\text{set4 pAUC} &: 0.222\times0.0913 = 0.020\\
+\text{bench, thick} &: (0.253+0.162+0.086+0.222)/4 = 0.723/4 = 0.181\\
+\text{bench, estimate} &: (0.253+0.162+0.086+0.020)/4 = 0.521/4 = 0.130\\
+\text{measured} &: 0.133
+\end{align*}
+The estimate ignores set1's 17 excluded targets and assumes the targets alike, so do not read the third decimal.
+But it shows the collapse is one scene's targets being switched off.
+\end{worked}
+
+\begin{keypoint}
+A mask head that calls haze ``cloud'' deletes the targets under the haze.
+\end{keypoint}
+
+\subsection{The fix: thick cloud only}
+
+The evaluator gained a switch, \code{ModelSpec.cloud_rule} in \file{app/evaluation/config.py}:
+\code{"cloud_or_thin"} (the default) or \code{"thick"}, described as ``thin cloud fires on haze''. Under the thick
+rule a pixel that was cloud only because of thin cloud falls to whatever it would otherwise have been: snow,
+shadow, water or land. With FTH1's own head and the thick rule: epoch 10 pAUC 0.181 (sets 0.253 / 0.162 / 0.086 /
+0.222), the same as with FTB1's masks. Does the thick rule hurt FT04? FT04 shipped $\to$ FT04 thick:
+$-0.0004\ [-0.0015,+0.0015]$, a tie \tagM{FTH2-heavy-joint-more/bootstrap.txt}.
+
+\begin{sourcenote}[: where the thick rule lives now]
+The course (part 69) shows the rule as an \code{np.select} in \file{app/evaluation/models.py} that re-assigns
+thin-only pixels after \code{segment_full_scene}. In the current source the rule has moved into
+\code{segment_full_scene} itself, as a parameter \code{thin_cloud} (default \code{True}): the cloud line becomes
+\lstinline!cls[(np.maximum(prob[1], prob[2]) if thin_cloud else prob[1]) > 0.5] = 2!, and \file{models.py} calls it with
+\code{thin_cloud=self.spec.cloud_rule != "thick"}
+(\file{app/foundation_models/inferencers/spectral_stem_inferencer.py}, lines 112--141). The two give the same class
+map: with thin cloud ignored, a thin-only pixel keeps the class from the earlier lines, where snow overwrites
+shadow overwrites water, which is the course's priority snow, shadow, water, land.
+\end{sourcenote}
+
+\section{FTH2, FTB2 and FTH3: a gain that holds}\label{sec:heavy:fth2}
+
+From here every model excludes cloud with its own thick-cloud masks.
+
+\begin{table}[htbp]
+\centering\small
+\begin{tabular}{lccc}
+\toprule
+ & pAUC epoch 6 / 7 / 8 & caught top 1\% & caught top 0.1\%\\
+\midrule
+FT04 shipped (cloud or thin) & 0.170 & 46.0\% & \textbf{15.8\%}\\
+FTB2 (own thick) & 0.160 / 0.163 / 0.162 & 46.1 / 46.4 / 46.8\% & 15.1 / 15.1 / 15.1\%\\
+FTH2 (own thick) & \textbf{0.185 / 0.184 / 0.186} & \textbf{48.2 / 49.0 / 49.0\%} & 15.3 / 15.2 / 15.7\%\\
+\bottomrule
+\end{tabular}
+\caption{18 joint epochs. Source: \tagM{FTH2-heavy-joint-more/README.md}.}
+\label{tab:heavy:fth2}
+\end{table}
+
+Every pAUC interval clears zero, at every checkpoint, against both the control and FT04
+(\cref{fig:heavy:intervals}). The average gap over the control:
+\begin{align*}
+(0.0245+0.0209+0.0244)/3 = 0.0698/3 = 0.0233 .
+\end{align*}
+
+\begin{sourcenote}[: ``about twice'' or ``about three times'']
+The course (part 69) quotes the FTH2 README as calling this gap ``about twice what cloud exclusion bought'', and
+corrects it: cloud exclusion is $+0.0074$ (\cref{ch:bootstrap}), and $0.0233/0.0074=3.1$. The current README
+reads ``about three times what cloud exclusion bought, +0.0074''
+(\file{FTH2-heavy-joint-more/README.md}): the source was corrected after the course note.
+\end{sourcenote}
+
+The gap \emph{grew} with fine-tuning: about $+0.013$ at 10 epochs, $+0.023$ at 18. And reconstruction still did not
+separate the models: FTH2's PRISMA SAM (4.48°) is worse than the control's (4.36°).
+
+\paragraph{FTH3: the plateau.} Six more joint epochs at $3\times10^{-5}$, Heavy only, from the source
+\tagM{FTH3-heavy-joint-more2/README.md}. Epochs 4, 5 and 6 score pAUC 0.184, 0.189 and 0.187. Against FTH2 epoch 8
+the three differences are:
+\begin{center}
+$-0.0021\ [-0.0043,-0.0000]$,\qquad $+0.0028\ [-0.0002,+0.0058]$,\qquad $+0.0011\ [-0.0009,+0.0030]$:
+\end{center}
+one barely below zero, one barely above, one a tie. That is a \emph{plateau}: more epochs at this recipe no longer move detection. Against
+FT04 all three stay resolved: $+0.0148$, $+0.0196$, $+0.0179$. The release candidate is FTH3 epoch 5: pAUC 0.189
+against 0.170, caught top 1\% 49.4\% against 46.0\%, top 0.1\% 16.0\% against 15.8\% (a tie, $[-1.2,+1.5]$). Pick it
+as the plateau's representative, not as a discovery: it is the best of a stable set and the only one whose
+top-0.1\% count is not below FT04's.
+
+\begin{worked}[label={we:heavy:mean}]{Mean gain over FT04 at three checkpoints}
+FTH2 $-$ FT04 at epochs 6, 7, 8: $+0.0151$, $+0.0143$, $+0.0168$.
+\begin{align*}
+0.0151+0.0143+0.0168 &= 0.0462\\
+0.0462/3 &= 0.0154
+\end{align*}
+The lowest lower bound is $+0.0032$ (epoch 7), so none touches zero. FTH3 at epochs 4, 5, 6:
+$0.0148+0.0196+0.0179=0.0523$, $0.0523/3=0.0174$.
+\end{worked}
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}
+\begin{axis}[width=0.9\linewidth,height=9cm,xmin=-0.004,xmax=0.04,ymin=0.3,ymax=13.7,
+  ytick={1,...,13},yticklabels={FTH3 ep6 $-$ FT04,FTH3 ep5 $-$ FT04,FTH3 ep4 $-$ FT04,FTH2 ep8 $-$ FT04,FTH2 ep7 $-$ FT04,FTH2 ep6 $-$ FT04,FTH2 ep8 $-$ FTB2,FTH2 ep7 $-$ FTB2,FTH2 ep6 $-$ FTB2,FTH1 ep10 $-$ FTB1,FTH1 ep9 $-$ FTB1,FTH1 ep8 $-$ FTB1,cloud excl. (FT04)},
+  yticklabel style={font=\scriptsize},xlabel={pAUC difference [95\% paired-bootstrap interval]},
+  xtick={0,0.01,0.02,0.03,0.04},
+  scaled x ticks=false,xticklabel style={/pgf/number format/fixed,/pgf/number format/precision=2,font=\scriptsize},
+  grid=major,grid style={gray!15}]
+\draw[thick,maskgrey] (axis cs:0,0.3) -- (axis cs:0,13.7);
+\addplot[only marks,mark=*,loss,error bars/.cd,x dir=both,x explicit] coordinates {
+ (0.0179,1) += (0.0113,0) -= (0.0124,0)
+ (0.0196,2) += (0.0120,0) -= (0.0124,0)
+ (0.0148,3) += (0.0111,0) -= (0.0119,0)
+ (0.0168,4) += (0.0107,0) -= (0.0115,0)
+ (0.0143,5) += (0.0104,0) -= (0.0111,0)
+ (0.0151,6) += (0.0106,0) -= (0.0115,0)};
+\addplot[only marks,mark=square*,spat,error bars/.cd,x dir=both,x explicit] coordinates {
+ (0.0244,7) += (0.0118,0) -= (0.0109,0)
+ (0.0209,8) += (0.0112,0) -= (0.0107,0)
+ (0.0245,9) += (0.0107,0) -= (0.0105,0)
+ (0.0145,10) += (0.0101,0) -= (0.0100,0)
+ (0.0093,11) += (0.0102,0) -= (0.0106,0)
+ (0.0132,12) += (0.0111,0) -= (0.0110,0)};
+\addplot[only marks,mark=diamond*,spec,error bars/.cd,x dir=both,x explicit] coordinates {
+ (0.0074,13) += (0.0027,0) -= (0.0027,0)};
+\end{axis}
+\end{tikzpicture}
+\caption{Heavy against the control (indigo squares) and against shipped FT04 (amber circles), at three
+neighbouring checkpoints each, drawn to scale; cloud exclusion (teal) for reference. Only FTH1 epoch 9 touches zero.
+Sources: \tagM{FTH1-heavy-joint/README.md}, \tagM{FTH2-heavy-joint-more/bootstrap.txt},
+\tagM{FTH3-heavy-joint-more2/bootstrap.txt}.}
+\label{fig:heavy:intervals}
+\end{figure}
+
+\section{The lesson: reconstruction did not separate the models}\label{sec:heavy:lesson}
+
+\begin{center}
+\begin{tabular}{lcc}
+\toprule
+ & PRISMA SAM (deg) & pAUC\\
+\midrule
+FTB1 (control, 10 epochs) & \textbf{4.48} & 0.161--0.162 (FT04 masks)\\
+FTH1 (Heavy, 10 epochs) & 4.74 & \textbf{0.171--0.175} (FT04 masks)\\
+FTB2 (control, 18 epochs) & \textbf{4.36} & 0.160--0.163 (own thick masks)\\
+FTH2 (Heavy, 18 epochs) & 4.48 & \textbf{0.184--0.186} (own thick masks)\\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\textbf{The model that reconstructs worse is the better detector, at every stage.} Had the decision been made on
+validation SAM, the number every run logs each epoch, Heavy would have been dropped after FTH1. The FTH2 README:
+``Better detection without better reconstruction.'' This is the third time in Part VIII: FT06's best-NLL epoch was
+its worst for detection, FT09c reconstructed better and detected worse, and now this.
+
+\begin{keypoint}
+Judge detectors on detection: reconstruction error and detection come apart, so a model must be selected on the
+measure the product uses.
+\end{keypoint}
+
+\section{Into the product}\label{sec:heavy:product}
+
+FTH3's verdict listed three things the release candidate needed before an analyst could use it: the thick-cloud
+rule, a manifest and resolver path for the progressive decoder, and a check of the worker's CPU cost. All three were
+done on 2026-10-29, and FTH3 epoch 5 became Indradhanu~V2 \texttt{v2.1.0} the same day, behind FT04's codename and
+architecture key, with FT04 (\texttt{v2.0.0}) kept as the manifest's first alternative
+(\file{docs/lld/spectral-stem.md}, ``Serving''). Because the manifest embeds the checkpoint's whole model
+configuration (\cref{ch:shipping}), switching models changed files, not code.
+
+\paragraph{What the product loads.} The serving documents give 35.3\,M parameters. \Cref{sec:heavy:width} counted the
+pretrained network at 33,884,194; the fine-tuned checkpoint adds the segmentation head, 1,431,120 counted by hand in
+\cref{sec:heavy:stemcount}, for the 35,315,314 of \cref{eq:heavy:served}: the 35.3\,M \tagC.
+
+\paragraph{The thick-cloud rule in the product.} The resolver's capabilities entry for \code{spectral_stem_finetune}
+sets \code{thin_cloud_is_cloud=False}; the worker passes it to \lstinline!segment_full_scene(..., thin_cloud=False)!, so
+only the head's thick-cloud channel can make a pixel ``cloud'', and \texttt{stats.json} records
+\texttt{cloud\_rule: "thick"} (\cref{ch:shipping}, the source check on the cloud rule). Pixels that are only thin
+cloud fall to the next class by priority and are scored.
+
+\begin{worked}[label={we:heavy:parity}]{Parity, to the digit}
+The parity run (\file{FTH3-heavy-joint-more2/product_parity.py}) takes the product's own path, resolver manifest to
+inferencer to \code{read_bands}, prediction, residual Mahalanobis, segmentation with the thick rule and the zeroing,
+and compares with the evaluator's run on the four PRISMA scenes \tagM{research/experiments/indradhanu-finetune/FTH3-heavy-joint-more2/README.md}:
+\begin{center}\small
+\begin{tabular}{lcccc}
+\toprule
+scene & thick cloud excluded & pAUC product & pAUC evaluator & gap\\
+\midrule
+set1 & 0.00\% & 0.2617 & 0.26165 & $+0.00005$\\
+set2 & 0.00\% & 0.1874 & 0.18742 & $-0.00002$\\
+set3 & 1.49\% & 0.0861 & 0.08609 & $+0.00001$\\
+set4 & 0.47\% & 0.2217 & 0.22167 & $+0.00003$\\
+\bottomrule
+\end{tabular}
+\end{center}
+The product column's mean:
+\begin{align*}
+0.2617+0.1874 &= 0.4491\\
+0.4491+0.0861 &= 0.5352\\
+0.5352+0.2217 &= 0.7569\\
+0.7569/4 &= 0.1892 .
+\end{align*}
+The evaluator's: $0.26165+0.18742+0.08609+0.22167=0.75683$, and $0.75683/4=0.1892$. Every gap is smaller than
+half of the product column's last printed digit, $0.00005$: the gaps are rounding. Note set4: 0.47\% thick cloud,
+where the old rule had called 75.4\% of the scene cloud (\cref{sec:heavy:haze}).
+\end{worked}
+
+In objects: the comparison page shown to the user on 2026-10-29 (\url{https://claude.ai/artifact/2dZFbGN6HhMBCx3kkZ8pQ4})
+counts the 909 labelled targets of the four scenes caught in each model's top 1\%, FT04 418 and Heavy 449.
+\begin{align*}
+418/909 &= 0.4598 \to 46.0\%, & 449/909 &= 0.4939 \to 49.4\%, & 449-418 &= 31 \text{ objects,}
+\end{align*}
+the FTH3 README's caught-at-1\% figures for FT04 and FTH3 epoch 5 \tagC.
+
+\paragraph{Sixteen threads.} The first CPU check (\file{cpu_timing.py}, inside the worker container, PRISMA set1,
+$1186\times1196$ pixels, 185 bands) gave Heavy 1,819\,s and FT04 1,058\,s, about 30 and 18 minutes a scene. The
+worker was running torch on 2 threads. A \emph{thread}\index{thread} is one line of work a program runs at a time;
+a numerical library splits a large matrix product across as many threads as it is allowed. The cap of 2 was set in
+two places, the worker image's \code{ENV} (\file{backend/Dockerfile.worker}) and an
+\lstinline!os.environ.setdefault(..., "2")! in \file{backend/allotrope_worker/__init__.py}, after crashes that the
+compose file's comment says were ``Docker Desktop UI's restart button, not throttling''. Since 2026-10-29
+\file{docker/docker-compose.yml} sets \code{OMP_NUM_THREADS}, \code{MKL_NUM_THREADS}, \code{OPENBLAS_NUM_THREADS} and
+\code{NUMEXPR_NUM_THREADS} to \code{${WORKER_THREADS:-16}}: compose's \code{environment} replaces the image's
+\code{ENV}, and \code{setdefault} never overwrites a variable that is already set, so the 16 wins inside compose and
+the 2 still applies outside it.
+
+\begin{worked}[label={we:heavy:threads}]{Four times faster from eight times the threads}
+From the FTH3 README \tagM{research/experiments/indradhanu-finetune/FTH3-heavy-joint-more2/README.md}:
+\begin{center}\small
+\begin{tabular}{lrrr}
+\toprule
+step & 2 threads & 16 threads & speed-up\\
+\midrule
+Heavy, total & 1{,}819\,s & 454\,s & $1819/454=4.01$\\
+\quad predict & 1{,}629\,s & 402\,s & $1629/402=4.05$\\
+\quad segment & 185\,s & 47\,s & $185/47=3.94$\\
+\quad score & 4\,s & 4\,s & $1.00$\\
+FT04, total & 1{,}058\,s & 274\,s & $1058/274=3.86$\\
+\bottomrule
+\end{tabular}
+\end{center}
+In minutes, Heavy goes from $1819/60=30.3$ to $454/60=7.6$, and still costs $454/274=1.66$ times FT04.
+Eight times the threads ($16/2=8$) bought four times the speed. A standard model for why is \emph{Amdahl's
+law}\index{Amdahl's law}: if a share $p$ of the work splits perfectly over $n$ threads and the rest does not, the time
+is proportional to $(1-p)+p/n$. It is a model, not a measurement. Set the speed-up from 2 to 16 threads to 4 and
+solve for $p$:
+\begin{align*}
+\frac{(1-p)+p/2}{(1-p)+p/16} &= 4 &&\text{the measured ratio}\\
+1-\tfrac12p &= 4\big(1-\tfrac{15}{16}p\big) &&\text{simplify each side, multiply up}\\
+1-0.5p &= 4-3.75p\\
+3.25p &= 3 &&\text{collect the $p$ terms}\\
+p &= 0.923 .
+\end{align*}
+The measured speed-up behaves as if about 92\% of the work were perfectly parallel \tagC. The score step did not speed up
+at all, but at 4\,s it is a small part; the rest of the serial share is reading, writing and bookkeeping, and threads also
+share memory bandwidth, which the law ignores.
+\end{worked}
+
+\begin{sourcenote}[: Heavy has shipped]
+The course's part 69, as written on 2026-10-29, ended with ``Not shipped: the product still runs Indradhanu V2 (FT04)''
+(corrected on 2026-10-31; the course's part 70 now covers the ship). The source had moved on the same day:
+FTH3 epoch 5 was shipped on 2026-10-29 as Indradhanu V2 \texttt{v2.1.0}, same codename and architecture key as FT04
+(FT04 \texttt{v2.0.0} is the manifest's first alternative), and the product now excludes thick cloud only (resolver
+\code{thin_cloud_is_cloud=False}) (\file{FTH3-heavy-joint-more2/README.md}, ``Shipped''; commit c4b3a63). The three items FTH3's verdict listed before
+release (the thick-cloud rule, a manifest path for the progressive decoder, a worker CPU-cost check) were done.
+\end{sourcenote}
+
+\begin{drift}
+Product checks recorded 2026-10-29 in \file{FTH3-heavy-joint-more2/README.md}. Parity: the product path scored
+PRISMA sets 1--4 at pAUC 0.2617 / 0.1874 / 0.0861 / 0.2217 against the evaluator's 0.26165 / 0.18742 / 0.08609 /
+0.22167, mean 0.1892 for both. Worker CPU cost on PRISMA set1 ($1186\times1196\times185$ bands, 2 torch threads):
+Heavy 1,819\,s against FT04 1,058\,s, $1{,}819/1{,}058=1.7$ times, far less than the 6.1 times parameter ratio;
+on 16 threads (compose, since 2026-10-29) 454\,s against 274\,s \tagM{FTH3-heavy-joint-more2/README.md}. The
+Dockerfile and \file{allotrope_worker/__init__.py} still default to 2 for anything run outside compose. The open caveats remain: four scenes, and a bootstrap that resamples
+objects, not scenes.
+\end{drift}
+
+\begin{confusions}
+\confusion{Heavy is 4x wide.}{That was its launch name. Its encoder widths are 3 times FT04's, its latent and
+decoder 2 times; its parameter count is 6.1 times overall and 8.9 times for the encoder.}
+\confusion{Three times the width should mean three times the parameters.}{Almost every weight is in a $C\times C$
+matrix, so the count grows like $C^2$: $3^2=9$, less a little for the biases and norms (8.86 at stage 1).}
+\confusion{Six times the parameters should mean six times slower.}{On the H100 an epoch took about 370\,s; on the
+product's CPU worker Heavy took 1.7 times FT04's time, on 2 threads and on 16 alike. Speed depends on hardware and on how busy it is kept, not
+on the parameter count alone.}
+\confusion{FTH1 $-$ FTB1 measures the effect of size.}{It measures the effect of the model: size, decoder,
+pretraining run and head width together. The recipe is what it holds fixed.}
+\confusion{FTH1's masks were bad, so Heavy's segmentation head is broken.}{Its thick-cloud channel works;
+thick-only exclusion with its own head matches the control's masks. The thin-cloud channel fires on haze, and the
+product's old rule took either channel. FT04's head did it too, on 11.8\% of set4.}
+\confusion{The thick rule was chosen to make Heavy look good.}{It was chosen after a diagnosis showed thin cloud
+covering 75\% of a hazy scene, and checked on FT04, where it changes nothing ($-0.0004\ [-0.0015,+0.0015]$). It was
+still adopted after seeing results, one more reason the release needs more than this bench.}
+\confusion{FTH3 epoch 5 beat FTH2, so the extra epochs helped.}{Its gain over FTH2 is unresolved and its neighbour
+is slightly below: a plateau.}
+\confusion{The served model drops 20 of PRISMA's 185 bands.}{A pretrained model does; its record of trained
+wavelengths is the SpectralEarth curve. The served v2.1.0's record grew to 733 wavelengths during fine-tuning, and it
+keeps all 185.}
+\confusion{35,315,443 parameters.}{That is the manifest's count, which includes 129 BatchNorm buffers; the trainable
+count is 35,315,314.}
+\confusion{Train loss above validation loss means something is broken.}{Training is the harder task here: more
+hidden tokens, missing bands, dropout. Watch the gap's trend, not its sign.}
+\end{confusions}
+
+\begin{checkyourself}
+\item\label{ex:heavy:1} Use \cref{eq:heavy:block} to count FT04's and Heavy's stage-2 block ($C=64$ and $192$,
+$R=4$). Check both against \cref{tab:heavy:blocks}, and compute the ratio. Then predict the ratio for a 2 times
+wider FT04 at stage 1.
+\item\label{ex:heavy:2} Count Heavy's stage-2 patch embedding ($3\times3$, stride 2, 96 to 192 channels, plus
+LayerNorm), and FT04's ($32\to64$).
+\item\label{ex:heavy:3} Using \cref{eq:heavy:cosine}, what learning rate does epoch 20 log? ($\cos(\pi/4)=0.7071$.)
+\item\label{ex:heavy:4} With 16 test shards, what is the largest number of loader workers that avoids an empty
+worker? With 12 workers, how many shards would give every worker exactly two?
+\item\label{ex:heavy:5} A pixel's thick-cloud probability is 0.3, thin cloud 0.8, water 0.6, and nothing else passes
+0.5. What class does the old rule give it, and what does the thick rule give it?
+\item\label{ex:heavy:6} A scene has 8 one-pixel targets with credits 1.0, 0.8, 0.8, 0.6, 0.4, 0.4, 0.0, 0.0. Compute
+its pAUC; then exclusion zeroes the first three. Compute it again. Why is the drop larger than 3 of 8?
+\item\label{ex:heavy:7} Why could FTH1 losing to FT04 not have shown that Heavy is the worse model, and what does
+FTB1 fix and not fix?
+\item\label{ex:heavy:8} With $p=0.923$, predict the speed-up from 2 to 24 threads with Amdahl's law. Then give two
+reasons not to trust the prediction on the 24-core host.
+\item\label{ex:heavy:9} Count by hand the stem's output network (\code{spectral_out}) for FT04's latent width $D=32$,
+and check it against \cref{tab:heavy:total}. Then count FT04's segmentation head: width 128, five classes, FT04's
+encoder widths 32, 64, 160, 256.
+\item\label{ex:heavy:10} At inference the product hides half the stage-1 tokens of each tile, twice. For Heavy on a
+$128\times128$ tile, how many tokens does each pass keep, and how many attention scores per head does stage~1 compute?
+With the product's batch of 8 tiles, how many rows does the stem see, and how many calls of the fused attention
+kernel does that take with \texttt{SDPA\_MAX\_ROWS} $=32{,}768$?
+\end{checkyourself}
+
+\par\bigskip\noindent\textit{That closes the experiments. Indradhanu Heavy is the base model, and its fine-tuned
+FTH3 epoch 5 is what the product's Indradhanu V2 now runs; every number behind that decision is in this chapter,
+with its interval.}
+
+\nextchapter{ch:namer}

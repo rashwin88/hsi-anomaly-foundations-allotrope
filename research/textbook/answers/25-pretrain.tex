@@ -1,0 +1,88 @@
+\answersfor{ch:pretrain}
+
+\begin{solution}{ex:pretrain:1}
+With the ramp:
+\begin{align*}
+  S &= 0.050 + 0.05 \times 0.18 = 0.050 + 0.009 = 0.059.
+\end{align*}
+At the full weight:
+\begin{align*}
+  S &= 0.050 + 0.5 \times 0.18 = 0.050 + 0.090 = 0.140.
+\end{align*}
+Change from epoch 1 under the ramp, term by term (epoch 1: L1 $= 0.055$, SAM $= 0.20$, $\lambda = 0$):
+\begin{align*}
+  \Delta L1 &= 0.050 - 0.055 = -0.005\\
+  \lambda_1\,\Delta\SAM &= 0 \times (0.18 - 0.20) = 0\\
+  \Delta\lambda\,\SAM &= (0.05 - 0) \times 0.18 = 0.009\\
+  \text{sum} &= -0.005 + 0 + 0.009 = +0.004.
+\end{align*}
+Check: $0.059 - 0.055 = 0.004$. The ramp term ($+0.009$) outweighs the L1 improvement ($-0.005$), so the ramped score rises
+although both measurements improved. At the full weight the score fell from 0.155 to 0.140.
+\end{solution}
+
+\begin{solution}{ex:pretrain:2}
+A later epoch must score below $0.155 \times (1 - 0.01) = 0.155 \times 0.99 = 0.15345$. A score of 0.1540 is lower than 0.155
+but not lower than 0.15345, so it is \emph{not} an improvement: every later epoch adds one bad epoch. After epoch $e$ the counter
+is $e - 1$. Patience 10 is reached at epoch 11 ($11 - 1 = 10$), but the minimum is 20, so the run continues. At epoch 20 the counter
+is 19: $20 \ge 20$ and $19 \ge 10$, so the run stops at epoch 20. The 1\% threshold exists to stop a slow creep of sub-1\% gains
+from keeping a run alive for ever.
+\end{solution}
+
+\begin{solution}{ex:pretrain:3}
+Plain average, $N = 4$:
+\begin{align*}
+  s = \frac{2 + 2 + 2 + (-1)}{4} = \frac{5}{4} = 1.25,
+\end{align*}
+different again from A's 1.0 and B's 0.5. Width-weighted:
+\begin{align*}
+  s_w &= \frac{2 \times 5 + 2 \times 5 + 2 \times 5 + (-1) \times 10}{5 + 5 + 5 + 10}
+       = \frac{10 + 10 + 10 - 10}{25} = \frac{20}{25} = 0.8.
+\end{align*}
+It is not 0.5 because C covers 15\,nm of visible where A and B cover 10\,nm. Width weighting makes the answer depend on
+\emph{how much spectrum} is covered, as an integral should, not on how many bands cover it. A spectrum that is 2 over a longer
+stretch genuinely has a higher mean value over wavelength.
+\end{solution}
+
+\begin{solution}{ex:pretrain:4}
+\begin{align*}
+  \text{done} &= 128 - 1 = 127\\
+  k &= \lfloor 127 / 20 \rfloor = 6 \quad (6 \times 20 = 120 \le 127 < 140)\\
+  \text{stop\_at} &= 20 \times (6 + 1) = 140\\
+  \text{shards} &= 200 \times 6 = 1200 \text{ to } 1200 + 199 = 1399.
+\end{align*}
+The run resumes at epoch 128 on block 6 and stops at 140. Learning rate at $t = 100$:
+\begin{align*}
+  \cos(\pi \times 100 / 200) &= \cos(\pi/2) = 0\\
+  \eta &= 0.000001 + 0.5 \times 0.000499 \times (1 + 0) = 0.000001 + 0.0002495 = 0.0002505.
+\end{align*}
+Halfway through the schedule the rate is halfway between $\eta_0$ and $\eta_{\min}$.
+\end{solution}
+
+\begin{solution}{ex:pretrain:5}
+Deltas (a zero band in front):
+\begin{align*}
+  2000 - 0 = 2000,\quad 2010 - 2000 = 10,\quad 1990 - 2010 = -20,\quad 1995 - 1990 = 5.
+\end{align*}
+Decode by running sum: $2000$; $2000 + 10 = 2010$; $2010 - 20 = 1990$; $1990 + 5 = 1995$.
+
+Wrapped pair. First delta: $-32{,}768 - 0 = -32{,}768$ (in range). Second:
+\begin{align*}
+  30{,}000 - (-32{,}768) &= 62{,}768 \quad\text{(too big for int16)}\\
+  62{,}768 - 65{,}536 &= -2{,}768 \quad\text{(stored)}.
+\end{align*}
+Decode: first value $-32{,}768$; second
+\begin{align*}
+  -32{,}768 + (-2{,}768) &= -35{,}536 \quad\text{(too small)}\\
+  -35{,}536 + 65{,}536 &= 30{,}000 \quad\text{(exact).}
+\end{align*}
+\end{solution}
+
+\begin{solution}{ex:pretrain:6}
+\begin{itemize}
+  \item Target 500: nearest source 500.3, distance $0.3 \le 0.5$: take it.
+  \item Target 510: nearest source 509.6, distance $|510 - 509.6| = 0.4 \le 0.5$: take it.
+  \item Target 520: nearest source 525.0, distance $5.0 > 0.5$: nodata.
+  \item Source 525.0 matches no target (it is 5\,nm from 520): dropped.
+\end{itemize}
+Kept: 500.3 and 509.6 (as 500 and 510); nodata: 520; dropped: 525.0.
+\end{solution}
