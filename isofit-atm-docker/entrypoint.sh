@@ -42,9 +42,12 @@ Options:
   --formats F             output formats, comma-separated: tif,bsq (default both)
   --paco-layout           EnMAP only: also write the PACO-style L2A folder
   --n-cores N             parallel workers (default: all CPUs)
-  --line {analytical|empirical}   per-pixel solve (default: analytical)
+  --line {analytical|empirical}   per-pixel solve (default: the sensor rule,
+                          AVIRIS-NG empirical, others analytical)
+  --no-presolve           skip ISOFIT's water-vapour presolve pass over the
+                          superpixels (faster; the LUT's full H2O range is used)
   --segmentation-size N   pixels per ISOFIT superpixel (default: the sensor rule,
-                          AVIRIS-NG 200, others 50; larger is faster,
+                          AVIRIS-NG 400, others 50; larger is faster,
                           coarser atmosphere)
   --ref PATH              reference product for the report's comparison section
                           (vendor L2 / FLAASH: EnMAP L2A folder, PRISMA L2 .he5,
@@ -65,8 +68,9 @@ fi
 INPUT="$1"; shift
 OUTPUT_DIR="$1"; shift
 SEASON=""
-LINE_MODE="analytical"
-SEG_SIZE=""   # empty: the sensor rule's segmentation_size (atm_post.SENSOR_RULES; AVIRIS-NG 200, others 50)
+LINE_MODE=""  # empty: the sensor rule's line_mode (AVIRIS-NG empirical, others analytical)
+PRESOLVE=1
+SEG_SIZE=""   # empty: the sensor rule's segmentation_size (atm_post.SENSOR_RULES; AVIRIS-NG 400, others 50)
 N_CORES="${N_CORES:-$(nproc)}"
 KEEP_WORK=0
 STOP_AFTER_LUT=0
@@ -82,6 +86,7 @@ while [[ $# -gt 0 ]]; do
         --season)         SEASON="$2"; shift 2 ;;
         --line)           LINE_MODE="$2"; shift 2 ;;
         --segmentation-size) SEG_SIZE="$2"; shift 2 ;;
+        --no-presolve)    PRESOLVE=0; shift ;;
         --n-cores)        N_CORES="$2"; shift 2 ;;
         --no-harmonise)   HARMONISE=0; shift ;;
         --formats)        OUT_FORMATS="$2"; shift 2 ;;
@@ -104,8 +109,7 @@ if [[ -f "$DEM" ]]; then PREP_ARGS+=(--dem "$DEM"); else
 EMU=$(find /root/.isofit/srtmnet -name "*.h5" | head -n1)
 [[ -n "$EMU" && -f "$EMU" ]] || die "sRTMnet .h5 not found under /root/.isofit/srtmnet"
 case "$LINE_MODE" in
-    analytical) LINE_ARG="--analytical_line" ;;   # empirical_line is patched at build time (Dockerfile)
-    empirical)  LINE_ARG="--empirical_line" ;;
+    ""|analytical|empirical) ;;   # empty: resolved from the sensor rule after stage 1
     *) die "--line must be analytical or empirical, got: $LINE_MODE" ;;
 esac
 
@@ -124,7 +128,7 @@ log "Output:  $OUTPUT_DIR"
 log "Cores:   $N_CORES"
 log "6S:      SIXS_FAST=${SIXS_FAST:-1} SIXS_CACHE=${SIXS_CACHE:-1}"
 # apply_oe falls back to ISOFIT's own analytical line if fast_al does not import; say so up front.
-log "Per-pixel solve: ${LINE_MODE}, ATM_FAST_AL=${ATM_FAST_AL:-1}, $(python -c 'import fast_al, torch; print("torch", torch.__version__, "on", "cuda" if torch.cuda.is_available() else "cpu")' 2>&1 | tail -1)"
+log "Per-pixel solve: ${LINE_MODE:-sensor rule}, ATM_FAST_AL=${ATM_FAST_AL:-1}, $(python -c 'import fast_al, torch; print("torch", torch.__version__, "on", "cuda" if torch.cuda.is_available() else "cpu")' 2>&1 | tail -1)"
 
 # ---- Stage 1: read the delivery ----------------------------------------------
 log "Stage 1/3: reading the delivery (readers.prep)"
@@ -140,7 +144,7 @@ v = {"FID": r["fid"], "FMT": r["format"], "ISOFIT_SENSOR": r["isofit_sensor"], "
      "LEVEL": r["level"], "PASS": "1" if r["pass_through"] else "0", "GRADE": r["grade"],
      "NOISE": u["instrument_noise"] or "", "LUT_CFG": u["lut_config"] or "", "AOT_PRIOR": "1" if u["aot_prior"] else "0",
      "HARM_MODEL": u["harmonise_model"] or "", "SEASON": sys.argv[2] or r["season"],
-     "SEG_RULE": u.get("segmentation_size") or 50,
+     "SEG_RULE": u.get("segmentation_size") or 50, "LINE_RULE": u.get("line_mode") or "analytical",
      "LAT": "" if r["centre_lat"] is None else r["centre_lat"], "LON": "" if r["centre_lon"] is None else r["centre_lon"],
      "DATE": r["date"]}
 print("\n".join(f"{k}={shlex.quote(str(x))}" for k, x in v.items()))
@@ -180,7 +184,14 @@ else
     NOISE_ARG=()
     [[ -n "$NOISE" ]] && NOISE_ARG=(--instrument_noise_path="/root/.isofit/data/${NOISE}")
     SEG_SIZE="${SEG_SIZE:-$SEG_RULE}"
-    log "Rule $RULE: LUT $(basename "$LUT"), noise ${NOISE:-ISOFIT default}, AOT prior $AOT_PRIOR, superpixels of $SEG_SIZE"
+    LINE_MODE="${LINE_MODE:-$LINE_RULE}"
+    case "$LINE_MODE" in
+        analytical) LINE_ARG="--analytical_line" ;;
+        empirical)  LINE_ARG="--empirical_line" ;;   # empirical_line is patched at build time (Dockerfile)
+        *) die "sensor rule line_mode must be analytical or empirical, got: $LINE_MODE" ;;
+    esac
+    PRESOLVE_ARG=(); [[ "$PRESOLVE" -eq 1 ]] && PRESOLVE_ARG=(--presolve)
+    log "Rule $RULE: LUT $(basename "$LUT"), noise ${NOISE:-ISOFIT default}, AOT prior $AOT_PRIOR, superpixels of $SEG_SIZE, ${LINE_MODE} line, presolve $PRESOLVE"
 
     # ---- Stage 2: ISOFIT apply_oe --------------------------------------------
     # In its generic NA- mode ISOFIT takes the file id from the radiance file's stem, then names everything
@@ -197,18 +208,20 @@ else
     run_oe() {
     isofit apply_oe \
         "$RDN_IN" "${WORK}/${FID}_loc" "${WORK}/${FID}_obs" "${WORK}/isofit" "$ISOFIT_SENSOR" \
-        --presolve ${LINE_ARG} --emulator_base="${EMU}" --lut_config_file="${LUT}" \
+        "${PRESOLVE_ARG[@]}" ${LINE_ARG} --emulator_base="${EMU}" --lut_config_file="${LUT}" \
         --surface_path="${SCENE_SURFACE}" "${NOISE_ARG[@]}" --n_cores="${N_CORES}" --segmentation_size="${SEG_SIZE}" \
         --pressure_elevation --logging_level=INFO \
         2>&1 | tee "${WORK}/isofit.log"
     }
     # Diagnostic mode: apply_oe cannot stop itself after the LUT, so run it in the
     # background and wait for the 4th "Running any post-sim functions" log line
-    # (presolve 6S + emulator, then full 6S + emulator). Exiting then works because
-    # this script is PID 1: the container, and every Ray worker in it, goes down with it.
+    # (presolve 6S + emulator, then full 6S + emulator; the 2nd with --no-presolve). Exiting
+    # then works because this script is PID 1: the container, and every Ray worker in it,
+    # goes down with it.
     if [[ "$STOP_AFTER_LUT" -eq 1 ]]; then
         run_oe & OE_PID=$!
-        until [[ $(grep -c "Running any post-sim functions" "${WORK}/isofit.log" 2>/dev/null || true) -ge 4 ]]; do
+        MARKS=$(( PRESOLVE == 1 ? 4 : 2 ))
+        until [[ $(grep -c "Running any post-sim functions" "${WORK}/isofit.log" 2>/dev/null || true) -ge $MARKS ]]; do
             kill -0 "$OE_PID" 2>/dev/null || die "apply_oe exited before the LUT was built"
             sleep 15
         done

@@ -130,10 +130,13 @@ def test_rules_table():
     assert atm_post.SENSOR_RULES["prisma"].aot_prior and not atm_post.SENSOR_RULES["enmap"].aot_prior
     for r in atm_post.SENSOR_RULES.values():
         assert r.harmonise_model is None or r.harmonise_model.endswith(".npz")
-    # superpixel size (AC26-SEG): AVIRIS-NG 200 for the 2 h budget, every other sensor at its validated 50
+    # superpixel size (AC26-SEG / FAST): AVIRIS-NG 400 for the 2 h budget, every other sensor at its validated 50
     seg = {k: r.segmentation_size for k, r in atm_post.SENSOR_RULES.items()}
-    assert seg.pop("avirisng") == 200 and set(seg.values()) == {50}
-    assert atm_post.asdict(atm_post.SENSOR_RULES["avirisng"])["segmentation_size"] == 200   # what scene.json carries
+    assert seg.pop("avirisng") == 400 and set(seg.values()) == {50}
+    assert atm_post.asdict(atm_post.SENSOR_RULES["avirisng"])["segmentation_size"] == 400   # what scene.json carries
+    # per-pixel stage (AC26-EL): AVIRIS-NG empirical line, every other sensor the analytical line
+    line = {k: r.line_mode for k, r in atm_post.SENSOR_RULES.items()}
+    assert line.pop("avirisng") == "empirical" and set(line.values()) == {"analytical"}
 
 
 def test_steep_fraction(tmp_path, rho):

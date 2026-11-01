@@ -2053,3 +2053,25 @@ own+z-unless-ridge-is-≥10%-better rule.
 - ISOFIT 17.8 -> 11.3 min (per-pixel stage ~7.5 min -> 64 s). Core land MAE vs JPL 0.0056 both (bias +0.0031 /
   +0.0029), spectral angle median 2.17 deg both; empirical vs analytical per pixel median 0.0014, > 0.005 on 0.94 %.
 - Full-line estimate (T7, 4 Mpix) at seg 200 + empirical: ~80 min on the L4 (analytical ~2.5 h).
+
+## AC26-FAST: AVIRIS-NG speed options on the 600-line window; default seg 400 + empirical line (2026-11-01)
+- Colab L4, runs alone, full resolution vs JPL corr by pixel index (381,210 px), core = land 460-2450 nm outside
+  water bands. Entry point now has --no-presolve; SensorRules gained line_mode.
+
+  | config | ISOFIT | core MAE (bias) | 460-550 nm | angle vs JPL med / p99 / p99.9 | vs seg 50: angle p99, px > 0.005 |
+  |---|---|---|---|---|---|
+  | seg 50 analytical | 40.8 min | 0.0056 (+0.0032) | 0.0034 | 2.15 / 3.87 / 5.01 | - |
+  | seg 200 analytical | 17.8 | 0.0056 | 0.0044 | 2.17 / 3.84 / 4.96 | 0.56, 0.00 % |
+  | seg 200 empirical | 11.3 | 0.0056 (+0.0029) | 0.0042 | 2.17 / 5.27 / 8.67 | 3.80, 1.48 % |
+  | seg 200 empirical, no presolve | 10.0 | 0.0056 | 0.0040 | 2.17 / - / - | 3.69, 1.33 % |
+  | **seg 400 empirical (default)** | **7.5** | 0.0057 (+0.0028) | 0.0052 | 2.19 / 4.34 / 6.92 | 3.19, 0.90 % |
+  | seg 400 analytical | 14.8 | 0.0057 (+0.0030) | 0.0054 | 2.19 / 3.80 / 4.89 | 1.04, 0.00 % |
+
+- **Empirical-line tail:** the top 1 % of pixels by angle vs the analytical solution are dark (83.5 % in the
+  darkest 5 %, median reflectance 0.087 vs 0.199); on them the empirical line is farther from JPL on 95 % (5.82 vs
+  3.47 deg). No presolve saves only 1.3 min (longer LUT setup), accuracy unchanged.
+- Full-line estimates (T7 4 Mpix / 14-16 GB): seg 400 empirical Colab ~50 min, VM ~25-35 min / ~50-75 min;
+  seg 400 analytical Colab ~130 min, VM ~50-80 min / ~2-3 h.
+- **Decision (user 2026-11-01): AVIRIS-NG default seg 400 + empirical line** (2 h budget incl. anomaly detection);
+  --line analytical when time allows. Calibration window on Drive (atm_trial_scenes/aviris_ng_600line_calibration)
+  to measure the VM's speed factor first.

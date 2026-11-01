@@ -16,6 +16,18 @@ disk; Drive desktop or the web UI works.
 | `aviris_ng/input/ang20151219t081738/` | `aviris_datasets_L1/ang20151219t081738/` (whole folder) | 6.9 GB |
 | `aviris_ng/reference/` | `aviris_datasets/ang20151219t081738/` → `ang20151219t081738_corr_v2m2_img.bin` + `.hdr` | 6.9 GB |
 | `dem/` | `atm_trial_scenes/dem/` (Copernicus 30 m tiles + `cop30_mosaic.vrt`, relative paths) | 2.0 GB |
+| `aviris_ng_600line_calibration/` | `atm_trial_scenes/aviris_ng_600line_calibration/` (`input/ang20151219t081738/` L1 window rows 2496–3096 + `reference/` JPL corr window) | 1.5 GB |
+
+**Run the calibration window first:**
+
+```bash
+REF=$T/aviris_ng_600line_calibration/reference/ang20151219t081738_corr_v2m2_img.hdr \
+  ./scripts/run_scene.sh $T/aviris_ng_600line_calibration/input/ang20151219t081738 $O/aviris_ng_600
+```
+
+- On Colab (L4, 12 vCPU) ISOFIT took 7.5 min with seg 400 + empirical.
+- The VM time divided by 7.5 is the factor that scales every Colab estimate below.
+- Core land MAE against JPL should be about 0.0057.
 
 The PRISMA pair (`prisma/`) is already complete in this local folder; the rest of the local copy is partial and
 can be deleted.
@@ -43,8 +55,10 @@ REF=$T/tanager/reference/20250919_170238_88_4001_basic_sr_hdf5.h5 \
   ./scripts/run_scene.sh $T/tanager/input/20250919_170238_88_4001_basic_radiance_hdf5.h5 $O/tanager
 
 # AVIRIS-NG L1 full flight line (5592 x 722 px, India, 2015-12-19) vs JPL L2 corr (no DEM needed: it carries loc_ort)
-# Runs at superpixels of 200 by default (AVIRIS-NG rule, AC26-SEG). Colab estimate for this 4 Mpix line ~2.5 h,
-# of which the per-pixel solve is ~70-90 min. On the VM's H200 + 16 cores it should be faster. Please time it.
+# Runs at superpixels of 400 + empirical line by default (AVIRIS-NG rule, AC26-FAST). Estimates for this 4 Mpix
+# line: Colab ~50 min, VM ~25-35 min; a 14-16 GB line ~50-75 min on the VM. Please time it.
+# First, calibrate on the 600-line window (Drive: atm_trial_scenes/aviris_ng_600line_calibration, ~7.5 min on
+# Colab): it gives the VM's real speed factor.
 REF=$T/aviris_ng/reference/ang20151219t081738_corr_v2m2_img.hdr \
   ./scripts/run_scene.sh $T/aviris_ng/input/ang20151219t081738 $O/aviris_ng
 ```
@@ -65,7 +79,7 @@ number. The final table is filled in from the corrected reports (AC26-T11).
 | PRISMA | 33 min | 0.0125 | 0.0124 (research scorer, 165-band grid with shift search: 0.0097 raw / 0.0057 harmonised) |
 | EnMAP | 33 min | 0.0162 | 0.0157 |
 | Tanager | 44 min | 0.0126 | 0.0089 |
-| AVIRIS-NG | 6.2 h at seg 50 (now seg 200: ~2.5 h est.) | 0.0136 | 0.0060 (pixel-index paired: 0.0051; seg 200 same, AC26-SEG) |
+| AVIRIS-NG | 6.2 h at seg 50; default seg 400 + empirical ~50 min (est.) | 0.0136 (seg 50) | 0.0060 at seg 50 (pixel-index paired 0.0051); seg 400 + empirical 0.0057 on the window (AC26-FAST) |
 
 The report pairs by nearest location on native bands, over all land, with no sub-pixel shift search or cloud and
 shadow exclusion. It is a sanity check on the VM: a run within about ±30% of these numbers is behaving as on Colab.

@@ -20,7 +20,7 @@ the result.
 entrypoint.sh <input file|folder> <output dir> [--sensor S] [--input-level radiance|toa|sr] [--radiance-scale X]
               [--wavelength-file F] [--season S] [--no-harmonise] [--formats tif,bsq] [--paco-layout]
               [--ref PATH] [--ref-wavelength-file F] [--no-report] [--n-cores N] [--line analytical|empirical]
-              [--segmentation-size N]   # default: the sensor rule (AVIRIS-NG 200, others 50)
+              [--segmentation-size N] [--no-presolve]   # defaults: the sensor rule (AVIRIS-NG 400 + empirical line)
               [--keep-work] [--stop-after-lut]
 # env: DEM_VRT, N_CORES, CONFIG_ROOT, SIXS_FAST=0, SIXS_CACHE=0, SIXS_ARCH=v4, ATM_FAST_AL=0
 scripts/run_scene.sh <input> <out> [entrypoint options]   # env: DEM_DIR, DEM_VRT_NAME, REF, GPUS, SHM_SIZE, IMG
@@ -163,11 +163,15 @@ at the end unless `--keep-work` is given; the report runs before that.
   nodata on the same pixels.
 - **`fast_al` handles diagonal Seps only.** A chunk with off-diagonal noise terms falls back to ISOFIT's solve for
   that actor (2 of 12 actors on the EnMAP coast trial).
-- **AVIRIS-NG runs at superpixels of 200.**
-  - The 460–550 nm bias grows by +0.001, and the AOT map is smoother (sd 0.0037 → 0.0021).
+- **AVIRIS-NG runs at superpixels of 400 with the empirical line** (sensor rule; `--line analytical` /
+  `--segmentation-size` override).
+  - Core MAE against JPL is 0.0057, against 0.0056 at seg 50 analytical.
+  - The darkest ~1% of pixels lose spectral fidelity: the angle against JPL at p99.9 is 6.9° against 4.9°. These
+    are mostly shadow and dark soil, which anomaly detection may see.
+  - The 460–550 nm error grows by +0.002, and the AOT map is smoother.
   - Not tested over water: the test window was dryland.
-  - At 200, the per-pixel solve is the bottleneck: about 90 min for a 4 Mpix line on Colab's L4. On the VM it
-    depends on the H200 and the core count.
+  - Seg 400 *analytical* keeps the seg-50 tail, at 2× the time: the per-pixel solve is ~90 min for a 4 Mpix line on
+    the L4.
 - **The report's MAE is a sanity check, not the accuracy claim.** It compares native bands, by nearest location,
   over all land, with no shift search and no cloud or shadow exclusion. The submission accuracy figures are the
   research scorer's (AC26-*).
@@ -183,5 +187,5 @@ at the end unless `--keep-work` is given; the report runs before that.
 | 6S v3 default, v4 opt-in | v3 1.29 s vs v4 1.38 s per point on an AVX-512 Xeon (clock drop) | `-march=native` (bakes in the build host's CPU) |
 | int16 ×10000, water bands dropped | Organisers' mail 2026-10-31 | float32 |
 | Tests gate the build (≥ 30% line coverage) | User rule: no tests, no ship. 79 tests, 53% (AC26-D10b, T11) | Build-time checks and end-to-end runs only |
-| AVIRIS-NG superpixels of 200 (`SensorRules.segmentation_size`); every other sensor 50 | 600-line window against JPL: core MAE 0.0056 at 50 and 200, spectral angle 2.15° vs 2.17°, 41 → 18 min. Needed for the 2 h budget, which includes anomaly detection (AC26-SEG) | 50: a full flight line takes 6.2 h on Colab. 100: same accuracy, 26 min per window |
+| AVIRIS-NG: superpixels of 400 + empirical line (`SensorRules.segmentation_size`, `line_mode`); every other sensor 50 + analytical | 600-line window against JPL: ISOFIT 40.8 → 7.5 min, core MAE 0.0056 → 0.0057, median angle 2.15° → 2.19°. It is the only configuration that fits a 14–16 GB line in the 2 h budget, which includes anomaly detection (AC26-SEG, EL, FAST; user 2026-11-01) | seg 50: 6.2 h for a full line on Colab. seg 200 empirical: worse dark-pixel tail (p99 5.3°). seg 400 analytical: the seg-50 tail but 14.8 min per window, ~2–3 h for 14–16 GB on the VM. No presolve: saves only 1.3 min |
 | Report pairs reference pixels at exactly the located rows/cols, and judges the reference scale on quiet bands | T7: a decimated read paired pixels N/2 apart (report MAE 0.038 against 0.005 by index), and JPL's junk water bands made `corr` look ×10000 (AC26-T11) | GDAL `out_shape` decimation; all-band p99 |

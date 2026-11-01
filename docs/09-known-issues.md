@@ -108,10 +108,11 @@ Added 2026-11-01 with `isofit-atm-docker/`. All known and accepted, not defects.
     MAE against Planet: Permian 0.0092, ROCX 0.0089, Thessaloniki 0.0114.
 - **`fast_al` solves diagonal Seps only.** An actor that meets an off-diagonal chunk switches to ISOFIT's own
   solve, which is correct but slower: 2 of 12 actors on the EnMAP coast trial.
-- **AVIRIS-NG runs at superpixels of 200, not 50**, for the 2 h submission budget.
-  - Against JPL the core error is unchanged (0.0056), and the spectral angle moves 2.15° → 2.17°.
-  - The 460–550 nm bias grows by +0.001.
-  - Not checked over water. Evidence: AC26-SEG.
+- **AVIRIS-NG runs at superpixels of 400 with the empirical line**, for the 2 h submission budget.
+  - Against JPL the core error is unchanged (0.0057 vs 0.0056).
+  - The darkest ~1% of pixels (shadow, dark soil) lose spectral fidelity: the angle at p99.9 is 6.9° against 4.9°.
+  - The blue error is +0.002. Not checked over water.
+  - `--line analytical` restores the per-pixel solve when there is time. Evidence: AC26-SEG, AC26-EL, AC26-FAST.
 - **ISOFIT logs "Center wavelengths ... do not match" on every run.** It is cosmetic: `apply_oe` compares microns
   with the prior's nanometres. The centres match exactly.
 

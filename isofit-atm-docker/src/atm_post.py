@@ -58,6 +58,9 @@ class SensorRules:
     harmonise_model: str | None = None
     # apply_oe input: pixels per superpixel. Both superpixel passes (presolve, full inversion) scale with the count.
     segmentation_size: int = 50
+    # apply_oe input: per-pixel stage, "analytical" (optimal estimation per pixel, fast_al) or "empirical" (one
+    # linear fit per superpixel; ~7x faster per-pixel stage, no per-pixel uncertainty)
+    line_mode: str = "analytical"
     note: str = ""
 
 
@@ -72,10 +75,14 @@ SENSOR_RULES = {
     "prisma": SensorRules(None, None, adjacency_below_elev_km=None, adjacency_range_km=1.0,
                           terrain_min_steep_frac=None, aot_prior=True, harmonise_model="prisma_native.npz"),
     # AOT pinned to ATREM's 50 km visibility (AC26-P); airborne adjacency range 0.5 km if ever enabled.
-    # Superpixels of 200 (AC26-SEG, 600-line window vs JPL corr): core land MAE 0.0056 as at 50, spectral angle vs
-    # JPL 2.17 vs 2.15 deg, 41 -> 18 min; only the 460-550 nm bias grows (+0.001). Chosen for the 2 h budget.
+    # Superpixels of 400 + empirical line (AC26-SEG, AC26-EL, AC26-FAST; 600-line window vs JPL corr): ISOFIT
+    # 40.8 -> 7.5 min, core land MAE 0.0057 vs 0.0056 at seg 50 analytical, median spectral angle 2.19 vs 2.15 deg.
+    # Cost: the darkest ~1 % of pixels lose spectral fidelity (angle vs JPL p99.9 6.9 vs 4.9 deg) and the 460-550 nm
+    # error grows +0.002. Chosen for the 2 h budget incl. anomaly detection (user, 2026-11-01); --line analytical
+    # (seg 400 analytical: 14.8 min, seg-50 tail) when time allows.
     "avirisng": SensorRules("avirisng_noise.txt", "avirisng_lut.json", adjacency_below_elev_km=None,
-                            adjacency_range_km=0.5, terrain_min_steep_frac=None, segmentation_size=200),
+                            adjacency_range_km=0.5, terrain_min_steep_frac=None, segmentation_size=400,
+                            line_mode="empirical"),
     # 30 m spaceborne like EnMAP, and EnMAP's rules gave land MAE 0.0061 / 0.0144 / 0.0079 against Planet's basic SR
     # on three scenes (AC26-ACC). The noise file is named here so ENVI / GeoTIFF deliveries (apply_oe NA- mode) get
     # it too, not only HDF5 (apply_oe tanager mode picks it itself). No Planet-paired harmonisation fitted: identity.
