@@ -298,6 +298,8 @@ export function NewActionDialog({
         if (typeof knobs.batch_size === "number") out.batch_size = knobs.batch_size;
         if (typeof knobs.sam_l1_alpha === "number")
           out.sam_l1_alpha = knobs.sam_l1_alpha;
+        if (typeof knobs.rm_components === "number")
+          out.rm_components = knobs.rm_components;
         if (typeof knobs.erosion_kernel_size === "number")
           out.erosion_kernel_size = knobs.erosion_kernel_size;
         if (typeof knobs.keep_mask_erosion_kernel_size === "number")
@@ -644,18 +646,19 @@ interface InputsFormProps {
 
 // Action types are family-keyed: some upstream producers only run on
 // HSI scenes (band_filter_apply, scene_segmentation), others only on
-// thermal (cloud_mask). Skip rendering optional input pickers that
-// target a producer the current scene's sensor family can't run.
+// Landsat 9 (cloud_mask: backend cloud_mask.py accepts landsat9 alone, so
+// a HotSat scene scores with no mask). Skip rendering optional input
+// pickers that target a producer the current scene's sensor can't run.
 const HSI_ONLY_PRODUCING_TYPES = new Set([
   "band_filter_apply",
   "scene_segmentation",
 ]);
-const THERMAL_ONLY_PRODUCING_TYPES = new Set([
+const LANDSAT9_ONLY_PRODUCING_TYPES = new Set([
   "cloud_mask",
 ]);
 
 function isThermalSensor(sensor: string): boolean {
-  return sensor === "landsat9";
+  return sensor === "landsat9" || sensor === "hotsat1";
 }
 
 function inputApplicable(
@@ -667,11 +670,11 @@ function inputApplicable(
   const targetsHsiOnly = input.producing_action_types.some((t) =>
     HSI_ONLY_PRODUCING_TYPES.has(t),
   );
-  const targetsThermalOnly = input.producing_action_types.some((t) =>
-    THERMAL_ONLY_PRODUCING_TYPES.has(t),
+  const targetsLandsat9Only = input.producing_action_types.some((t) =>
+    LANDSAT9_ONLY_PRODUCING_TYPES.has(t),
   );
   if (isThermal && targetsHsiOnly) return false;
-  if (!isThermal && targetsThermalOnly) return false;
+  if (sensorType !== "landsat9" && targetsLandsat9Only) return false;
   return true;
 }
 
@@ -1286,6 +1289,8 @@ export interface ModelOverrideKnobs {
   stride?: number;
   batch_size?: number;
   sam_l1_alpha?: number;
+  /** residual_mahalanobis only — PCA directions kept, 5..100 (default 30). */
+  rm_components?: number;
   /** SegFormer-MAE family only — odd integer in [1, 129]. Pixels
    *  within kernel_size//2 of any invalid pixel are excluded from
    *  reconstruction accumulation. */
@@ -1343,10 +1348,9 @@ function AnomalyScoringExtras({
     const sensorMatch = (m: ModelSummary): boolean => {
       // Scene sensors: "prisma" / "enmap" / "aviris_ng" / "tanager" →
       // hyperspectral models.
-      // Scene sensors: "landsat9" / "hotsat1" → thermal models. (HotSAT
-      // currently has no anomaly-scoring-compatible model wired in the
-      // backend; the picker will correctly show an empty list with the
-      // "no compatible models" message until a HotSAT shim is added.)
+      // Scene sensors: "landsat9" / "hotsat1" → thermal models. HotSAT's
+      // uncalibrated DN is z-scored per scene by the backend before the
+      // thermal model sees it (resolver.py _SCENE_SENSOR_FAMILY).
       const sceneFamily =
         sceneSensorType === "prisma" ||
         sceneSensorType === "enmap" ||
@@ -1497,6 +1501,15 @@ function ModelKnobs({
         cleaned.sam_l1_alpha = merged.sam_l1_alpha;
       }
     }
+    // rm_components — residual_mahalanobis only (the backend refuses it elsewhere); 30 is the default.
+    if (
+      !isClassical &&
+      (merged.scoring_method ?? model.default_scoring_method) === "residual_mahalanobis" &&
+      typeof merged.rm_components === "number" &&
+      merged.rm_components !== 30
+    ) {
+      cleaned.rm_components = merged.rm_components;
+    }
     // erosion_kernel_size — drop when it matches the InferenceConfig
     // default (15) so we don't bloat the submitted config with no-ops.
     // Also drop for classical: backend rejects it (validity-mask
@@ -1527,6 +1540,7 @@ function ModelKnobs({
   const currentStride = knobs.stride ?? model.default_stride ?? 64;
   const currentBatch = knobs.batch_size ?? model.default_batch_size ?? 8;
   const currentAlpha = knobs.sam_l1_alpha ?? 0.5;
+  const currentRm = knobs.rm_components ?? 30;
   const currentErosion = knobs.erosion_kernel_size ?? 15;
   const currentKeepErosion = knobs.keep_mask_erosion_kernel_size ?? 1;
   // SegFormer-MAE family uses TokenMasking.erode_mask under the hood;
@@ -1632,6 +1646,19 @@ function ModelKnobs({
               <span className="anomaly-extras__knob-help">
                 α = 1 → pure L1 · α = 0 → pure SAM · 0.5 = balanced
               </span>
+            </label>
+          )}
+          {!isClassical && currentScoring === "residual_mahalanobis" && (
+            <label className="anomaly-extras__knob">
+              <span>PCA components</span>
+              <input
+                type="number"
+                min={5}
+                max={100}
+                step={1}
+                value={currentRm}
+                onChange={(e) => set({ rm_components: Number(e.target.value) })}
+              />
             </label>
           )}
           {usesErosion && (

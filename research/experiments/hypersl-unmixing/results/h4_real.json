@@ -1,0 +1,321 @@
+{
+ "Jasper": {
+  "n": 5766,
+  "n_manmade": 355,
+  "n_natural": 5411,
+  "n_by_label": {
+   "concrete_asphalt": 355,
+   "natural": 5411
+  },
+  "methods": {
+   "namer_ring": {
+    "all": {
+     "auc": 0.586,
+     "recall_at_5pct_fa": 0.101,
+     "l2_concrete_acc": 0.859,
+     "n_l2": 355
+    },
+    "pure": {
+     "auc": 0.682,
+     "recall_at_5pct_fa": 0.084,
+     "l2_concrete_acc": 0.886,
+     "n_l2": 167
+    },
+    "mixed": {
+     "auc": 0.454,
+     "recall_at_5pct_fa": 0.048,
+     "l2_concrete_acc": 0.835,
+     "n_l2": 188
+    },
+    "called_manmade_at_0": {
+     "manmade": 0.42,
+     "natural": 0.298
+    }
+   },
+   "namer_self": {
+    "all": {
+     "auc": 0.07,
+     "recall_at_5pct_fa": 0.014,
+     "l2_concrete_acc": 0.854,
+     "n_l2": 355
+    },
+    "pure": {
+     "auc": 0.022,
+     "recall_at_5pct_fa": 0.0,
+     "l2_concrete_acc": 0.928,
+     "n_l2": 167
+    },
+    "mixed": {
+     "auc": 0.134,
+     "recall_at_5pct_fa": 0.021,
+     "l2_concrete_acc": 0.787,
+     "n_l2": 188
+    },
+    "called_manmade_at_0": {
+     "manmade": 0.023,
+     "natural": 0.252
+    }
+   },
+   "sam": {
+    "all": {
+     "auc": 0.916,
+     "recall_at_5pct_fa": 0.518,
+     "l2_concrete_acc": 0.617,
+     "n_l2": 355
+    },
+    "pure": {
+     "auc": 0.968,
+     "recall_at_5pct_fa": 0.808,
+     "l2_concrete_acc": 0.982,
+     "n_l2": 167
+    },
+    "mixed": {
+     "auc": 0.811,
+     "recall_at_5pct_fa": 0.287,
+     "l2_concrete_acc": 0.293,
+     "n_l2": 188
+    }
+   },
+   "ls_none": {
+    "all": {
+     "auc": 0.539,
+     "recall_at_5pct_fa": 0.197,
+     "l2_concrete_acc": 0.628,
+     "n_l2": 355
+    },
+    "pure": {
+     "auc": 0.548,
+     "recall_at_5pct_fa": 0.251,
+     "l2_concrete_acc": 0.94,
+     "n_l2": 167
+    },
+    "mixed": {
+     "auc": 0.559,
+     "recall_at_5pct_fa": 0.16,
+     "l2_concrete_acc": 0.351,
+     "n_l2": 188
+    }
+   },
+   "ls_mean": {
+    "all": {
+     "auc": 0.85,
+     "recall_at_5pct_fa": 0.341,
+     "l2_concrete_acc": 0.744,
+     "n_l2": 355
+    },
+    "pure": {
+     "auc": 0.985,
+     "recall_at_5pct_fa": 0.988,
+     "l2_concrete_acc": 0.725,
+     "n_l2": 167
+    },
+    "mixed": {
+     "auc": 0.654,
+     "recall_at_5pct_fa": 0.138,
+     "l2_concrete_acc": 0.761,
+     "n_l2": 188
+    }
+   },
+   "ls_ring": {
+    "all": {
+     "auc": 0.621,
+     "recall_at_5pct_fa": 0.256,
+     "l2_concrete_acc": 0.58,
+     "n_l2": 355
+    },
+    "pure": {
+     "auc": 0.694,
+     "recall_at_5pct_fa": 0.443,
+     "l2_concrete_acc": 0.635,
+     "n_l2": 167
+    },
+    "mixed": {
+     "auc": 0.519,
+     "recall_at_5pct_fa": 0.074,
+     "l2_concrete_acc": 0.532,
+     "n_l2": 188
+    }
+   },
+   "lat_none": {
+    "all": {
+     "auc": 0.705,
+     "recall_at_5pct_fa": 0.203,
+     "l2_concrete_acc": 0.265,
+     "n_l2": 355
+    },
+    "pure": {
+     "auc": 0.733,
+     "recall_at_5pct_fa": 0.449,
+     "l2_concrete_acc": 0.413,
+     "n_l2": 167
+    },
+    "mixed": {
+     "auc": 0.692,
+     "recall_at_5pct_fa": 0.106,
+     "l2_concrete_acc": 0.133,
+     "n_l2": 188
+    }
+   }
+  }
+ },
+ "Urban4": {
+  "n": 5360,
+  "n_manmade": 2039,
+  "n_natural": 3321,
+  "n_by_label": {
+   "concrete_asphalt": 1624,
+   "manmade_l1": 415,
+   "natural": 3321
+  },
+  "methods": {
+   "namer_ring": {
+    "all": {
+     "auc": 0.298,
+     "recall_at_5pct_fa": 0.01,
+     "l2_concrete_acc": 0.607,
+     "n_l2": 1624
+    },
+    "pure": {
+     "auc": 0.164,
+     "recall_at_5pct_fa": 0.034,
+     "l2_concrete_acc": 0.774,
+     "n_l2": 602
+    },
+    "mixed": {
+     "auc": 0.401,
+     "recall_at_5pct_fa": 0.008,
+     "l2_concrete_acc": 0.508,
+     "n_l2": 1022
+    },
+    "called_manmade_at_0": {
+     "manmade": 0.326,
+     "natural": 0.625
+    }
+   },
+   "namer_self": {
+    "all": {
+     "auc": 0.006,
+     "recall_at_5pct_fa": 0.0,
+     "l2_concrete_acc": 0.896,
+     "n_l2": 1624
+    },
+    "pure": {
+     "auc": 0.0,
+     "recall_at_5pct_fa": 0.0,
+     "l2_concrete_acc": 1.0,
+     "n_l2": 602
+    },
+    "mixed": {
+     "auc": 0.012,
+     "recall_at_5pct_fa": 0.0,
+     "l2_concrete_acc": 0.835,
+     "n_l2": 1022
+    },
+    "called_manmade_at_0": {
+     "manmade": 0.018,
+     "natural": 0.963
+    }
+   },
+   "sam": {
+    "all": {
+     "auc": 0.57,
+     "recall_at_5pct_fa": 0.0,
+     "l2_concrete_acc": 0.618,
+     "n_l2": 1624
+    },
+    "pure": {
+     "auc": 0.469,
+     "recall_at_5pct_fa": 0.0,
+     "l2_concrete_acc": 0.721,
+     "n_l2": 602
+    },
+    "mixed": {
+     "auc": 0.635,
+     "recall_at_5pct_fa": 0.003,
+     "l2_concrete_acc": 0.557,
+     "n_l2": 1022
+    }
+   },
+   "ls_none": {
+    "all": {
+     "auc": 0.688,
+     "recall_at_5pct_fa": 0.139,
+     "l2_concrete_acc": 0.4,
+     "n_l2": 1624
+    },
+    "pure": {
+     "auc": 0.606,
+     "recall_at_5pct_fa": 0.17,
+     "l2_concrete_acc": 0.429,
+     "n_l2": 602
+    },
+    "mixed": {
+     "auc": 0.763,
+     "recall_at_5pct_fa": 0.256,
+     "l2_concrete_acc": 0.383,
+     "n_l2": 1022
+    }
+   },
+   "ls_mean": {
+    "all": {
+     "auc": 0.488,
+     "recall_at_5pct_fa": 0.278,
+     "l2_concrete_acc": 0.629,
+     "n_l2": 1624
+    },
+    "pure": {
+     "auc": 0.55,
+     "recall_at_5pct_fa": 0.406,
+     "l2_concrete_acc": 0.846,
+     "n_l2": 602
+    },
+    "mixed": {
+     "auc": 0.472,
+     "recall_at_5pct_fa": 0.179,
+     "l2_concrete_acc": 0.501,
+     "n_l2": 1022
+    }
+   },
+   "ls_ring": {
+    "all": {
+     "auc": 0.441,
+     "recall_at_5pct_fa": 0.117,
+     "l2_concrete_acc": 0.514,
+     "n_l2": 1624
+    },
+    "pure": {
+     "auc": 0.447,
+     "recall_at_5pct_fa": 0.133,
+     "l2_concrete_acc": 0.701,
+     "n_l2": 602
+    },
+    "mixed": {
+     "auc": 0.434,
+     "recall_at_5pct_fa": 0.112,
+     "l2_concrete_acc": 0.404,
+     "n_l2": 1022
+    }
+   },
+   "lat_none": {
+    "all": {
+     "auc": 0.583,
+     "recall_at_5pct_fa": 0.255,
+     "l2_concrete_acc": 0.548,
+     "n_l2": 1624
+    },
+    "pure": {
+     "auc": 0.685,
+     "recall_at_5pct_fa": 0.385,
+     "l2_concrete_acc": 0.674,
+     "n_l2": 602
+    },
+    "mixed": {
+     "auc": 0.518,
+     "recall_at_5pct_fa": 0.166,
+     "l2_concrete_acc": 0.474,
+     "n_l2": 1022
+    }
+   }
+  }
+ }
+}

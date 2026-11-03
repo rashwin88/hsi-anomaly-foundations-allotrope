@@ -117,7 +117,7 @@ What each sensor expects:
 | `landsat9` | a single `.tif` file |
 | `enmap` | the **folder** containing `*-METADATA.XML` |
 | `aviris_ng` | the **folder** containing `*_corr_*.bin` |
-| `hotsat1` | the **folder** containing `metadata.json` + GeoTIFFs |
+| `hotsat1` | the **folder** containing `metadata.json` + GeoTIFFs (`*_ortho.tiff`, `*_stacked.tiff`, `*_udm.tiff`). The cube and the export grid are the ortho (metadata.json's `visual` asset); the scene id is metadata.json's `id`. No `cloud_mask` (Landsat 9 only): HotSat scores with no keep mask |
 | `tanager` | a single ortho surface-reflectance `.h5` (Planet's `ortho_sr_hdf5` asset), **or** an ENVI pair picked together: the `.hdr` plus its data file (`.img` / `.bsq` / `.bil` / `.bip` / `.dat` / no extension). If both are uploaded the `.h5` is used |
 | `generic_hsi` ("Other hyperspectral (any format)") | every file of the scene picked together: a GeoTIFF / COG, an ENVI `.hdr` + its data file (`.hsi`, `.img`, `.bsq`, ..., or none) plus an OSK `.igm` + `.igm.hdr` if there is one, or an HDF5 / NetCDF file. Add a wavelength CSV / JSON when the cube carries no band table. The Scale picker overrides the detected scale (x1, x0.0001, not reflectance). The finished job shows the pre-flight report ([lld/generic-hsi.md](lld/generic-hsi.md)) |
 

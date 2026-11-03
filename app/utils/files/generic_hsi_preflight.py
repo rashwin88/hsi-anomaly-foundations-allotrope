@@ -69,7 +69,7 @@ def assemble(*, source: Path, data_path: str, var, upload, info, band, fill, fil
     if scale.get("warning"):
         warnings.append(scale["warning"])
     if not georef["exportable"]:
-        warnings.append("no map coordinates: the scene can be scored, but export will refuse")
+        warnings.append("no map coordinates: the scene can be scored; export is in pixel coordinates (col,row)")
     report = {
         "schema": SCHEMA,
         "file": source.name,

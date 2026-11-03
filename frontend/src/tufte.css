@@ -944,6 +944,10 @@ body .react-flow__edge-path { stroke: var(--ink-3); }
   outline: 1px solid var(--rule);
   outline-offset: -1px;
 }
+/* Except the prep mask: its PNG is white-on-transparent, so on paper it reads as blank. */
+.adp-viewer__panel-with-overlay .anomaly-viewer__panel-canvas {
+  background: #0b0b0f;
+}
 .viewer-metric__value,
 .anomaly-extras__knob-val {
   font-family: var(--font-ui);

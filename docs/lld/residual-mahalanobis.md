@@ -40,6 +40,10 @@ cube (C,H,W), reconstruction (C,H,W), keep (H,W)
 3. **Well conditioned.** 30 whitened components, not all bands - plain RX over 150+ bands was dropped in
    2026-05 for near-singular covariances.
 4. **Other methods unchanged.** `local_window` is read only by this method.
+5. **Width is an option (v1.0.1).** The per-model override `rm_components` (5-100, default 30) sets the
+   number of whitened components (`compute_score(rm_components=)` -> `d`); the action refuses it on any
+   other method, records it in `stats.json` as `rm_components`, and the New Action dialog shows it as
+   "PCA components" under Advanced. Unset, the score is byte-identical to before.
 
 ## Failure modes
 

@@ -19,8 +19,10 @@ flat CSV, and a manifest. Every path inside the zip is prefixed with
         MANIFEST.json                       # audit trail
 
 Hard requirements from the submission rules:
-  - GeoTIFF must carry a valid CRS. We refuse to ship a CRS-less bundle
-    (raises ``MissingCRSError`` — the api translates that to a 422).
+  - GeoTIFF carries the scene CRS. A scene with none exports in pixel coordinates
+    (2026-11-01): the api passes ``app.georef.pixel_grid()`` with crs None and a
+    ``georef_note``; no .prj, lat / lon blank, MANIFEST "georeference" says so.
+    ``MissingCRSError`` (a 422) only when no override transform is given at all.
   - Filenames AND the folder path must literally start with ``hyper_``.
   - Shapefile sidecar set is complete (geopandas writes all five files).
 
@@ -139,8 +141,9 @@ class ExportSpec:
     # carry CRS). The api resolves this from the raw scene file via
     # ``app.georef.resolve_scene_georef`` and threads it in here.
     override_transform: Any = None     # rasterio.transform.Affine
-    override_crs: Any = None           # rasterio.crs.CRS
+    override_crs: Any = None           # rasterio.crs.CRS; None with a transform = pixel grid
     subset: str = "all"                # "manmade" / "natural": only those objects' pixels
+    georef_note: str | None = None     # set when the scene has no georeference
 
 
 def build_hyper_bundle(spec: ExportSpec) -> tuple[bytes, str]:
@@ -192,7 +195,7 @@ def build_hyper_bundle(spec: ExportSpec) -> tuple[bytes, str]:
     # model doesn't thread spatial reference — accept a caller-supplied
     # override (resolved at endpoint time from the raw scene file).
     if src_crs is None:
-        if spec.override_crs is not None and spec.override_transform is not None:
+        if spec.override_transform is not None:
             src_crs = spec.override_crs
             src_transform = spec.override_transform
             profile = dict(profile)
@@ -249,8 +252,9 @@ def build_hyper_bundle(spec: ExportSpec) -> tuple[bytes, str]:
         rec: dict[str, Any] = {
             "row": int(r),
             "col": int(c),
-            "latitude": float(lat),
-            "longitude": float(lon),
+            # Pixel-grid x / y are not degrees: no CRS, no lat / lon.
+            "latitude": float(lat) if src_crs is not None else float("nan"),
+            "longitude": float(lon) if src_crs is not None else float("nan"),
         }
         if obj is not None:
             rec.update(_namer_fields(obj))
@@ -276,7 +280,7 @@ def build_hyper_bundle(spec: ExportSpec) -> tuple[bytes, str]:
     # Reproject to EPSG:4326 if we're not already there — common GIS
     # convention for shapefile/CSV, and matches what `latitude/longitude`
     # field names imply.
-    if records and str(gdf.crs).lower() not in ("epsg:4326",):
+    if records and gdf.crs is not None and str(gdf.crs).lower() not in ("epsg:4326",):
         # Compute lat/lon in EPSG:4326 explicitly for the attribute table,
         # but keep the geometry in the native CRS so it overlays the
         # source raster correctly in QGIS/ArcGIS.
@@ -383,6 +387,8 @@ def build_hyper_bundle(spec: ExportSpec) -> tuple[bytes, str]:
             })
         else:
             manifest["confidence_threshold_deg"] = spec.confidence_threshold_deg
+        if spec.georef_note:
+            manifest["georeference"] = spec.georef_note
         zf.writestr(f"{folder}/MANIFEST.json", json.dumps(manifest, indent=2))
 
     zip_filename = f"{folder}.zip"
@@ -500,7 +506,9 @@ def _objects_csv_bytes(objects: list[dict], transform, crs) -> bytes:
         return b""
     xs, ys = zip(*(rasterio.transform.xy(transform, float(o["row"]), float(o["col"]),
                                          offset="center") for o in objects))
-    lons, lats = warp(crs, "EPSG:4326", list(xs), list(ys))
+    # No CRS (pixel grid): nothing to project, lat / lon stay blank.
+    lons, lats = (warp(crs, "EPSG:4326", list(xs), list(ys)) if crs is not None
+                  else ([float("nan")] * len(xs), [float("nan")] * len(xs)))
     buf = io.StringIO()
     writer = csv.DictWriter(buf, fieldnames=_OBJECT_KEYS, extrasaction="ignore")
     writer.writeheader()

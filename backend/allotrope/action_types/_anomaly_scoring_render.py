@@ -58,6 +58,9 @@ def _save_raster_2d(arr: Any, path: Any, dtype: str) -> None:
         "count": 1,
         "dtype": a.dtype.name,
         "compress": "lzw",
+        # A native-band AVIRIS-NG reconstruction is > 4 GB uncompressed; classic TIFF
+        # aborts with "Maximum TIFF file size exceeded". IF_SAFER keeps small files classic.
+        "BIGTIFF": "IF_SAFER",
         "transform": Affine.identity(),
     }
     with rasterio.open(path, "w", **profile) as dst:
@@ -81,6 +84,9 @@ def _save_raster_3d(arr: Any, path: Any, dtype: str) -> None:
         "count": c,
         "dtype": a.dtype.name,
         "compress": "lzw",
+        # A native-band AVIRIS-NG reconstruction is > 4 GB uncompressed; classic TIFF
+        # aborts with "Maximum TIFF file size exceeded". IF_SAFER keeps small files classic.
+        "BIGTIFF": "IF_SAFER",
         "transform": Affine.identity(),
     }
     with rasterio.open(path, "w", **profile) as dst:

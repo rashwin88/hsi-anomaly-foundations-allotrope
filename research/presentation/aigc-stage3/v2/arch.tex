@@ -1,0 +1,19 @@
+% Indradhanu V2 (Heavy, v2.1.0) block diagram; shapes recorded by forward hooks (research/textbook/chapters/41-heavy.tex)
+\adjustbox{max width=\textwidth, max totalheight=0.52\textheight}{%
+\begin{tikzpicture}[x=1mm,y=1mm]
+\tikzset{blk/.style={stg, pattern color=pB!85, minimum height=12mm, font=\fontsize{6.6}{7.7}\selectfont}}
+\node[font=\fontsize{6.8}{8}\selectfont, align=center] (x) at (-4,0) {$\mathbf{x}$\\185 bands\\\shp{(B,185,128,128)}};
+\node[blk, text width=29mm] (A) at (24,0) {\textbf{Spectral stem}\\reduced attention: 53 bins\\of 40\,nm, 64 queries, 4 heads\\{\color{mute}+ per-band skip $\cdot$ 17,825 p}\\\shp{out z (B,64,128,128)}};
+\node[blk, text width=25mm] (B) at (61,0) {\textbf{Stage-1 embed} k4 s4\\mask $\rho{=}0.65$:\\\textbf{delete} 665 of 1,024\\tokens per tile\\\shp{out (B,359,96)}};
+\node[blk, text width=34mm] (C) at (101,0) {\textbf{SegFormer encoder}\\4 stages $\times$ 2 blocks\\$C$ = [96, 192, 480, 768]\\heads [3, 6, 10, 12], $R$ [8, 4, 2, 1]\\{\color{mute}29.58 M p}};
+\node[blk, text width=34mm] (D) at (101,-27) {\textbf{Progressive decoder}\\fuse 4 maps to 512\\up\_half 256, up\_full 128\\head 64 $\cdot$ {\color{mute}4.28 M p}\\\shp{out (B,64,128,128)}};
+\node[blk, text width=25mm] (E) at (61,-27) {\textbf{Wavelength decoder}\\$\hat x_n=\mathbf{u}(\lambda_n)\!\cdot\!\hat{\mathbf z}+c(\lambda_n)$\\any output band list\\{\color{mute}6,337 p}\\\shp{out (B,185,128,128)}};
+\node[font=\fontsize{6.8}{8}\selectfont, align=center] (y) at (24,-27) {$\hat{\mathbf{x}}$, reflectance\\(denormalised by the\\fixed wavelength curve)};
+\node[blk, text width=21mm, draw=ochre!85!black, line width=0.9pt] (F) at (139,-27) {\textbf{Segmentation}\\\textbf{head}, unmasked\\pass, width 256\\5 classes $\cdot$ {\color{mute}1.43 M p}\\\shp{out (B,5,128,128)}};
+\draw[df] (x) -- (A); \draw[df] (A) -- (B); \draw[df] (B) -- (C);
+\draw[df] (C) -- node[right, align=left]{\shp{F1 96@32$^2$ F2 192@16$^2$}\\\shp{F3 480@8$^2$ F4 768@4$^2$}} (D);
+\draw[df] (D) -- (E); \draw[df] (E) -- (y);
+\draw[tf, draw=ochre!85!black] (C.east) -| (F.north);
+\draw[tf] ($(A.east)!0.5!(B.west)$) -- ++(0,-13) -| ($(D.north west)+(4,0)$);
+\node[color=mute, anchor=north] at (64,-13.4) {\shp{skip: z, hidden-token pixels set to 0}};
+\end{tikzpicture}}

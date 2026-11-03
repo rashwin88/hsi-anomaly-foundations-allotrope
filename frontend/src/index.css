@@ -6505,6 +6505,18 @@ dl.action-output-viewer__stats {
 .smv-map__meaning { flex: 1 1 auto; }
 .smv-map__status { color: var(--ink-2, #555); font-style: italic; }
 .smv-map__readout { color: var(--ink, #111); }
+/* The caption's point toggles are controls, not prose: ink, dotted when off, solid when on. */
+.smv-map__caption .smv-toggle {
+  color: var(--ink, #111);
+  text-decoration: underline dotted;
+  text-decoration-thickness: 1px;
+}
+.smv-map__caption .smv-toggle[aria-pressed="true"] { text-decoration-style: solid; }
+
+/* The man-made cut: quick picks, then a slider for any value in between. */
+.smv-cut { display: inline-flex; align-items: center; gap: 0.6rem; white-space: nowrap; }
+.smv-cut__range { width: 9rem; margin: 0; vertical-align: middle; }
+.smv-cut__val { min-width: 2.4em; }
 
 .smv-side {
   display: flex;

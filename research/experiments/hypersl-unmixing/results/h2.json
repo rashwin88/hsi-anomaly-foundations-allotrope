@@ -1,0 +1,302 @@
+{
+ "DC1": {
+  "N": 5625,
+  "K": 5,
+  "B": 224,
+  "vca_mSAD_deg": 0.0,
+  "gt": {
+   "refl": {
+    "aRMSE": 0.0001,
+    "AAD_deg": 0.03
+   },
+   "frame": {
+    "aRMSE": 0.0001,
+    "AAD_deg": 0.04
+   },
+   "latent": {
+    "aRMSE": 0.2529,
+    "AAD_deg": 50.77
+   },
+   "tokens": {
+    "aRMSE": 0.1948,
+    "AAD_deg": 41.66
+   },
+   "refl_nnls_norm": {
+    "aRMSE": 0.0,
+    "AAD_deg": 0.0
+   }
+  },
+  "vca": {
+   "refl": {
+    "aRMSE": 0.0001,
+    "AAD_deg": 0.03
+   },
+   "frame": {
+    "aRMSE": 0.0001,
+    "AAD_deg": 0.04
+   },
+   "latent": {
+    "aRMSE": 0.2529,
+    "AAD_deg": 50.77
+   },
+   "tokens": {
+    "aRMSE": 0.1948,
+    "AAD_deg": 41.66
+   },
+   "refl_nnls_norm": {
+    "aRMSE": 0.0,
+    "AAD_deg": 0.0
+   }
+  }
+ },
+ "DC2": {
+  "N": 10000,
+  "K": 9,
+  "B": 224,
+  "vca_mSAD_deg": 0.0,
+  "gt": {
+   "refl": {
+    "aRMSE": 0.0003,
+    "AAD_deg": 0.03
+   },
+   "frame": {
+    "aRMSE": 0.0,
+    "AAD_deg": 0.0
+   },
+   "latent": {
+    "aRMSE": 0.1125,
+    "AAD_deg": 17.13
+   },
+   "tokens": {
+    "aRMSE": 0.1101,
+    "AAD_deg": 16.92
+   },
+   "refl_nnls_norm": {
+    "aRMSE": 0.0,
+    "AAD_deg": 0.0
+   }
+  },
+  "vca": {
+   "refl": {
+    "aRMSE": 0.0003,
+    "AAD_deg": 0.03
+   },
+   "frame": {
+    "aRMSE": 0.0002,
+    "AAD_deg": 0.01
+   },
+   "latent": {
+    "aRMSE": 0.1126,
+    "AAD_deg": 17.14
+   },
+   "tokens": {
+    "aRMSE": 0.1102,
+    "AAD_deg": 16.93
+   },
+   "refl_nnls_norm": {
+    "aRMSE": 0.0002,
+    "AAD_deg": 0.01
+   }
+  }
+ },
+ "DC3": {
+  "N": 11025,
+  "K": 6,
+  "B": 224,
+  "vca_mSAD_deg": 4.17,
+  "gt": {
+   "refl": {
+    "aRMSE": 0.0,
+    "AAD_deg": 0.0
+   },
+   "frame": {
+    "aRMSE": 0.0,
+    "AAD_deg": 0.0
+   },
+   "latent": {
+    "aRMSE": 0.2614,
+    "AAD_deg": 56.79
+   },
+   "tokens": {
+    "aRMSE": 0.2186,
+    "AAD_deg": 51.84
+   },
+   "refl_nnls_norm": {
+    "aRMSE": 0.0,
+    "AAD_deg": 0.0
+   }
+  },
+  "vca": {
+   "refl": {
+    "aRMSE": 0.0871,
+    "AAD_deg": 24.89
+   },
+   "frame": {
+    "aRMSE": 0.0871,
+    "AAD_deg": 24.92
+   },
+   "latent": {
+    "aRMSE": 0.1765,
+    "AAD_deg": 44.94
+   },
+   "tokens": {
+    "aRMSE": 0.1602,
+    "AAD_deg": 42.12
+   },
+   "refl_nnls_norm": {
+    "aRMSE": 0.0938,
+    "AAD_deg": 25.67
+   }
+  }
+ },
+ "EGU": {
+  "N": 40000,
+  "K": 5,
+  "B": 224,
+  "vca_mSAD_deg": 0.17,
+  "gt": {
+   "refl": {
+    "aRMSE": 0.0584,
+    "AAD_deg": 7.82
+   },
+   "frame": {
+    "aRMSE": 0.0557,
+    "AAD_deg": 7.38
+   },
+   "latent": {
+    "aRMSE": 0.1422,
+    "AAD_deg": 22.57
+   },
+   "tokens": {
+    "aRMSE": 0.1402,
+    "AAD_deg": 22.33
+   },
+   "refl_nnls_norm": {
+    "aRMSE": 0.0185,
+    "AAD_deg": 2.48
+   }
+  },
+  "vca": {
+   "refl": {
+    "aRMSE": 0.084,
+    "AAD_deg": 11.38
+   },
+   "frame": {
+    "aRMSE": 0.0828,
+    "AAD_deg": 11.19
+   },
+   "latent": {
+    "aRMSE": 0.1637,
+    "AAD_deg": 25.3
+   },
+   "tokens": {
+    "aRMSE": 0.1605,
+    "AAD_deg": 25.05
+   },
+   "refl_nnls_norm": {
+    "aRMSE": 0.0233,
+    "AAD_deg": 3.11
+   }
+  }
+ },
+ "Jasper": {
+  "N": 10000,
+  "K": 4,
+  "B": 198,
+  "vca_mSAD_deg": 22.52,
+  "gt": {
+   "refl": {
+    "aRMSE": 0.0778,
+    "AAD_deg": 6.68
+   },
+   "frame": {
+    "aRMSE": 0.0765,
+    "AAD_deg": 6.52
+   },
+   "latent": {
+    "aRMSE": 0.1058,
+    "AAD_deg": 10.64
+   },
+   "tokens": {
+    "aRMSE": 0.0975,
+    "AAD_deg": 9.57
+   },
+   "refl_nnls_norm": {
+    "aRMSE": 0.0502,
+    "AAD_deg": 3.61
+   }
+  },
+  "vca": {
+   "refl": {
+    "aRMSE": 0.3184,
+    "AAD_deg": 36.73
+   },
+   "frame": {
+    "aRMSE": 0.3238,
+    "AAD_deg": 39.2
+   },
+   "latent": {
+    "aRMSE": 0.3387,
+    "AAD_deg": 45.4
+   },
+   "tokens": {
+    "aRMSE": 0.3391,
+    "AAD_deg": 45.9
+   },
+   "refl_nnls_norm": {
+    "aRMSE": 0.203,
+    "AAD_deg": 25.07
+   }
+  }
+ },
+ "Urban4": {
+  "N": 94249,
+  "K": 4,
+  "B": 162,
+  "vca_mSAD_deg": 25.1,
+  "gt": {
+   "refl": {
+    "aRMSE": 0.2144,
+    "AAD_deg": 25.65
+   },
+   "frame": {
+    "aRMSE": 0.2173,
+    "AAD_deg": 25.69
+   },
+   "latent": {
+    "aRMSE": 0.1704,
+    "AAD_deg": 20.25
+   },
+   "tokens": {
+    "aRMSE": 0.1651,
+    "AAD_deg": 19.71
+   },
+   "refl_nnls_norm": {
+    "aRMSE": 0.0591,
+    "AAD_deg": 4.41
+   }
+  },
+  "vca": {
+   "refl": {
+    "aRMSE": 0.4138,
+    "AAD_deg": 53.47
+   },
+   "frame": {
+    "aRMSE": 0.4306,
+    "AAD_deg": 55.03
+   },
+   "latent": {
+    "aRMSE": 0.4008,
+    "AAD_deg": 56.05
+   },
+   "tokens": {
+    "aRMSE": 0.3937,
+    "AAD_deg": 55.8
+   },
+   "refl_nnls_norm": {
+    "aRMSE": 0.2557,
+    "AAD_deg": 34.27
+   }
+  }
+ }
+}

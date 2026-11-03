@@ -109,6 +109,31 @@ def test_validate_config_checks_the_classes(monkeypatch):
         anomaly_scoring.validate_config({**base, "exclude_classes": ["water"]}, "prisma")
 
 
+def test_rm_components_only_with_residual_mahalanobis(monkeypatch):
+    """v1.0.1: rm_components is accepted for a residual_mahalanobis model, refused on any other method."""
+    import dataclasses
+
+    from allotrope.foundation_models import resolver
+    from test_scene_segmentation_v2 import _model
+
+    l1 = dataclasses.replace(_model(), codename="Indradhanu", scoring_methods=("L1", "residual_mahalanobis"),
+                             default_scoring_method="L1")
+    monkeypatch.setattr(resolver, "list_catalog", lambda root: [_model(), l1])
+    base = {"input_band_filter_output_id": BF_ID, "model_codenames": ["Indradhanu V2"]}
+    ok = anomaly_scoring.validate_config({**base, "model_overrides": {"Indradhanu V2": {"rm_components": 20}}},
+                                         "prisma")
+    assert ok["model_overrides"]["Indradhanu V2"]["rm_components"] == 20
+    with pytest.raises(ValueError, match="residual_mahalanobis"):
+        anomaly_scoring.validate_config({**base, "model_codenames": ["Indradhanu"],
+                                         "model_overrides": {"Indradhanu": {"rm_components": 20}}}, "prisma")
+    ok = anomaly_scoring.validate_config({**base, "model_codenames": ["Indradhanu"], "model_overrides": {
+        "Indradhanu": {"scoring_method": "residual_mahalanobis", "rm_components": 20}}}, "prisma")
+    assert ok["model_overrides"]["Indradhanu"]["rm_components"] == 20
+    with pytest.raises(ValueError):                                       # outside 5..100
+        anomaly_scoring.validate_config({**base, "model_overrides": {"Indradhanu V2": {"rm_components": 3}}},
+                                        "prisma")
+
+
 # --- addition C: the 165-grid band filter under V2 ---------------------------
 
 

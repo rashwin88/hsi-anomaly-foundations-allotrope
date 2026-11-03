@@ -42,6 +42,20 @@ class GeorefUnavailable(Exception):
     """No CRS could be recovered from the raw scene file on disk."""
 
 
+# The export fallback for a scene with no georeference (user, 2026-11-01: always export). One unit
+# per pixel, y negated so the grid reads north-up in GIS tools; written with crs=None, so no .prj.
+# Built lazily: this module must import without rasterio.
+def pixel_grid():
+    """The pixel-coordinate affine: pixel centre (row, col) -> x = col + 0.5, y = -(row + 0.5)."""
+    from rasterio.transform import Affine
+
+    return Affine(1.0, 0.0, 0.0, 0.0, -1.0, 0.0)
+
+
+NO_GEOREF_NOTE = ("no georeference: pixel coordinates (col,row); x=col+0.5, y=-(row+0.5) "
+                  "at pixel centres")
+
+
 def resolve_scene_georef(
     *,
     scene_dir: Path,
@@ -296,20 +310,37 @@ def _resolve_thermal_geotiff(scene_dir: Path, sensor_type: str, target_shape):
         )
     # Pick the most georef-likely file per sensor:
     #   Landsat 9 → the thermal band (B10 / ST).
-    #   HotSat-1  → the ortho-rectified product (skip UDM mask + thumbnails).
-    if sensor_type == "landsat9":
-        preferred = [
-            p for p in tifs
-            if "B10" in p.name.upper() or "ST" in p.name.upper()
-        ]
-    else:  # hotsat1
-        preferred = [
-            p for p in tifs
-            if "ortho" in p.name.lower() or "stacked" in p.name.lower()
-        ]
-        # Reject UDM (uncertainty / mask) products even if they slipped in.
-        preferred = [p for p in preferred if "udm" not in p.name.lower()]
+    #   HotSat-1  → the raster the cube was built from (never the UDM mask).
+    if sensor_type == "hotsat1":
+        return _read_georef_from_geotiff(_hotsat_cube_tiff(scene_dir, tifs), target_shape)
+    preferred = [
+        p for p in tifs
+        if "B10" in p.name.upper() or "ST" in p.name.upper()
+    ]
     return _read_georef_from_geotiff((preferred or tifs)[0], target_shape)
+
+
+def _hotsat_cube_tiff(scene_dir: Path, tifs: list[Path]) -> Path:
+    """The GeoTIFF the HotSat builder read the cube from, so the export grid is the cube's grid.
+
+    The ortho and the stacked rasters sit on different grids, so glob order must not choose.
+    HotSatHelper's ``visual`` asset is the builder's own choice; without a readable
+    metadata.json, the ortho then the stacked raster, by sorted name. Never the UDM.
+    """
+    from app.models.file_processing.sources import FileSourceConfig
+    from app.utils.files.hotsat_helper import HotSatHelper
+
+    for meta in sorted(scene_dir.rglob("metadata.json")):
+        try:
+            return Path(HotSatHelper(FileSourceConfig(source_path=str(meta.parent))).primary_visual_path)
+        except (OSError, ValueError) as exc:
+            logger.warning("HotSat metadata %s unusable for georef (%s); picking by file name", meta, exc)
+    named = sorted((p for p in tifs if "udm" not in p.name.lower()), key=lambda p: p.name)
+    for suffix in ("_ortho.tiff", "_stacked.tiff"):
+        for p in named:
+            if p.name.lower().endswith(suffix):
+                return p
+    raise GeorefUnavailable(f"no HotSat *_ortho.tiff / *_stacked.tiff under {scene_dir}")
 
 
 # ---------------------------------------------------------------------------

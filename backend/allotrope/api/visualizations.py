@@ -66,6 +66,8 @@ logger = logging.getLogger("allotrope.api.visualizations")
 router = APIRouter(prefix="/scenes", tags=["scenes"])
 
 # kinds the worker writes; we look for `<kind>.png` in the dir.
+# Single-band thermal scenes: no spectrum, no band list, no per-band image (422 unsupported_sensor).
+_THERMAL_SENSORS = ("landsat9", "hotsat1")
 _PNG_KINDS = ("color", "nir", "swir", "ndvi", "band_mosaic")
 _KIND_LABELS: dict[str, str] = {
     "color": "Color (true-colour / thermal)",
@@ -283,13 +285,13 @@ def get_scene_spectrum(
 ) -> SpectrumResponse:
     """Return the full spectrum at one pixel.
 
-    Hyperspectral only — landsat9 scenes are single-band thermal and
+    Hyperspectral only — landsat9 / hotsat1 scenes are single-band thermal and
     return 422 `unsupported_sensor`. Out-of-range pixels return 422
     `out_of_range`. Cold-cache calls take ~3–5 s for PRISMA while the
     pickle is read; warm-cache calls are <100 ms.
     """
     scene = _scene_or_404(scene_id, db)
-    if scene.sensor_type == "landsat9":
+    if scene.sensor_type in _THERMAL_SENSORS:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="unsupported_sensor",
@@ -392,7 +394,7 @@ def list_bands(
     (cached). No PNG rendering here — that's the per-band endpoint.
     """
     scene = _scene_or_404(scene_id, db)
-    if scene.sensor_type == "landsat9":
+    if scene.sensor_type in _THERMAL_SENSORS:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="unsupported_sensor",
@@ -448,7 +450,7 @@ def get_band_image(
     Hyperspectral only. Out-of-range index → 422.
     """
     scene = _scene_or_404(scene_id, db)
-    if scene.sensor_type == "landsat9":
+    if scene.sensor_type in _THERMAL_SENSORS:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="unsupported_sensor",

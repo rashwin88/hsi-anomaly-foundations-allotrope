@@ -1,0 +1,1524 @@
+{
+ "DC1": {
+  "bands": 224,
+  "wl_range": [
+   400,
+   2500
+  ],
+  "endmembers": [
+   {
+    "set": "gt",
+    "endmember": "mineral_1",
+    "nearest_gt": "mineral_1",
+    "label": "natural",
+    "call": "natural",
+    "p_manmade": 0.003,
+    "class": "concrete_asphalt",
+    "p_class": 0.79
+   },
+   {
+    "set": "gt",
+    "endmember": "mineral_2",
+    "nearest_gt": "mineral_2",
+    "label": "natural",
+    "call": "natural",
+    "p_manmade": 0.262,
+    "class": "metal",
+    "p_class": 0.693
+   },
+   {
+    "set": "gt",
+    "endmember": "mineral_3",
+    "nearest_gt": "mineral_3",
+    "label": "natural",
+    "call": "man-made",
+    "p_manmade": 0.643,
+    "class": "concrete_asphalt",
+    "p_class": 0.488
+   },
+   {
+    "set": "gt",
+    "endmember": "mineral_4",
+    "nearest_gt": "mineral_4",
+    "label": "natural",
+    "call": "man-made",
+    "p_manmade": 0.919,
+    "class": "plastic",
+    "p_class": 0.96
+   },
+   {
+    "set": "gt",
+    "endmember": "mineral_5",
+    "nearest_gt": "mineral_5",
+    "label": "natural",
+    "call": "man-made",
+    "p_manmade": 0.648,
+    "class": "plastic",
+    "p_class": 0.702
+   },
+   {
+    "set": "vca",
+    "endmember": "vca_1",
+    "nearest_gt": "mineral_4",
+    "label": "natural",
+    "call": "man-made",
+    "p_manmade": 0.919,
+    "class": "plastic",
+    "p_class": 0.96
+   },
+   {
+    "set": "vca",
+    "endmember": "vca_2",
+    "nearest_gt": "mineral_1",
+    "label": "natural",
+    "call": "natural",
+    "p_manmade": 0.003,
+    "class": "concrete_asphalt",
+    "p_class": 0.79
+   },
+   {
+    "set": "vca",
+    "endmember": "vca_3",
+    "nearest_gt": "mineral_5",
+    "label": "natural",
+    "call": "man-made",
+    "p_manmade": 0.648,
+    "class": "plastic",
+    "p_class": 0.702
+   },
+   {
+    "set": "vca",
+    "endmember": "vca_4",
+    "nearest_gt": "mineral_3",
+    "label": "natural",
+    "call": "man-made",
+    "p_manmade": 0.643,
+    "class": "concrete_asphalt",
+    "p_class": 0.488
+   },
+   {
+    "set": "vca",
+    "endmember": "vca_5",
+    "nearest_gt": "mineral_2",
+    "label": "natural",
+    "call": "natural",
+    "p_manmade": 0.262,
+    "class": "metal",
+    "p_class": 0.693
+   }
+  ],
+  "pixels": {
+   "n": 3448,
+   "n_pure": 63,
+   "n_mixed": 3385,
+   "n_by_label": {
+    "natural": 3448
+   },
+   "methods": {
+    "sam": {
+     "pure": {
+      "natural_called_manmade": 0.619
+     },
+     "mixed": {
+      "natural_called_manmade": 0.024
+     }
+    },
+    "ls_none": {
+     "pure": {
+      "natural_called_manmade": 0.0
+     },
+     "mixed": {
+      "natural_called_manmade": 0.0
+     }
+    },
+    "ls_mean": {
+     "pure": {
+      "natural_called_manmade": 0.0
+     },
+     "mixed": {
+      "natural_called_manmade": 0.0
+     }
+    },
+    "ls_ring": {
+     "pure": {
+      "natural_called_manmade": 0.0
+     },
+     "mixed": {
+      "natural_called_manmade": 0.079
+     }
+    },
+    "ace": {
+     "pure": {
+      "natural_called_manmade": 0.238
+     },
+     "mixed": {
+      "natural_called_manmade": 0.0
+     }
+    },
+    "bank_refl": {
+     "pure": {
+      "natural_called_manmade": 0.381
+     },
+     "mixed": {
+      "natural_called_manmade": 0.0
+     }
+    },
+    "lat_none": {
+     "pure": {
+      "natural_called_manmade": 0.0
+     },
+     "mixed": {
+      "natural_called_manmade": 0.004
+     }
+    },
+    "namer_ring": {
+     "pure": {
+      "natural_called_manmade": 0.381
+     },
+     "mixed": {
+      "natural_called_manmade": 0.007
+     }
+    },
+    "namer_self": {
+     "pure": {
+      "natural_called_manmade": 0.619
+     },
+     "mixed": {
+      "natural_called_manmade": 0.015
+     }
+    }
+   }
+  }
+ },
+ "DC2": {
+  "bands": 224,
+  "wl_range": [
+   400,
+   2500
+  ],
+  "endmembers": [
+   {
+    "set": "gt",
+    "endmember": "mineral_1",
+    "nearest_gt": "mineral_1",
+    "label": "natural",
+    "call": "natural",
+    "p_manmade": 0.003,
+    "class": "concrete_asphalt",
+    "p_class": 0.79
+   },
+   {
+    "set": "gt",
+    "endmember": "mineral_2",
+    "nearest_gt": "mineral_2",
+    "label": "natural",
+    "call": "natural",
+    "p_manmade": 0.262,
+    "class": "metal",
+    "p_class": 0.693
+   },
+   {
+    "set": "gt",
+    "endmember": "mineral_3",
+    "nearest_gt": "mineral_3",
+    "label": "natural",
+    "call": "man-made",
+    "p_manmade": 0.643,
+    "class": "concrete_asphalt",
+    "p_class": 0.488
+   },
+   {
+    "set": "gt",
+    "endmember": "mineral_4",
+    "nearest_gt": "mineral_4",
+    "label": "natural",
+    "call": "man-made",
+    "p_manmade": 0.919,
+    "class": "plastic",
+    "p_class": 0.96
+   },
+   {
+    "set": "gt",
+    "endmember": "mineral_5",
+    "nearest_gt": "mineral_5",
+    "label": "natural",
+    "call": "man-made",
+    "p_manmade": 0.648,
+    "class": "plastic",
+    "p_class": 0.702
+   },
+   {
+    "set": "gt",
+    "endmember": "mineral_6",
+    "nearest_gt": "mineral_6",
+    "label": "natural",
+    "call": "natural",
+    "p_manmade": 0.029,
+    "class": "metal",
+    "p_class": 0.873
+   },
+   {
+    "set": "gt",
+    "endmember": "mineral_7",
+    "nearest_gt": "mineral_7",
+    "label": "natural",
+    "call": "natural",
+    "p_manmade": 0.051,
+    "class": "metal",
+    "p_class": 0.566
+   },
+   {
+    "set": "gt",
+    "endmember": "mineral_8",
+    "nearest_gt": "mineral_8",
+    "label": "natural",
+    "call": "man-made",
+    "p_manmade": 0.928,
+    "class": "metal",
+    "p_class": 0.696
+   },
+   {
+    "set": "gt",
+    "endmember": "mineral_9",
+    "nearest_gt": "mineral_9",
+    "label": "natural",
+    "call": "natural",
+    "p_manmade": 0.101,
+    "class": "concrete_asphalt",
+    "p_class": 0.598
+   },
+   {
+    "set": "vca",
+    "endmember": "vca_1",
+    "nearest_gt": "mineral_3",
+    "label": "natural",
+    "call": "man-made",
+    "p_manmade": 0.643,
+    "class": "concrete_asphalt",
+    "p_class": 0.488
+   },
+   {
+    "set": "vca",
+    "endmember": "vca_2",
+    "nearest_gt": "mineral_9",
+    "label": "natural",
+    "call": "natural",
+    "p_manmade": 0.101,
+    "class": "concrete_asphalt",
+    "p_class": 0.598
+   },
+   {
+    "set": "vca",
+    "endmember": "vca_3",
+    "nearest_gt": "mineral_6",
+    "label": "natural",
+    "call": "natural",
+    "p_manmade": 0.029,
+    "class": "metal",
+    "p_class": 0.873
+   },
+   {
+    "set": "vca",
+    "endmember": "vca_4",
+    "nearest_gt": "mineral_4",
+    "label": "natural",
+    "call": "man-made",
+    "p_manmade": 0.919,
+    "class": "plastic",
+    "p_class": 0.96
+   },
+   {
+    "set": "vca",
+    "endmember": "vca_5",
+    "nearest_gt": "mineral_5",
+    "label": "natural",
+    "call": "man-made",
+    "p_manmade": 0.648,
+    "class": "plastic",
+    "p_class": 0.702
+   },
+   {
+    "set": "vca",
+    "endmember": "vca_6",
+    "nearest_gt": "mineral_1",
+    "label": "natural",
+    "call": "natural",
+    "p_manmade": 0.003,
+    "class": "concrete_asphalt",
+    "p_class": 0.79
+   },
+   {
+    "set": "vca",
+    "endmember": "vca_7",
+    "nearest_gt": "mineral_7",
+    "label": "natural",
+    "call": "natural",
+    "p_manmade": 0.051,
+    "class": "metal",
+    "p_class": 0.566
+   },
+   {
+    "set": "vca",
+    "endmember": "vca_8",
+    "nearest_gt": "mineral_2",
+    "label": "natural",
+    "call": "natural",
+    "p_manmade": 0.262,
+    "class": "metal",
+    "p_class": 0.693
+   },
+   {
+    "set": "vca",
+    "endmember": "vca_9",
+    "nearest_gt": "mineral_8",
+    "label": "natural",
+    "call": "man-made",
+    "p_manmade": 0.928,
+    "class": "metal",
+    "p_class": 0.696
+   }
+  ],
+  "pixels": {
+   "n": 6000,
+   "n_pure": 1703,
+   "n_mixed": 4297,
+   "n_by_label": {
+    "natural": 6000
+   },
+   "methods": {
+    "sam": {
+     "pure": {
+      "natural_called_manmade": 0.456
+     },
+     "mixed": {
+      "natural_called_manmade": 0.462
+     }
+    },
+    "ls_none": {
+     "pure": {
+      "natural_called_manmade": 0.042
+     },
+     "mixed": {
+      "natural_called_manmade": 0.099
+     }
+    },
+    "ls_mean": {
+     "pure": {
+      "natural_called_manmade": 0.294
+     },
+     "mixed": {
+      "natural_called_manmade": 0.232
+     }
+    },
+    "ls_ring": {
+     "pure": {
+      "natural_called_manmade": 0.081
+     },
+     "mixed": {
+      "natural_called_manmade": 0.112
+     }
+    },
+    "ace": {
+     "pure": {
+      "natural_called_manmade": 0.094
+     },
+     "mixed": {
+      "natural_called_manmade": 0.185
+     }
+    },
+    "bank_refl": {
+     "pure": {
+      "natural_called_manmade": 0.358
+     },
+     "mixed": {
+      "natural_called_manmade": 0.296
+     }
+    },
+    "lat_none": {
+     "pure": {
+      "natural_called_manmade": 0.1
+     },
+     "mixed": {
+      "natural_called_manmade": 0.114
+     }
+    },
+    "namer_ring": {
+     "pure": {
+      "natural_called_manmade": 0.04
+     },
+     "mixed": {
+      "natural_called_manmade": 0.214
+     }
+    },
+    "namer_self": {
+     "pure": {
+      "natural_called_manmade": 0.113
+     },
+     "mixed": {
+      "natural_called_manmade": 0.254
+     }
+    }
+   }
+  }
+ },
+ "DC3": {
+  "bands": 224,
+  "wl_range": [
+   400,
+   2500
+  ],
+  "endmembers": [
+   {
+    "set": "gt",
+    "endmember": "mineral_1",
+    "nearest_gt": "mineral_1",
+    "label": "natural",
+    "call": "natural",
+    "p_manmade": 0.005,
+    "class": "metal",
+    "p_class": 0.424
+   },
+   {
+    "set": "gt",
+    "endmember": "mineral_2",
+    "nearest_gt": "mineral_2",
+    "label": "natural",
+    "call": "man-made",
+    "p_manmade": 0.928,
+    "class": "metal",
+    "p_class": 0.696
+   },
+   {
+    "set": "gt",
+    "endmember": "mineral_3",
+    "nearest_gt": "mineral_3",
+    "label": "natural",
+    "call": "man-made",
+    "p_manmade": 0.651,
+    "class": "concrete_asphalt",
+    "p_class": 0.686
+   },
+   {
+    "set": "gt",
+    "endmember": "mineral_4",
+    "nearest_gt": "mineral_4",
+    "label": "natural",
+    "call": "natural",
+    "p_manmade": 0.014,
+    "class": "concrete_asphalt",
+    "p_class": 0.611
+   },
+   {
+    "set": "gt",
+    "endmember": "mineral_5",
+    "nearest_gt": "mineral_5",
+    "label": "natural",
+    "call": "natural",
+    "p_manmade": 0.002,
+    "class": "metal",
+    "p_class": 0.467
+   },
+   {
+    "set": "gt",
+    "endmember": "mineral_6",
+    "nearest_gt": "mineral_6",
+    "label": "natural",
+    "call": "natural",
+    "p_manmade": 0.156,
+    "class": "plastic",
+    "p_class": 0.56
+   },
+   {
+    "set": "vca",
+    "endmember": "vca_1",
+    "nearest_gt": "mineral_6",
+    "label": "natural",
+    "call": "natural",
+    "p_manmade": 0.306,
+    "class": "concrete_asphalt",
+    "p_class": 0.436
+   },
+   {
+    "set": "vca",
+    "endmember": "vca_2",
+    "nearest_gt": "mineral_1",
+    "label": "natural",
+    "call": "natural",
+    "p_manmade": 0.004,
+    "class": "metal",
+    "p_class": 0.72
+   },
+   {
+    "set": "vca",
+    "endmember": "vca_3",
+    "nearest_gt": "mineral_4",
+    "label": "natural",
+    "call": "natural",
+    "p_manmade": 0.009,
+    "class": "concrete_asphalt",
+    "p_class": 0.733
+   },
+   {
+    "set": "vca",
+    "endmember": "vca_4",
+    "nearest_gt": "mineral_2",
+    "label": "natural",
+    "call": "man-made",
+    "p_manmade": 0.829,
+    "class": "metal",
+    "p_class": 0.535
+   },
+   {
+    "set": "vca",
+    "endmember": "vca_5",
+    "nearest_gt": "mineral_5",
+    "label": "natural",
+    "call": "natural",
+    "p_manmade": 0.003,
+    "class": "concrete_asphalt",
+    "p_class": 0.728
+   },
+   {
+    "set": "vca",
+    "endmember": "vca_6",
+    "nearest_gt": "mineral_2",
+    "label": "natural",
+    "call": "man-made",
+    "p_manmade": 0.536,
+    "class": "concrete_asphalt",
+    "p_class": 0.453
+   }
+  ],
+  "pixels": {
+   "n": 695,
+   "n_pure": 0,
+   "n_mixed": 695,
+   "n_by_label": {
+    "natural": 695
+   },
+   "methods": {
+    "sam": {
+     "pure": {},
+     "mixed": {
+      "natural_called_manmade": 0.452
+     }
+    },
+    "ls_none": {
+     "pure": {},
+     "mixed": {
+      "natural_called_manmade": 0.239
+     }
+    },
+    "ls_mean": {
+     "pure": {},
+     "mixed": {
+      "natural_called_manmade": 0.099
+     }
+    },
+    "ls_ring": {
+     "pure": {},
+     "mixed": {
+      "natural_called_manmade": 0.053
+     }
+    },
+    "ace": {
+     "pure": {},
+     "mixed": {
+      "natural_called_manmade": 0.0
+     }
+    },
+    "bank_refl": {
+     "pure": {},
+     "mixed": {
+      "natural_called_manmade": 0.256
+     }
+    },
+    "lat_none": {
+     "pure": {},
+     "mixed": {
+      "natural_called_manmade": 0.227
+     }
+    },
+    "namer_ring": {
+     "pure": {},
+     "mixed": {
+      "natural_called_manmade": 0.115
+     }
+    },
+    "namer_self": {
+     "pure": {},
+     "mixed": {
+      "natural_called_manmade": 0.153
+     }
+    }
+   }
+  }
+ },
+ "EGU": {
+  "bands": 224,
+  "wl_range": [
+   400,
+   2500
+  ],
+  "endmembers": [
+   {
+    "set": "gt",
+    "endmember": "em_1",
+    "nearest_gt": "em_1",
+    "label": "natural",
+    "call": "natural",
+    "p_manmade": 0.226,
+    "class": "oil_fuel",
+    "p_class": 0.447
+   },
+   {
+    "set": "gt",
+    "endmember": "em_2",
+    "nearest_gt": "em_2",
+    "label": "natural",
+    "call": "natural",
+    "p_manmade": 0.284,
+    "class": "oil_fuel",
+    "p_class": 0.744
+   },
+   {
+    "set": "gt",
+    "endmember": "em_3",
+    "nearest_gt": "em_3",
+    "label": "natural",
+    "call": "natural",
+    "p_manmade": 0.018,
+    "class": "concrete_asphalt",
+    "p_class": 0.6
+   },
+   {
+    "set": "gt",
+    "endmember": "em_4",
+    "nearest_gt": "em_4",
+    "label": "natural",
+    "call": "natural",
+    "p_manmade": 0.21,
+    "class": "metal",
+    "p_class": 0.809
+   },
+   {
+    "set": "gt",
+    "endmember": "em_5",
+    "nearest_gt": "em_5",
+    "label": "natural",
+    "call": "natural",
+    "p_manmade": 0.07,
+    "class": "concrete_asphalt",
+    "p_class": 0.568
+   },
+   {
+    "set": "vca",
+    "endmember": "vca_1",
+    "nearest_gt": "em_3",
+    "label": "natural",
+    "call": "natural",
+    "p_manmade": 0.022,
+    "class": "concrete_asphalt",
+    "p_class": 0.613
+   },
+   {
+    "set": "vca",
+    "endmember": "vca_2",
+    "nearest_gt": "em_5",
+    "label": "natural",
+    "call": "natural",
+    "p_manmade": 0.245,
+    "class": "concrete_asphalt",
+    "p_class": 0.508
+   },
+   {
+    "set": "vca",
+    "endmember": "vca_3",
+    "nearest_gt": "em_1",
+    "label": "natural",
+    "call": "natural",
+    "p_manmade": 0.224,
+    "class": "oil_fuel",
+    "p_class": 0.536
+   },
+   {
+    "set": "vca",
+    "endmember": "vca_4",
+    "nearest_gt": "em_2",
+    "label": "natural",
+    "call": "natural",
+    "p_manmade": 0.289,
+    "class": "oil_fuel",
+    "p_class": 0.577
+   },
+   {
+    "set": "vca",
+    "endmember": "vca_5",
+    "nearest_gt": "em_4",
+    "label": "natural",
+    "call": "natural",
+    "p_manmade": 0.223,
+    "class": "metal",
+    "p_class": 0.805
+   }
+  ],
+  "pixels": {
+   "n": 6000,
+   "n_pure": 185,
+   "n_mixed": 5815,
+   "n_by_label": {
+    "natural": 6000
+   },
+   "methods": {
+    "sam": {
+     "pure": {
+      "natural_called_manmade": 0.735
+     },
+     "mixed": {
+      "natural_called_manmade": 0.464
+     }
+    },
+    "ls_none": {
+     "pure": {
+      "natural_called_manmade": 0.741
+     },
+     "mixed": {
+      "natural_called_manmade": 0.295
+     }
+    },
+    "ls_mean": {
+     "pure": {
+      "natural_called_manmade": 0.454
+     },
+     "mixed": {
+      "natural_called_manmade": 0.616
+     }
+    },
+    "ls_ring": {
+     "pure": {
+      "natural_called_manmade": 0.481
+     },
+     "mixed": {
+      "natural_called_manmade": 0.491
+     }
+    },
+    "ace": {
+     "pure": {
+      "natural_called_manmade": 0.341
+     },
+     "mixed": {
+      "natural_called_manmade": 0.373
+     }
+    },
+    "bank_refl": {
+     "pure": {
+      "natural_called_manmade": 0.449
+     },
+     "mixed": {
+      "natural_called_manmade": 0.445
+     }
+    },
+    "lat_none": {
+     "pure": {
+      "natural_called_manmade": 0.135
+     },
+     "mixed": {
+      "natural_called_manmade": 0.15
+     }
+    },
+    "namer_ring": {
+     "pure": {
+      "natural_called_manmade": 0.065
+     },
+     "mixed": {
+      "natural_called_manmade": 0.11
+     }
+    },
+    "namer_self": {
+     "pure": {
+      "natural_called_manmade": 0.0
+     },
+     "mixed": {
+      "natural_called_manmade": 0.131
+     }
+    }
+   }
+  }
+ },
+ "Samson": {
+  "bands": 156,
+  "wl_range": [
+   401,
+   889
+  ],
+  "endmembers": [
+   {
+    "set": "gt",
+    "endmember": "soil",
+    "nearest_gt": "soil",
+    "label": "natural",
+    "call": "man-made",
+    "p_manmade": 0.569,
+    "class": "plastic",
+    "p_class": 0.552
+   },
+   {
+    "set": "gt",
+    "endmember": "tree",
+    "nearest_gt": "tree",
+    "label": "natural",
+    "call": "natural",
+    "p_manmade": 0.494,
+    "class": "textile_fabric",
+    "p_class": 0.46
+   },
+   {
+    "set": "gt",
+    "endmember": "water",
+    "nearest_gt": "water",
+    "label": "natural",
+    "call": "man-made",
+    "p_manmade": 0.642,
+    "class": "plastic",
+    "p_class": 0.443
+   },
+   {
+    "set": "vca",
+    "endmember": "vca_1",
+    "nearest_gt": "water",
+    "label": "natural",
+    "call": "man-made",
+    "p_manmade": 0.597,
+    "class": "oil_fuel",
+    "p_class": 0.646
+   },
+   {
+    "set": "vca",
+    "endmember": "vca_2",
+    "nearest_gt": "tree",
+    "label": "natural",
+    "call": "man-made",
+    "p_manmade": 0.549,
+    "class": "textile_fabric",
+    "p_class": 0.398
+   },
+   {
+    "set": "vca",
+    "endmember": "vca_3",
+    "nearest_gt": "soil",
+    "label": "natural",
+    "call": "man-made",
+    "p_manmade": 0.555,
+    "class": "plastic",
+    "p_class": 0.477
+   }
+  ],
+  "pixels": {
+   "n": 5986,
+   "n_pure": 2266,
+   "n_mixed": 3720,
+   "n_by_label": {
+    "natural": 5986
+   },
+   "methods": {
+    "sam": {
+     "pure": {
+      "natural_called_manmade": 0.338
+     },
+     "mixed": {
+      "natural_called_manmade": 0.2
+     }
+    },
+    "ls_none": {
+     "pure": {
+      "natural_called_manmade": 0.387
+     },
+     "mixed": {
+      "natural_called_manmade": 0.115
+     }
+    },
+    "ls_mean": {
+     "pure": {
+      "natural_called_manmade": 0.397
+     },
+     "mixed": {
+      "natural_called_manmade": 0.243
+     }
+    },
+    "ls_ring": {
+     "pure": {
+      "natural_called_manmade": 0.22
+     },
+     "mixed": {
+      "natural_called_manmade": 0.234
+     }
+    },
+    "ace": {
+     "pure": {
+      "natural_called_manmade": 0.377
+     },
+     "mixed": {
+      "natural_called_manmade": 0.429
+     }
+    },
+    "bank_refl": {
+     "pure": {
+      "natural_called_manmade": 0.374
+     },
+     "mixed": {
+      "natural_called_manmade": 0.372
+     }
+    },
+    "lat_none": {
+     "pure": {
+      "natural_called_manmade": 0.388
+     },
+     "mixed": {
+      "natural_called_manmade": 0.23
+     }
+    },
+    "namer_ring": {
+     "pure": {
+      "natural_called_manmade": 0.795
+     },
+     "mixed": {
+      "natural_called_manmade": 0.56
+     }
+    },
+    "namer_self": {
+     "pure": {
+      "natural_called_manmade": 0.936
+     },
+     "mixed": {
+      "natural_called_manmade": 0.846
+     }
+    }
+   }
+  }
+ },
+ "Jasper": {
+  "bands": 198,
+  "wl_range": [
+   409,
+   2452
+  ],
+  "endmembers": [
+   {
+    "set": "gt",
+    "endmember": "tree",
+    "nearest_gt": "tree",
+    "label": "natural",
+    "call": "natural",
+    "p_manmade": 0.345,
+    "class": "concrete_asphalt",
+    "p_class": 0.379
+   },
+   {
+    "set": "gt",
+    "endmember": "water",
+    "nearest_gt": "water",
+    "label": "natural",
+    "call": "natural",
+    "p_manmade": 0.458,
+    "class": "concrete_asphalt",
+    "p_class": 0.494
+   },
+   {
+    "set": "gt",
+    "endmember": "soil",
+    "nearest_gt": "soil",
+    "label": "natural",
+    "call": "natural",
+    "p_manmade": 0.215,
+    "class": "oil_fuel",
+    "p_class": 0.335
+   },
+   {
+    "set": "gt",
+    "endmember": "road",
+    "nearest_gt": "road",
+    "label": "concrete_asphalt",
+    "call": "natural",
+    "p_manmade": 0.236,
+    "class": "concrete_asphalt",
+    "p_class": 0.549
+   },
+   {
+    "set": "vca",
+    "endmember": "vca_1",
+    "nearest_gt": "water",
+    "label": "natural",
+    "call": "natural",
+    "p_manmade": 0.401,
+    "class": "concrete_asphalt",
+    "p_class": 0.523
+   },
+   {
+    "set": "vca",
+    "endmember": "vca_2",
+    "nearest_gt": "tree",
+    "label": "natural",
+    "call": "natural",
+    "p_manmade": 0.267,
+    "class": "oil_fuel",
+    "p_class": 0.518
+   },
+   {
+    "set": "vca",
+    "endmember": "vca_3",
+    "nearest_gt": "water",
+    "label": "natural",
+    "call": "man-made",
+    "p_manmade": 0.595,
+    "class": "concrete_asphalt",
+    "p_class": 0.715
+   },
+   {
+    "set": "vca",
+    "endmember": "vca_4",
+    "nearest_gt": "road",
+    "label": "concrete_asphalt",
+    "call": "natural",
+    "p_manmade": 0.476,
+    "class": "concrete_asphalt",
+    "p_class": 0.435
+   }
+  ],
+  "pixels": {
+   "n": 5965,
+   "n_pure": 2523,
+   "n_mixed": 3442,
+   "n_by_label": {
+    "concrete_asphalt": 400,
+    "natural": 5565
+   },
+   "methods": {
+    "sam": {
+     "pure": {
+      "l1_auc": 0.973,
+      "l1_recall_5fa": 0.895,
+      "natural_called_manmade": 0.027,
+      "l2_acc": 1.0,
+      "l2_acc_cov50": 1.0,
+      "n_l2": 114
+     },
+     "mixed": {
+      "l1_auc": 0.863,
+      "l1_recall_5fa": 0.374,
+      "natural_called_manmade": 0.026,
+      "l2_acc": 0.406,
+      "l2_acc_cov50": 0.364,
+      "n_l2": 286
+     }
+    },
+    "ls_none": {
+     "pure": {
+      "l1_auc": 0.637,
+      "l1_recall_5fa": 0.36,
+      "natural_called_manmade": 0.04,
+      "l2_acc": 0.974,
+      "l2_acc_cov50": 1.0,
+      "n_l2": 114
+     },
+     "mixed": {
+      "l1_auc": 0.537,
+      "l1_recall_5fa": 0.175,
+      "natural_called_manmade": 0.037,
+      "l2_acc": 0.437,
+      "l2_acc_cov50": 0.399,
+      "n_l2": 286
+     }
+    },
+    "ls_mean": {
+     "pure": {
+      "l1_auc": 0.995,
+      "l1_recall_5fa": 1.0,
+      "natural_called_manmade": 0.003,
+      "l2_acc": 0.605,
+      "l2_acc_cov50": 0.754,
+      "n_l2": 114
+     },
+     "mixed": {
+      "l1_auc": 0.738,
+      "l1_recall_5fa": 0.196,
+      "natural_called_manmade": 0.166,
+      "l2_acc": 0.734,
+      "l2_acc_cov50": 0.846,
+      "n_l2": 286
+     }
+    },
+    "ls_ring": {
+     "pure": {
+      "l1_auc": 0.714,
+      "l1_recall_5fa": 0.474,
+      "natural_called_manmade": 0.176,
+      "l2_acc": 0.632,
+      "l2_acc_cov50": 0.789,
+      "n_l2": 114
+     },
+     "mixed": {
+      "l1_auc": 0.564,
+      "l1_recall_5fa": 0.119,
+      "natural_called_manmade": 0.226,
+      "l2_acc": 0.552,
+      "l2_acc_cov50": 0.503,
+      "n_l2": 286
+     }
+    },
+    "ace": {
+     "pure": {
+      "l1_auc": 0.341,
+      "l1_recall_5fa": 0.026,
+      "natural_called_manmade": 0.383,
+      "l2_acc": 0.105,
+      "l2_acc_cov50": 0.07,
+      "n_l2": 114
+     },
+     "mixed": {
+      "l1_auc": 0.435,
+      "l1_recall_5fa": 0.035,
+      "natural_called_manmade": 0.372,
+      "l2_acc": 0.084,
+      "l2_acc_cov50": 0.063,
+      "n_l2": 286
+     }
+    },
+    "bank_refl": {
+     "pure": {
+      "l1_auc": 0.442,
+      "l1_recall_5fa": 0.289,
+      "natural_called_manmade": 0.499,
+      "l2_acc": 0.693,
+      "l2_acc_cov50": 0.877,
+      "n_l2": 114
+     },
+     "mixed": {
+      "l1_auc": 0.488,
+      "l1_recall_5fa": 0.175,
+      "natural_called_manmade": 0.408,
+      "l2_acc": 0.406,
+      "l2_acc_cov50": 0.455,
+      "n_l2": 286
+     }
+    },
+    "lat_none": {
+     "pure": {
+      "l1_auc": 0.761,
+      "l1_recall_5fa": 0.535,
+      "natural_called_manmade": 0.006,
+      "l2_acc": 0.535,
+      "l2_acc_cov50": 0.491,
+      "n_l2": 114
+     },
+     "mixed": {
+      "l1_auc": 0.688,
+      "l1_recall_5fa": 0.115,
+      "natural_called_manmade": 0.022,
+      "l2_acc": 0.15,
+      "l2_acc_cov50": 0.042,
+      "n_l2": 286
+     }
+    },
+    "namer_ring": {
+     "pure": {
+      "l1_auc": 0.783,
+      "l1_recall_5fa": 0.175,
+      "natural_called_manmade": 0.159,
+      "l2_acc": 0.921,
+      "l2_acc_cov50": 0.86,
+      "n_l2": 114
+     },
+     "mixed": {
+      "l1_auc": 0.468,
+      "l1_recall_5fa": 0.045,
+      "natural_called_manmade": 0.416,
+      "l2_acc": 0.839,
+      "l2_acc_cov50": 0.958,
+      "n_l2": 286
+     }
+    },
+    "namer_self": {
+     "pure": {
+      "l1_auc": 0.025,
+      "l1_recall_5fa": 0.0,
+      "natural_called_manmade": 0.184,
+      "l2_acc": 0.982,
+      "l2_acc_cov50": 1.0,
+      "n_l2": 114
+     },
+     "mixed": {
+      "l1_auc": 0.112,
+      "l1_recall_5fa": 0.021,
+      "natural_called_manmade": 0.297,
+      "l2_acc": 0.815,
+      "l2_acc_cov50": 0.874,
+      "n_l2": 286
+     }
+    }
+   }
+  }
+ },
+ "Urban4": {
+  "bands": 162,
+  "wl_range": [
+   440,
+   2369
+  ],
+  "endmembers": [
+   {
+    "set": "gt",
+    "endmember": "asphalt",
+    "nearest_gt": "asphalt",
+    "label": "concrete_asphalt",
+    "call": "natural",
+    "p_manmade": 0.181,
+    "class": "concrete_asphalt",
+    "p_class": 0.671
+   },
+   {
+    "set": "gt",
+    "endmember": "grass",
+    "nearest_gt": "grass",
+    "label": "natural",
+    "call": "man-made",
+    "p_manmade": 0.682,
+    "class": "plastic",
+    "p_class": 0.741
+   },
+   {
+    "set": "gt",
+    "endmember": "tree",
+    "nearest_gt": "tree",
+    "label": "natural",
+    "call": "man-made",
+    "p_manmade": 0.776,
+    "class": "plastic",
+    "p_class": 0.709
+   },
+   {
+    "set": "gt",
+    "endmember": "roof",
+    "nearest_gt": "roof",
+    "label": "manmade_l1",
+    "call": "natural",
+    "p_manmade": 0.245,
+    "class": "concrete_asphalt",
+    "p_class": 0.591
+   },
+   {
+    "set": "vca",
+    "endmember": "vca_1",
+    "nearest_gt": "roof",
+    "label": "manmade_l1",
+    "call": "man-made",
+    "p_manmade": 0.533,
+    "class": "concrete_asphalt",
+    "p_class": 0.572
+   },
+   {
+    "set": "vca",
+    "endmember": "vca_2",
+    "nearest_gt": "tree",
+    "label": "natural",
+    "call": "man-made",
+    "p_manmade": 0.722,
+    "class": "textile_fabric",
+    "p_class": 0.373
+   },
+   {
+    "set": "vca",
+    "endmember": "vca_3",
+    "nearest_gt": "asphalt",
+    "label": "concrete_asphalt",
+    "call": "natural",
+    "p_manmade": 0.483,
+    "class": "wood_paper",
+    "p_class": 0.553
+   },
+   {
+    "set": "vca",
+    "endmember": "vca_4",
+    "nearest_gt": "tree",
+    "label": "natural",
+    "call": "man-made",
+    "p_manmade": 0.698,
+    "class": "plastic",
+    "p_class": 0.329
+   }
+  ],
+  "pixels": {
+   "n": 5876,
+   "n_pure": 1376,
+   "n_mixed": 4500,
+   "n_by_label": {
+    "concrete_asphalt": 1939,
+    "manmade_l1": 452,
+    "natural": 3485
+   },
+   "methods": {
+    "sam": {
+     "pure": {
+      "l1_auc": 0.445,
+      "l1_recall_5fa": 0.002,
+      "natural_called_manmade": 0.575,
+      "l2_acc": 0.783,
+      "l2_acc_cov50": 0.979,
+      "n_l2": 374
+     },
+     "mixed": {
+      "l1_auc": 0.586,
+      "l1_recall_5fa": 0.001,
+      "natural_called_manmade": 0.392,
+      "l2_acc": 0.548,
+      "l2_acc_cov50": 0.49,
+      "n_l2": 1565
+     }
+    },
+    "ls_none": {
+     "pure": {
+      "l1_auc": 0.574,
+      "l1_recall_5fa": 0.221,
+      "natural_called_manmade": 0.565,
+      "l2_acc": 0.578,
+      "l2_acc_cov50": 0.684,
+      "n_l2": 374
+     },
+     "mixed": {
+      "l1_auc": 0.671,
+      "l1_recall_5fa": 0.146,
+      "natural_called_manmade": 0.166,
+      "l2_acc": 0.283,
+      "l2_acc_cov50": 0.224,
+      "n_l2": 1565
+     }
+    },
+    "ls_mean": {
+     "pure": {
+      "l1_auc": 0.585,
+      "l1_recall_5fa": 0.412,
+      "natural_called_manmade": 0.92,
+      "l2_acc": 0.861,
+      "l2_acc_cov50": 0.952,
+      "n_l2": 374
+     },
+     "mixed": {
+      "l1_auc": 0.462,
+      "l1_recall_5fa": 0.216,
+      "natural_called_manmade": 0.514,
+      "l2_acc": 0.506,
+      "l2_acc_cov50": 0.518,
+      "n_l2": 1565
+     }
+    },
+    "ls_ring": {
+     "pure": {
+      "l1_auc": 0.386,
+      "l1_recall_5fa": 0.132,
+      "natural_called_manmade": 0.65,
+      "l2_acc": 0.711,
+      "l2_acc_cov50": 0.845,
+      "n_l2": 374
+     },
+     "mixed": {
+      "l1_auc": 0.463,
+      "l1_recall_5fa": 0.142,
+      "natural_called_manmade": 0.413,
+      "l2_acc": 0.402,
+      "l2_acc_cov50": 0.375,
+      "n_l2": 1565
+     }
+    },
+    "ace": {
+     "pure": {
+      "l1_auc": 0.522,
+      "l1_recall_5fa": 0.071,
+      "natural_called_manmade": 0.278,
+      "l2_acc": 0.275,
+      "l2_acc_cov50": 0.257,
+      "n_l2": 374
+     },
+     "mixed": {
+      "l1_auc": 0.489,
+      "l1_recall_5fa": 0.08,
+      "natural_called_manmade": 0.356,
+      "l2_acc": 0.171,
+      "l2_acc_cov50": 0.151,
+      "n_l2": 1565
+     }
+    },
+    "bank_refl": {
+     "pure": {
+      "l1_auc": 0.452,
+      "l1_recall_5fa": 0.316,
+      "natural_called_manmade": 0.668,
+      "l2_acc": 0.794,
+      "l2_acc_cov50": 0.909,
+      "n_l2": 374
+     },
+     "mixed": {
+      "l1_auc": 0.487,
+      "l1_recall_5fa": 0.101,
+      "natural_called_manmade": 0.4,
+      "l2_acc": 0.364,
+      "l2_acc_cov50": 0.366,
+      "n_l2": 1565
+     }
+    },
+    "lat_none": {
+     "pure": {
+      "l1_auc": 0.687,
+      "l1_recall_5fa": 0.416,
+      "natural_called_manmade": 0.717,
+      "l2_acc": 0.824,
+      "l2_acc_cov50": 0.872,
+      "n_l2": 374
+     },
+     "mixed": {
+      "l1_auc": 0.553,
+      "l1_recall_5fa": 0.206,
+      "natural_called_manmade": 0.679,
+      "l2_acc": 0.47,
+      "l2_acc_cov50": 0.453,
+      "n_l2": 1565
+     }
+    },
+    "namer_ring": {
+     "pure": {
+      "l1_auc": 0.156,
+      "l1_recall_5fa": 0.037,
+      "natural_called_manmade": 0.665,
+      "l2_acc": 0.856,
+      "l2_acc_cov50": 0.84,
+      "n_l2": 374
+     },
+     "mixed": {
+      "l1_auc": 0.386,
+      "l1_recall_5fa": 0.022,
+      "natural_called_manmade": 0.592,
+      "l2_acc": 0.472,
+      "l2_acc_cov50": 0.38,
+      "n_l2": 1565
+     }
+    },
+    "namer_self": {
+     "pure": {
+      "l1_auc": 0.0,
+      "l1_recall_5fa": 0.0,
+      "natural_called_manmade": 1.0,
+      "l2_acc": 1.0,
+      "l2_acc_cov50": 1.0,
+      "n_l2": 374
+     },
+     "mixed": {
+      "l1_auc": 0.011,
+      "l1_recall_5fa": 0.0,
+      "natural_called_manmade": 0.945,
+      "l2_acc": 0.799,
+      "l2_acc_cov50": 0.714,
+      "n_l2": 1565
+     }
+    }
+   }
+  }
+ }
+}

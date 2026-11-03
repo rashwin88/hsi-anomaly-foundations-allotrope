@@ -131,13 +131,32 @@ a subset of the committed mask. A subset on an action without the namer files (p
 | member | content |
 |---|---|
 | `hyper_anomaly_mask_<sel>.tif` | uint8 0/1, the selected objects' pixels, scene CRS + affine, no nodata |
-| `hyper_anomaly_pixels_<sel>.{shp,shx,dbf,prj,cpg}` | one point per selected pixel: row, col, lat, lon, nm_obj, nm_call, nm_cls, nm_p, nm_mm, nm_conf, family, mat1, scr1 |
-| `hyper_anomaly_objects_<sel>.{shp,...}` and `.csv` | one point per selected object (centroid): obj_id, call, class, confident, p_manmade, p_class, n_px, lat, lon |
-| `hyper_namer_level1.tif`, `hyper_namer_class.tif` | int8 maps of every object recomputed at `manmade_p` (class code 99 = man-made, class unknown) |
-| `hyper_quicklook_<sel>.png` | RGB dimmed and desaturated, selected pixels as yellow `#FFE600` markers with a dark outline, squares man-made, circles natural, at least 5 px at a 1600 px long edge; a key with the two counts |
-| `MANIFEST.json` | schema `allotrope-export-hyper-classes/1`, `software_version`, grid, `chain` (scene, band filter bands kept, segmentation method and classes left out at segmentation and at scoring, scoring models / methods, prep threshold and committed pixels, match namer checkpoint and confident_p), `selection` (classes, confident_only, manmade_p, counts, per_class), namer |
+| `hyper_anomaly_pixels_<sel>.{shp,shx,dbf,prj,cpg}` | one point per selected pixel, fields below |
+| `MANIFEST.json` | schema `allotrope-export-hyper-classes/1`, `software_version`, grid, `chain` (scene, band filter bands kept, segmentation method and classes left out at segmentation and at scoring, scoring models / methods, prep threshold and committed pixels, match namer checkpoint and confident_p), `selection` (classes, confident_only, manmade_p, counts, per_class), namer, `material_rule`, `georeference` (only when the scene has none), `files` |
 
-No heatmap, no coded material raster. Lat / lon columns are EPSG:4326, geometry in the scene CRS.
+Nothing else (v1.0.1, user 2026-11-01: minimal files). The objects shapefile / CSV, the two namer maps and the
+quick-look PNG of v1.0 are gone; the Story GIF (`docs/lld/story-gif.md`) is separate and unchanged.
+
+| DBF field | meaning |
+|---|---|
+| `row`, `col`, `lat`, `lon` | pixel; lat / lon EPSG:4326 (blank on the pixel grid) |
+| `nm_obj`, `nm_call`, `nm_mm` | the pixel's object, its call at `manmade_p`, its mean P(man-made) |
+| `nm_cls`, `nm_p`, `nm_conf` | closest namer class and its P(class \| man-made), confident flag; `nm_cls` is `natural` for a natural object |
+| `family` | the pixel's family-match verdict (`family_matches.parquet`) |
+| `mat1`, `scr1` | the pixel's own USGS splib07 SAM top-1 and its angle (degrees) |
+| `material` | the family-library spectrum closest to the OBJECT's mean spectrum, within the object's class (the `natural` entries for a natural object); empty when the class has no entry (e.g. `unknown`), the action has no family library / pixel spectra, or its `family_legend.json` predates the per-entry `cls` (the screen then shows no reference either) |
+| `mat_lib` | that entry's library, `USGS` or `ECOSTRESS` (id prefix; the family library is 250 USGS + 161 ECOSTRESS) |
+| `mat_ang` | its spectral angle, degrees, 2 dp |
+
+`material` is computed exactly as the match screen's object card ("closest material" plot): `data.ts`
+`meanSpectrum` (per band, the mean over the object's pixels of valid finite values in `anomaly_pixel_spectra.npz`)
+and `nearestInClass` (the largest cosine, on the bands both have finite, over the rows of `family_library_refl.npz`
+whose `family_legend.json` `library[].cls` is the class; first on a tie), in `class_pack._object_materials`.
+
+No heatmap, no coded material raster. Lat / lon columns are EPSG:4326, geometry in the scene CRS. **No
+georeference** (v1.0.1): the pack still exports, on the pixel grid `app.georef.pixel_grid()` =
+`Affine(1, 0, 0, 0, -1, 0)` with no CRS - point x = col + 0.5, y = -(row + 0.5), no `.prj`, lat / lon blank - and
+the MANIFEST `georeference` says so; the response carries `X-Allotrope-Georef: none` and the screen shows a note.
 `subset=` keeps working; giving both is a 422, as is `confident_only` / `manmade_p` without `classes`.
 
 **Selection counts**: `GET /actions/{id}/spectral_library_match/selection_counts` with the same three params returns
@@ -146,7 +165,8 @@ No heatmap, no coded material raster. Lat / lon columns are EPSG:4326, geometry 
 **Object coordinates**: `GET /actions/{id}/spectral_library_match/object_coords` returns
 `{crs, coords: {obj_id: [lat, lon]}}` (EPSG:4326 centroids) through the export's georef path
 (`_scene_georef`), because the browser cannot project and the action's rasters carry an
-identity transform. 404 without `namer_objects.parquet`, 422 `crs_missing` without georef.
+identity transform. 404 without `namer_objects.parquet`, 422 `crs_missing` without georef (it stays strict;
+the viewer then shows row / col).
 
 **Viewer** (`spectralMatch/`; class-driven redesign 2026-11-01,
 [proposal](../proposals/class-driven-flow.md) Gap 2 UI and additions A, D; Tufte style). One
@@ -175,11 +195,16 @@ repeat their values in `data.ts`.
   "at this sensitivity". Runs from before the `prob_<class>` columns use the pack's lower bound
   from `namer_pixels.parquet` (per class, the sum of `p_cls` over the object's pixels whose own
   top class it is, over `n_px`; `app/spectral_match/class_selection.py` `_top_classes`), so
-  screen and pack agree; it leans tentative. No cut-off above 0.5 is offered, so a worker
-  man-made object never turns natural.
+  screen and pack agree; it leans tentative. Beside the three presets (pressed when the cut
+  equals theirs) a slider sets any cut from 0.05 to 0.95 in steps of 0.01, with a live
+  readout (v1.0.1, user 2026-11-01); the maps repaint from a deferred copy of the cut so the
+  thumb stays responsive. Above 0.5 the worker's weaker man-made objects turn natural - intended.
+  Off 0.5 the pack slug gains `_p<digits>` (0.62 -> `_p062`, 0.6 -> `_p06`).
 - **Show: All · Man-made · Natural** in the controls line is the primary filter (user,
   2026-11-01); the class rows only refine man-made. Picking a material implies Man-made; All
-  or Natural clears the picks (`selection.ts` `coarseSel`, `pickMaterial`).
+  or Natural clears the picks (`selection.ts` `coarseSel`, `pickMaterial`). It also drives the
+  anomaly points map (v1.0.1): All shows both kinds, Man-made only squares, Natural only
+  circles; the caption toggles refine that until the switch moves again.
 - **Class rows** (right column), the refinement and the legend at once: **man-made**, its
   material classes nested under it, then **natural**. Each row reads "oil / fuel, a thin bar,
   62": the bar's light line is all objects of the row, its heavier part the confident ones;
@@ -199,7 +224,7 @@ repeat their values in `data.ts`.
     #2e7d32, a clearer leaf green than `--accent-natural` at that size - user, 2026-11-01).
     Objects in the selection get an ochre halo, unless the selection is All. Past 6 screen px
     per image px the markers become glyphs, a red pin holding a building or a green leaf. The caption is the
-    legend and the switches: "■ man-made 292 · ● natural 3,226 · selected only"; *selected
+    legend and the switches (ink, dotted underline off, solid on): "■ man-made 292 · ● natural 3,226 · selected only"; *selected
     only* limits the points to the selection at the current sensitivity, i.e. what the export
     will hold. Shape and colour both carry the call (shape for colour-blind readers); the panel
     has no material colours.

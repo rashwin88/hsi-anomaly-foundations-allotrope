@@ -5,7 +5,7 @@ The class-driven export of a spectral_library_match action, and the counts its b
     GET  /actions/{id}/spectral_library_match/selection_counts?classes=...&confident_only=...&manmade_p=...
 
 The match screen lets the analyst tick classes (natural, man-made, or material classes such as oil_fuel), keep
-confident objects only, and lower the man-made cut; the export is then exactly that selection
+confident objects only, and move the man-made cut; the export is then exactly that selection
 (app/spectral_match/class_pack.py), and selection_counts gives "Export oil + plastic (64 objects)" without building
 the zip. Both use app/spectral_match/class_selection.py, so they cannot disagree.
 
@@ -58,7 +58,7 @@ def parse_tokens(classes: str) -> tuple[str, ...]:
 
 def class_pack_response(action: Action, scene: Scene, artifact_dir: Path, db: Session, *, transform, crs,
                         classes: str, confident_only: bool, manmade_p: float | None,
-                        software_version: str) -> StreamingResponse:
+                        software_version: str, georef_note: str | None = None) -> StreamingResponse:
     """The pack as a streamed zip. 422 for an unknown token or an action without namer results."""
     from app.spectral_match.class_pack import ClassPackSpec, build_class_pack
     from app.spectral_match.class_selection import SelectionError
@@ -69,7 +69,7 @@ def class_pack_response(action: Action, scene: Scene, artifact_dir: Path, db: Se
         action_id=f"action_{action.id}", scene_id=f"scene_{scene.id}", sensor_type=scene.sensor_type,
         artifact_dir=artifact_dir, software_version=software_version, crs=crs, transform=transform,
         tokens=parse_tokens(classes), confident_only=confident_only, manmade_p=manmade_p,
-        chain=resolve_chain(action, scene, db))
+        chain=resolve_chain(action, scene, db), georef_note=georef_note)
     try:
         blob, name, sel = build_class_pack(spec)
     except SelectionError as exc:

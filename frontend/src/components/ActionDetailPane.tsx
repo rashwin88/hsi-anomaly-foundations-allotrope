@@ -21,7 +21,7 @@ import { createVisualization } from "../api/projectVisualizations";
 import type { ActionDetail, ActionTypeMeta } from "../types";
 import { ActionFlowChart } from "./ActionFlowChart";
 import { HistogramChart, ROCChart, SpectrumChart } from "./DiagnosticCharts";
-import { type SpectralLibraryMatchSummary } from "./spectralMatch/data";
+import { NO_GEOREF_NOTE, type SpectralLibraryMatchSummary } from "./spectralMatch/data";
 import { SpectralMatchModal } from "./spectralMatch/SpectralMatchModal";
 import { SegmentationViewer, isV2Segmentation } from "./SegmentationViewer";
 
@@ -2103,7 +2103,7 @@ function SpectrumProbeModal({
 
   const [data, setData] = useState<SpectrumResp | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const isThermal = sensorType === "landsat9";
+  const isThermal = sensorType === "landsat9" || sensorType === "hotsat1";
 
   useEffect(() => {
     if (isThermal) return; // thermal spectrum endpoint returns 422
@@ -2179,8 +2179,8 @@ function SpectrumProbeModal({
           {isThermal ? (
             <p className="action-output-viewer__hint small">
               Thermal scenes are single-band — no spectrum to plot. The
-              pixel's temperature is visible directly in the score / RGB
-              panels.
+              pixel's value (°C for Landsat 9, relative DN for HotSAT-1) is
+              visible directly in the score / RGB panels.
             </p>
           ) : error ? (
             <p className="form__error" role="alert">
@@ -2536,10 +2536,12 @@ function PrepExportButton({
   );
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [note, setNote] = useState<string | null>(null);
 
   const onClick = async () => {
     setBusy(true);
     setError(null);
+    setNote(null);
     try {
       const r = await fetch(
         `/api/actions/${encodeURIComponent(actionId)}/export`,
@@ -2548,9 +2550,6 @@ function PrepExportButton({
       if (!r.ok) {
         let detail = `HTTP ${r.status}`;
         try { const j = await r.json(); detail = j.detail ?? detail; } catch { /* */ }
-        if (detail === "crs_missing") {
-          throw new Error("Scene has no CRS — submission requires georef.");
-        }
         if (detail === "prep_not_committed") {
           throw new Error("Commit the threshold first, then export.");
         }
@@ -2566,6 +2565,8 @@ function PrepExportButton({
       a.download = filename;
       a.click();
       URL.revokeObjectURL(a.href);
+      // The api exports a scene with no georeference in pixel coordinates and says so here.
+      if (r.headers.get("X-Allotrope-Georef") === "none") setNote(NO_GEOREF_NOTE);
     } catch (err) {
       setError(String((err as Error).message ?? err));
     } finally {
@@ -2593,6 +2594,7 @@ function PrepExportButton({
           {error.length > 80 ? error.slice(0, 80) + "…" : error}
         </p>
       )}
+      {note && <p className="form__hint small">{note}</p>}
     </>
   );
 }
@@ -2806,6 +2808,19 @@ function AnomalyDetectionPrepModal({
         // any so the panel stays populated.
         mask_url: previewResult?.mask_url ?? "",
       });
+      // Commit writes the .tif but no PNG, so render the committed values
+      // through the preview endpoint; otherwise Commit-without-Apply leaves
+      // the mask panel empty. A failed render does not undo the commit.
+      try {
+        const shown = await submitAnomalyDetectionPreview(actionId, {
+          threshold,
+          threshold_mode: thresholdMode,
+          dilation_kernel: dilationKernel,
+        });
+        setPreviewResult(shown);
+      } catch {
+        // Keep the commit's numbers; the panel shows the placeholder.
+      }
     } catch (err) {
       setCommitError(
         err instanceof ApiError

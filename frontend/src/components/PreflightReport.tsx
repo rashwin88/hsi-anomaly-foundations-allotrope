@@ -33,7 +33,7 @@ export function preflightRows(report: Json): [string, string][] {
     ["FWHM", `${num(fwhm.min_nm, 2)}–${num(fwhm.max_nm, 2)} nm · ${fwhm.source ?? "—"}`],
     ["Scale", `${scale.decision ?? "—"} ×${scale.factor ?? "—"} · ${scale.source ?? "—"}: ${scale.reason ?? ""}`],
     ["No-data", `${declared === null || declared === undefined ? "none declared" : String(declared)} (${nodata.source ?? "—"}); also NaN, -9999, all-zero spectra`],
-    ["Georef", georef.exportable ? `${georef.source} · ${georef.crs ?? ""}` : `none — export will refuse`],
+    ["Georef", georef.exportable ? `${georef.source} · ${georef.crs ?? ""}` : `none — export in pixel coordinates`],
   ];
 }
 

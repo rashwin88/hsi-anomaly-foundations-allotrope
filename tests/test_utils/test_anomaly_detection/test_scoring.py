@@ -48,6 +48,22 @@ def test_fade_stops_dark_pixel_outranking_bright(method, bright_err):
     assert faded[0] < faded[1]
 
 
+def test_rm_components_sets_the_pca_width():
+    """v1.0.1: rm_components reaches residual_mahalanobis as d; the default is byte-identical to d=30."""
+    from app.utils.anomaly_detection.residual_mahalanobis import residual_mahalanobis
+
+    rng = np.random.default_rng(7)
+    orig = rng.random((40, 24, 24)).astype(np.float32)
+    recon = (orig + 0.05 * rng.standard_normal(orig.shape)).astype(np.float32)
+    valid = np.ones((24, 24), np.uint8)
+    default = compute_score(orig, recon, valid, "residual_mahalanobis")
+    d30 = compute_score(orig, recon, valid, "residual_mahalanobis", rm_components=30)
+    d20 = compute_score(orig, recon, valid, "residual_mahalanobis", rm_components=20)
+    assert default.tobytes() == d30.tobytes()
+    assert not np.allclose(d20, d30)
+    np.testing.assert_array_equal(d20, residual_mahalanobis(orig, recon, valid.astype(bool), d=20))
+
+
 def test_fade_leaves_pixels_at_or_above_threshold_unchanged():
     orig, recon, valid = _cube_pair()
     plain = compute_score(orig, recon, valid, "SAM")[0]

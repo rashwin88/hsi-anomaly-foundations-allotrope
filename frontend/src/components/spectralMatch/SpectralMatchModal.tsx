@@ -10,8 +10,8 @@
 //
 // Design: docs/proposals/class-driven-flow.md (Gap 2 UI, additions A and D), drawn in the Tufte
 // style agreed 2026-11-01 - the maps and the numbers dominate, controls are quiet text toggles,
-// labels sit next to the data. The header's All | Man-made | Natural is the primary filter; the
-// class rows only refine man-made (user feedback the same day). The two maps are small multiples: same size, same scale, one
+// labels sit next to the data. The header's All | Man-made | Natural is the primary filter, of the
+// anomaly points map too (v1.0.1); the class rows only refine man-made (user feedback the same day). The two maps are small multiples: same size, same scale, one
 // pan / zoom (MatchMap PanLink). On a narrow window they become a switch.
 //
 // Export: `classes=&confident_only=&manmade_p=` (selection.ts), counted by the api's
@@ -19,14 +19,14 @@
 // count and the export falls back to the older `subset=manmade|natural` where the selection is
 // exactly that; other selections then say why they cannot be exported yet.
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useDeferredValue, useEffect, useMemo, useState } from "react";
 
 import { downloadStoryGif } from "../../api/story";
 import { type Box, MatchMap, PanLink, type Px } from "./MatchMap";
 import {
   type FamilyData, type HistogramRow, type MatchRow, type NamerData, type NamerObject,
   type PixelSpectra, type Spectra2D, type SpectralLibraryMatchSummary, INK_3, NAMER_MANMADE,
-  NAMER_NATURAL, className, fileUrl, key, loadFamily, loadHistogram, loadMatches, loadNamer,
+  NAMER_NATURAL, NO_GEOREF_NOTE, className, fileUrl, key, loadFamily, loadHistogram, loadMatches, loadNamer,
   loadObjectCoords, loadPixelSpectra, loadSamLibrary,
 } from "./data";
 import {
@@ -35,7 +35,7 @@ import {
 } from "./panels";
 import { MARK_PX, paintPoints, pointMarkers } from "./points";
 import {
-  type Call, type Coarse, CUTS, DEFAULT_CUT, type ServerCounts, callsAt, coarseOf, coarseSel,
+  type Call, type Coarse, CUT_MAX, CUT_MIN, CUTS, DEFAULT_CUT, type ServerCounts, callsAt, coarseOf, coarseSel,
   countPicked, exportQuery, fetchSelectionCounts, legacySubset, manmadeLeaves, picked, selectionName,
   tokens,
 } from "./selection";
@@ -145,7 +145,8 @@ function snap(px: Px, has: (k: number) => boolean): Px | null {
 
 const boxOf = (o: NamerObject): Box => ({ r0: o.row_min, r1: o.row_max, c0: o.col_min, c1: o.col_max });
 
-async function download(r: Response, fallback: string) {
+// Saves the zip; true when the api wrote it in pixel coordinates (the scene has no georeference).
+async function download(r: Response, fallback: string): Promise<boolean> {
   const blob = await r.blob();
   const name = r.headers.get("Content-Disposition")?.match(/filename="([^"]+)"/)?.[1] ?? fallback;
   const a = document.createElement("a");
@@ -153,14 +154,14 @@ async function download(r: Response, fallback: string) {
   a.download = name;
   a.click();
   URL.revokeObjectURL(a.href);
+  return r.headers.get("X-Allotrope-Georef") === "none";
 }
 
 async function failure(r: Response): Promise<string> {
   let detail = `HTTP ${r.status}`;
   try { detail = (await r.json()).detail ?? detail; } catch { /* not json */ }
   if (typeof detail !== "string") detail = JSON.stringify(detail);
-  return detail === "crs_missing" ? "This scene has no map projection, so it cannot be exported."
-    : `Export failed: ${detail}`;
+  return `Export failed: ${detail}`;
 }
 
 export function SpectralMatchModal({ actionId, summary, onClose }: {
@@ -211,7 +212,9 @@ export function SpectralMatchModal({ actionId, summary, onClose }: {
 
   // Default selection: every man-made object, as the worker's own man-made subset.
   const sel = useMemo(() => selState ?? new Set(nd ? manmadeLeaves(nd) : []), [selState, nd]);
-  const calls = useMemo(() => (nd ? callsAt(nd, cut) : new Map<number, Call>()), [nd, cut]);
+  // The slider repaints both maps on every step; deferring keeps the thumb responsive.
+  const paintCut = useDeferredValue(cut);
+  const calls = useMemo(() => (nd ? callsAt(nd, paintCut) : new Map<number, Call>()), [nd, paintCut]);
   const isPicked = useCallback((o: NamerObject) => picked(calls.get(o.obj_id)!, sel, confidentOnly),
                                [calls, sel, confidentOnly]);
   const onPoints = useCallback((o: NamerObject) => {
@@ -225,6 +228,12 @@ export function SpectralMatchModal({ actionId, summary, onClose }: {
   const pointsImage = useMemo(
     () => (nd && dims ? paintPoints(dims.w, dims.h, nd, calls, onPoints) : null), [nd, dims, calls, onPoints]);
   const coarse: Coarse = nd ? coarseOf(sel, nd) : "manmade";
+  // The header switch also decides which kinds of point the right map shows; its caption
+  // toggles refine that until the switch moves again.
+  useEffect(() => {
+    setShowMm(coarse !== "natural");
+    setShowNat(coarse !== "manmade");
+  }, [coarse]);
   // The ochre halo marks the selection only when it is a part of the objects.
   const haloed = useCallback((o: NamerObject) => coarse !== "all" && isPicked(o), [coarse, isPicked]);
   const pointObjs = useMemo(() => (nd ? nd.objects.filter(onPoints) : []), [nd, onPoints]);
@@ -295,16 +304,18 @@ export function SpectralMatchModal({ actionId, summary, onClose }: {
 
   const [exportBusy, setExportBusy] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
+  const [exportNote, setExportNote] = useState<string | null>(null);
   const handleExport = async () => {
     setExportBusy(true);
     setExportError(null);
+    setExportNote(null);
     const base = `/api/actions/${encodeURIComponent(actionId)}/export`;
     const short = actionId.replace(/^action_/, "").slice(0, 8);
     try {
       if (!hasNamer || !nd) {
         const r = await fetch(base, { method: "POST" });
         if (!r.ok) throw new Error(await failure(r));
-        await download(r, `hyper_${short}.zip`);
+        if (await download(r, `hyper_${short}.zip`)) setExportNote(NO_GEOREF_NOTE);
         return;
       }
       const legacy = legacySubset(sel, confidentOnly, cut, nd);
@@ -319,7 +330,9 @@ export function SpectralMatchModal({ actionId, summary, onClose }: {
         if (again.ok) r = again;
       }
       if (!r.ok) throw new Error(await failure(r));
-      await download(r, `hyper_${short}_${selectionName(sel, nd).replace(/[^a-z]+/gi, "_")}.zip`);
+      if (await download(r, `hyper_${short}_${selectionName(sel, nd).replace(/[^a-z]+/gi, "_")}.zip`)) {
+        setExportNote(NO_GEOREF_NOTE);
+      }
     } catch (err) {
       setExportError(String((err as Error).message ?? err));
     } finally {
@@ -456,8 +469,14 @@ export function SpectralMatchModal({ actionId, summary, onClose }: {
           )}
           {hasNamer && (
             <>
-              <ToggleSet label="Call man-made when P is above" value={cut} onChange={setCut}
-                         options={CUTS.map((c) => ({ value: c.p, label: <>{c.label} <span className="smv-num">{c.p}</span></> }))} />
+              <span className="smv-cut">
+                <ToggleSet label="Call man-made when P is above" value={cut} onChange={setCut}
+                           options={CUTS.map((c) => ({ value: c.p, label: <>{c.label} <span className="smv-num">{c.p}</span></> }))} />
+                <input type="range" className="smv-cut__range" min={CUT_MIN} max={CUT_MAX} step={0.01}
+                       value={cut} aria-label="Call man-made when P is above"
+                       onChange={(e) => setCut(Math.round(Number(e.target.value) * 100) / 100)} />
+                <span className="smv-num smv-cut__val">{cut.toFixed(2)}</span>
+              </span>
               <ToggleSet label="Colour" value={colourBy} onChange={setColourBy} options={[
                 { value: "level1", label: "man-made / natural" },
                 { value: "material", label: "material" },
@@ -477,6 +496,7 @@ export function SpectralMatchModal({ actionId, summary, onClose }: {
               {storyBusy ? "Rendering…" : "Story GIF"}
             </button>
             {exportError && <span className="smv-error" title={exportError}>{exportError}</span>}
+            {exportNote && <span className="smv-quiet">{exportNote}</span>}
           </span>
         </div>
 

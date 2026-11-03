@@ -13,17 +13,18 @@ only, with a manifest that records every step that produced it. There is no heat
     hyper_<scene>_<action>_<sel>/
         hyper_anomaly_mask_<sel>.tif        uint8 0/1, 1 on the selected objects' pixels; scene CRS and affine
         hyper_anomaly_pixels_<sel>.shp ...  one point per selected pixel (+ .shx .dbf .prj .cpg)
-        hyper_anomaly_objects_<sel>.shp ... one point per selected object, at its centroid
-        hyper_anomaly_objects_<sel>.csv     obj_id, call, class, confident, p_manmade, p_class, n_px, lat, lon
-        hyper_namer_level1.tif              int8 -1 outside the mask, 0 natural, 1 man-made, at manmade_p
-        hyper_namer_class.tif               int8 -1 outside, 0 natural, class codes (+10 tentative), at manmade_p
-        hyper_quicklook_<sel>.png           dimmed RGB, the selected pixels as yellow points (squares man-made,
-                                            circles natural, dark outline, a minimum size)
         MANIFEST.json                       the chain (scene ... match), the selection, the counts
 
+Nothing else (user, 2026-11-01: v1.0.1 dropped the objects shapefile / csv, the two namer maps and the quick-look).
+Each pixel carries its object's ``material``: the family-library spectrum closest to the OBJECT's mean spectrum
+within the object's class ("natural" entries for a natural object), computed exactly as the match screen's object
+card does (frontend/src/components/spectralMatch/data.ts meanSpectrum + nearestInClass), so the two agree; ``mat_lib``
+is its library (USGS / ECOSTRESS) and ``mat_ang`` the spectral angle in degrees.
+
 Gotchas: every raster gets the georef the api resolved from the raw scene (the action's own TIFFs carry an identity
-transform). Shapefile geometry is in the scene CRS; lat / lon columns are EPSG:4326. The two namer maps are
-recomputed at manmade_p so they agree with the selection, not with the action's stored maps.
+transform). Shapefile geometry is in the scene CRS; lat / lon columns are EPSG:4326. A scene with no georeference
+gets the pixel grid (crs None): geometry x = col + 0.5, y = -(row + 0.5), no .prj, lat / lon blank, and the
+MANIFEST "georeference" says so.
 """
 
 from __future__ import annotations
@@ -41,15 +42,8 @@ import numpy as np
 from .class_selection import UNKNOWN_CLASS, Selection, SelectionError, select
 
 SCHEMA = "allotrope-export-hyper-classes/1"
-# hyper_namer_class.tif code of a man-made object whose class could not be computed (UNKNOWN_CLASS).
-UNKNOWN_CODE = 99
-# Quick-look rendering (addition D): one bright colour unused by the class colours, a dark outline, and markers
-# that keep a minimum size so single pixels stay visible on the whole scene.
-POINT_RGB = (255, 230, 0)
-OUTLINE_RGB = (20, 20, 20)
-_QUICKLOOK_EDGE = 1600          # long edge of the PNG, px
-_MIN_MARKER_HALF = 2            # marker half-size at PNG scale, px (5 px squares / circles)
-_RGB_DIM = 0.45                 # the RGB under the points is desaturated and dimmed to this brightness
+# Library of a family-library entry, from its id prefix ("usgs:..." / "ecostress:..."; data/family_library).
+_LIBRARY_OF_PREFIX = {"usgs": "USGS", "ecostress": "ECOSTRESS"}
 
 
 @dataclass(frozen=True)
@@ -59,12 +53,13 @@ class ClassPackSpec:
     sensor_type: str
     artifact_dir: Path
     software_version: str
-    crs: Any                        # rasterio CRS of the scene grid
+    crs: Any                        # rasterio CRS of the scene grid; None = pixel grid (no georeference)
     transform: Any                  # its affine
     tokens: tuple[str, ...]
     confident_only: bool = False
     manmade_p: float | None = None  # None = the action's own cut
     chain: dict = field(default_factory=dict)   # MANIFEST "chain", resolved by the api
+    georef_note: str | None = None  # MANIFEST "georeference" when the scene has none
 
 
 def selection_of(spec: ClassPackSpec) -> Selection:
@@ -101,21 +96,12 @@ def build_class_pack(spec: ClassPackSpec) -> tuple[bytes, str, Selection]:
 
     slug = sel.slug()
     folder = f"hyper_{_short(spec.scene_id)}_{_short(spec.action_id)}_{slug}"
-    level1, classes = _namer_maps(obj_map, sel, legend)
     members: dict[str, bytes] = {
         f"hyper_anomaly_mask_{slug}.tif": _geotiff(mask.astype(np.uint8), spec, "uint8", None,
                                                    {"ANOMALY_MASK": f"1 = anomaly pixel of the selection {slug}"}),
-        "hyper_namer_level1.tif": _geotiff(level1, spec, "int8", -1, {"NAMER_LEVEL1_CODES": json.dumps(
-            {"-1": "outside the anomaly mask", "0": "natural", "1": "man-made"})}),
-        "hyper_namer_class.tif": _geotiff(classes, spec, "int8", -1, {"NAMER_CLASS_CODES": json.dumps(
-            _class_codes(legend))}),
-        f"hyper_quicklook_{slug}.png": _quicklook(art, obj_map, mask, sel),
     }
-    pixel_gdf, object_gdf, object_csv = _points(art, obj_map, mask, sel, spec)
-    for name, gdf in ((f"hyper_anomaly_pixels_{slug}", pixel_gdf), (f"hyper_anomaly_objects_{slug}", object_gdf)):
-        for ext, blob in _shapefile(gdf).items():
-            members[f"{name}.{ext}"] = blob
-    members[f"hyper_anomaly_objects_{slug}.csv"] = object_csv
+    for ext, blob in _shapefile(_points(art, obj_map, mask, sel, spec)).items():
+        members[f"hyper_anomaly_pixels_{slug}.{ext}"] = blob
     members["MANIFEST.json"] = json.dumps(_manifest(spec, sel, legend, mask.shape, sorted(members)),
                                           indent=2).encode()
 
@@ -146,37 +132,6 @@ def _object_map(art: Path) -> np.ndarray:
     return out
 
 
-def _class_codes(legend: dict) -> dict[str, str]:
-    """hyper_namer_class.tif code -> label, from the action's namer_legend.json."""
-    codes = {"-1": "outside the anomaly mask", "0": "natural", str(UNKNOWN_CODE): "man-made, class unknown"}
-    for code, item in (legend.get("classes") or {}).items():
-        codes[code] = f"{item.get('label', item.get('cls'))}{' (tentative)' if item.get('tentative') else ''}"
-    return codes
-
-
-def _namer_maps(obj_map: np.ndarray, sel: Selection, legend: dict) -> tuple[np.ndarray, np.ndarray]:
-    """Level-1 and class maps at the selection's cut (codes as namer/objects.py writes them)."""
-    from app.spectral_match.namer.objects import OUTSIDE, TENTATIVE_OFFSET
-
-    o = sel.objects
-    code_of = {item["cls"]: int(code) for code, item in (legend.get("classes") or {}).items()
-               if not item.get("tentative")}
-    mm = o["call"] == "manmade"
-    size = int(max(np.max(o["obj_id"], initial=0), obj_map.max(initial=0))) + 1
-    l1_lut = np.full(size, OUTSIDE, np.int8)
-    cls_lut = np.full(size, OUTSIDE, np.int8)
-    for oid, is_mm, cls, conf in zip(o["obj_id"], mm, o["cls"], o["confident"]):
-        l1_lut[int(oid)] = 1 if is_mm else 0
-        if not is_mm:
-            cls_lut[int(oid)] = 0
-        elif cls in code_of:
-            cls_lut[int(oid)] = code_of[cls] + (0 if conf else TENTATIVE_OFFSET)
-        else:
-            cls_lut[int(oid)] = UNKNOWN_CODE
-    l1_lut[0] = cls_lut[0] = OUTSIDE
-    return l1_lut[obj_map], cls_lut[obj_map]
-
-
 def _geotiff(raster: np.ndarray, spec: ClassPackSpec, dtype: str, nodata, tags: dict) -> bytes:
     from rasterio.io import MemoryFile
 
@@ -190,9 +145,8 @@ def _geotiff(raster: np.ndarray, spec: ClassPackSpec, dtype: str, nodata, tags: 
 
 
 def _points(art: Path, obj_map: np.ndarray, mask: np.ndarray, sel: Selection, spec: ClassPackSpec):
-    """(pixel GeoDataFrame, object GeoDataFrame, object CSV bytes). Geometry in the scene CRS, lat / lon in 4326."""
-    import csv
-
+    """GeoDataFrame, one point per selected pixel. Geometry in the scene CRS, lat / lon in 4326 (blank on the
+    pixel grid)."""
     import geopandas as gpd
     import rasterio
     from rasterio.warp import transform as warp
@@ -202,46 +156,83 @@ def _points(art: Path, obj_map: np.ndarray, mask: np.ndarray, sel: Selection, sp
     rows, cols = np.nonzero(mask)
     xs, ys = rasterio.transform.xy(spec.transform, rows, cols, offset="center") if len(rows) else ([], [])
     xs, ys = np.atleast_1d(xs).astype(float), np.atleast_1d(ys).astype(float)
-    lons, lats = warp(spec.crs, "EPSG:4326", list(xs), list(ys)) if len(rows) else ([], [])
+    if spec.crs is None:
+        lons = lats = np.full(len(rows), np.nan)
+    else:
+        lons, lats = warp(spec.crs, "EPSG:4326", list(xs), list(ys)) if len(rows) else ([], [])
     fam, sam = _matches_by_pixel(art)
     k = [row_of[int(i)] for i in obj_map[rows, cols]]
+    natural = (o["call"][k].astype(str) != "manmade") if k else np.zeros(0, bool)
+    mat = _object_materials(art, obj_map, sel)
+    pix_obj = o["obj_id"][k].astype(int) if k else np.zeros(0, int)
     pixel_cols = {
         "row": rows.astype(int), "col": cols.astype(int), "lat": np.round(lats, 7), "lon": np.round(lons, 7),
-        "nm_obj": o["obj_id"][k].astype(int) if k else [], "nm_call": o["call"][k].astype(str) if k else [],
-        "nm_cls": o["cls"][k].astype(str) if k else [],
+        "nm_obj": pix_obj, "nm_call": o["call"][k].astype(str) if k else [],
+        "nm_cls": np.where(natural, "natural", o["cls"][k].astype(str)) if k else [],
         "nm_p": np.round(o["p_cls"][k].astype(float), 4) if k else [],
         "nm_mm": np.round(o["p_manmade"][k].astype(float), 4) if k else [],
         "nm_conf": o["confident"][k].astype(int) if k else [],
         "family": [fam.get((int(r), int(c)), "") for r, c in zip(rows, cols)],
         "mat1": [sam.get((int(r), int(c)), ("", None))[0] for r, c in zip(rows, cols)],
         "scr1": [sam.get((int(r), int(c)), ("", None))[1] for r, c in zip(rows, cols)],
+        "material": [mat.get(int(i), ("", "", None))[0] for i in pix_obj],
+        "mat_lib": [mat.get(int(i), ("", "", None))[1] for i in pix_obj],
+        "mat_ang": np.array([mat.get(int(i), ("", "", np.nan))[2] for i in pix_obj], float),
     }
-    pixel_gdf = gpd.GeoDataFrame(pixel_cols, geometry=gpd.points_from_xy(xs, ys), crs=spec.crs)
+    return gpd.GeoDataFrame(pixel_cols, geometry=gpd.points_from_xy(xs, ys), crs=spec.crs)
 
-    picked = np.nonzero(sel.selected)[0]
-    oxs, oys = (rasterio.transform.xy(spec.transform, o["row"][picked].astype(float),
-                                      o["col"][picked].astype(float), offset="center")
-                if len(picked) else ([], []))
-    oxs, oys = np.atleast_1d(oxs).astype(float), np.atleast_1d(oys).astype(float)
-    olons, olats = warp(spec.crs, "EPSG:4326", list(oxs), list(oys)) if len(picked) else ([], [])
-    obj_cols = {
-        "obj_id": o["obj_id"][picked].astype(int), "call": o["call"][picked].astype(str),
-        "class": [c if c else "natural" for c in o["cls"][picked].astype(str)] if len(picked) else [],
-        "confident": o["confident"][picked].astype(int),
-        "p_manmade": np.round(o["p_manmade"][picked].astype(float), 4),
-        "p_class": np.round(o["p_cls"][picked].astype(float), 4),
-        "n_px": o["n_px"][picked].astype(int), "lat": np.round(olats, 7), "lon": np.round(olons, 7),
-    }
-    object_gdf = gpd.GeoDataFrame(obj_cols, geometry=gpd.points_from_xy(oxs, oys), crs=spec.crs)
 
-    buf = io.StringIO()
-    keys = list(obj_cols)
-    writer = csv.writer(buf)
-    writer.writerow(keys)
-    for i in range(len(picked)):
-        writer.writerow(["" if (isinstance(v, float) and np.isnan(v)) else v
-                         for v in (obj_cols[c][i] for c in keys)])
-    return pixel_gdf, object_gdf, buf.getvalue().encode("utf-8")
+def _object_materials(art: Path, obj_map: np.ndarray, sel: Selection) -> dict[int, tuple[str, str, float]]:
+    """obj_id -> (closest family-library label, its library, angle in degrees, 2 dp) for each selected object.
+
+    Mirrors the match screen exactly (data.ts meanSpectrum + nearestInClass): the object's mean over its pixels,
+    band by band over valid finite values; then, among library rows of the object's class ("natural" for a natural
+    object), the largest cosine on the bands both have finite, the first on a tie. Empty when the action has no
+    family library or pixel spectra, the band counts differ (the screen then shows no reference either), or the
+    class has no entry (class unknown, none covering this sensor, or a legend from before library[].cls)."""
+    paths = [art / f for f in ("family_legend.json", "family_library_refl.npz", "anomaly_pixel_spectra.npz")]
+    if not all(p.is_file() for p in paths):
+        return {}
+    entries = json.loads(paths[0].read_text()).get("library") or []
+    lib, px = np.load(paths[1]), np.load(paths[2])
+    ref = np.where(lib["valid"].astype(bool), lib["refl"].astype(np.float64), np.nan)
+    spectra = np.where(px["valid"].astype(bool), px["spectra"].astype(np.float64), np.nan)
+    if len(entries) != ref.shape[0] or ref.shape[1] != spectra.shape[1]:
+        return {}
+    ref = np.where(np.isfinite(ref), ref, np.nan)
+    spec_ix = {(int(r), int(c)): i for i, (r, c) in enumerate(zip(px["rows"], px["cols"]))}
+    lib_cls = np.array([e.get("cls") or "" for e in entries], dtype=object)
+    o = sel.objects
+    wanted = {int(i): ("natural" if call != "manmade" else str(cls or ""))
+              for i, call, cls, on in zip(o["obj_id"], o["call"], o["cls"], sel.selected) if on}
+    rows, cols = np.nonzero(np.isin(obj_map, list(wanted)) & (obj_map > 0))
+    members: dict[int, list[int]] = {}
+    for r, c in zip(rows, cols):
+        i = spec_ix.get((int(r), int(c)))
+        if i is not None:
+            members.setdefault(int(obj_map[r, c]), []).append(i)
+    out: dict[int, tuple[str, str, float]] = {}
+    for oid, ix in members.items():
+        cand = np.flatnonzero(lib_cls == wanted[oid]) if wanted[oid] else np.zeros(0, int)
+        if not len(cand):
+            continue
+        block = spectra[ix]
+        n = np.isfinite(block).sum(axis=0)
+        mean = np.where(n > 0, np.nansum(block, axis=0) / np.maximum(n, 1), np.nan)
+        cands = ref[cand]                                           # (k, B)
+        ok = np.isfinite(mean)[None, :] & np.isfinite(cands)
+        a, b = np.where(ok, mean[None, :], 0.0), np.where(ok, cands, 0.0)
+        dot, na, nb = (a * b).sum(axis=1), (a * a).sum(axis=1), (b * b).sum(axis=1)
+        with np.errstate(divide="ignore", invalid="ignore"):
+            cos = np.where((na > 0) & (nb > 0), dot / np.sqrt(na * nb), -np.inf)
+        if not np.isfinite(cos).any():
+            continue
+        best_cos = float(cos.max())
+        entry = entries[int(cand[int(np.argmax(cos))])]             # argmax: the first on a tie, as the screen
+        angle = float(np.degrees(np.arccos(np.clip(best_cos, -1.0, 1.0))))
+        out[oid] = (str(entry.get("label", "")), _LIBRARY_OF_PREFIX.get(str(entry.get("id", "")).split(":", 1)[0], ""),
+                    round(angle, 2))
+    return out
 
 
 def _matches_by_pixel(art: Path) -> tuple[dict, dict]:
@@ -277,49 +268,6 @@ def _shapefile(gdf) -> dict[str, bytes]:
                 for ext in ("shp", "shx", "dbf", "prj", "cpg") if (Path(td) / f"shape.{ext}").is_file()}
 
 
-def _quicklook(art: Path, obj_map: np.ndarray, mask: np.ndarray, sel: Selection) -> bytes:
-    """Dimmed, desaturated RGB with the selected pixels as yellow markers: squares man-made, circles natural."""
-    from PIL import Image, ImageDraw
-
-    H, W = mask.shape
-    rgb_path = art / "rgb.png"
-    if rgb_path.is_file():
-        rgb = np.asarray(Image.open(rgb_path).convert("RGB").resize((W, H), Image.BILINEAR), np.float32)
-    else:
-        rgb = np.full((H, W, 3), 128, np.float32)
-    grey = rgb.mean(axis=2, keepdims=True)
-    base = (_RGB_DIM * (0.35 * rgb + 0.65 * grey)).clip(0, 255).astype(np.uint8)
-    scale = min(1.0 * _QUICKLOOK_EDGE / max(H, W), 8.0)
-    size = (max(1, round(W * scale)), max(1, round(H * scale)))
-    img = Image.fromarray(base).resize(size, Image.BILINEAR)
-    draw = ImageDraw.Draw(img)
-    half = max(_MIN_MARKER_HALF, round(scale / 2))
-    mm_ids = set(int(i) for i, c in zip(sel.objects["obj_id"], sel.objects["call"]) if c == "manmade")
-    rows, cols = np.nonzero(mask)
-    pts = [((c + 0.5) * scale, (r + 0.5) * scale, int(obj_map[r, c]) in mm_ids) for r, c in zip(rows, cols)]
-    # Outlines first, then fills, so a neighbour's outline never covers a point.
-    for grow, colour in ((1, OUTLINE_RGB), (0, POINT_RGB)):
-        h = half + grow
-        for x, y, is_mm in pts:
-            box = (x - h, y - h, x + h, y + h)
-            (draw.rectangle if is_mm else draw.ellipse)(box, fill=colour)
-    n_mm = sum(1 for p in pts if p[2])
-    _legend(draw, n_mm, len(pts) - n_mm)
-    out = io.BytesIO()
-    img.save(out, format="PNG", optimize=True)
-    return out.getvalue()
-
-
-def _legend(draw, n_manmade: int, n_natural: int) -> None:
-    """Top-left key: the two marker shapes with their pixel counts."""
-    draw.rectangle((6, 6, 210, 46), fill=(0, 0, 0))
-    for i, (label, n, square) in enumerate((("man-made", n_manmade, True), ("natural", n_natural, False))):
-        y = 12 + 18 * i
-        box = (12, y, 22, y + 10)
-        (draw.rectangle if square else draw.ellipse)(box, fill=POINT_RGB, outline=OUTLINE_RGB)
-        draw.text((30, y - 1), f"{label}  {n:,} px", fill=(235, 235, 235))
-
-
 def _manifest(spec: ClassPackSpec, sel: Selection, legend: dict, shape, files: list[str]) -> dict:
     return {
         "schema": SCHEMA,
@@ -348,6 +296,10 @@ def _manifest(spec: ClassPackSpec, sel: Selection, legend: dict, shape, files: l
         "namer": {"codename": legend.get("codename"), "checkpoint": legend.get("checkpoint"),
                   "confident_p": legend.get("confident_p")},
         "unknown_class": UNKNOWN_CLASS,
+        "material_rule": ("material / mat_lib / mat_ang: the family-library spectrum (USGS or ECOSTRESS) closest by "
+                          "spectral angle (degrees) to the pixel's OBJECT mean spectrum, within the object's class "
+                          "(natural entries for natural objects); mat1 / scr1 are the pixel's own USGS splib07 SAM top-1"),
+        **({"georeference": spec.georef_note} if spec.georef_note else {}),
         "files": files,
         "report_required": True,
     }

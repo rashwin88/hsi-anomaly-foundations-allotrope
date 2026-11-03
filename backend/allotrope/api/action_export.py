@@ -26,8 +26,9 @@ Two things worth knowing before touching this:
   - Vendables hold no spatial reference, so every GeoTIFF an Action wrote has an
     identity transform. CRS and affine are recovered here by re-reading the raw
     scene file through app/georef/. A scene whose georeferencing cannot be
-    resolved yields 422 crs_missing rather than a bundle that would be
-    disqualified downstream for having no projection.
+    resolved still exports (user, 2026-11-01), loudly: in pixel coordinates
+    (app.georef.pixel_grid, no CRS, no .prj), the MANIFEST's "georeference" says
+    so, the response carries ``X-Allotrope-Georef: none`` and a warning is logged.
 """
 
 from __future__ import annotations
@@ -148,7 +149,8 @@ def spectral_library_match_at_pixel(
 #   - anomaly_detection_prep → thermal bundle (only when committed)
 #
 # Submission rules (2026-05-14):
-#   * GeoTIFF must have a valid CRS → 422 if missing, no silent identity-fallback.
+#   * GeoTIFF carries the scene CRS. With none, a loud pixel-grid fallback (2026-11-01;
+#     it replaced the 422): pixel coordinates, MANIFEST note, X-Allotrope-Georef: none.
 #   * Filenames/folders must literally contain `hyper` / `thermal`.
 #   * Shapefile sidecar set must be complete.
 # All handled inside the bundle builders in app/spectral_match/export.py
@@ -215,16 +217,19 @@ def export_action(
             raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                                 detail="give classes= or subset=, not both")
         parse_tokens(classes)                       # 422 on a bad token before the georef read
-        transform, crs = _scene_georef(action, scene, artifact_dir)
-        return class_pack_response(action, scene, artifact_dir, db, transform=transform, crs=crs,
+        transform, crs, note = _scene_georef(action, scene, artifact_dir, fallback=True)
+        resp = class_pack_response(action, scene, artifact_dir, db, transform=transform, crs=crs,
                                    classes=classes, confident_only=confident_only, manmade_p=manmade_p,
-                                   software_version=software_version)
+                                   software_version=software_version, georef_note=note)
+        if note:
+            resp.headers[GEOREF_HEADER] = "none"
+        return resp
     check_subset(action.type, artifact_dir, subset)
 
     action_wire = f"action_{action.id}"
     scene_wire = f"scene_{scene.id}"
 
-    transform, crs = _scene_georef(action, scene, artifact_dir)
+    transform, crs, note = _scene_georef(action, scene, artifact_dir, fallback=True)
 
     try:
         if action.type == "spectral_library_match":
@@ -239,6 +244,7 @@ def export_action(
                 override_transform=transform,
                 override_crs=crs,
                 subset=subset,
+                georef_note=note,
             )
             # If the summary captured the splib version, surface it in the manifest.
             try:
@@ -275,6 +281,7 @@ def export_action(
                 software_version=software_version,
                 override_transform=transform,
                 override_crs=crs,
+                georef_note=note,
             )
             zip_bytes, zip_filename = build_thermal_bundle(spec_t)
 
@@ -307,6 +314,7 @@ def export_action(
         headers={
             "Content-Disposition": f'attachment; filename="{zip_filename}"',
             "Content-Length": str(len(zip_bytes)),
+            **({GEOREF_HEADER: "none"} if note else {}),
         },
     )
 
@@ -344,7 +352,7 @@ def spectral_namer_object_coords(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="namer_objects_missing",
         )
-    transform, crs = _scene_georef(action, scene, artifact_dir)
+    transform, crs, _ = _scene_georef(action, scene, artifact_dir)
     objs = pq.read_table(objects_path, columns=["obj_id", "row", "col"]).to_pydict()
     if not objs["obj_id"]:
         return NamerObjectCoordsResponse(crs=str(crs), coords={})
@@ -387,13 +395,18 @@ def _export_context(action_id: str, db: Session):
     return action, output, scene, artifact_dir
 
 
-def _scene_georef(action: Action, scene: Scene, artifact_dir: Path):
-    """(transform, crs) of the scene, re-read from the raw file (the action's TIFFs carry an
-    identity transform). The target shape is the action's match_map.tif (hyper) or
-    anomaly_mask.tif (thermal). 422 crs_missing when the scene has no georeferencing."""
+# Set to "none" on an export written in pixel coordinates; the UI shows a note on it.
+GEOREF_HEADER = "X-Allotrope-Georef"
+
+
+def _scene_georef(action: Action, scene: Scene, artifact_dir: Path, *, fallback: bool = False):
+    """(transform, crs, note) of the scene, re-read from the raw file (the action's TIFFs carry
+    an identity transform); note is None when georeferenced. The target shape is the action's
+    match_map.tif (hyper) or anomaly_mask.tif (thermal). With no georeferencing: ``fallback``
+    gives the pixel grid, crs None and NO_GEOREF_NOTE, logged; otherwise 422 crs_missing."""
     import rasterio
 
-    from app.georef import GeorefUnavailable, resolve_scene_georef
+    from app.georef import NO_GEOREF_NOTE, GeorefUnavailable, pixel_grid, resolve_scene_georef
 
     scene_raw_dir = Path(settings.data_dir) / scene.raw_path
     if not scene_raw_dir.is_dir():
@@ -409,13 +422,18 @@ def _scene_georef(action: Action, scene: Scene, artifact_dir: Path):
     try:
         with rasterio.open(ref_path) as src:
             target_shape = (src.height, src.width)
-        return resolve_scene_georef(
+        transform, crs = resolve_scene_georef(
             scene_dir=scene_raw_dir,
             sensor_type=scene.sensor_type,
             target_shape=target_shape,
         )
+        return transform, crs, None
     except GeorefUnavailable as exc:
         logger.warning("georef unavailable: %s", exc)
+        if fallback:
+            logger.warning("exporting %s of scene_%s in pixel coordinates (no CRS)",
+                           action.type, scene.id)
+            return pixel_grid(), None, NO_GEOREF_NOTE
         # The detail stays the code the UI matches on; the reason (e.g. generic_hsi's
         # "this file has no map coordinates") rides in a header for API callers.
         raise HTTPException(

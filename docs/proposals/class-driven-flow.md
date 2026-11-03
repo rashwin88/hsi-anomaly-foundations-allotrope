@@ -59,11 +59,10 @@ presets, the export named by the selection; not committed or deployed beyond the
 
 **Pack contents**, all on the scene's real grid, named with the `hyper_` prefix:
 - `hyper_anomaly_mask_<sel>.tif`: uint8 0/1, the selected objects' pixels only. This is the submission-format map.
-- `hyper_anomaly_pixels_<sel>.shp` + sidecars: one point per selected pixel.
-- `hyper_anomaly_objects_<sel>.shp` + sidecars and `hyper_anomaly_objects_<sel>.csv`: one point per selected object
-  (centroid), with call, class, confident, p_manmade, p_class, n_px, lat, lon.
-- `hyper_namer_level1.tif` and `hyper_namer_class.tif`: the full maps, for context.
-- `hyper_quicklook_<sel>.png`: RGB plus the selected objects outlined.
+- `hyper_anomaly_pixels_<sel>.shp` + sidecars: one point per selected pixel, with its object's closest material
+  (`material`, `mat_lib` USGS / ECOSTRESS, `mat_ang`) as the screen shows it.
+- (v1.0.1, user 2026-11-01: nothing else. The objects shapefile / CSV, the two namer maps and the quick-look of v1.0
+  were dropped.)
 - `MANIFEST.json`, recording the whole chain:
   - scene (id, sensor, file);
   - band filter (bands kept);
@@ -96,9 +95,8 @@ On PRISMA and Tanager, through the API and a headless browser:
 For each pack, check:
 - grid and CRS;
 - mask values {0,1};
-- the mask pixel count equals the selection's pixel count;
-- the objects CSV rows equal the selected objects;
-- the shapefiles open;
+- the mask pixel count equals the selection's pixel count, and the pixel shapefile's row count;
+- the shapefile opens, with `material` filled for man-made objects that have a class;
 - the manifest records the chain and the selection exactly.
 
 ## Additions agreed 2026-11-01 (same build)
@@ -107,6 +105,8 @@ For each pack, check:
 a bit more aggressive on man-made").
 - Presets: Balanced 0.5 (today), Sensitive 0.35, Very sensitive 0.25, as the cut-off on an object's mean P(man-made).
   The screen recomputes calls client-side from namer_objects.parquet: map, list, counts and class bars, with no re-run.
+- v1.0.1 (user 2026-11-01): a slider beside the presets sets any cut 0.05-0.95 (step 0.01). Above 0.5, low-P man-made
+  objects become natural; that is intended.
 - The export takes `manmade_p=<cut>`; the pack and manifest record it.
 - Evidence: on recent scenes many objects sit just under 0.5 (EnMAP 330 of 1,434 objects with P in 0.3-0.5; PRISMA
   1,227 of 5,544).

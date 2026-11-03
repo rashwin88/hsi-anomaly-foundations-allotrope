@@ -115,8 +115,9 @@ onboarding, band filtering and export run unchanged on either format.
   onboarding does.
 - **HDF5 wins** when an upload carries both formats: it has Planet's masks.
 - **Georef**: `_resolve_tanager_envi` opens the data file with rasterio. No CRS (no map
-  info) raises `GeorefUnavailable` "has no map info", so export answers 422 `crs_missing`
-  rather than shipping an identity-transform map. A rotated map info, or a CRS with no EPSG
+  info) raises `GeorefUnavailable` "has no map info"; since v1.0.1 the export then ships in
+  pixel coordinates (`app.georef.pixel_grid()`, no CRS, no `.prj`, MANIFEST `georeference`,
+  `X-Allotrope-Georef: none`) instead of 422 `crs_missing`. A rotated map info, or a CRS with no EPSG
   code, still exports, but leaves the Scene without a bbox or `native_projection`.
 - **Frontend**: the Tanager file input accepts several files (`multiple`) so the pair goes in
   one upload; a data file with no extension needs the picker's "All files" filter.
@@ -158,8 +159,8 @@ differs and a second cache file was built.
 | Onboarding `Unrecognized File Extension` | an extension `FileSourceConfig` does not map (it accepts `.h5`, `.he5`, `.hdf5`, `.hdr`) |
 | Onboarding `no .h5 … and no ENVI .hdr with its data file` | an ENVI header uploaded without its data file, or the data file named differently from the header's stem |
 | Onboarding `GDAL reads N bands, header says M` | the data file does not belong to the header, or the header was edited |
-| ENVI export 422 `crs_missing` | the header has no `map info` (the resolver says so in the log) |
-| Export 422 `crs_missing` | `_resolve_tanager` raised `GeorefUnavailable`: no `.h5` under `raw/`, unreadable grid, or the mask's shape ≠ (YDim, XDim). It never rescales: band filtering does not crop a Tanager cube, so a mismatch means the wrong file |
+| ENVI export in pixel coordinates (`X-Allotrope-Georef: none`) | the header has no `map info` (the resolver says so in the log) |
+| Export in pixel coordinates (`X-Allotrope-Georef: none`) | `_resolve_tanager` raised `GeorefUnavailable`: no `.h5` under `raw/`, unreadable grid, or the mask's shape ≠ (YDim, XDim). It never rescales: band filtering does not crop a Tanager cube, so a mismatch means the wrong file |
 | Scene id is `ortho_sr` | the file had no `strip_id` attribute; a second such upload collides on `(sensor_type, sensor_scene_id)`, and `stac_item` has no datetime |
 | Memory | the cube is read whole: 1.55 GB float32 + 0.39 GB validity for 426 × 1020 × 895, ~3 GB peak during band filtering — EnMAP's order of magnitude |
 

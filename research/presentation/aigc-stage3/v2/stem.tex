@@ -1,0 +1,37 @@
+% The wavelength-binned spectral stem of Indradhanu V2 (reduced attention), NAS-figure style.
+% Mechanism verified against app/foundation_models/components/spectral_reduced.py and spectral_tokens.py:
+% 40 nm bins from 400 nm (53), bin token = width-weighted mean of x_b k(e(lambda_b)) + bin-centre bias; 64 learned
+% queries attend over the occupied bins (4 heads, token width 32); a per-band skip mean_b x_b W(e(lambda_b)); output 64 channels.
+\adjustbox{max width=\linewidth}{%
+\begin{tikzpicture}[x=1mm,y=1mm]
+% spectrum with bands
+\node[grp, fill=pB!30, minimum width=25mm, minimum height=30mm, anchor=north west] (GS) at (0,0) {};
+\node[glab] at (GS.north west) {one pixel, any band list};
+\draw[ink!70, line width=0.5pt] plot[smooth] coordinates {(2,-22) (5,-17) (8,-12.5) (11,-14) (13,-19) (15,-13) (18,-11) (21,-15) (23,-18)};
+\foreach \x in {2.5,3.6,4.7,5.8,6.9,8.0,9.1,10.2,11.3,12.4,14.6,15.7,16.8,17.9,19.0,20.1,21.2,22.3} \draw[ink, line width=0.25pt] (\x,-24) -- (\x,-25.6);
+\foreach \a/\b/\c in {2.1/6.4/pY,6.4/10.7/pB,10.7/15.0/pY,15.0/19.3/pB,19.3/23.0/pY} \fill[\c] (\a,-26.4) rectangle (\b,-27.4);
+\node[tsh] at (12.5,-29.2) {40\,nm bins from 400\,nm};
+\node[tsh, anchor=west] at (2,-7.4) {$x_b$ at $\lambda_b$};
+% wavelength encoding
+\node[stg, pattern color=pB!90, minimum width=15mm, minimum height=6mm] (E) at (37,-26) {$\mathbf e(\lambda)$, sin/cos\\10--10,000\,nm};
+% bin tokens
+\node[grp, fill=pY!30, draw=ochre!85!black, solid, minimum width=20mm, minimum height=15mm, anchor=north west] (GT) at (28,0) {};
+\node[glab] at (GT.north west) {bin tokens $\mathbf t_g$};
+\foreach \k in {0,...,4} \node[cell, fill=pY, minimum size=2.6mm] at (31.3+\k*3.3,-8.6) {};
+\node[tsh] at (38,-12.6) {53 bins, 32 wide};
+% attention
+\node[grp, fill=pG!30, draw=ochre!85!black, solid, minimum width=20mm, minimum height=15mm, anchor=north west] (GA) at (52,0) {};
+\node[glab] at (GA.north west) {64 queries};
+\foreach \k in {0,...,3} \node[cell, circle, fill=pB, minimum size=2.4mm] at (56+\k*3.6,-8.6) {};
+\node[tsh] at (62,-12.6) {attention, 4 heads};
+% output
+\node[stgn, minimum width=11mm, minimum height=7mm] (Z) at (80,-7.5) {$\mathbf z$\\64 ch};
+\node[tsh] at (80,-2.2) {to the encoder};
+% flows
+\draw[df] (GS.east |- 0,-8.6) -- (GT.west |- 0,-8.6);
+\draw[df] (GT.east |- 0,-8.6) -- (GA.west |- 0,-8.6);
+\draw[df] (GA.east |- 0,-8.6) -- (Z.west |- 0,-8.6);
+\draw[df] (GS.east |- 0,-19) -- node[tsh, above, pos=0.62]{per-band skip $\mathbf W(\lambda_b)$} (Z.south |- 0,-19) -- (Z.south);
+\draw[df, draw=mute] (E.north) -- node[tsh, left, pos=0.3]{$\mathbf k(\lambda_b)$} (38,-15);
+\draw[df, draw=mute] (E.east) -- ++(5,0) node[tsh, right]{$\mathbf W,\ \mathbf U$};
+\end{tikzpicture}}

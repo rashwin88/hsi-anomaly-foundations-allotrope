@@ -7,12 +7,15 @@ all ship as georeferenced raster files that rasterio reads directly.
 
 Public API: ``resolve_scene_georef(scene_dir, sensor_type, target_shape) ->
 (transform, crs)``. Raises ``GeorefUnavailable`` if no georef can be
-recovered (export endpoint translates that to a 422 ``crs_missing``).
+recovered. The export endpoint then falls back, loudly, to ``pixel_grid()`` with no CRS
+and records ``NO_GEOREF_NOTE`` in the MANIFEST (the object-coords endpoint stays strict).
 """
 
 from app.georef.from_scene_file import (
+    NO_GEOREF_NOTE,
     GeorefUnavailable,
+    pixel_grid,
     resolve_scene_georef,
 )
 
-__all__ = ["GeorefUnavailable", "resolve_scene_georef"]
+__all__ = ["NO_GEOREF_NOTE", "GeorefUnavailable", "pixel_grid", "resolve_scene_georef"]

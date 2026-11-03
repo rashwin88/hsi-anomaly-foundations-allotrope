@@ -1,0 +1,51 @@
+% Architecture evolution of Indradhanu: one mini schematic per generation; new parts in ochre.
+% Sources: docs/04-models.md, docs/lld/spectral-stem.md, docs/lld/evaluation.md, research/experiments/indradhanu-se-pretrain/F002-heavy/README.md,
+% research/experiments/indradhanu-finetune/FTH3-heavy-joint-more2/README.md, final design/ROADMAP.md (OB-14), git log dates.
+\newcommand{\gen}[8]{% x, input, stem style, stem, encoder style, encoder, decoder style, decoder
+  \node[lab, color=mute] at (#1,0) {#2};
+  \node[#3, minimum width=17mm, minimum height=3.6mm] at (#1,-4.5) {#4};
+  \node[#5, minimum height=4.2mm] at (#1,-9.6) {#6};
+  \node[#7, minimum width=17mm, minimum height=3.6mm] at (#1,-14.7) {#8};
+  \draw[ar] (#1,-1.6) -- (#1,-2.6); \draw[ar] (#1,-6.4) -- (#1,-7.4); \draw[ar] (#1,-11.8) -- (#1,-12.8); \draw[ar] (#1,-16.6) -- (#1,-17.7);}
+\adjustbox{max width=\textwidth, max totalheight=0.42\textheight}{%
+\begin{tikzpicture}[x=1mm,y=1mm,
+  mb/.style={stg, pattern color=faint!55, inner sep=0.6pt, font=\itshape\fontsize{5.6}{6.4}\selectfont},
+  nw/.style={stgn, inner sep=0.6pt, font=\itshape\fontsize{5.6}{6.4}\selectfont},
+  ex/.style={stgx, dashed, inner sep=0.8pt, font=\itshape\fontsize{5.6}{6.4}\selectfont},
+  lab/.style={font=\fontsize{5.6}{6.4}\selectfont, align=center, text width=20mm},
+  ar/.style={-{Stealth[length=1mm,width=0.8mm]}, line width=0.35pt, draw=mute}]
+\gen{0}{165-band grid}{mb}{1$\times$1 compressor}{mb, minimum width=10mm}{encoder}{mb}{SegFormer decoder}
+\node[mb, minimum width=17mm, minimum height=3.4mm] at (0,-19.6) {reconstruction};
+\gen{22}{\textcolor{ochre!80!black}{\textbf{any band list}}}{nw}{wavelength stem}{mb, minimum width=10mm}{encoder}{mb}{SegFormer decoder}
+\node[mb, minimum width=17mm, minimum height=3.4mm] at (22,-19.6) {reconstruction};
+\gen{44}{native bands}{mb}{wavelength stem}{mb, minimum width=10mm}{encoder}{mb}{SegFormer decoder}
+\node[mb, minimum width=8.5mm, minimum height=3.4mm] at (40.2,-19.6) {recon.};
+\node[nw, minimum width=7.5mm, minimum height=3.4mm] at (48.6,-19.6) {seg.};
+\node[ex, text width=18mm, minimum height=21mm] at (66,-10.5) {implant denoising\\[0.6mm] uncertainty head\\[0.6mm] gated loss\\[0.6mm] block masking\\[0.6mm] scene adaptation};
+\node[lab, color=mute] at (66,0) {tried};
+\gen{88}{native bands}{mb}{wavelength stem}{mb, minimum width=10mm}{encoder}{nw}{progressive decoder}
+\node[mb, minimum width=8.5mm, minimum height=3.4mm] at (84.2,-19.6) {recon.};
+\node[mb, minimum width=7.5mm, minimum height=3.4mm] at (92.6,-19.6) {seg.};
+\gen{110}{native bands}{mb}{wavelength stem, 64}{nw, minimum width=18mm}{encoder, 3$\times$ wide}{mb}{progressive decoder}
+\node[mb, minimum width=8.5mm, minimum height=3.4mm] at (106.2,-19.6) {recon.};
+\node[mb, minimum width=7.5mm, minimum height=3.4mm] at (114.6,-19.6) {seg.};
+\node[lab, color=mute] at (132,0) {reconstruction};
+\node[nw, text width=17mm, minimum height=5.4mm] at (132,-6.2) {residual\\Mahalanobis};
+\node[nw, text width=17mm, minimum height=5.4mm] at (132,-12.6) {thick cloud\\only};
+\node[nw, text width=17mm, minimum height=5.4mm] at (132,-19) {segmentation\\as its own step};
+\foreach \x/\n/\d/\r in {
+  {0/V1, v0.2.0/Apr 2026/pAUC 0.165},
+  {22/Stem + pretraining/14--16 Oct/F001 alone 0.155},
+  {44/V2.0 (FT04)/19 Oct/\textbf{0.170}, 418 objects},
+  {66/Explored/17--22 Oct/0.125--0.165},
+  {88/Progressive decoder/22--23 Oct/0.176, then 0.172 (tie)},
+  {110/V2.1 Heavy (FTH3)/28--29 Oct/\textbf{0.189}, 449 objects},
+  {132/Scoring layer/15 Oct--1 Nov/AUC 0.662$\to$0.854}}
+  {\node[lab] at (\x,-24.8) {\textbf{\n}};
+   \node[lab, color=mute] at (\x,-27.8) {\d};
+   \node[lab] at (\x,-30.8) {\r};}
+\begin{scope}[on background layer]
+\foreach \x/\f in {0/pB,22/pY,44/pG,88/pY,110/pR,132/pB} \node[grp, fill=\f!28, minimum width=20.6mm, minimum height=25.5mm, inner sep=0] at (\x,-9.6) {};
+\node[grp, draw=faint, minimum width=20.6mm, minimum height=25.5mm, inner sep=0] at (66,-9.6) {};
+\end{scope}
+\end{tikzpicture}}

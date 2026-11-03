@@ -33,8 +33,10 @@ Failure path:
 
 from __future__ import annotations
 
+import json
 import logging
 import pickle
+import re
 import shutil
 import uuid
 from datetime import datetime, timezone
@@ -119,10 +121,10 @@ def _filename_for_id(sensor_type: str, files: list[Path], root: Path | None = No
     DatasetBuilder will compute this same id internally during onboarding;
     we read it from `stac_item.id` afterwards and assert they match.
 
-    `root` is where the relative `files` live. Only Tanager needs it: its
+    `root` is where the relative `files` live. Tanager needs it: its
     file is named ortho_sr.h5, so the id comes from the strip_id attribute
     (ENVI: the file name or header description), and an ENVI header only
-    counts when its data file exists on disk.
+    counts when its data file exists on disk. HotSat reads metadata.json's `id`.
     """
     if sensor_type == "prisma":
         for p in files:
@@ -143,18 +145,9 @@ def _filename_for_id(sensor_type: str, files: list[Path], root: Path | None = No
             if name.endswith(".bin") and "_corr_" in name:
                 return p.parent.name
     elif sensor_type == "hotsat1":
-        # HotSat scene id is the stable prefix of every raster
-        # filename, also written into ``metadata.json`` as ``id``.
-        # We derive it from the ``_ortho.tiff`` / ``_stacked.tiff``
-        # / ``_udm.tiff`` filename rather than opening JSON here so
-        # the duplicate pre-check stays a pure stat-only pass.
-        for p in files:
-            name = p.name
-            for suffix in ("_ortho.tiff", "_stacked.tiff", "_udm.tiff"):
-                if name.endswith(suffix):
-                    base = name[: -len(suffix)]
-                    if base:
-                        return base
+        hotsat_id = _hotsat_scene_id(files, root)
+        if hotsat_id:
+            return hotsat_id
     elif sensor_type == "tanager":
         picked = pick_tanager_file([(root or Path()) / p for p in files])
         if picked is not None:
@@ -166,6 +159,27 @@ def _filename_for_id(sensor_type: str, files: list[Path], root: Path | None = No
     raise ValueError(
         f"could not derive filename id for sensor_type={sensor_type!r}"
     )
+
+
+# A HotSat raster name is the scene id plus one of these; the ortho carries its frame number.
+_HOTSAT_RASTER_SUFFIX = re.compile(r"(_frame\d+_ortho|_ortho|_stacked|_udm)\.tiff$", re.IGNORECASE)
+
+
+def _hotsat_scene_id(files: list[Path], root: Path | None) -> str | None:
+    """The id HotSatHelper reads: metadata.json's ``id``, else the raster-name prefix."""
+    for p in files:
+        if p.name == "metadata.json":
+            try:
+                scene_id = json.loads(((root or Path()) / p).read_text(encoding="utf-8")).get("id")
+            except (OSError, ValueError, AttributeError):
+                scene_id = None
+            if isinstance(scene_id, str) and scene_id:
+                return scene_id
+    for p in sorted(files):
+        base = _HOTSAT_RASTER_SUFFIX.sub("", p.name)
+        if base != p.name and base:
+            return base
+    return None
 
 
 # --- DatasetBuilder dispatch -----------------------------------------
@@ -280,7 +294,7 @@ def _native_projection(sensor_type: str, builder) -> str | None:
             return f"EPSG:{int(proj.epsg)}"
         return None
     if sensor_type == "tanager":
-        # ENVI without a north-up EPSG map info has no grid; export then refuses (GeorefUnavailable).
+        # ENVI without a north-up EPSG map info has no grid; export then falls back to pixel coordinates.
         return f"EPSG:{grid_epsg(metadata.grid)}" if metadata.grid is not None else None
     if sensor_type == "generic_hsi":
         # None without a CRS with an EPSG code; the pre-flight report says why.

@@ -14,7 +14,9 @@ for any sensor. ``<p>`` is ``thermal`` for Landsat 9 / HotSat-1 and ``hyper`` ot
         MANIFEST.json                     # audit trail
 
 Hard requirements (2026-05-14 submission rules):
-  - GeoTIFF with valid CRS (refuse to ship CRS-less bundles).
+  - GeoTIFF with the scene CRS. A scene with none exports in pixel coordinates (2026-11-01): the
+    api passes ``app.georef.pixel_grid()`` with crs None and a ``georef_note``; no .prj, lat / lon
+    blank, MANIFEST "georeference" says so. ``MissingCRSError`` only when no override at all.
   - Every path inside the zip starts with the literal ``thermal_`` / ``hyper_``.
   - Shapefile sidecar set is complete.
 """
@@ -55,7 +57,8 @@ class ThermalExportSpec:
     # Caller-supplied georef override (resolved from raw scene file) when
     # the action's anomaly_mask.tif itself has no CRS. Mirrors the hyper path.
     override_transform: Any = None     # rasterio.transform.Affine
-    override_crs: Any = None           # rasterio.crs.CRS
+    override_crs: Any = None           # rasterio.crs.CRS; None with a transform = pixel grid
+    georef_note: str | None = None     # set when the scene has no georeference
 
 
 def build_thermal_bundle(spec: ThermalExportSpec) -> tuple[bytes, str]:
@@ -90,7 +93,7 @@ def build_thermal_bundle(spec: ThermalExportSpec) -> tuple[bytes, str]:
         src_transform = src.transform
 
     if src_crs is None:
-        if spec.override_crs is not None and spec.override_transform is not None:
+        if spec.override_transform is not None:
             src_crs = spec.override_crs
             src_transform = spec.override_transform
             # Rewrite the mask with the resolved georef before shipping it.
@@ -130,8 +133,9 @@ def build_thermal_bundle(spec: ThermalExportSpec) -> tuple[bytes, str]:
         rec: dict[str, Any] = {
             "row": int(r),
             "col": int(c),
-            "latitude": float(lat),
-            "longitude": float(lon),
+            # Pixel-grid x / y are not degrees: no CRS, no lat / lon.
+            "latitude": float(lat) if src_crs is not None else float("nan"),
+            "longitude": float(lon) if src_crs is not None else float("nan"),
             "score": (
                 float(composite[int(r), int(c)])
                 if composite is not None else None
@@ -143,7 +147,7 @@ def build_thermal_bundle(spec: ThermalExportSpec) -> tuple[bytes, str]:
     gdf = gpd.GeoDataFrame(records, geometry="geometry", crs=src_crs)
 
     # Lat/lon attributes always in 4326 for the table; geometry stays native.
-    if str(gdf.crs).lower() not in ("epsg:4326",):
+    if gdf.crs is not None and str(gdf.crs).lower() not in ("epsg:4326",):
         gdf_4326 = gdf.to_crs("EPSG:4326")
         gdf["latitude"] = gdf_4326.geometry.y
         gdf["longitude"] = gdf_4326.geometry.x
@@ -185,7 +189,7 @@ def build_thermal_bundle(spec: ThermalExportSpec) -> tuple[bytes, str]:
             "sensor_type": spec.sensor_type,
             "software_version": spec.software_version,
             "generated_at_utc": datetime.now(timezone.utc).isoformat(),
-            "crs_wkt": src_crs.to_wkt(),
+            "crs_wkt": src_crs.to_wkt() if src_crs else None,
             "n_anomalous_pixels": len(records),
             "metrics": metrics,
             "report_required": True,
@@ -194,6 +198,8 @@ def build_thermal_bundle(spec: ThermalExportSpec) -> tuple[bytes, str]:
                 "experiences, and approaches (30% of marks). Author manually."
             ),
         }
+        if spec.georef_note:
+            manifest["georeference"] = spec.georef_note
         zf.writestr(f"{folder}/MANIFEST.json", json.dumps(manifest, indent=2))
 
     return zip_buf.getvalue(), f"{folder}.zip"

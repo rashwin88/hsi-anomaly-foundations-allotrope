@@ -8,4 +8,4 @@ access to Python). Bump all three together at release.
 """
 
 APP_NAME = "Allotrope"
-__version__ = "1.0.0"
+__version__ = "1.0.2"

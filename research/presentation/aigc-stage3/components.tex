@@ -1,0 +1,62 @@
+% Component cards: a mini schematic, two technical lines, the measured effect.
+% \card{icon}{title}{what it is}{measured effect}{status: shipped|tried}
+\newcommand{\card}[5]{%
+  \begin{minipage}[t][31mm][t]{71mm}
+  \begin{minipage}[t]{17mm}\vspace{0pt}\centering #1\end{minipage}\hspace{2mm}%
+  \begin{minipage}[t]{52mm}\vspace{0pt}
+  \raggedright{\small\textbf{#2}\par}{\fontsize{5.8}{7}\selectfont\scshape #5\par}\vspace{0.6mm}
+  {\fontsize{6.6}{7.9}\selectfont #3\par}\vspace{0.8mm}
+  {\fontsize{6.6}{7.9}\selectfont\color{ink}\textbf{Effect.} #4\par}
+  \end{minipage}
+  \end{minipage}}
+\newcommand{\shipped}{{\color{natural}shipped}}
+\newcommand{\tried}{{\color{manmade}tried, not shipped}}
+\tikzset{ic/.style={x=1mm,y=1mm, line width=0.4pt}}
+% icons
+\newcommand{\icstem}{\begin{tikzpicture}[ic]
+  \foreach \i in {0,...,13} \draw[mute] (\i*1.1,0) -- (\i*1.1,3);
+  \foreach \a/\b in {0/3.8,4.4/8.2,8.8/14.8} \draw[ochre!90!black, line width=0.6pt] (\a,-0.8) -- (\b,-0.8);
+  \draw[-{Stealth[length=1mm]}, mute] (7.4,-1.8) -- (7.4,-4.2);
+  \node[draw=ink, minimum width=12mm, minimum height=3.5mm, font=\fontsize{5.6}{6}\selectfont] at (7.4,-6.4) {64 channels};
+  \end{tikzpicture}}
+\newcommand{\icaug}{\begin{tikzpicture}[ic]
+  \foreach \i in {0,...,13} \draw[ink] (\i*1.1,4) -- (\i*1.1,7);
+  \foreach \i in {0,1,3,4,8,9,12} \draw[ink] (\i*1.1,-1) -- (\i*1.1,2);
+  \foreach \i in {2,5,6,7,10,11,13} \draw[faint, dashed] (\i*1.1,-1) -- (\i*1.1,2);
+  \node[font=\fontsize{5.4}{6}\selectfont, color=mute] at (7.2,-3) {random subset};
+  \end{tikzpicture}}
+\newcommand{\icseg}{\begin{tikzpicture}[ic]
+  \foreach \i in {0,...,4} \foreach \j in {0,...,4} \fill[natural!25] (\i*2.6,\j*2.6) rectangle ++(2.5,2.5);
+  \foreach \i/\j in {0/4,1/4,0/3,3/1,4/1,4/0} \fill[natural!70] (\i*2.6,\j*2.6) rectangle ++(2.5,2.5);
+  \foreach \i/\j in {2/3,3/3,3/4,2/4} \fill[faint!80] (\i*2.6,\j*2.6) rectangle ++(2.5,2.5);
+  \end{tikzpicture}}
+\newcommand{\icdec}{\begin{tikzpicture}[ic]
+  \draw[ink!70, rounded corners=0.5pt, pattern=north east lines, pattern color=faint] (0,0) rectangle (3,3); \draw[ink!70, rounded corners=0.5pt, pattern=north east lines, pattern color=faint] (4.5,-1.5) rectangle (10.5,4.5);
+  \draw[ochre!85!black, line width=0.6pt, rounded corners=0.5pt, pattern=north east lines, pattern color=ochre!50] (12,-4.5) rectangle (16,7.5);
+  \draw[-{Stealth[length=1mm]}, mute] (3,1.5) -- (4.5,1.5); \draw[-{Stealth[length=1mm]}, mute] (10.5,1.5) -- (12,1.5);
+  \draw[dashed, mute] (7.5,-1.5) -- (7.5,-6) -- (14,-6) -- (14,-4.5);
+  \node[font=\fontsize{5}{6}\selectfont, color=mute] at (7.5,-7.5) {skip};
+  \end{tikzpicture}}
+\newcommand{\icheavy}{\begin{tikzpicture}[ic]
+  \foreach \w/\y in {1/0,2/2,5/4,8/6} \draw[ink!70, rounded corners=0.5pt, pattern=north east lines, pattern color=faint] (0,\y) rectangle (\w*0.5,\y+1.5);
+  \foreach \w/\y in {1/0,2/2,5/4,8/6} \draw[ochre!85!black, line width=0.6pt, rounded corners=0.5pt, pattern=north east lines, pattern color=ochre!50] (6,\y) rectangle (6+\w*1.2,\y+1.5);
+  \node[font=\fontsize{5}{6}\selectfont, color=mute] at (2,-1.6) {FT04};
+  \node[font=\fontsize{5}{6}\selectfont, color=mute] at (10.5,-1.6) {Heavy};
+  \end{tikzpicture}}
+\newcommand{\icrm}{\begin{tikzpicture}[ic]
+  \draw[faint, rotate=30] (0,0) ellipse (7 and 2.6);
+  \foreach \p in {(-3,-1.5),(-1,-0.4),(1,0.6),(2.8,1.8),(0.2,-0.3),(-2,-0.6),(3.5,1.2),(-4,-2.6)} \fill[mute] \p circle (0.35);
+  \fill[ochre] (-1.5,3.4) circle (0.6);
+  \draw[ochre!90!black, densely dotted] (-1.5,3.4) -- (0,0);
+  \end{tikzpicture}}
+\newcommand{\ictried}{\begin{tikzpicture}[ic]
+  \node[draw=faint, dashed, minimum width=13mm, minimum height=9mm, text=mute, font=\fontsize{5.4}{6}\selectfont, align=center] {uncertainty\\head};
+  \draw[manmade, line width=0.6pt] (4.5,-4.5) -- (7.5,-1.5) (4.5,-1.5) -- (7.5,-4.5);
+  \end{tikzpicture}}
+\newcommand{\icnamer}{\begin{tikzpicture}[ic]
+  \node[draw=ochre!90!black, fill=ochre!15, minimum width=14mm, minimum height=3mm, font=\fontsize{5}{6}\selectfont] (s) at (0,0) {V2 stem};
+  \node[draw=ink, minimum width=5mm, minimum height=6mm, font=\fontsize{5}{6}\selectfont] (p) at (-4,-7) {pixel};
+  \node[draw=ink, minimum width=5mm, minimum height=6mm, font=\fontsize{5}{6}\selectfont] (l) at (4,-7) {library};
+  \draw[-{Stealth[length=1mm]}, mute] (s) -- (p); \draw[-{Stealth[length=1mm]}, mute] (s) -- (l);
+  \draw[<->, mute] (p) -- node[above, font=\fontsize{5}{6}\selectfont]{cos} (l);
+  \end{tikzpicture}}

@@ -24,7 +24,8 @@ Inputs (all carried inside `actions.configuration`):
                                   class map (None = its keep_mask as is)
   - model_overrides               optional — per-codename dict of
                                   {scoring_method, patch_size, stride,
-                                   batch_size, sam_l1_alpha} fields,
+                                   batch_size, sam_l1_alpha, rm_components}
+                                  fields,
                                   any subset; missing fields fall
                                   back to the capability defaults
 
@@ -98,6 +99,12 @@ class ModelOverride(BaseModel):
             "score = alpha * L1_norm + (1 - alpha) * SAM_norm. "
             "Ignored unless scoring_method='combined'."
         ),
+    )
+    rm_components: int | None = Field(
+        default=None,
+        ge=5,
+        le=100,
+        description="residual_mahalanobis only: PCA directions kept (default 30)",
     )
     erosion_kernel_size: int | None = Field(
         default=None,
@@ -188,7 +195,7 @@ class AnomalyScoringConfig(BaseModel):
         default_factory=dict,
         description=(
             "Optional per-codename overrides for scoring method, "
-            "patch_size, stride, batch_size, and sam_l1_alpha. Codenames "
+            "patch_size, stride, batch_size, sam_l1_alpha and rm_components. Codenames "
             "absent from this dict use the capability defaults."
         ),
     )
@@ -486,7 +493,7 @@ def validate_config(raw_cfg: dict[str, Any], sensor_type: str) -> dict[str, Any]
         if m.family == "classical":
             for forbidden in (
                 "patch_size", "stride", "batch_size",
-                "sam_l1_alpha", "erosion_kernel_size",
+                "sam_l1_alpha", "rm_components", "erosion_kernel_size",
             ):
                 if getattr(override, forbidden, None) is not None:
                     raise ValueError(
@@ -494,6 +501,16 @@ def validate_config(raw_cfg: dict[str, Any], sensor_type: str) -> dict[str, Any]
                         f"is not applicable to classical detector "
                         f"{m.architecture!r}"
                     )
+        # rm_components sets residual_mahalanobis' PCA width; on any other method it would be
+        # silently ignored, so refuse it.
+        if override.rm_components is not None and m.family != "classical":
+            effective = override.scoring_method or m.default_scoring_method
+            if effective != "residual_mahalanobis":
+                raise ValueError(
+                    f"model_overrides[{override_codename!r}].rm_components applies to "
+                    f"scoring_method 'residual_mahalanobis' only (this model scores with "
+                    f"{effective!r})"
+                )
         # erosion_kernel_size must be odd — the underlying
         # TokenMasking.erode_mask uses a centered kernel.
         if (

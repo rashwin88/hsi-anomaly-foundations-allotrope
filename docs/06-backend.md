@@ -100,7 +100,7 @@ has joined it.
   invalid;
 - `FileSourceConfig.infer_file_category` (`app/models/file_processing/sources.py`) must
   accept the path, or every builder construction fails validation;
-- a branch in `app/georef/from_scene_file.py`, or exports 422 with `crs_missing`;
+- a branch in `app/georef/from_scene_file.py`, or exports fall back to pixel coordinates (no CRS);
 - `_guess_sensor` in `app/utils/visualization/hyperspectral_visualizer.py` if band count
   would mislabel it.
 
@@ -155,7 +155,7 @@ worth of `async` — the DB session is sync and will block the loop.
 no migration.
 
 **The version lives in one place.** `allotrope/version.py` (`APP_NAME`, `__version__`, 1.0.0
-since 2026-11-01). Every export MANIFEST's `software_version` is `allotrope/<version>`;
+since 2026-11-01, 1.0.1 the same day, 1.0.2 for the HotSat-1 fixes). Every export MANIFEST's `software_version` is `allotrope/<version>`;
 `GET /version` (unauthenticated) returns `{name, version}`; `frontend/src/version.ts` and
 `frontend/package.json` mirror it by hand.
 

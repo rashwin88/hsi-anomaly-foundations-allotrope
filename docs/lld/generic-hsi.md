@@ -38,7 +38,7 @@ read_generic_hsi_metadata (no cube read; one decimated sample)
   └─ preflight report (JSON)  -> Scene.extra_metadata["preflight"], job.payload["preflight"]
 GenericHsiDatasetBuilder.vend_dataset()  one GDAL read, scaled, invalid voxels 0.0, units
   └─ band filter -> spatial mask -> PCHIP -> (common grid)         [the Tanager / EnMAP pipeline]
-export ─▶ resolve_generic_hsi_georef ─▶ (Affine, CRS) or GeorefUnavailable -> 422 crs_missing
+export ─▶ resolve_generic_hsi_georef ─▶ (Affine, CRS) or GeorefUnavailable -> pixel-grid export (v1.0.1)
 ```
 
 ## The pre-flight report
@@ -68,7 +68,7 @@ Written by `generic_hsi_preflight.assemble`, schema `allotrope.generic_hsi.prefl
 | Override | `allotrope_ingest.json` `{"scale": "auto" | "x1" | "x0.0001" | "x<k>" | "radiance"}`; the upload form's `scale_override` writes it | Stored in `raw/`, so every re-vend (band_filter_apply) applies it; the scene id gets `@<override>` so a corrected re-upload is not refused as a duplicate |
 | Not reflectance | vended unscaled, `units="not_reflectance"`; anomaly_scoring skips foundation models (`models_skipped_not_reflectance`), refuses if only foundation models were asked for; spectral match adds a `warning` | MNF-RX is unit-free. The default stays `["Indradhanu V2", "MNF-RX"]`: the data decides, not a per-scene default the catalog cannot express |
 | No-data | declared value, plus always -9999, non-finite, and a pixel 0 in every band; a lone 0 stays valid unless 0 is declared | GHOSt declares 0; Tanager uses -9999; NaN broke spectral matching on the costume. A single true 0 (deep absorption) is real data |
-| Georef | file CRS + non-identity affine (EPSG:4326 allowed); else `.igm`; else refuse | An unplaceable map must never be submitted |
+| Georef | file CRS + non-identity affine (EPSG:4326 allowed); else `.igm`; else export in pixel coordinates (v1.0.1) | User, 2026-11-01: always export. The fallback is loud - no CRS, no `.prj`, MANIFEST `georeference`, `X-Allotrope-Georef: none`, a UI note - so a pixel-grid map is never mistaken for a placed one |
 | IGM | own ENVI parser + numpy, band roles from `band names`, else by range / gradient; EPSG:4326 affine fitted to the lat/lon bounding box | GDAL opens `x.igm` with `x.hdr` - the cube's header - before `x.igm.hdr`. The bbox fit is PRISMA's fallback, approximate for a rotated swath (noted in `assumptions`) |
 | Segmentation | V2 refuses a not-reflectance scene ("V2 segmentation needs reflectance; ... use method 'indices' or fix the scale at upload"), checked from the band filter's `summary.json` `scene_units` before any load; the generic_hsi template carries `method_if_not_reflectance: "indices"`, so the default falls back to the index method | The head was trained on reflectance; the static catalog cannot hold a per-scene default, so the fallback is a config field only this template sets |
 | Scoring summary | `model_codenames` lists the models that RAN | anomaly_detection_prep reads each listed model's raster; a skipped V2 has none (found in the E2E) |
@@ -82,8 +82,10 @@ Written by `generic_hsi_preflight.assemble`, schema `allotrope.generic_hsi.prefl
   georef resolver all go through it (via `locate_data`), so they read the same file.
 - Sidecars (wavelength file, `allotrope_ingest.json`, `.igm`) are searched under the scene's `raw/`
   folder (`upload_root`), wherever in the upload they sit.
-- The export detail stays `crs_missing` (the UI matches on it); the reason - "this file has no map
-  coordinates ..." - is in the `X-Allotrope-Reason` header and on the scene page.
+- No georeference no longer refuses the export (v1.0.1): prep and match bundles and the class pack come back 200
+  on `app.georef.pixel_grid()` (`Affine(1, 0, 0, 0, -1, 0)`, crs None; point x = col + 0.5, y = -(row + 0.5)),
+  with `X-Allotrope-Georef: none` and the MANIFEST note `NO_GEOREF_NOTE`; the reason - "this file has no map
+  coordinates ..." - is in the api log and on the scene page. `object_coords` stays strict (422 `crs_missing`).
 
 ## Failure modes
 
@@ -93,7 +95,7 @@ Written by `generic_hsi_preflight.assemble`, schema `allotrope.generic_hsi.prefl
 | Onboarding `no wavelengths found ... Upload a wavelength file` | no band table in any of the four places; add a CSV / JSON with one value per band |
 | Onboarding `GDAL reads N bands, the header says M` | the data file is not the header's |
 | Scoring `this scene is not reflectance ...` | only foundation models picked on a DN / radiance scene; add MNF-RX or re-upload with an override |
-| Export 422 `crs_missing`, header `this file has no map coordinates` | no CRS, no map info, no `.igm` with its own header |
+| Export 200 with `X-Allotrope-Georef: none`, files in pixel coordinates | no CRS, no map info, no `.igm` with its own header (before v1.0.1: 422 `crs_missing`) |
 | `IGM holds projected coordinates` | an `.igm` in UTM metres; only degrees are supported |
 | Memory | the cube is read whole, as Tanager: float32 C x H x W plus a bool cube of the same size |
 
@@ -107,6 +109,6 @@ anomaly_detection_prep -> commit p99.5 -> export -> spectral_library_match -> ex
 | Case | Pre-flight | Chain | Export |
 |---|---|---|---|
 | (a) GHOSt-like COG: pixel interleave, float32 0-1, `wavelength` + `wavelenght_units=nm`, nodata 0, EPSG:32613 | band_metadata, FWHM derived 1.95 x spacing (9.66 nm), reflectance_0_1, nodata 0, georef file | 426 -> 335 bands; V2 + MNF-RX; 404 px at p99.5; splib07 cache 518 entries | 200, mask EPSG:32613 `(30, 0, 590970, 0, -30, 3651540)`, values {0, 1}; match bundle 200 on the same grid |
-| (b) same cube uint16 x10000, no georef | reflectance_x10000 (median 3730, p99 4887), georef none, warning "export will refuse" | 426 -> 331; V2 + MNF-RX; 404 px | 422 `crs_missing`, `X-Allotrope-Reason: this file has no map coordinates ...` (prep and match) |
+| (b) same cube uint16 x10000, no georef | reflectance_x10000 (median 3730, p99 4887), georef none, warning "export will refuse" | 426 -> 331; V2 + MNF-RX; 404 px | 422 `crs_missing`, `X-Allotrope-Reason: this file has no map coordinates ...` (prep and match; v1.0.1: 200 in pixel coordinates) |
 | (c) OSK-style ENVI `.hsi` + `.hdr`, BSQ, `wavelength` + `fwhm` + map info, ignore -9999 | FWHM from envi_header (5.2-6.8 nm), reflectance_0_1, nodata -9999, georef file | 426 -> 335; V2 + MNF-RX; 404 px | 200, mask on the grid of (a), {0, 1}; match 200 |
 | (d) (b) with override `radiance` | not_reflectance (operator), id `tanager_u16_nogeo@radiance` | scoring ran MNF-RX only (`models_skipped_not_reflectance: ["Indradhanu V2"]`); prep, commit ok; segmentation default fell back to indices, explicit V2 refused | 422, as (b) |

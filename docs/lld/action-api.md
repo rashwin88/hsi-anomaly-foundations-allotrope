@@ -111,7 +111,7 @@ pattern, mount order suddenly matters and this note stops being true.
 |---|---|
 | Unknown action id | 404 `action_not_found` |
 | Preview mask evicted or api restarted | 404 `preview_mask_not_cached_repost_apply` |
-| Export on a scene whose CRS cannot be resolved | 422 `crs_missing` |
+| Export on a scene whose CRS cannot be resolved | 200 in pixel coordinates, `X-Allotrope-Georef: none` (v1.0.1; `object_coords` stays 422 `crs_missing`) |
 | Delete on a running Action | 409 |
 
 The export case is worth understanding rather than just catching. Vendables carry no spatial

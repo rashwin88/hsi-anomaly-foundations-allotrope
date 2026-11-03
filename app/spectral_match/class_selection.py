@@ -7,8 +7,9 @@ so the count the match screen shows on its export button is the count the pack c
 Design: docs/proposals/class-driven-flow.md (gap 2, addition A); docs/lld/spectral-namer-in-product.md.
 
 Why it exists: the namer calls each object man-made or natural at P(man-made) > 0.5 and names a man-made one's
-closest class. The user picks classes on the match screen ("oil + plastic", "natural") and may lower the man-made
-cut (Sensitive 0.35, Very sensitive 0.25) because solar-panel-like objects sit just under 0.5. The export must
+closest class. The user picks classes on the match screen ("oil + plastic", "natural") and may move the man-made
+cut (Sensitive 0.35, Very sensitive 0.25, or a slider 0.05-0.95) because solar-panel-like objects sit just under 0.5;
+above 0.5 the weaker man-made calls turn natural. The export must
 re-decide each object at that cut from namer_objects.parquet, with no re-run.
 
 Re-deciding at a cut:

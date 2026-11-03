@@ -20,6 +20,14 @@ class FileDownloaderType(Enum):
     DOWNLOAD_LINK = "download_link"
 
 
+def _is_hotsat_bundle(path: str) -> bool:
+    """A HotSat-1 scene folder: metadata.json beside an ortho or stacked GeoTIFF (HotSatHelper's layout)."""
+    if not os.path.isdir(path):
+        return False
+    names = [n.lower() for n in os.listdir(path)]
+    return "metadata.json" in names and any(n.endswith(("_ortho.tiff", "_stacked.tiff")) for n in names)
+
+
 class FileSourceConfig(BaseModel):
     """
     Configuration for the local file path
@@ -47,6 +55,9 @@ class FileSourceConfig(BaseModel):
             elif self.source_path.lower().endswith(".hdr"):  # pylint: disable=no-member
                 # Tanager delivered as ENVI: the builder is handed the header (tanager_envi.py).
                 self.file_category = FileCategory.ENVI_HEADER
+            elif _is_hotsat_bundle(self.source_path):
+                # Before the EnMAP name test: a HotSat folder's path could contain those words.
+                self.file_category = FileCategory.HOTSAT_FOLDER
             elif "ENMAP" in self.source_path and "L2A" in self.source_path:
                 self.file_category = FileCategory.ENMAP_FOLDER
             elif os.path.isdir(self.source_path) and any(

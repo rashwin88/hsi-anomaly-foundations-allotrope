@@ -9,6 +9,7 @@ rasterio / pyarrow / geopandas / PIL only, not the database.
 from __future__ import annotations
 
 import csv
+import dataclasses
 import io
 import json
 import os
@@ -349,6 +350,42 @@ def test_export_bundle_carries_the_namer(fake_namer, tmp_path):
     assert cols[:10] == ["row", "col", "lat", "lon", "nm_mm", "nm_call", "nm_cls", "nm_p", "nm_conf",
                          "nm_obj"]
     assert "family" in cols and "mat1" in cols
+
+
+def test_export_bundle_without_georeference_is_in_pixel_coordinates(fake_namer, tmp_path):
+    """v1.0.1: no georeference still exports - pixel grid, no CRS, no .prj, lat / lon blank, a MANIFEST note."""
+    import geopandas as gpd
+    from rasterio.io import MemoryFile
+
+    from app.georef import NO_GEOREF_NOTE, pixel_grid
+    from app.spectral_match.export import ExportSpec, MissingCRSError, build_hyper_bundle
+
+    mask = _mask()
+    _run_namer(tmp_path, mask)
+    _write_family_and_sam(tmp_path, *np.nonzero(mask & (np.arange(H)[:, None] < 25)))
+    spec = ExportSpec(action_id="action_11111111-2222", scene_id="scene_33333333-4444", sensor_type="generic_hsi",
+                      artifact_dir=tmp_path, splib_version=None, software_version="test")
+    with pytest.raises(MissingCRSError):                                  # no override at all: still refused
+        build_hyper_bundle(spec)
+    for subset in ("all", "manmade"):
+        blob, name = build_hyper_bundle(dataclasses.replace(
+            spec, override_transform=pixel_grid(), override_crs=None, georef_note=NO_GEOREF_NOTE, subset=subset))
+        z = zipfile.ZipFile(io.BytesIO(blob))
+        folder = name[:-4]
+        assert not any(n.endswith(".prj") for n in z.namelist())
+        tif = next(n for n in z.namelist() if n.endswith(".tif"))
+        with MemoryFile(z.read(tif)) as mf, mf.open() as src:
+            assert src.crs is None and tuple(src.transform)[:6] == (1.0, 0.0, 0.0, 0.0, -1.0, 0.0)
+        assert json.loads(z.read(f"{folder}/MANIFEST.json"))["georeference"] == NO_GEOREF_NOTE
+        shp = tmp_path / f"shp_{subset}"
+        shp.mkdir()
+        for n in z.namelist():
+            if "/hyper_anomaly_materials" in n:
+                (shp / f"a.{n.rsplit('.', 1)[1]}").write_bytes(z.read(n))
+        pts = gpd.read_file(shp / "a.shp")
+        assert pts.crs is None and len(pts) == (mask.sum() if subset == "all" else 11)
+        assert np.allclose(pts.geometry.x, pts["col"] + 0.5) and np.allclose(pts.geometry.y, -(pts["row"] + 0.5))
+        assert pts["lat"].isna().all()
 
 
 def _bundle(art: Path, subset: str):

@@ -1,0 +1,100 @@
+% Allotrope v1.0 deck theme: quiet, Tufte-like, matching the product's v1.0 UI.
+% Paper #fffff8, ink #111, hairlines #ddd; man-made #c0392b, natural #2e7d6b, anomaly/selection ochre #d4a017.
+\usepackage{fontspec}
+\usepackage{unicode-math}
+\setmainfont{texgyrepagella}[Extension=.otf, UprightFont=*-regular, BoldFont=*-bold,
+  ItalicFont=*-italic, BoldItalicFont=*-bolditalic, Numbers={Lining,Monospaced}]
+\setsansfont{texgyrepagella}[Extension=.otf, UprightFont=*-regular, BoldFont=*-bold,
+  ItalicFont=*-italic, BoldItalicFont=*-bolditalic, Numbers={Lining,Monospaced}]
+\setmonofont{texgyrecursor}[Extension=.otf, UprightFont=*-regular, BoldFont=*-bold, Scale=0.95]
+\setmathfont{texgyrepagella-math.otf}
+\usefonttheme{professionalfonts}
+\usefonttheme{serif}
+
+\usepackage{booktabs,array,tabularx,colortbl,multirow,makecell}
+\usepackage{tikz,pgfplots}
+\usetikzlibrary{arrows.meta,positioning,calc,decorations.pathreplacing,shapes.misc}
+\pgfplotsset{compat=1.18}
+\usepgfplotslibrary{groupplots}
+
+\definecolor{paper}{HTML}{FFFFF8}
+\definecolor{ink}{HTML}{111111}
+\definecolor{rule}{HTML}{DDDDDD}
+\definecolor{mute}{HTML}{6B6B6B}
+\definecolor{faint}{HTML}{A8A8A8}
+\definecolor{manmade}{HTML}{C0392B}
+\definecolor{natural}{HTML}{2E7D6B}
+\definecolor{ochre}{HTML}{D4A017}
+\definecolor{band}{HTML}{F4F1E6}
+
+\setbeamercolor{background canvas}{bg=paper}
+\setbeamercolor{normal text}{fg=ink,bg=paper}
+\setbeamercolor{structure}{fg=ink}
+\setbeamercolor{alerted text}{fg=manmade}
+\setbeamercolor{frametitle}{fg=ink}
+\setbeamercolor{block title}{fg=ink,bg=}
+\setbeamercolor{block body}{fg=ink,bg=}
+\setbeamertemplate{navigation symbols}{}
+\setbeamertemplate{blocks}[default]
+\setbeamersize{text margin left=6mm, text margin right=6mm}
+
+\setbeamertemplate{frametitle}{%
+  \vspace*{2.2mm}{\fontsize{12.5}{14.5}\selectfont\insertframetitle\par}%
+  \vspace{0.8mm}{\color{rule}\rule{\textwidth}{0.4pt}}\vspace{-1mm}}
+
+\newcommand{\decklabel}{Allotrope v1.0 \textperiodcentered{} AIGC Stage III}
+\setbeamertemplate{footline}{%
+  \hbox to \paperwidth{\hspace{6mm}{\color{mute}\fontsize{6.5}{8}\selectfont\decklabel}\hfill
+  {\color{mute}\fontsize{6.5}{8}\selectfont\insertframenumber}\hspace{6mm}}\vspace{2.2mm}}
+
+\setbeamertemplate{itemize item}{\raisebox{0.25ex}{\color{ochre}\rule{0.5ex}{0.5ex}}}
+\setbeamertemplate{itemize subitem}{\color{mute}--}
+\setlength{\leftmargini}{1.0em}
+\setbeamerfont{itemize/enumerate body}{size=\small}
+\setbeamerfont{itemize/enumerate subbody}{size=\footnotesize}
+
+\renewcommand{\arraystretch}{1.08}
+\setlength{\tabcolsep}{3pt}
+\arrayrulecolor{faint}
+\setlength{\heavyrulewidth}{0.5pt}\setlength{\lightrulewidth}{0.3pt}\setlength{\cmidrulewidth}{0.3pt}
+
+% small helpers
+\newcommand{\sfr}[1]{\includegraphics[width=20.6mm]{figures/story_prisma_k#1.jpg}}  % story frame
+\newcommand{\src}[1]{{\color{mute}\fontsize{5.6}{6.6}\selectfont #1\par}}
+\newcommand{\srcc}[1]{{\color{mute}\fontsize{5.6}{6.6}\selectfont #1}}       % on-slide source note
+\newcommand{\kicker}[1]{{\color{mute}\scriptsize\scshape #1}}                 % panel heading
+\newcommand{\hl}[1]{\textbf{#1}}
+\newcommand{\mm}{{\color{manmade}man-made}}
+\newcommand{\nat}{{\color{natural}natural}}
+\newcommand{\shp}[1]{{\ttfamily\fontsize{5.4}{6}\selectfont #1}}             % tensor shape on arrows
+\newcommand{\fn}[1]{{\ttfamily\fontsize{6.3}{7.4}\selectfont #1}}             % file name
+
+\pgfplotsset{tufte/.style={
+  axis line style={draw=none}, tick style={draw=none},
+  ticklabel style={font=\fontsize{6.5}{7}\selectfont, color=mute},
+  label style={font=\fontsize{6.5}{7}\selectfont, color=mute},
+  grid=none, every axis plot/.append style={line join=round}}}
+
+\tikzset{blk/.style={draw=ink, line width=0.4pt, align=center, inner sep=2pt,
+    font=\fontsize{6.4}{7.4}\selectfont, fill=paper},
+  arr/.style={-{Stealth[length=1.6mm,width=1.2mm]}, line width=0.45pt, draw=ink}}
+\tikzset{ms/.style={font=\fontsize{5.9}{6.9}\selectfont, align=left, anchor=south west, inner sep=0.5pt, text width=#1}}
+\tikzset{fl/.style={font=\fontsize{5.7}{6.7}\selectfont, align=left, anchor=north west, inner sep=0.5pt, text width=#1, color=manmade!85!ink}}
+\usepackage{adjustbox}
+\newcommand{\fitw}[1]{\adjustbox{max width=\linewidth}{#1}}
+\usetikzlibrary{patterns,fit,backgrounds,shapes.geometric}
+\definecolor{pY}{HTML}{F6E7A1}\definecolor{pB}{HTML}{CFE0F3}\definecolor{pG}{HTML}{D4EAD6}\definecolor{pR}{HTML}{F2C4BC}
+% NAS-figure style: dashed tinted group containers, hatched stage blocks, pastel cells, open loss circles
+\tikzset{
+  grp/.style={draw=mute, dashed, rounded corners=3pt, line width=0.5pt, inner sep=2mm},
+  stg/.style={draw=ink!70, rounded corners=1.5pt, line width=0.5pt, preaction={fill=paper},
+    pattern=north east lines, pattern color=ochre!45, align=center, font=\itshape\fontsize{6.4}{7.4}\selectfont, inner sep=1pt},
+  stgn/.style={stg, draw=ochre!85!black, line width=0.9pt},
+  stgx/.style={stg, draw=faint, pattern color=faint!30, text=mute},
+  cell/.style={draw=ink!50, line width=0.3pt, minimum size=1.9mm, inner sep=0pt},
+  loss/.style={draw=ochre!90!black, line width=0.6pt, ellipse, inner sep=0.8pt, font=\itshape\fontsize{5.8}{6.6}\selectfont, fill=paper},
+  glab/.style={font=\itshape\fontsize{6.6}{7.6}\selectfont, color=ink!80, anchor=north west, inner sep=1pt, xshift=1.2mm, yshift=-1mm},
+  tsh/.style={font=\itshape\fontsize{5.4}{6}\selectfont, color=mute},
+  df/.style={-{Stealth[length=1.5mm,width=1.1mm]}, line width=0.5pt, draw=ink},
+  tf/.style={-{Stealth[length=1.5mm,width=1.1mm]}, line width=0.5pt, draw=mute, dashed}}
+\newcommand{\take}[1]{\par\vspace{0.6mm}{\color{ink}\fontsize{7.2}{8.6}\selectfont\itshape #1\par}}

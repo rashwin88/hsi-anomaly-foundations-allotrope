@@ -349,6 +349,10 @@ export async function loadHistogram(actionId: string): Promise<HistogramRow[] | 
   return j ? (j.top1_counts ?? []) : null;
 }
 
+// Shown after an export the api answered with X-Allotrope-Georef: none (action_export.py).
+export const NO_GEOREF_NOTE =
+  "No georeference in this scene: TIF and shapefile are in pixel coordinates (col,row)";
+
 // Centroid lat / lon per object, from the api (the browser cannot project). Null when the
 // scene has no georeferencing; the viewer then shows row / col.
 export async function loadObjectCoords(actionId: string): Promise<Map<number, [number, number]> | null> {

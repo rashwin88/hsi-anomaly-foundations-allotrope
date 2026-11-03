@@ -12,7 +12,7 @@ Recipe per the action's META:
   4. For each picked model codename:
        a. Resolve codename → checkpoint + inferencer config.
        b. Apply per-codename overrides (scoring_method, patch/stride/
-          batch_size, sam_l1_alpha) on top of capability defaults.
+          batch_size, sam_l1_alpha, rm_components) on top of capability defaults.
        c. predict_full_scene → reconstruction.
        d. Score with the resolved method.
        e. Apply keep_mask if provided. A model that excludes classes (V2)
@@ -181,6 +181,7 @@ def run(ctx: Any) -> None:
         InferenceConfig,
         PixelStatsOverride,
     )
+    from app.utils.anomaly_detection.residual_mahalanobis import PCA_COMPONENTS
     from app.utils.anomaly_detection.scoring import compute_roc, compute_score
     from app.utils.torch_helpers.device_selection import get_device
 
@@ -404,6 +405,7 @@ def run(ctx: Any) -> None:
         stride = int(ovr.get("stride") or m.default_stride)
         batch_size = int(ovr.get("batch_size") or m.default_batch_size)
         sam_l1_alpha = float(ovr.get("sam_l1_alpha") or 0.5)
+        rm_components = int(ovr.get("rm_components") or PCA_COMPONENTS)
         # Optional erosion kernel override for the SegFormer-MAE
         # family. None → keep the InferenceConfig default (15) baked
         # into the inferencer; SegFormer reads `self.config.erosion_kernel_size`
@@ -578,6 +580,7 @@ def run(ctx: Any) -> None:
                 eroded_keep_mask,
                 method=method,
                 combined_weight=sam_l1_alpha,
+                rm_components=rm_components,
             )
 
             # Classes the model excludes (Indradhanu V2: thick cloud) are zeroed AFTER scoring, from its own
@@ -689,6 +692,7 @@ def run(ctx: Any) -> None:
             "stride": None if is_classical else stride,
             "batch_size": None if is_classical else batch_size,
             "sam_l1_alpha": sam_l1_alpha if (not is_classical and method == "combined") else None,
+            "rm_components": rm_components if (not is_classical and method == "residual_mahalanobis") else None,
             "erosion_kernel_size": (
                 None if is_classical
                 else (int(erosion_ks_override) if erosion_ks_override is not None else 15)

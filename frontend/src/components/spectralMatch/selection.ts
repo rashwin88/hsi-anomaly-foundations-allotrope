@@ -2,8 +2,8 @@
 // chosen sensitivity (docs/proposals/class-driven-flow.md, Gap 2 and addition A).
 //
 // Sensitivity: the worker calls an object man-made when its mean P(man-made) is above 0.5
-// (app/spectral_match/namer/objects.py MANMADE_CALL_P). The screen can lower that cut-off and
-// recomputes every call here, live, from namer_objects.parquet. An object that crosses it takes
+// (app/spectral_match/namer/objects.py MANMADE_CALL_P). The screen moves that cut-off anywhere in
+// CUT_MIN..CUT_MAX and recomputes every call here, live, from namer_objects.parquet. An object that crosses it takes
 // its top mean P(class | man-made) (the prob_<class> columns) as its class, tentative below
 // namer_confident_p. Runs from before those columns use the export's lower bound from
 // namer_pixels.parquet (per class, the sum of p_cls over the object's pixels whose own top class
@@ -27,6 +27,9 @@ export const CUTS = [
   { p: 0.25, label: "Very sensitive" },
 ];
 export const DEFAULT_CUT = 0.5;
+// The slider's range (user, 2026-11-01). Above 0.5 the worker's weaker man-made calls turn natural.
+export const CUT_MIN = 0.05;
+export const CUT_MAX = 0.95;
 export const UNKNOWN = "unknown";
 export const NATURAL = "natural";
 

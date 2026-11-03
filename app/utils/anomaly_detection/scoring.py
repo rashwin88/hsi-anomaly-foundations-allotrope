@@ -29,7 +29,8 @@ Score methods:
 
 - residual_mahalanobis
     How unusual the residual's direction is: Mahalanobis distance of the
-    residual in its whitened top-30 principal components, against a local
+    residual in its whitened top-30 principal components (``rm_components``;
+    capped at the band count), against a local
     ring mean (21/61 px) or the global mean. Indradhanu's default since
     2026-10-15 (mean ROC-AUC on the labelled PRISMA scenes 0.662 -> 0.854
     for v0.2.0). See residual_mahalanobis.py.
@@ -47,7 +48,9 @@ from typing import Literal
 
 import numpy as np
 
-from app.utils.anomaly_detection.residual_mahalanobis import LOCAL_WINDOW, residual_mahalanobis
+from app.utils.anomaly_detection.residual_mahalanobis import (
+    LOCAL_WINDOW, PCA_COMPONENTS, residual_mahalanobis,
+)
 
 ScoringMethod = Literal["L1", "MSE", "SAM", "combined", "residual_mahalanobis"]
 
@@ -61,6 +64,7 @@ def compute_score(
     combined_weight: float = 0.5,
     sam_dark_fade: float | None = None,
     local_window: tuple[int, int] | None = LOCAL_WINDOW,
+    rm_components: int = PCA_COMPONENTS,
 ) -> np.ndarray:
     """Compute a (H, W) anomaly score map.
 
@@ -77,6 +81,9 @@ def compute_score(
                         over bands of `original`. None = plain angle.
         local_window:   residual_mahalanobis only: (inner, outer) full widths of
                         the ring whose mean is subtracted; None = global mean.
+        rm_components:  residual_mahalanobis only: whitened PCA directions kept
+                        (default 30). More than the band count keeps every band's
+                        direction (whitened_pca slices the eigen order).
 
     Returns:
         (H, W) float32 score map; non-negative, validity-masked.
@@ -106,7 +113,8 @@ def compute_score(
         samn = _normalise(sam, spatial)
         score = combined_weight * l1n + (1.0 - combined_weight) * samn
     elif method == "residual_mahalanobis":
-        score = residual_mahalanobis(original, reconstruction, spatial, local_window=local_window)
+        score = residual_mahalanobis(original, reconstruction, spatial, d=rm_components,
+                                     local_window=local_window)
     else:
         raise ValueError(f"unknown scoring method {method!r}")
 
