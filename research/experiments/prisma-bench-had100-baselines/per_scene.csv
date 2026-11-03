@@ -55,6 +55,10 @@ KCSR_3_29,all,set1,0.0509,0.3363,0.0376,19,14
 KCSR_3_29,all,set2,0.0416,0.7104,0.0111,95,22
 KCSR_3_29,all,set3,0.0375,0.5582,0.0129,32,11
 KCSR_3_29,all,set4,0.0397,0.6409,0.0241,49,29
+AutoAD,all,set1,0.1027,0.917,0.069,81,25
+AutoAD,all,set2,0.0904,0.7718,0.0353,94,16
+AutoAD,all,set3,0.0578,0.7301,0.009,51,10
+AutoAD,all,set4,0.1594,0.8532,0.012,110,9
 Indradhanu V2 Heavy (FTH3),excluded,set1,0.2616,0.9354,0.116,106,54
 Indradhanu V2 Heavy (FTH3),excluded,set2,0.1874,0.8735,0.0766,112,36
 Indradhanu V2 Heavy (FTH3),excluded,set3,0.0861,0.7806,0.0167,62,19
@@ -111,5 +115,9 @@ KCSR_3_29,excluded,set1,0.0509,0.3363,0.0376,19,14
 KCSR_3_29,excluded,set2,0.0416,0.7104,0.0111,95,22
 KCSR_3_29,excluded,set3,0.0375,0.561,0.0129,32,11
 KCSR_3_29,excluded,set4,0.0398,0.6422,0.0241,49,29
+AutoAD,excluded,set1,0.1027,0.917,0.069,81,25
+AutoAD,excluded,set2,0.0904,0.7718,0.0353,94,16
+AutoAD,excluded,set3,0.0601,0.7369,0.0129,52,12
+AutoAD,excluded,set4,0.1771,0.8552,0.0172,117,13
 Indradhanu V1 (v0.2.0),all,set3,0.0728,0.7502,0.0064,53,8
 Indradhanu V1 (v0.2.0),excluded,set3,0.0926,0.7611,0.0141,67,12

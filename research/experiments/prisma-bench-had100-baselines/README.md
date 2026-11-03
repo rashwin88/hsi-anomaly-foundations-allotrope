@@ -22,6 +22,7 @@ after scoring (as in the FTH3 report's Table 4). Chance: 93 objects at the top 1
 | Indradhanu V2.0 (FT04) + RM | 0.162 / 0.174 | 415 / 427 | 135 / 152 | 0.853 / 0.857 | -0.015 [-0.027, -0.003] |
 | PCA-RX (no model) | 0.128 / 0.139 | 361 / 377 | 74 / 77 | 0.839 / 0.842 | -0.050 [-0.064, -0.036] |
 | CR 5/29, lambda 0.01 | 0.125 / 0.127 | 371 / 376 | 127 / 127 | 0.865 / 0.868 | -0.063 [-0.090, -0.035] |
+| AutoAD (official code, tiled 2 x 2) | 0.103 / 0.108 | 336 / 344 | 60 / 66 | 0.818 / 0.820 | -0.082 [-0.107, -0.057] |
 | MNF-RX (product classical) | 0.075 / 0.097 | 249 / 280 | 31 / 47 | 0.749 / 0.753 | -0.093 [-0.110, -0.075] |
 | LRX 13/29 | 0.093 / 0.093 | 241 / 241 | 76 / 76 | 0.621 / 0.622 | -0.096 [-0.127, -0.065] |
 | GRX, all bands | 0.079 / 0.081 | 273 / 282 | 65 / 67 | 0.753 / 0.756 | -0.108 [-0.130, -0.083] |
@@ -31,7 +32,7 @@ after scoring (as in the FTH3 report's Table 4). Chance: 93 objects at the top 1
 | LRX 5/15 | 0.029 / 0.029 | 71 / 71 | 39 / 39 | 0.362 / 0.363 | -0.160 [-0.188, -0.132] |
 
 Full tables (every CR lambda, paired differences for objects at the top 1 % and 0.1 %, per scene): `results.md`;
-everything incl. tiers and per-scene values: `results.json`, `per_scene.csv`. AutoAD: see "Deep methods" below.
+everything incl. tiers and per-scene values: `results.json`, `per_scene.csv`.
 
 Charts (slide A6 style, 80 x 47 mm, `make_chart.py`): `chart_prisma_had100.pdf/.png` (pAUC, cloud excluded, dot =
 pooled value, line = 95 % object-bootstrap interval - not the 50-200 band span of the HAD100 chart) and
@@ -76,12 +77,10 @@ Windows are full widths (inner / outer); HAD100's best windows are its Table IV 
   large for one run in the time available. Set1: 611 s for the 4 tiles (early stop after 401 / 401 / 701 / 951
   iterations), RTX 4000 SFF Ada alone.
 
-  **AutoAD result, set1 only (time box)**, `partial_AutoAD.json` (`partial_eval.py`, same measures, no tiers; set1 has
-  no thick cloud, so all = excl.): pAUC 0.103, objects top 1 % 81 of 153, top 0.1 % 25, ROC-AUC 0.917, against V2 Heavy
-  0.262 / 106 / 54 / 0.935 on the same scene: pAUC -0.159 [-0.220, -0.089], objects top 1 % -16.3 [-25.5, -6.5] pts.
-  For scale on set1: CR 0.216 / 115, PCA-RX 0.173 / 82, GRX 0.165 / 84. Sets 2-4 were still running at hand-over
-  (`step2_autoad_run2.log`; the script resumes per scene). When `set4/AutoAD.npz` exists, rerun `step3_evaluate.py`,
-  `summarise.py` and `make_chart.py` to put AutoAD in the pooled table and both charts.
+  All 4 scenes: 611 / 889 / 936 / 675 s. Pooled, cloud excluded: pAUC 0.108 [0.086, 0.128], 344 objects in the top 1 %
+  (V2 Heavy 449: -11.6 [-15.0, -8.3] pts), 66 in the top 0.1 %, ROC-AUC 0.820 - between CR and MNF-RX. Per scene
+  (pAUC / top 1 %): 0.103 / 81, 0.090 / 94, 0.060 / 52, 0.177 / 117. `partial_AutoAD.json` is the earlier set1-only
+  check (same numbers on set1).
 - **RGAE**: skipped - no official Python release found (the paper's code is not on GitHub).
 - **LREN**: skipped - the official code (github.com/xdjiangkai/LREN) is TensorFlow 1.5 / CUDA 10.2, and its LRR
   dictionary step is built over all pixels (infeasible at ~1 M pixels without re-engineering it).
